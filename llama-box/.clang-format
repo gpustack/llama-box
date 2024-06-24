@@ -1,0 +1,14 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+SeparateDefinitionBlocks: Always
+---
+Language: Cpp
+AllowShortFunctionsOnASingleLine: None
+AlignTrailingComments: true
+AlignEscapedNewlines: Left
+AlwaysBreakTemplateDeclarations: Yes
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+PackConstructorInitializers: NextLineOnly
+---

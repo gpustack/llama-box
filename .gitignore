@@ -1,0 +1,35 @@
+# Files
+.DS_Store
+*.o
+*.a
+*.so
+*.gguf
+*.bin
+*.exe
+*.exe~
+*.dll
+*.dylib
+*.log
+*.dot
+*.bat
+*.tmp
+*.metallib
+*.out
+*.swp
+*.swo
+.clang-tidy
+version.cpp
+
+# Directories
+.idea/
+.vscode/
+.vs/
+.cache/
+.ccls-cache/
+.direnv/
+.sbin/
+.dist/
+build/
+bin/
+out/
+tmp/
