@@ -11,7 +11,6 @@
 #include "llama.cpp/llama.h"
 
 // version
-extern const char *LLAMA_BOX_BUILD_DATE;
 extern const char *LLAMA_BOX_GIT_TREE_STATE;
 extern const char *LLAMA_BOX_GIT_VERSION;
 extern const char *LLAMA_BOX_GIT_COMMIT;

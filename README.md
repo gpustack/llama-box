@@ -2,7 +2,7 @@
 
 [![ci status](https://github.com/thxcode/llama-box/actions/workflows/ci.yml/badge.svg)](https://github.com/thxcode/llama-box/actions/workflows/ci.yml)<br/>
 
-LLaMA box is a cleaning LLMs inference server rather
+LLaMA box is a clean LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
 
 ## Usage

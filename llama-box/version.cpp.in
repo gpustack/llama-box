@@ -1,0 +1,3 @@
+char const *LLAMA_BOX_GIT_TREE_STATE = "@GIT_TREE_STATE@";
+char const *LLAMA_BOX_GIT_COMMIT = "@GIT_COMMIT@";
+char const *LLAMA_BOX_GIT_VERSION = "@GIT_VERSION@";
