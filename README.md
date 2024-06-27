@@ -2,7 +2,7 @@
 
 [![ci status](https://github.com/thxcode/llama-box/actions/workflows/ci.yml/badge.svg)](https://github.com/thxcode/llama-box/actions/workflows/ci.yml)<br/>
 
-LLaMA box is a clean LLMs inference server rather
+LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
 
 ## Usage
@@ -145,9 +145,12 @@ logging:
 - **GET** `/health`: Returns the current state of the llama-box.
     + 503 -> `{"status": "loading model"}` if the model is still being loaded.
     + 500 -> `{"status": "error"}` if the model failed to load.
-    + 200 -> `{"status": "ok", "slots_idle": 1, "slots_processing": 2 }` if the model is successfully loaded and the server is ready for further requests mentioned below.
-    + 200 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if no slots are currently available.
-    + 503 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if the query parameter `fail_on_no_slot` is provided and no slots are currently available.
+    + 200 -> `{"status": "ok", "slots_idle": 1, "slots_processing": 2 }` if the model is successfully loaded and the
+      server is ready for further requests mentioned below.
+    + 200 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if no slots are currently
+      available.
+    + 503 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if the query
+      parameter `fail_on_no_slot` is provided and no slots are currently available.
 
 - **GET** `/metrics`: Returns the Prometheus compatible metrics of the llama-box.
     + This endpoint is only available if the `--metrics` flag is enabled.
