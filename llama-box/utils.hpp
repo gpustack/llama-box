@@ -253,8 +253,9 @@ static size_t common_part(const std::string &a, const std::string &b) {
     return i;
 }
 
-static bool ends_with(const std::string & str, const std::string & suffix) {
-    return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+static bool ends_with(const std::string &str, const std::string &suffix) {
+    return str.size() >= suffix.size() &&
+           0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
 }
 
 static size_t find_partial_stop_string(const std::string &stop, const std::string &text) {
@@ -274,7 +275,8 @@ static size_t find_partial_stop_string(const std::string &stop, const std::strin
 }
 
 // format incomplete utf-8 multibyte character for output
-static std::string tokens_to_output_formatted_string(const llama_context * ctx, const llama_token token) {
+static std::string tokens_to_output_formatted_string(const llama_context *ctx,
+                                                     const llama_token token) {
     std::string out = token == -1 ? "" : llama_token_to_piece(ctx, token);
 
     // if the size is 1 and first bit is 1, meaning it's a partial character
@@ -435,7 +437,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
             llama_params["json_schema"] = json_value(response_format, "schema", json::object());
         } else if (!response_type.empty() && response_type != "text") {
             throw std::runtime_error(
-                "\"response_format\" must be one of \"text\" or \"json_object\", but got: " +
+                R"("response_format" must be one of "text" or "json_object", but got: )" +
                 response_type);
         }
     }
@@ -454,7 +456,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
             llama_params["n_probs"] = std::min(json_value(body, "logprobs", 2), 5);
         }
     } else if (body.contains("top_logprobs")) {
-        throw std::runtime_error("\"top_logprobs\" requires \"logprobs\" to be set");
+        throw std::runtime_error(R"("top_logprobs" requires "logprobs" to be set)");
     }
 
     // Params supported by OAI but unsupported by llama.cpp
@@ -473,6 +475,19 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
         // "max_tokens"
         if (!llama_params.contains(item.key()) || item.key() == "n_predict") {
             llama_params[item.key()] = item.value();
+        }
+    }
+
+    // Handle "stream_options" field
+    if (json_value(llama_params, "stream", false)) {
+        if (!body.contains("stream_options")) {
+            llama_params["stream_options"] = json{{"include_usage", true}};
+        } else if (body.at("stream_options").is_object()) {
+            if (!body.at("stream_options").contains("include_usage")) {
+                llama_params["stream_options"]["include_usage"] = true;
+            }
+        } else {
+            throw std::runtime_error("Invalid type for \"stream_options\" field");
         }
     }
 
@@ -552,7 +567,11 @@ static json oaicompat_completion_response(const json &request, const json result
     res["choices"] = json::array({choice});
 
     // Add usage information
-    if (!streaming) {
+    bool include_usage = false;
+    if (request.contains("stream_options")) {
+        include_usage = json_value(request.at("stream_options"), "include_usage", false);
+    }
+    if (!streaming || (include_usage && !finish_reason.empty())) {
         int completion_tokens = json_value(result, "tokens_predicted", 0);
         int prompt_tokens = json_value(result, "tokens_evaluated", 0);
         json timings = json_value(result, "timings", json::object());
@@ -564,6 +583,8 @@ static json oaicompat_completion_response(const json &request, const json result
                             {"total_tokens", completion_tokens + prompt_tokens},
                             {"time_to_first_token_ms", ttft},
                             {"time_per_output_token_ms", tpot}};
+    } else if (include_usage) {
+        res["usage"] = nullptr;
     }
 
     return res;
