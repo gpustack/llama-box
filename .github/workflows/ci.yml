@@ -53,6 +53,9 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
+      - name: Deps
+        run: |
+          brew update && brew install ccache
       - name: Setup XCode
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -64,9 +67,6 @@ jobs:
           key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Deps
-        run: |
-          brew update && brew install ccache
       - name: Build
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
@@ -395,6 +395,12 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install ccache curl -y
       - name: Setup Cache
         timeout-minutes: 5
         uses: actions/cache@v3
@@ -402,26 +408,23 @@ jobs:
           key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}\.cache
-      - name: Deps
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = 'SilentlyContinue'
-
-          choco install ccache -y
       - name: Setup HIP
-        id: sdk
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
           Write-Host "I install AMD ROCm HIP SDK"
-          Invoke-WebRequest -Uri "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-${{ matrix.version == '5.7' && '23.Q4' || '23.Q3' }}-WinSvr2022-For-HIP.exe" -OutFile "${env:RUNNER_TEMP}\rocm-install.exe"
-          Start-Process "${env:RUNNER_TEMP}\rocm-install.exe" -ArgumentList '-install' -NoNewWindow -Wait
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ runner.temp }}\installer.exe" `
+            --url "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-${{ matrix.version == '5.7' && '23.Q4' || '23.Q3' }}-WinSvr2022-For-HIP.exe"
+          Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
+            -ArgumentList '-install'
 
           Write-Host "I verify AMD ROCm HIP SDK"
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
           
-          "HIP_PATH=$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
+          "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
@@ -437,9 +440,8 @@ jobs:
           AMDGPU_TARGETS: "${{ matrix.version == '5.7' && 'gfx803;gfx900;gfx906;gfx908;gfx90a;gfx940;gfx941;gfx942;gfx1010;gfx1030;gfx1100;gfx1101;gfx1102' || 'gfx803;gfx900;gfx906;gfx908;gfx90a;gfx940;gfx1010;gfx1030;gfx1100;gfx1101;gfx1102' }}"
         run: |
           Write-Host "===== BUILD ====="
-          Write-Host "HIP_PATH=${{ steps.sdk.outputs.HIP_PATH }}"
+          Write-Host "HIP_PATH=${env:HIP_PATH}"
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
-          $env:HIP_PATH = "${{ steps.sdk.outputs.HIP_PATH }}"
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
@@ -487,12 +489,13 @@ jobs:
       - name: Setup CUDA
         # ensure MSBuildExtensions has been configured,
         # see https://github.com/NVlabs/tiny-cuda-nn/issues/164#issuecomment-1280749170.
-        id: sdk
         uses: Jimver/cuda-toolkit@v0.2.16
         with:
           cuda: ${{ matrix.version == '12.5' && '12.5.0' || '11.7.1' }}
           method: 'network'
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
+          use-github-cache: false
+          use-local-cache: false
       - name: Build
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
@@ -506,8 +509,7 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           
           Write-Host "===== BUILD ====="
-          Write-Host "CUDA_PATH=${{ steps.sdk.outputs.CUDA_PATH }}"
-          $env:CUDA_PATH = "${{ steps.sdk.outputs.CUDA_PATH }}"
+          Write-Host "CUDA_PATH=${env:CUDA_PATH}"
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
               -DLLAMA_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
               ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} `
@@ -530,6 +532,75 @@ jobs:
           path: ${{ github.workspace }}\\out\\*.zip
           name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
+  # uncache-able building,
+  # as the oneAPI need to configure the environment variables via setvars.bat.
+  windows-oneapi:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ amd64 ]
+        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=offline.
+        #     2024.2 ==> 2024.2.0
+        #     2024.1 ==> 2024.1.1
+        version: [ '2024.2', '2024.1' ]
+    runs-on: windows-2022
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install curl ninja -y
+      - name: Setup oneAPI
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+          
+          Write-Host "I install Intel oneAPI SDK"
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ runner.temp }}\installer.exe" `
+            --url "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/${{ matrix.version == '2024.2' && 'e83a8e64-04fc-45df-85c6-c2208d03bdb5/w_BaseKit_p_2024.2.0.635' || '7dff44ba-e3af-4448-841c-0d616c8da6e7/w_BaseKit_p_2024.1.0.595' }}.exe"
+          Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
+            -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
+          
+          Write-Host "I verify Intel oneAPI SDK"
+          & 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' --version
+          
+          $oneapiPath = "$(Resolve-Path -Path 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' | Split-Path | Split-Path)"
+          "ONEAPI_PATH=${oneapiPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $oneapiRoot = "$(Split-Path -Path $oneapiPath)"
+          "ONEAPI_ROOT=${oneapiRoot}" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build
+        # disable OpenMP,
+        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
+        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
+        run: |
+          Write-Host "===== BUILD ====="
+          Write-Host "ONEAPI_PATH=${env:ONEAPI_PATH}"
+          Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
+          & "${{ github.workspace }}\llama-box\scripts\build-windows-oneapi.bat" "${{ github.workspace }}" "${{ matrix.arch }}"
+          
+          Write-Host "===== RESULT ====="
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          
+          Write-Host "===== PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\*.zip
+          name: llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}
+
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     permissions:
@@ -544,6 +615,7 @@ jobs:
       - linux-oneapi
       - windows-hip
       - windows-cuda
+      - windows-oneapi
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4

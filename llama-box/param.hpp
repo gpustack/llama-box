@@ -897,7 +897,7 @@ bool llama_box_params_parse(int argc, char **argv, llama_box_params &bparams) {
             }
 
             if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers")) {
+                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") || !strcmp(flag, "--n-gpu-layers")) {
                     if (i == argc) {
                         missing("--gpu-layers");
                     }
