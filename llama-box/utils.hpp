@@ -8,7 +8,7 @@
 #include "llama.cpp/common/common.h"
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/json.hpp"
-#include "llama.cpp/llama.h"
+#include "llama.cpp/include/llama.h"
 
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
 

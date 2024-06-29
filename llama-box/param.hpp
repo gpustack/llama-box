@@ -7,8 +7,8 @@
 #include "llama.cpp/common/json-schema-to-grammar.h"
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/json.hpp"
-#include "llama.cpp/ggml.h"
-#include "llama.cpp/llama.h"
+#include "llama.cpp/ggml/include/ggml.h"
+#include "llama.cpp/include/llama.h"
 
 // version
 extern const char *LLAMA_BOX_GIT_TREE_STATE;
@@ -50,7 +50,7 @@ static int invalid(const char *flag) {
 #define LLAMA_COMMON_ATTRIBUTE_FORMAT(...)
 #endif
 
-void llama_box_params_print_usage(int, char **argv, const llama_box_params &bparams) {
+static void llama_box_params_print_usage(int, char **argv, const llama_box_params &bparams) {
     struct opt {
         LLAMA_COMMON_ATTRIBUTE_FORMAT(4, 5)
 
@@ -180,6 +180,8 @@ void llama_box_params_print_usage(int, char **argv, const llama_box_params &bpar
                                                                      "add a control vector with user defined scaling SCALE" });
     opts.push_back({ "*",           "       --control-vector-layer-range START END",
                                                                      "layer range to apply the control vector(s) to, start and end inclusive" });
+    opts.push_back({ "*",           "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: %s)", params.spm_infill ? "enabled" : "disabled" });
+
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "*",           "-ngl,  --gpu-layers N",     "number of layers to store in VRAM" });
         opts.push_back({ "*",           "-sm,   --split-mode SPLIT_MODE",
@@ -248,7 +250,7 @@ void llama_box_params_print_usage(int, char **argv, const llama_box_params &bpar
     printf("\n");
 }
 
-bool llama_box_params_parse(int argc, char **argv, llama_box_params &bparams) {
+static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bparams) {
     try {
         for (int i = 1; i < argc;) {
             const char *flag = argv[i++];
@@ -896,8 +898,14 @@ bool llama_box_params_parse(int argc, char **argv, llama_box_params &bparams) {
                 continue;
             }
 
+            if (!strcmp(flag, "--spm-infill")) {
+                bparams.gparams.spm_infill = true;
+                continue;
+            }
+
             if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") || !strcmp(flag, "--n-gpu-layers")) {
+                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") ||
+                    !strcmp(flag, "--n-gpu-layers")) {
                     if (i == argc) {
                         missing("--gpu-layers");
                     }

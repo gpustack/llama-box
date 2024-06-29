@@ -1,5 +1,10 @@
 # llama-box
 
+if (MINGW)
+    # fix: https://github.com/ggerganov/llama.cpp/actions/runs/9651004652/job/26617901362?pr=8006
+    add_compile_definitions(_WIN32_WINNT=${GGML_WIN_VER})
+endif ()
+
 #
 # version
 #
@@ -43,11 +48,11 @@ add_library(${TARGET} OBJECT version.cpp)
 # llama-box
 #
 set(TARGET llama-box)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_SOURCE_DIR})
 add_executable(${TARGET} main.cpp param.hpp ratelimiter.hpp utils.hpp)
 target_link_libraries(${TARGET} PRIVATE version common ${CMAKE_THREAD_LIBS_INIT})
-target_include_directories(${TARGET} PUBLIC ${CMAKE_SOURCE_DIR})
+target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 if (WIN32)
     TARGET_LINK_LIBRARIES(${TARGET} PRIVATE ws2_32)
-endif()
+endif ()
 target_compile_features(${TARGET} PUBLIC cxx_std_11)

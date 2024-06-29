@@ -77,9 +77,9 @@ jobs:
           echo "===== BUILD ====="
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DLLAMA_ACCELERATE=on -DLLAMA_METAL=on -DLLAMA_METAL_EMBED_LIBRARY=on \
-            ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} \
-            -DLLAMA_OPENMP=off
+            -DGGML_ACCELERATE=on -DGGML_METAL=on -DGGML_METAL_EMBED_LIBRARY=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           
           echo "===== RESULT ====="
@@ -91,7 +91,7 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -157,9 +157,9 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DLLAMA_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} \
-            -DLLAMA_OPENMP=off
+            -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -251,9 +251,9 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DLLAMA_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-            ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} \
-            -DLLAMA_OPENMP=off
+            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -340,9 +340,9 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DLLAMA_SYCL=on -DLLAMA_SYCL_F16=on \
-            ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} \
-            -DLLAMA_OPENMP=off
+            -DGGML_SYCL=on -DGGML_SYCL_F16=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -356,7 +356,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env CC=icx \
-            --env CXX=icx \
+            --env CXX=icpx \
             --env CCACHE_DIR \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -445,9 +445,9 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
-            -DLLAMA_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
-            ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} `
-            -DLLAMA_OPENMP=off
+            -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
 
           Write-Host "===== RESULT ====="
@@ -511,9 +511,9 @@ jobs:
           Write-Host "===== BUILD ====="
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-              -DLLAMA_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
-              ${{ matrix.arch == 'amd64' && '-DLLAMA_NATIVE=off' || '-DLLAMA_NATIVE=on' }} `
-              -DLLAMA_OPENMP=off
+              -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+              ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+              -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
   
           Write-Host "===== RESULT ====="
