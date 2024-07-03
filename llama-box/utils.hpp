@@ -574,15 +574,16 @@ static json oaicompat_completion_response(const json &request, const json result
     if (!streaming || (include_usage && !finish_reason.empty())) {
         int completion_tokens = json_value(result, "tokens_predicted", 0);
         int prompt_tokens = json_value(result, "tokens_evaluated", 0);
-        json timings = json_value(result, "timings", json::object());
-        int ttft = json_value(timings, "prompt_ms", 0); // time to first token in milliseconds.
-        int tpot = json_value(timings, "predicted_per_token_ms",
-                              0); // time per output token in milliseconds.
+        json ts = json_value(result, "timings", json::object());
+        int ttft = json_value(ts, "prompt_ms", 0);
+        int tpot = json_value(ts, "predicted_per_token_ms", 0);
+        int tps = json_value(ts, "predicted_per_second", 0);
         res["usage"] = json{{"completion_tokens", completion_tokens},
                             {"prompt_tokens", prompt_tokens},
                             {"total_tokens", completion_tokens + prompt_tokens},
                             {"time_to_first_token_ms", ttft},
-                            {"time_per_output_token_ms", tpot}};
+                            {"time_per_output_token_ms", tpot},
+                            {"tokens_per_second", tps}};
     } else if (include_usage) {
         res["usage"] = nullptr;
     }
