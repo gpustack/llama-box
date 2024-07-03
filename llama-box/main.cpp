@@ -3131,6 +3131,12 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
+                const std::string done = "data: [DONE] \n\n";
+                if (!sink.write(done.c_str(), done.size())) {
+                    sink.done();
+                    return false;
+                }
+
                 sink.done_with_trailer({{"X-Response-Tokens-Per-Second",
                                          std::to_string(json_value(result.data.at("timings"),
                                                                    "predicted_per_second", tps))}});
