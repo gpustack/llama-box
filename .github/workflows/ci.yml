@@ -242,7 +242,7 @@ jobs:
         # see https://developer.nvidia.com/cuda-gpus.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
-          CUDA_ARCHITECTURES: "${{ startsWith(matrix.version, '12.') && '50;52;53;60;61;62;70;72;75;80;86;87;89;90' || '50;52;53;60;61;62;70;72;75;80;86;87' }}"
+          CUDA_ARCHITECTURES: "52;61;70;75;80"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
@@ -503,7 +503,7 @@ jobs:
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         env:
-          CUDA_ARCHITECTURES: "${{ startsWith(matrix.version, '12.') && '50;52;53;60;61;62;70;72;75;80;86;87;89;90' || '50;52;53;60;61;62;70;72;75;80;86;87' }}"
+          CUDA_ARCHITECTURES: "52;61;70;75;80"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
