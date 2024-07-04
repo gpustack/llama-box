@@ -37,9 +37,9 @@ concurrency:
 
 jobs:
 
-  # cache-able building with ccache.
   darwin-metal:
     strategy:
+      # cache-able building with ccache.
       fail-fast: false
       matrix:
         arch: [ amd64, arm64 ]
@@ -98,16 +98,31 @@ jobs:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-darwin-${{ matrix.arch }}-metal-${{ matrix.version }}
 
-  # cache-able building with ccache.
   linux-hip:
     strategy:
+      # cache-able building with ccache.
       fail-fast: false
       matrix:
-        arch: [ amd64 ]
         # see https://hub.docker.com/r/rocm/dev-ubuntu-22.04/tags.
         #     6.1 ==> 6.1.2
         #     5.7 ==> 5.7.1
+        # build fat binary,
+        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
+        #     https://llvm.org/docs/AMDGPUUsage.html.
+        # official gpu support list,
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html,
+        #     https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html.
+        arch: [ amd64 ]
         version: [ '6.1', '5.7' ]
+        size: [ 's', 'l' ]
+        exclude:
+          - size: 'l'
+            version: '5.7'
+        include:
+          - size: 's'
+            hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
+          - size: 'l'
+            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Space
@@ -127,7 +142,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -140,15 +155,9 @@ jobs:
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
         #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
-        # build fat binary,
-        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
-        #     https://llvm.org/docs/AMDGPUUsage.html.
-        # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html,
-        #     https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
-          AMDGPU_TARGETS: "gfx803;gfx900;gfx906;gfx908;gfx90a;gfx940;gfx941;gfx942;gfx1010;gfx1030;gfx1100;gfx1101;gfx1102"
+          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
@@ -189,23 +198,34 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}
+          name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}
 
-  # cache-able building with ccache.
   linux-cuda:
     strategy:
+      # cache-able building with ccache.
       fail-fast: false
       matrix:
-        arch: [ amd64 ]
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
         #     12.5 ==> 12.5.0
-        #     11.7 ==> 11.7.1
-        version: [ '12.5', '11.7' ]
+        #     11.8 ==> 11.8.0
+        # build fat binary,
+        # see https://developer.nvidia.com/cuda-gpus.
+        arch: [ amd64 ]
+        version: [ '12.5', '11.8' ]
+        size: [ 's', 'l' ]
+        exclude:
+          - size: 'l'
+            version: '11.8'
+        include:
+          - size: 's'
+            cuda_arch: '80-real;86-real;89'
+          - size: 'l'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Space
@@ -225,7 +245,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -238,11 +258,9 @@ jobs:
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
         #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
-        # build fat binary,
-        # see https://developer.nvidia.com/cuda-gpus.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
-          CUDA_ARCHITECTURES: "52;61;70;75;80"
+          CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
@@ -270,7 +288,7 @@ jobs:
             --env CUDA_ARCHITECTURES \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            nvidia/cuda:${{ matrix.version == '12.5' && '12.5.0' || '11.7.1' }}-devel-ubuntu22.04
+            nvidia/cuda:${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}-devel-ubuntu22.04
           
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -281,22 +299,22 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
+          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}
 
-  # cache-able building with ccache.
   linux-oneapi:
     strategy:
+      # cache-able building with ccache.
       fail-fast: false
       matrix:
-        arch: [ amd64 ]
         # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
         #     2024.2 ==> 2024.2.0
         #     2024.1 ==> 2024.1.1
+        arch: [ amd64 ]
         version: [ '2024.2', '2024.1' ]
     runs-on: ubuntu-22.04
     steps:
@@ -378,16 +396,32 @@ jobs:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
-  # cache-able building with ccache.
   windows-hip:
+    continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
+      # cache-able building with ccache.
       fail-fast: false
       matrix:
-        arch: [ amd64 ]
         # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
         #     5.7 ==> 5.7.1
         #     5.5 ==> 5.5.1
+        # build fat binary,
+        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
+        #     https://llvm.org/docs/AMDGPUUsage.html.
+        # official gpu support list,
+        # see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html,
+        #     https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.
+        arch: [ amd64 ]
         version: [ '5.7', '5.5' ]
+        size: [ 's', 'l' ]
+        exclude:
+          - size: 'l'
+            version: '5.5'
+        include:
+          - size: 's'
+            hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
+          - size: 'l'
+            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
       - name: Clone
@@ -405,7 +439,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}\.cache
       - name: Setup HIP
@@ -429,15 +463,9 @@ jobs:
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
         #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
-        # build fat binary,
-        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
-        #     https://llvm.org/docs/AMDGPUUsage.html.
-        # official gpu support list,
-        # see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html,
-        #     https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
-          AMDGPU_TARGETS: "${{ matrix.version == '5.7' && 'gfx803;gfx900;gfx906;gfx908;gfx90a;gfx940;gfx941;gfx942;gfx1010;gfx1030;gfx1100;gfx1101;gfx1102' || 'gfx803;gfx900;gfx906;gfx908;gfx90a;gfx940;gfx1010;gfx1030;gfx1100;gfx1101;gfx1102' }}"
+          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
           Write-Host "===== BUILD ====="
           Write-Host "HIP_PATH=${env:HIP_PATH}"
@@ -459,24 +487,37 @@ jobs:
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}\\out\\*.zip
-          name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}
+          name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}
 
-  # uncache-able building,
-  # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
   windows-cuda:
+    continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
-      fail-fast: false
+      # uncache-able building,
+      # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
+      fail-fast: true
       matrix:
-        arch: [ amd64 ]
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
         #     12.5 ==> 12.5.0
-        #     11.7 ==> 11.7.1
-        version: [ '12.5', '11.7' ]
+        #     11.8 ==> 11.8.0
+        # build fat binary,
+        # see https://developer.nvidia.com/cuda-gpus.
+        arch: [ amd64 ]
+        version: [ '12.5', '11.8' ]
+        size: [ 's', 'l' ]
+        exclude:
+          - size: 'l'
+            version: '11.8'
+        include:
+          - size: 's'
+            cuda_arch: '80-real;86-real;89'
+          - size: 'l'
+            version: '12.5'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89'
     # see https://github.com/actions/runner-images?tab=readme-ov-file#available-images,
     #     https://forums.developer.nvidia.com/t/problems-with-latest-vs2022-update/294150.
     runs-on: ${{ matrix.version == '12.5' && 'windows-2022' || 'windows-2019' }}
@@ -491,7 +532,7 @@ jobs:
         # see https://github.com/NVlabs/tiny-cuda-nn/issues/164#issuecomment-1280749170.
         uses: Jimver/cuda-toolkit@v0.2.16
         with:
-          cuda: ${{ matrix.version == '12.5' && '12.5.0' || '11.7.1' }}
+          cuda: ${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}
           method: 'network'
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
           use-github-cache: false
@@ -500,10 +541,8 @@ jobs:
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
         #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
-        # build fat binary,
-        # see https://developer.nvidia.com/cuda-gpus.
         env:
-          CUDA_ARCHITECTURES: "52;61;70;75;80"
+          CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
@@ -515,7 +554,7 @@ jobs:
               ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
               -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
-  
+          
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
@@ -525,23 +564,24 @@ jobs:
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}\\out\\*.zip
-          name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}
+          name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}
 
-  # uncache-able building,
-  # as the oneAPI need to configure the environment variables via setvars.bat.
   windows-oneapi:
+    continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
-      fail-fast: false
+      # uncache-able building,
+      # as the oneAPI need to configure the environment variables via setvars.bat.
+      fail-fast: true
       matrix:
-        arch: [ amd64 ]
         # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=offline.
         #     2024.2 ==> 2024.2.0
         #     2024.1 ==> 2024.1.1
+        arch: [ amd64 ]
         version: [ '2024.2', '2024.1' ]
     runs-on: windows-2022
     steps:
