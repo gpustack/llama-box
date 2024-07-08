@@ -1,10 +1,10 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstddef>
 #include <memory>
 #include <set>
-#include <csignal>
 #include <thread>
 
 #include "llama.cpp/common/common.h"
@@ -2629,10 +2629,20 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_props = [&ctx_server](const httplib::Request &, httplib::Response &res) {
+        std::string template_key = "tokenizer.chat_template", curr_tmpl;
+        int32_t tlen = llama_model_meta_val_str(ctx_server.model, template_key.c_str(), nullptr, 0);
+        if (tlen > 0) {
+            std::vector<char> curr_tmpl_buf(tlen + 1, 0);
+            if (llama_model_meta_val_str(ctx_server.model, template_key.c_str(),
+                                         curr_tmpl_buf.data(), curr_tmpl_buf.size()) == tlen) {
+                curr_tmpl = std::string(curr_tmpl_buf.data(), tlen);
+            }
+        }
         json props = {
             {"system_prompt", ctx_server.system_prompt.c_str()},
             {"default_generation_settings", ctx_server.default_generation_settings_for_props},
-            {"total_slots", ctx_server.params.n_parallel}};
+            {"total_slots", ctx_server.params.n_parallel},
+            {"chat_template", curr_tmpl.c_str()}};
 
         res.set_content(props.dump(), "application/json; charset=utf-8");
     };
@@ -2748,7 +2758,7 @@ int main(int argc, char **argv) {
         std::string content;
         if (request.count("tokens") != 0) {
             const std::vector<llama_token> tokens = request.at("tokens");
-            content = llama_detokenize_bpe(ctx_server.ctx, tokens);
+            content = llama_detokenize(ctx_server.ctx, tokens, false);
         }
 
         const json response = json{{"content", content}};
