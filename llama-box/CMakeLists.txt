@@ -45,14 +45,42 @@ set(TARGET version)
 add_library(${TARGET} OBJECT version.cpp)
 
 #
+# patch
+#
+add_custom_target(patch
+        COMMENT "Applying patches"
+        COMMAND ${CMAKE_COMMAND} -DMSVC=${MSVC} -DCMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}
+        -DCMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID} -DCMAKE_VS_PLATFORM_NAME=${CMAKE_VS_PLATFORM_NAME}
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/patch-llama-cpp.cmake"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        VERBATIM
+)
+add_dependencies(patch version)
+
+#
 # llama-box
 #
 set(TARGET llama-box)
 include_directories(${CMAKE_SOURCE_DIR})
 add_executable(${TARGET} main.cpp param.hpp ratelimiter.hpp utils.hpp)
+add_dependencies(${TARGET} patch)
 target_link_libraries(${TARGET} PRIVATE version common ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 if (WIN32)
     TARGET_LINK_LIBRARIES(${TARGET} PRIVATE ws2_32)
 endif ()
 target_compile_features(${TARGET} PUBLIC cxx_std_11)
+
+#
+# clean patches
+#
+add_custom_command(
+        TARGET ${TARGET}
+        POST_BUILD
+        COMMENT "Cleaning patches"
+        COMMAND ${CMAKE_COMMAND} -DMSVC=${MSVC} -DCMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}
+        -DCMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID} -DCMAKE_VS_PLATFORM_NAME=${CMAKE_VS_PLATFORM_NAME}
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/unpatch-llama-cpp.cmake"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        VERBATIM
+)
