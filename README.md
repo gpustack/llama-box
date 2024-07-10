@@ -80,7 +80,7 @@ general:
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: -1.0, < 0 - disabled)
   -np,   --parallel N             number of parallel sequences to decode (default: 1)
   -cb,   --cont-batching          enable continuous batching (a.k.a dynamic batching) (default: enabled)
-         --mmproj FILE            path to a multimodal projector file for LLaVA. see examples/llava/README.md
+         --mmproj FILE            path to a multimodal projector file for LLaVA
          --mlock                  force system to keep model in RAM rather than swapping or compressing
          --no-mmap                do not memory-map model (slower load but may reduce pageouts if not using mlock)
          --numa TYPE              attempt optimizations that help on some NUMA systems
@@ -101,6 +101,7 @@ general:
                                   add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
                                   layer range to apply the control vector(s) to, start and end inclusive
+         --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: disabled)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
@@ -135,11 +136,13 @@ server:
          --conn-idle N            server connection idle in seconds (default: 60)
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
+                                  when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header.
 
 logging:
 
          --log-format {text,json} 
                                   log output format: json or text (default: json)
+
 ```
 
 ## API Endpoints
