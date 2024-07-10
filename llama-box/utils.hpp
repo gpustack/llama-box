@@ -405,6 +405,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     llama_params["__oaicompat"] = true;
     llama_params["__oaicompat_completion"] = true;
     llama_params["__oaicompat_completion_chat"] = chat;
+    llama_params["__oaicompat_completion_chat_vision"] = false;
 
     // Handle default field
     llama_params["model"] = json_value(body, "model", std::string(DEFAULT_OAICOMPAT_MODEL));
@@ -416,10 +417,36 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     llama_params["n_predict"] = json_value(body, "max_tokens", -1);
 
     // Apply chat template to the list of messages
-    if (!chat_template.empty()) {
-        llama_params["prompt"] = format_chat(model, chat_template, body.at("messages"));
+    if (chat) {
+        json messages = body.at("messages");
+        bool has_array_content;
+        for (const json &msg : messages) {
+            if (msg.at("content").is_array()) {
+                has_array_content = true;
+                break;
+            }
+        }
+        if (!has_array_content) {
+            llama_params["prompt"] = format_chat(model, chat_template, messages);
+        } else {
+            llama_params["__oaicompat_completion_chat_vision"] = true;
+            // Parse the vision messages,
+            // see https://platform.openai.com/docs/guides/vision
+            for (const json &msg : messages) {
+                if (msg.at("role") == "user") {
+                    llama_params["prompt"] = msg.at("content");
+                    break;
+                }
+            }
+            if (!llama_params.contains("prompt")) {
+                throw std::runtime_error(
+                    R"(Illegal param: only "user" role is supported to request vision completion)");
+            }
+        }
+    } else if (body.contains("prompt")) {
+        llama_params["prompt"] = body.at("prompt");
     } else {
-        llama_params["prompt"] = json_value(body, "prompt", std::string());
+        throw std::runtime_error("Illegal param: missing required field: prompt");
     }
 
     // Handle "stop" field
@@ -437,7 +464,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
             llama_params["json_schema"] = json_value(response_format, "schema", json::object());
         } else if (!response_type.empty() && response_type != "text") {
             throw std::runtime_error(
-                R"("response_format" must be one of "text" or "json_object", but got: )" +
+                R"(Illegal param: "response_format" must be one of "text" or "json_object", but got: )" +
                 response_type);
         }
     }
@@ -445,7 +472,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     // Handle "n" field
     int n_choices = json_value(body, "n", 1);
     if (n_choices != 1) {
-        throw std::runtime_error("Only one completion choice is allowed");
+        throw std::runtime_error("Illegal param: only one completion choice is allowed");
     }
 
     // Handle "logprobs" field
@@ -456,7 +483,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
             llama_params["n_probs"] = std::min(json_value(body, "logprobs", 2), 5);
         }
     } else if (body.contains("top_logprobs")) {
-        throw std::runtime_error(R"("top_logprobs" requires "logprobs" to be set)");
+        throw std::runtime_error(R"(Illegal param: "top_logprobs" requires "logprobs" to be set)");
     }
 
     // Params supported by OAI but unsupported by llama.cpp
@@ -487,7 +514,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
                 llama_params["stream_options"]["include_usage"] = true;
             }
         } else {
-            throw std::runtime_error("Invalid type for \"stream_options\" field");
+            throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
         }
     }
 

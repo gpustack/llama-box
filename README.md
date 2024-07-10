@@ -192,6 +192,11 @@ logging:
 
 - **POST** `/v1/chat/completions` (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/chat/create.
+    + This endpoint is compatible with [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision) when
+      enabled `--mmproj` flag,
+      see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main. (Note: do not support link `url`, use base64
+      encoded image
+      instead.)
 
 - **POST** `/v1/embeddings`: (OpenAI-compatible) Returns the embeddings of the given prompt,
   see https://platform.openai.com/docs/api-reference/embeddings/create.

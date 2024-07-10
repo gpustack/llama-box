@@ -162,4 +162,5 @@ endif ()
 #
 
 add_subdirectory(llama.cpp)
+add_subdirectory(llama.cpp/examples/llava)
 add_subdirectory(llama-box)

@@ -155,7 +155,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "-dt,   --defrag-thold N",       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold });
     opts.push_back({ "*",           "-np,   --parallel N",           "number of parallel sequences to decode (default: %d)", params.n_parallel });
     opts.push_back({ "*",           "-cb,   --cont-batching",        "enable continuous batching (a.k.a dynamic batching) (default: %s)", params.cont_batching ? "enabled" : "disabled" });
-    opts.push_back({ "*",           "       --mmproj FILE",          "path to a multimodal projector file for LLaVA. see examples/llava/README.md" });
+    opts.push_back({ "*",           "       --mmproj FILE",          "path to a multimodal projector file for LLaVA" });
     if (llama_supports_mlock()) {
         opts.push_back({ "*",           "       --mlock",                "force system to keep model in RAM rather than swapping or compressing" });
     }
@@ -217,7 +217,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                      "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
     opts.push_back({ "server",      "       --conn-idle N",          "server connection idle in seconds (default: %d)", bparams.conn_idle });
     opts.push_back({ "server",      "       --conn-keepalive N",     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
-    opts.push_back({ "server",      "-tps   --tokens-per-second N",  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)", bparams.n_tps });
+    opts.push_back({ "server",      "-tps   --tokens-per-second N",  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
+                                                                     "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header.", bparams.n_tps });
 
     opts.push_back({ "logging" });
     opts.push_back({ "logging",     "       --log-format {text,json}",

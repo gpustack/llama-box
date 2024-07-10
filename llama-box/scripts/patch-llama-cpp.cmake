@@ -11,6 +11,20 @@ endif ()
 
 # Apply patch
 if (Git_FOUND)
+    execute_process(
+            COMMAND ${GIT_EXECUTABLE} -C ${LLAMA_CPP_DIR} status --porcelain
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            OUTPUT_VARIABLE TREE_STATE
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE RES
+    )
+    if (NOT RES EQUAL 0)
+        message(FATAL_ERROR "Failed to apply patches: Cannot get tree state")
+    endif ()
+    if (TREE_STATE)
+        message(WARNING "Skipped to apply patches: Working tree is dirty")
+        return()
+    endif ()
     file(GLOB_RECURSE PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.patch")
     foreach (PATCH_FILE ${PATCHES})
         execute_process(
