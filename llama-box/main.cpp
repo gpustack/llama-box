@@ -677,7 +677,7 @@ struct server_context {
             llama_kv_cache_clear(ctx);
             llama_synchronize(ctx);
             llama_reset_timings(ctx);
-            LOG_INFO("sampled tokens per second", {"tps", n_tps});
+            LOG_INFO("sampled tokens per second", {{"tps", n_tps}});
         }
 
         return true;
@@ -801,13 +801,18 @@ struct server_context {
                     } else {
                         p = llama_tokenize(ctx, s, false, TMP_FORCE_SPECIAL);
                     }
-
                     prompt_tokens.insert(prompt_tokens.end(), p.begin(), p.end());
-                } else {
+                } else if (jp.is_object() && jp.contains("text")) {
+                    std::string s = json_value(jp, "text", std::string());
+                    std::vector<llama_token> p;
                     if (first) {
+                        p = llama_tokenize(ctx, s, add_special, TMP_FORCE_SPECIAL);
                         first = false;
+                    } else {
+                        p = llama_tokenize(ctx, s, false, TMP_FORCE_SPECIAL);
                     }
-
+                    prompt_tokens.insert(prompt_tokens.end(), p.begin(), p.end());
+                } else if (jp.is_number()) {
                     prompt_tokens.push_back(jp.get<llama_token>());
                 }
             }
@@ -1126,10 +1131,11 @@ struct server_context {
         slot.command = SLOT_COMMAND_LOAD_PROMPT;
         slot.prompt_tokens.clear();
 
-        LOG_INFO("slot is processing task", {
-                                                {"id_slot", slot.id},
-                                                {"id_task", slot.id_task},
-                                            });
+        LOG_INFO("slot is processing task",
+                 {{"id_slot", slot.id},
+                  {"id_task", slot.id_task},
+                  {"max_tokens_per_second",
+                   slot.token_bkt ? std::to_string(slot.token_bkt->capacity) : "N/A"}});
 
         return true;
     }
@@ -2540,7 +2546,7 @@ int main(int argc, char **argv) {
         [&res_error](const httplib::Request &, httplib::Response &res, std::exception_ptr ep) {
             std::string message;
             try {
-                std::rethrow_exception(std::move(ep));
+                std::rethrow_exception(ep);
             } catch (std::exception &e) {
                 message = e.what();
             } catch (...) {
@@ -2798,7 +2804,7 @@ int main(int argc, char **argv) {
             } else {
                 res.set_header("X-Response-Tokens-Per-Second",
                                std::to_string(json_value(result.data.at("timings"),
-                                                         "predicted_per_second", tps)));
+                                                         "predicted_per_second", double(tps))));
                 const std::string infill =
                     result.data.dump(-1, ' ', false, json::error_handler_t::replace);
                 res.set_content(infill, "application/json; charset=utf-8");
@@ -2831,9 +2837,10 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
-                sink.done_with_trailer({{"X-Response-Tokens-Per-Second",
-                                         std::to_string(json_value(result.data.at("timings"),
-                                                                   "predicted_per_second", tps))}});
+                sink.done_with_trailer(
+                    {{"X-Response-Tokens-Per-Second",
+                      std::to_string(json_value(result.data.at("timings"), "predicted_per_second",
+                                                double(tps)))}});
                 return true;
             }
         };
@@ -3070,7 +3077,7 @@ int main(int argc, char **argv) {
             } else {
                 res.set_header("X-Response-Tokens-Per-Second",
                                std::to_string(json_value(result.data.at("timings"),
-                                                         "predicted_per_second", tps)));
+                                                         "predicted_per_second", double(tps))));
 
                 json completions_json = result.data;
                 if (req.path == "/v1/completions") {
@@ -3121,9 +3128,10 @@ int main(int argc, char **argv) {
                     return false;
                 }
 
-                sink.done_with_trailer({{"X-Response-Tokens-Per-Second",
-                                         std::to_string(json_value(result.data.at("timings"),
-                                                                   "predicted_per_second", tps))}});
+                sink.done_with_trailer(
+                    {{"X-Response-Tokens-Per-Second",
+                      std::to_string(json_value(result.data.at("timings"), "predicted_per_second",
+                                                double(tps)))}});
                 return true;
             }
         };
@@ -3201,7 +3209,7 @@ int main(int argc, char **argv) {
             } else {
                 res.set_header("X-Response-Tokens-Per-Second",
                                std::to_string(json_value(result.data.at("timings"),
-                                                         "predicted_per_second", tps)));
+                                                         "predicted_per_second", double(tps))));
 
                 const json chats_completion_json =
                     oaicompat_completion_response(request, result.data, completion_id);
@@ -3262,9 +3270,10 @@ int main(int argc, char **argv) {
                     return false;
                 }
 
-                sink.done_with_trailer({{"X-Response-Tokens-Per-Second",
-                                         std::to_string(json_value(result.data.at("timings"),
-                                                                   "predicted_per_second", tps))}});
+                sink.done_with_trailer(
+                    {{"X-Response-Tokens-Per-Second",
+                      std::to_string(json_value(result.data.at("timings"), "predicted_per_second",
+                                                double(tps)))}});
                 return true;
             }
         };

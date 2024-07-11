@@ -602,9 +602,9 @@ static json oaicompat_completion_response(const json &request, const json result
         int completion_tokens = json_value(result, "tokens_predicted", 0);
         int prompt_tokens = json_value(result, "tokens_evaluated", 0);
         json ts = json_value(result, "timings", json::object());
-        int ttft = json_value(ts, "prompt_ms", 0);
-        int tpot = json_value(ts, "predicted_per_token_ms", 0);
-        int tps = json_value(ts, "predicted_per_second", 0);
+        double ttft = json_value(ts, "prompt_ms", 0.0);
+        double tpot = json_value(ts, "predicted_per_token_ms", 0.0);
+        double tps = json_value(ts, "predicted_per_second", 0.0);
         res["usage"] = json{{"completion_tokens", completion_tokens},
                             {"prompt_tokens", prompt_tokens},
                             {"total_tokens", completion_tokens + prompt_tokens},
