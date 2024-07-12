@@ -58,7 +58,7 @@ static inline void server_log(const char *level, const char *function, int line,
     ss_tid << std::this_thread::get_id();
     json log = json{
         {"tid", ss_tid.str()},
-        {"timestamp", time(nullptr)},
+        {"ts", time(nullptr)},
     };
 
     if (server_log_json) {
@@ -79,7 +79,7 @@ static inline void server_log(const char *level, const char *function, int line,
     }
 
     char buf[1024];
-    snprintf(buf, 1024, "%4s [%24s] %s", level, function, message);
+    snprintf(buf, 1024, "%4s [%30s] %s", level, function, message);
 
     if (!extra.empty()) {
         log.merge_patch(extra);
@@ -398,6 +398,17 @@ static json probs_vector_to_json(const llama_context *ctx,
 
 static json oaicompat_completion_request(const struct llama_model *model, const json &body,
                                          const std::string &chat_template) {
+    // Print the request for debugging
+    {
+        json body_cp = body;
+        if (body_cp.contains("messages")) {
+            body_cp["messages"] = "[...]";
+        } else if (body_cp.contains("prompt")) {
+            body_cp["prompt"] = "...";
+        }
+        LOG_INFO("OAI request", {{"params", body_cp}});
+    }
+
     bool chat = !chat_template.empty();
     json llama_params;
 
@@ -500,9 +511,11 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     for (const auto &item : body.items()) {
         // Exception: if "n_predict" is present, we overwrite the value specified earlier by
         // "max_tokens"
-        if (!llama_params.contains(item.key()) || item.key() == "n_predict") {
-            llama_params[item.key()] = item.value();
+        const std::string &key = item.key();
+        if (key == "messages" || (llama_params.contains(key) && key != "n_predict")) {
+            continue;
         }
+        llama_params[item.key()] = item.value();
     }
 
     // Handle "stream_options" field
