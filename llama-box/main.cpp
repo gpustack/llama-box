@@ -3199,9 +3199,10 @@ int main(int argc, char **argv) {
         }
 
         json request = json::parse(req.body);
-        if (!request.contains("messages")) {
-            res_error(res, format_error_response("\"messages\" must be provided",
-                                                 ERROR_TYPE_INVALID_REQUEST));
+        if (!request.contains("messages") || !request.at("messages").is_array()) {
+            res_error(res,
+                      format_error_response("\"messages\" must be provided and must be an array",
+                                            ERROR_TYPE_INVALID_REQUEST));
             return;
         }
         request = oaicompat_completion_request(ctx_server.model, request, params.chat_template);

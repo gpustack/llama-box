@@ -103,36 +103,34 @@ static inline void server_log(const char *level, const char *function, int line,
 // Format given chat. If tmpl is empty, we take the template from model metadata
 inline std::string format_chat(const struct llama_model *model, const std::string &tmpl,
                                const std::vector<json> &messages) {
-    size_t alloc_size = 0;
-    // vector holding all allocated string to be passed to llama_chat_apply_template
-    std::vector<std::string> str(messages.size() * 2);
-    std::vector<llama_chat_message> chat(messages.size());
+    std::vector<llama_chat_msg> chat;
 
-    for (size_t i = 0; i < messages.size(); ++i) {
-        const auto &curr_msg = messages[i];
-        str[i * 2 + 0] = json_value(curr_msg, "role", std::string(""));
-        str[i * 2 + 1] = json_value(curr_msg, "content", std::string(""));
-        alloc_size += str[i * 2 + 1].length();
-        chat[i].role = str[i * 2 + 0].c_str();
-        chat[i].content = str[i * 2 + 1].c_str();
+    for (const auto &curr_msg : messages) {
+        std::string role = json_value(curr_msg, "role", std::string(""));
+
+        std::string content;
+        if (curr_msg.contains("content")) {
+            if (curr_msg["content"].is_string()) {
+                content = curr_msg["content"].get<std::string>();
+            } else if (curr_msg["content"].is_array()) {
+                for (const json &part : curr_msg["content"]) {
+                    if (part.contains("text")) {
+                        content += "\n" + part["text"].get<std::string>();
+                    }
+                }
+            } else {
+                throw std::runtime_error("Invalid 'content' type (ref: "
+                                         "https://github.com/ggerganov/llama.cpp/issues/8367)");
+            }
+        } else {
+            throw std::runtime_error(
+                "Missing 'content' (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
+        }
+
+        chat.push_back({role, content});
     }
 
-    const char *ptr_tmpl = tmpl.empty() ? nullptr : tmpl.c_str();
-    std::vector<char> buf(alloc_size * 2);
-
-    // run the first time to get the total output length
-    int32_t res = llama_chat_apply_template(model, ptr_tmpl, chat.data(), chat.size(), true,
-                                            buf.data(), buf.size());
-
-    // if it turns out that our buffer is too small, we resize it
-    if ((size_t)res > buf.size()) {
-        buf.resize(res);
-        res = llama_chat_apply_template(model, ptr_tmpl, chat.data(), chat.size(), true, buf.data(),
-                                        buf.size());
-    }
-
-    const std::string formatted_chat(buf.data(), res);
-    return formatted_chat;
+    return llama_chat_apply_template(model, tmpl, chat, true);
 }
 
 //
@@ -430,21 +428,26 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     // Apply chat template to the list of messages
     if (chat) {
         const json messages = body.at("messages");
-        bool has_array_content = false;
+        bool chat_vision = false;
         for (const json &msg : messages) {
-            if (msg.at("content").is_array()) {
-                has_array_content = true;
-                break;
+            if (!msg.contains("content") || !msg.at("content").is_array()) {
+                continue;
+            }
+            for (const json &part : msg.at("content")) {
+                if (part.contains("type") && part.at("type") == "image_url") {
+                    chat_vision = true;
+                    break;
+                }
             }
         }
-        if (!has_array_content) {
+        if (!chat_vision) {
             llama_params["prompt"] = format_chat(model, chat_template, messages);
         } else {
             llama_params["__oaicompat_completion_chat_vision"] = true;
             // Parse the vision messages,
             // see https://platform.openai.com/docs/guides/vision
             for (const json &msg : messages) {
-                if (msg.at("role") == "user") {
+                if (msg.contains("role") && msg.at("role") == "user") {
                     llama_params["prompt"] = msg.at("content");
                     break;
                 }
