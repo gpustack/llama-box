@@ -429,8 +429,8 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
 
     // Apply chat template to the list of messages
     if (chat) {
-        json messages = body.at("messages");
-        bool has_array_content;
+        const json messages = body.at("messages");
+        bool has_array_content = false;
         for (const json &msg : messages) {
             if (msg.at("content").is_array()) {
                 has_array_content = true;
