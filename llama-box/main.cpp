@@ -1903,6 +1903,11 @@ struct server_context {
         int32_t n_batch = llama_n_batch(ctx);
         int32_t n_ubatch = llama_n_ubatch(ctx);
 
+        // track if this is an embedding or non-embedding batch
+        // if we've added sampled tokens above, we are in non-embedding mode
+        // -1: none, 0: non-embedding, 1: embedding
+        int32_t batch_type = batch.n_tokens > 0 ? 0 : -1;
+
         // next, batch any pending prompts without exceeding n_batch
         if (params.cont_batching || batch.n_tokens == 0) {
             for (auto &slot : slots) {
@@ -2059,6 +2064,14 @@ struct server_context {
                         if (batch.n_tokens + slot.n_prompt_tokens > n_batch) {
                             continue;
                         }
+                    }
+
+                    // check that we are in the right batch_type, if not defer the slot
+                    int32_t slot_type = slot.embedding ? 1 : 0;
+                    if (batch_type == -1) {
+                        batch_type = slot_type;
+                    } else if (batch_type != slot_type) {
+                        continue;
                     }
 
                     // keep only the common part
