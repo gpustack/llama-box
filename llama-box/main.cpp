@@ -2,7 +2,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
-#include <cstddef>
 #include <memory>
 #include <set>
 #include <thread>
@@ -1097,6 +1096,7 @@ struct server_context {
             if (slot.ctx_sampling != nullptr) {
                 llama_sampling_free(slot.ctx_sampling);
             }
+
             slot.ctx_sampling = llama_sampling_init(slot.sparams);
             if (slot.ctx_sampling == nullptr) {
                 // for now, the only error that may happen here is invalid
@@ -1113,8 +1113,8 @@ struct server_context {
             }
             int tps = task.tps;
 #ifndef NDEBUG
-            tps = json_value(data, "tps",
-                             task.tps); // allow overriding tps for debugging
+            // allow overriding tps for debugging
+            tps = json_value(data, "tps", task.tps);
             if (tps > n_tps) {
                 tps = n_tps;
             }
@@ -1188,7 +1188,7 @@ struct server_context {
                 slot.find_stopping_strings(str_test, token_str.size(), STOP_TYPE_FULL);
             if (stop_pos != std::string::npos) {
                 is_stop_full = true;
-                slot.generated_text.erase(slot.generated_text.begin() + pos + stop_pos,
+                slot.generated_text.erase(slot.generated_text.begin() + long(pos) + long(stop_pos),
                                           slot.generated_text.end());
                 pos = std::min(slot.n_sent_text, slot.generated_text.size());
             } else {
@@ -1350,8 +1350,8 @@ struct server_context {
             std::vector<completion_token_output> probs_output;
             if (probs_pos < probs_stop_pos) {
                 probs_output = std::vector<completion_token_output>(
-                    slot.generated_token_probs.begin() + probs_pos,
-                    slot.generated_token_probs.begin() + probs_stop_pos);
+                    slot.generated_token_probs.begin() + long(probs_pos),
+                    slot.generated_token_probs.begin() + long(probs_stop_pos));
             }
             slot.n_sent_token_probs = probs_stop_pos;
 
@@ -1835,11 +1835,10 @@ struct server_context {
         // TODO: simplify and improve
         for (server_slot &slot : slots) {
             if (slot.ga_n == 1) {
-                if (slot.is_processing() &&
-                    (int)system_tokens.size() + slot.n_past >= slot.n_ctx - 1) {
+                if (slot.is_processing() && n_system_tokens + slot.n_past >= slot.n_ctx - 1) {
                     // Shift context
                     const int n_keep = slot.params.n_keep + add_bos_token;
-                    const int n_left = (int)system_tokens.size() + slot.n_past - n_keep;
+                    const int n_left = n_system_tokens + slot.n_past - n_keep;
                     const int n_discard =
                         slot.params.n_discard ? slot.params.n_discard : (n_left / 2);
 
@@ -2077,13 +2076,13 @@ struct server_context {
                     }
 
                     // keep only the common part
-                    int p0 = (int)system_tokens.size() + slot.n_past;
+                    int p0 = n_system_tokens + slot.n_past;
                     if (!llama_kv_cache_seq_rm(ctx, slot.id + 1, p0, -1)) {
                         // could not partially delete (likely using a
                         // non-Transformer model)
                         llama_kv_cache_seq_rm(ctx, slot.id + 1, -1, -1);
 
-                        p0 = (int)system_tokens.size();
+                        p0 = n_system_tokens;
                         if (p0 != 0) {
                             // copy over the system prompt when there is one
                             llama_kv_cache_seq_cp(ctx, 0, slot.id + 1, -1, -1);
@@ -2101,9 +2100,6 @@ struct server_context {
 
                     // remove the non-common part from the cache
                     slot.cache_tokens.resize(slot.n_past);
-
-                    LOG_INFO("kv cache rm [p0, end)",
-                             {{"id_slot", slot.id}, {"id_task", slot.id_task}, {"p0", p0}});
 
                     int32_t slot_npast = slot.n_past_se > 0 ? slot.n_past_se : slot.n_past;
 
@@ -2228,7 +2224,6 @@ struct server_context {
             // clang-format on
 
             const int ret = llama_decode(ctx, batch_view);
-
             if (ret != 0) {
                 if (n_batch == 1 || ret < 0) {
                     // if you get here, it means the KV cache is full - try
@@ -2285,10 +2280,9 @@ struct server_context {
                 }
 
                 completion_token_output result;
-                const llama_token id =
+                result.tok =
                     llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, slot.i_batch - i);
-
-                llama_sampling_accept(slot.ctx_sampling, ctx, id, true);
+                llama_sampling_accept(slot.ctx_sampling, ctx, result.tok, true);
 
                 slot.n_decoded += 1;
                 if (slot.n_decoded == 1) {
@@ -2298,13 +2292,12 @@ struct server_context {
                     metrics.on_prompt_eval(slot);
                 }
 
-                llama_token_data_array cur_p = {slot.ctx_sampling->cur.data(),
-                                                slot.ctx_sampling->cur.size(), false};
-                result.tok = id;
-
-                const size_t n_probs = std::min(cur_p.size, (size_t)slot.sparams.n_probs);
+                const size_t n_probs =
+                    std::min(slot.ctx_sampling->cur.size(), (size_t)slot.sparams.n_probs);
                 if (n_probs > 0) {
                     const size_t n_valid = slot.ctx_sampling->n_valid;
+                    llama_token_data_array cur_p = {slot.ctx_sampling->cur.data(),
+                                                    slot.ctx_sampling->cur.size(), false};
 
                     // Make sure at least n_probs top tokens are at the front of
                     // the vector:
@@ -2441,9 +2434,9 @@ struct server_context {
         if (tokens.empty()) {
             std::string suffix;
             if (batch.n_tokens == 0) {
-                suffix = "\nASSISTANT:\n";
+                suffix = "\n### Assistant:\n";
             } else {
-                suffix = "\nAnswer the questions.\nASSISTANT:\n";
+                suffix = "\nAnswer the questions.\n### Assistant:\n";
             }
             tokens = llama_tokenize(ctx, suffix, false, true);
         }
@@ -2513,7 +2506,7 @@ int main(int argc, char **argv) {
     if (!params.system_prompt.empty()) {
         ctx_server.system_prompt = params.system_prompt;
     } else if (!params.mmproj.empty()) {
-        ctx_server.system_prompt = "SYSTEM:\nAnswer the questions.\nUSER:";
+        ctx_server.system_prompt = "### System: You are a helpful assistant.\n### Human: ";
     }
 
     if (params.model_alias == "unknown") {
@@ -3135,10 +3128,12 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
-                const std::string done = "data: [DONE] \n\n";
-                if (!sink.write(done.c_str(), done.size())) {
-                    sink.done();
-                    return false;
+                if (oaicompat) {
+                    const std::string done = "data: [DONE] \n\n";
+                    if (!sink.write(done.c_str(), done.size())) {
+                        sink.done();
+                        return false;
+                    }
                 }
 
                 sink.done_with_trailer(
@@ -3164,7 +3159,7 @@ int main(int argc, char **argv) {
                         {
                             {{"id", params.model_alias},
                              {"object", "model"},
-                             {"created", std::time(0)},
+                             {"created", std::time(nullptr)},
                              {"owned_by", "llama-box"},
                              {"meta", ctx_server.model_meta()}},
                         }}};

@@ -205,6 +205,28 @@ logging:
   see https://platform.openai.com/docs/api-reference/embeddings/create.
     + This endpoint is only available if the `--embeddings` flag is enabled.
 
+## Tools
+
+It was so hard to find a Chat UI that was directly compatible with OpenAI, I mean, no installation required (I can live
+with `docker run`), no tokens (or optional), no Ollama required (don't you think Ollama’s API is hard to use?), just a
+simple RESTful API.
+
+So I was inspired by
+the [llama.cpp/chat.sh](https://github.com/ggerganov/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
+and adjust it to interact with llama-box.
+
+All you need is a Bash shell and curl.
+
+- **completion.sh**: A simple script to interact with the `/completion` endpoint.
+
+```shell
+$ # one-shot completion
+$ N_PREDICT=4096 TOP_K=1 ./llama-box/tools/completion.sh "// Quick-sort implementation in C (4 spaces indentation + detailed comments) and sample usage:\n\n#include"
+
+$ # interactive completion
+$ N_PREDICT=4096 ./llama-box/tools/completion.sh
+```
+
 ## License
 
 MIT

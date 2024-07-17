@@ -105,6 +105,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "       --keep N",               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", params.n_keep });
     opts.push_back({ "*",           "       --chunks N",             "max number of chunks to process (default: %d, -1 = all)", params.n_chunks });
     opts.push_back({ "*",           "-fa,   --flash-attn",           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
+    opts.push_back({ "*",           "-e,    --escape",               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
     opts.push_back({ "*",           "       --no-escape",            "do not process escape sequences" });
     opts.push_back({ "*",           "       --samplers SAMPLERS",    "samplers that will be used for generation in the order, separated by \';\'\n"
                                                                      "(default: %s)", sampler_type_names.c_str() });
@@ -402,6 +403,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
                 bparams.gparams.flash_attn = true;
                 continue;
+            }
+
+            if (!strcmp(flag, "-e") || !strcmp(flag, "--escape")) {
+                bparams.gparams.escape = true;
+                return true;
             }
 
             if (!strcmp(flag, "--no-escape")) {
