@@ -32,6 +32,7 @@ general:
          --keep N                 number of tokens to keep from the initial prompt (default: 0, -1 = all)
          --chunks N               max number of chunks to process (default: -1, -1 = all)
   -fa,   --flash-attn             enable Flash Attention (default: disabled)
+  -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
          --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';'
                                   (default: top_k;tfs_z;typical_p;top_p;min_p;temperature)
@@ -80,6 +81,7 @@ general:
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: -1.0, < 0 - disabled)
   -np,   --parallel N             number of parallel sequences to decode (default: 1)
   -cb,   --cont-batching          enable continuous batching (a.k.a dynamic batching) (default: enabled)
+  -nocb, --no-cont-batching       disable continuous batching
          --mmproj FILE            path to a multimodal projector file for LLaVA
          --mlock                  force system to keep model in RAM rather than swapping or compressing
          --no-mmap                do not memory-map model (slower load but may reduce pageouts if not using mlock)
