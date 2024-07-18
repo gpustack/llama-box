@@ -140,7 +140,7 @@ echo "SEED        : ${SEED}"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then
-    rm -f "${LOG_FILE}"
+    : > "${LOG_FILE}"
 fi
 if [[ ! -f "${LOG_FILE}" ]]; then
     touch "${LOG_FILE}"

@@ -2592,14 +2592,18 @@ int main(int argc, char **argv) {
 
     // load the model
     if (!ctx_server.load_model(bparams)) {
+        state.store(SERVER_STATE_ERROR);
         return 1;
     }
     LOG_INFO("model loaded", {});
 
+    // init server
     if (!ctx_server.init()) {
+        state.store(SERVER_STATE_ERROR);
         return 1;
     }
     LOG_INFO("server initialized", {});
+    state.store(SERVER_STATE_READY);
 
     // if a custom chat template is not supplied, we will use the one that comes
     // with the model (if any)
