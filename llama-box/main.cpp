@@ -156,7 +156,7 @@ struct server_slot {
     bool oaicompat_completion_chat_vision = false;
 
     // sampling
-    llama_token sampled;
+    std::vector<llama_token> sampled;
     struct llama_sampling_params sparams;
     llama_sampling_context *ctx_sampling = nullptr;
     json json_schema;
@@ -179,6 +179,15 @@ struct server_slot {
 
     token_bucket *token_bkt = nullptr; // bucket for tokens per second
 
+    // speculative decoding
+    llama_sampling_context *ctx_sampling_draft = nullptr;
+    std::vector<llama_token> sampled_draft;
+    std::vector<std::vector<llama_token_data>> sampled_draft_probs;
+    std::default_random_engine sampled_draft_rng;
+    std::uniform_real_distribution<> sampled_draft_rng_dist;
+    int32_t n_drafted = 0;
+    int32_t n_drafted_accepted = 0;
+
     void reset() {
         n_prompt_tokens = 0;
         generated_text = "";
@@ -200,6 +209,13 @@ struct server_slot {
             delete token_bkt;
             token_bkt = nullptr;
         }
+
+        sampled.clear();
+        sampled_draft.clear();
+        sampled_draft_probs.clear();
+        sampled_draft_rng_dist.reset();
+        n_drafted = 0;
+        n_drafted_accepted = 0;
     }
 
     bool has_budget(gpt_params &global_params) {
@@ -242,7 +258,7 @@ struct server_slot {
     }
 
     json get_formated_timings() const {
-        return json{
+        json ret = json{
             {"prompt_n", n_prompt_tokens_processed},
             {"prompt_ms", t_prompt_processing},
             {"prompt_per_token_ms", t_prompt_processing / n_prompt_tokens_processed},
@@ -253,6 +269,17 @@ struct server_slot {
             {"predicted_per_token_ms", t_token_generation / n_decoded},
             {"predicted_per_second", 1e3 / t_token_generation * n_decoded},
         };
+
+        if (n_drafted > 0) {
+            const int32_t n_decoded_with_drafted = n_decoded + n_drafted - n_drafted_accepted;
+            ret["predicted_per_token_ms"] = t_token_generation / n_decoded_with_drafted;
+            ret["predicted_per_second"] = 1e3 / t_token_generation * n_decoded_with_drafted;
+            ret["drafted_n"] = n_drafted;
+            ret["drafted_accepted_n"] = n_drafted_accepted;
+            ret["drafted_accepted_p"] = float(n_drafted_accepted) / float(n_drafted);
+        }
+
+        return ret;
     }
 
     size_t find_stopping_strings(const std::string &text, const size_t last_token_size,
@@ -283,6 +310,41 @@ struct server_slot {
 
         return stop_pos;
     }
+
+    void push_token_into_result(llama_token tok, completion_token_output &result,
+                                llama_context *ctx) const {
+        result.toks.push_back(tok);
+
+        const size_t n_probs = std::min(ctx_sampling->cur.size(), (size_t)sparams.n_probs);
+        if (n_probs > 0) {
+            result.probss.emplace_back();
+
+            const auto last_idx = int32_t(result.probss.size() - 1);
+            const size_t n_valid = ctx_sampling->n_valid;
+            llama_token_data_array cur_p = {ctx_sampling->cur.data(), ctx_sampling->cur.size(),
+                                            false};
+
+            // Make sure at least n_probs top tokens are at the front of
+            // the vector:
+            if (sparams.temp == 0.0f && n_probs > n_valid) {
+                llama_sample_top_k(ctx, &cur_p, int32_t(n_probs), 0);
+            }
+
+            if (sparams.temp == 0.0f) {
+                // With greedy sampling the probabilities have possibly
+                // not been calculated.
+                for (size_t x = 0; x < n_probs; ++x) {
+                    result.probss[last_idx].push_back({cur_p.data[x].id, x == 0 ? 1.0f : 0.0f});
+                }
+            } else {
+                // Tokens filtered out due to e.g. top_k have 0 probability.
+                for (size_t x = 0; x < n_probs; ++x) {
+                    result.probss[last_idx].push_back(
+                        {cur_p.data[x].id, x >= n_valid ? 0.0f : cur_p.data[x].p});
+                }
+            }
+        }
+    }
 };
 
 struct server_metrics {
@@ -292,12 +354,16 @@ struct server_metrics {
     uint64_t t_prompt_processing_total = 0;
     uint64_t n_tokens_predicted_total = 0;
     uint64_t t_tokens_generation_total = 0;
+    uint64_t n_tokens_drafted_total = 0;
+    uint64_t n_tokens_drafted_accepted_total = 0;
 
     uint64_t n_prompt_tokens_processed = 0;
     uint64_t t_prompt_processing = 0;
 
     uint64_t n_tokens_predicted = 0;
     uint64_t t_tokens_generation = 0;
+    uint64_t n_tokens_drafted = 0;
+    uint64_t n_tokens_drafted_accepted = 0;
 
     void init() {
         t_start = ggml_time_us();
@@ -315,6 +381,10 @@ struct server_metrics {
         n_tokens_predicted += slot.n_decoded;
         t_tokens_generation += uint64_t(slot.t_token_generation);
         t_tokens_generation_total += uint64_t(slot.t_token_generation);
+        n_tokens_drafted += slot.n_drafted;
+        n_tokens_drafted_total += slot.n_drafted;
+        n_tokens_drafted_accepted += slot.n_drafted_accepted;
+        n_tokens_drafted_accepted_total += slot.n_drafted_accepted;
     }
 
     void reset_bucket() {
@@ -322,6 +392,8 @@ struct server_metrics {
         t_prompt_processing = 0;
         n_tokens_predicted = 0;
         t_tokens_generation = 0;
+        n_tokens_drafted = 0;
+        n_tokens_drafted_accepted = 0;
     }
 };
 
@@ -580,18 +652,23 @@ struct server_context {
     // Necessary similarity of prompt for slot selection
     float slot_prompt_similarity = 0.0f;
 
+    // speculative deconding
+    llama_model *model_draft = nullptr;
+    llama_context *ctx_draft = nullptr;
+    llama_batch batch_draft;
+
     ~server_context() {
-        if (ctx_clip) {
+        if (ctx_clip != nullptr) {
             clip_free(ctx_clip);
             ctx_clip = nullptr;
         }
 
-        if (ctx) {
+        if (ctx != nullptr) {
             llama_free(ctx);
             ctx = nullptr;
         }
 
-        if (model) {
+        if (model != nullptr) {
             llama_free_model(model);
             model = nullptr;
         }
@@ -601,10 +678,25 @@ struct server_context {
             if (slot.ctx_sampling != nullptr) {
                 llama_sampling_free(slot.ctx_sampling);
             }
+            if (slot.ctx_sampling_draft != nullptr) {
+                llama_sampling_free(slot.ctx_sampling_draft);
+            }
             delete slot.token_bkt;
         }
 
         llama_batch_free(batch);
+
+        if (ctx_draft != nullptr) {
+            llama_free(ctx_draft);
+            ctx_draft = nullptr;
+        }
+
+        if (model_draft != nullptr) {
+            llama_free_model(model_draft);
+            model_draft = nullptr;
+        }
+
+        llama_batch_free(batch_draft);
     }
 
     bool load_model(const llama_box_params &bparams) {
@@ -623,6 +715,21 @@ struct server_context {
             }
         }
 
+        // load the draft model if needed
+        if (!params.model_draft.empty() && params.n_draft > 0) {
+            gpt_params params_draft = params;
+            params_draft.model = params.model_draft;
+            params_draft.n_gpu_layers = params.n_gpu_layers_draft;
+            params_draft.n_threads = params.n_threads_draft;
+            params_draft.n_threads_batch = params.n_threads_batch_draft;
+            params_draft.warmup = false;
+            std::tie(model_draft, ctx_draft) = llama_init_from_gpt_params(params_draft);
+            if (model_draft == nullptr) {
+                LOG_ERROR("unable to load draft model", {{"model", params.model_draft}});
+                return false;
+            }
+        }
+
         // dedicate one sequence to the system prompt
         params.n_parallel += 1;
         std::tie(model, ctx) = llama_init_from_gpt_params(params);
@@ -633,12 +740,31 @@ struct server_context {
         }
 
         // check multimodal projection model compatibility
-        if (ctx_clip) {
+        if (ctx_clip != nullptr) {
             const int n_embd_clip = clip_n_mmproj_embd(ctx_clip);
             const int n_embd = llama_n_embd(model);
             if (n_embd_clip != n_embd) {
                 LOG_ERROR("multimodal projector embedding length is not equal to the model.",
                           {{"n_embd_clip", n_embd_clip}, {"n_embd", n_embd}});
+                return false;
+            }
+        }
+
+        // check draft model compatibility if needed
+        if (ctx_draft != nullptr) {
+            const bool vocab_type_draft = llama_vocab_type(model_draft);
+            const bool vocab_type = llama_vocab_type(model);
+            if (vocab_type_draft != vocab_type) {
+                LOG_ERROR("draft model vocabulary type is not equal to the model.",
+                          {{"vocab_type_draft", vocab_type_draft}, {"vocab_type", vocab_type}});
+                return false;
+            }
+
+            if (llama_add_bos_token(model_draft) != llama_add_bos_token(model) ||
+                llama_add_eos_token(model_draft) != llama_add_eos_token(model) ||
+                llama_token_bos(model_draft) != llama_token_bos(model) ||
+                llama_token_eos(model_draft) != llama_token_eos(model)) {
+                LOG_ERROR("draft model special tokens are not equal to the model.", {});
                 return false;
             }
         }
@@ -739,6 +865,9 @@ struct server_context {
         // attention models such as BERT where the KV cache is not used)
         const auto n_batch = int32_t(llama_n_batch(ctx));
         batch = llama_batch_init(n_batch, 0, 1);
+        if (ctx_draft != nullptr) {
+            batch_draft = llama_batch_init(n_batch, 0, 1);
+        }
 
         // load system prompt
         if (!system_prompt.empty()) {
@@ -769,6 +898,9 @@ struct server_context {
             // assign the system KV cache to all parallel sequences
             for (int32_t i = 1; i <= params.n_parallel; ++i) {
                 llama_kv_cache_seq_cp(ctx, 0, i, -1, -1);
+                if (ctx_draft) {
+                    llama_kv_cache_seq_cp(ctx_draft, 0, i, -1, -1);
+                }
             }
         }
 
@@ -1106,6 +1238,32 @@ struct server_context {
             }
         }
 
+        if (ctx_draft != nullptr) {
+            if (slot.ctx_sampling_draft != nullptr) {
+                llama_sampling_free(slot.ctx_sampling_draft);
+            }
+
+            llama_sampling_params sparams_draft = slot.sparams;
+            // the draft samplers will copy the target sampler's grammar.
+            sparams_draft.grammar.clear();
+            // force greedy sampling with probs for the draft model
+            if (sparams_draft.temp <= 0.0f) {
+                sparams_draft.temp = -1.0f;
+            }
+            slot.ctx_sampling_draft = llama_sampling_init(sparams_draft);
+            if (slot.ctx_sampling_draft == nullptr) {
+                // for now, the only error that may happen here is invalid
+                // grammar
+                send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
+                return false;
+            }
+
+            if (sparams_draft.seed == LLAMA_DEFAULT_SEED) {
+                sparams_draft.seed = std::time(nullptr);
+            }
+            slot.sampled_draft_rng = std::default_random_engine(sparams_draft.seed);
+        }
+
         {
             if (slot.token_bkt != nullptr) {
                 delete slot.token_bkt;
@@ -1143,18 +1301,21 @@ struct server_context {
     bool process_token(completion_token_output &result, server_slot &slot) {
         // remember which tokens were sampled - used for repetition penalties
         // during sampling
-        const std::string token_str = llama_token_to_piece(ctx, result.tok, false);
-        slot.sampled = result.tok;
+        slot.sampled.clear();
+        std::string token_str;
+        for (const llama_token &tok : result.toks) {
+            token_str += llama_token_to_piece(ctx, tok, false);
+            slot.sampled.push_back(tok);
+            if (slot.ctx_sampling->params.use_penalty_prompt_tokens && tok != -1) {
+                // we can change penalty_prompt_tokens because it is always created
+                // from scratch each request
+                slot.ctx_sampling->params.penalty_prompt_tokens.push_back(tok);
+            }
+        }
 
         // search stop word and delete it
         slot.generated_text += token_str;
         slot.has_next_token = true;
-
-        if (slot.ctx_sampling->params.use_penalty_prompt_tokens && result.tok != -1) {
-            // we can change penalty_prompt_tokens because it is always created
-            // from scratch each request
-            slot.ctx_sampling->params.penalty_prompt_tokens.push_back(result.tok);
-        }
 
         // check if there is incomplete UTF-8 character at the end
         bool incomplete = false;
@@ -1198,10 +1359,9 @@ struct server_context {
             }
 
             // check if there is any token to predict
-            if (stop_pos == std::string::npos ||
-                (!slot.has_next_token && !is_stop_full && stop_pos > 0)) {
+            if (stop_pos == std::string::npos || (!is_stop_full && stop_pos > 0)) {
                 // no send the stop word in the response
-                result.text_to_send = slot.generated_text.substr(pos, std::string::npos);
+                result.text_to_send = slot.generated_text.substr(pos, stop_pos);
                 slot.n_sent_text += result.text_to_send.size();
                 // add the token to slot queue and cache
             }
@@ -1222,9 +1382,13 @@ struct server_context {
             slot.has_next_token = false;
         }
 
-        if (llama_token_is_eog(model, result.tok)) {
-            slot.stopped_eos = true;
-            slot.has_next_token = false;
+        // check the EOT
+        for (const llama_token &tok : result.toks) {
+            if (llama_token_is_eog(model, tok)) {
+                slot.stopped_eos = true;
+                slot.has_next_token = false;
+                break;
+            }
         }
 
         auto n_ctx_train = llama_n_ctx_train(model);
@@ -1748,6 +1912,9 @@ struct server_context {
             // Erase token cache
             const size_t n_erased = slot->cache_tokens.size();
             llama_kv_cache_seq_rm(ctx, slot->id + 1, -1, -1);
+            if (ctx_draft != nullptr) {
+                llama_kv_cache_seq_rm(ctx_draft, slot->id + 1, -1, -1);
+            }
             slot->cache_tokens.clear();
 
             server_task_result result;
@@ -1814,9 +1981,15 @@ struct server_context {
                 LOG_INFO("all slots are idle", {});
                 if (system_prompt.empty()) {
                     llama_kv_cache_clear(ctx);
+                    if (ctx_draft != nullptr) {
+                        llama_kv_cache_clear(ctx_draft);
+                    }
                 } else {
                     for (int32_t i = 0; i <= params.n_parallel; ++i) {
                         llama_kv_cache_seq_rm(ctx, i, n_system_tokens, -1);
+                        if (ctx_draft != nullptr) {
+                            llama_kv_cache_seq_rm(ctx, i, n_system_tokens, -1);
+                        }
                     }
                 }
                 return;
@@ -1855,6 +2028,11 @@ struct server_context {
                     llama_kv_cache_seq_rm(ctx, slot.id + 1, n_keep, n_keep + n_discard);
                     llama_kv_cache_seq_add(ctx, slot.id + 1, n_keep + n_discard,
                                            n_system_tokens + slot.n_past, -n_discard);
+                    if (ctx_draft != nullptr) {
+                        llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, n_keep, n_keep + n_discard);
+                        llama_kv_cache_seq_add(ctx_draft, slot.id + 1, n_keep + n_discard,
+                                               n_system_tokens + slot.n_past, -n_discard);
+                    }
 
                     if (slot.params.cache_prompt) {
                         for (size_t i = n_keep + n_discard; i < slot.cache_tokens.size(); i++) {
@@ -1873,6 +2051,9 @@ struct server_context {
 
         // start populating the batch for this iteration
         llama_batch_clear(batch);
+        if (ctx_draft) {
+            llama_batch_clear(batch_draft);
+        }
 
         // frist, add sampled tokens from any ongoing sequences
         for (auto &slot : slots) {
@@ -1886,16 +2067,26 @@ struct server_context {
 
             slot.i_batch = batch.n_tokens;
 
-            const int32_t slot_npast = slot.n_past_se > 0 ? slot.n_past_se : slot.n_past;
+            int32_t slot_npast = slot.n_past_se > 0 ? slot.n_past_se : slot.n_past;
+            slot_npast += slot.n_drafted_accepted;
 
             // TODO: we always have to take into account the "system_tokens"
             //       this is not great and needs to be improved somehow
-            llama_batch_add(batch, slot.sampled, n_system_tokens + slot_npast, {slot.id + 1}, true);
-
+            llama_batch_add(batch, slot.sampled[slot.sampled.size() - 1],
+                            n_system_tokens + slot_npast, {slot.id + 1}, true);
+            if (!slot.sampled_draft.empty()) {
+                for (const llama_token &tok : slot.sampled_draft) {
+                    llama_batch_add(batch, tok, n_system_tokens + slot_npast + 1, {slot.id + 1},
+                                    true);
+                    slot_npast += 1;
+                }
+            }
             slot.n_past += 1;
 
             if (slot.params.cache_prompt) {
-                slot.cache_tokens.push_back(slot.sampled);
+                for (const llama_token &tok : slot.sampled) {
+                    slot.cache_tokens.push_back(tok);
+                }
             }
         }
 
@@ -2097,6 +2288,15 @@ struct server_context {
                         // context?
                         llama_sampling_reset(slot.ctx_sampling);
                     }
+                    if (ctx_draft != nullptr) {
+                        if (!llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, p0, -1)) {
+                            llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, -1, -1);
+                            if (p0 != 0) {
+                                llama_kv_cache_seq_cp(ctx_draft, 0, slot.id + 1, -1, -1);
+                            }
+                            llama_sampling_reset(slot.ctx_sampling_draft);
+                        }
+                    }
 
                     // remove the non-common part from the cache
                     slot.cache_tokens.resize(slot.n_past);
@@ -2122,6 +2322,10 @@ struct server_context {
 
                         llama_batch_add(batch, prompt_tokens[slot.n_past],
                                         n_system_tokens + slot_npast, {slot.id + 1}, false);
+                        if (ctx_draft != nullptr) {
+                            llama_batch_add(batch_draft, prompt_tokens[slot.n_past],
+                                            n_system_tokens + slot_npast, {slot.id + 1}, false);
+                        }
 
                         if (slot.params.cache_prompt) {
                             slot.cache_tokens.push_back(prompt_tokens[slot.n_past]);
@@ -2178,18 +2382,16 @@ struct server_context {
                         const int bd = (slot.ga_w / slot.ga_n) * (slot.ga_n - 1);
                         const int dd = (slot.ga_w / slot.ga_n) - ib * bd - slot.ga_w;
 
-                        LOG_TEE("\n");
-                        LOG_TEE("shift: [%6d, %6d] + %6d -> [%6d, %6d]\n", slot.ga_i,
-                                slot.n_past_se, ib * bd, slot.ga_i + ib * bd,
-                                slot.n_past_se + ib * bd);
-                        LOG_TEE("div:   [%6d, %6d] / %6d -> [%6d, %6d]\n", slot.ga_i + ib * bd,
-                                slot.ga_i + ib * bd + slot.ga_w, slot.ga_n,
-                                (slot.ga_i + ib * bd) / slot.ga_n,
-                                (slot.ga_i + ib * bd + slot.ga_w) / slot.ga_n);
-                        LOG_TEE("shift: [%6d, %6d] + %6d -> [%6d, %6d]\n",
-                                slot.ga_i + ib * bd + slot.ga_w, slot.n_past_se + ib * bd, dd,
-                                slot.ga_i + ib * bd + slot.ga_w + dd,
-                                slot.n_past_se + ib * bd + dd);
+                        LOG("\n");
+                        LOG("slot %d shift: [%6d, %6d] + %6d -> [%6d, %6d]\n", slot.id, slot.ga_i,
+                            slot.n_past_se, ib * bd, slot.ga_i + ib * bd, slot.n_past_se + ib * bd);
+                        LOG("slot %d div:   [%6d, %6d] / %6d -> [%6d, %6d]\n", slot.id,
+                            slot.ga_i + ib * bd, slot.ga_i + ib * bd + slot.ga_w, slot.ga_n,
+                            (slot.ga_i + ib * bd) / slot.ga_n,
+                            (slot.ga_i + ib * bd + slot.ga_w) / slot.ga_n);
+                        LOG("slot %d shift: [%6d, %6d] + %6d -> [%6d, %6d]\n", slot.id,
+                            slot.ga_i + ib * bd + slot.ga_w, slot.n_past_se + ib * bd, dd,
+                            slot.ga_i + ib * bd + slot.ga_w + dd, slot.n_past_se + ib * bd + dd);
 
                         llama_kv_cache_seq_add(ctx, slot.id + 1, slot.ga_i, slot.n_past_se,
                                                ib * bd);
@@ -2197,13 +2399,22 @@ struct server_context {
                                                slot.ga_i + ib * bd + slot.ga_w, slot.ga_n);
                         llama_kv_cache_seq_add(ctx, slot.id + 1, slot.ga_i + ib * bd + slot.ga_w,
                                                slot.n_past_se + ib * bd, dd);
+                        if (ctx_draft != nullptr) {
+                            llama_kv_cache_seq_add(ctx_draft, slot.id + 1, slot.ga_i,
+                                                   slot.n_past_se, ib * bd);
+                            llama_kv_cache_seq_div(ctx_draft, slot.id + 1, slot.ga_i + ib * bd,
+                                                   slot.ga_i + ib * bd + slot.ga_w, slot.ga_n);
+                            llama_kv_cache_seq_add(ctx_draft, slot.id + 1,
+                                                   slot.ga_i + ib * bd + slot.ga_w,
+                                                   slot.n_past_se + ib * bd, dd);
+                        }
 
                         slot.n_past_se -= bd;
 
                         slot.ga_i += slot.ga_w / slot.ga_n;
 
-                        LOG_TEE("\nn_past_old = %d, n_past = %d, ga_i = %d\n\n",
-                                slot.n_past_se + bd, slot.n_past_se, slot.ga_i);
+                        LOG("\nslot %d n_past_old = %d, n_past = %d, ga_i = %d\n\n", slot.id,
+                            slot.n_past_se + bd, slot.n_past_se, slot.ga_i);
                     }
 
                     slot.n_past_se += n_tokens;
@@ -2264,6 +2475,25 @@ struct server_context {
 
                 continue; // continue loop of n_batch
             }
+            if (ctx_draft != nullptr && batch_draft.n_tokens > 0) {
+                const int32_t n_draft_tokens = std::min(n_batch, batch_draft.n_tokens - i);
+
+                // clang-format off
+                llama_batch batch_draft_view = {
+                    n_draft_tokens,
+                    batch_draft.token + i,
+                    nullptr,
+                    batch_draft.pos + i,
+                    batch_draft.n_seq_id + i,
+                    batch_draft.seq_id + i,
+                    batch_draft.logits + i,
+                    0, 0, 0, // unused
+                };
+                // clang-format on
+
+                const int ret_draft = llama_decode(ctx_draft, batch_draft_view);
+                GGML_ASSERT(ret_draft == 0);
+            }
 
             for (auto &slot : slots) {
                 if (slot.state != SLOT_STATE_PROCESSING || slot.i_batch < (int)i ||
@@ -2280,11 +2510,93 @@ struct server_context {
                 }
 
                 completion_token_output result;
-                result.tok =
-                    llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, slot.i_batch - i);
-                llama_sampling_accept(slot.ctx_sampling, ctx, result.tok, true);
+                if (!slot.sampled_draft.empty()) {
+                    llama_token tok;
+                    auto sz_draft = int32_t(slot.sampled_draft.size());
+                    // +1 to allow for the last token to be generated
+                    for (int32_t j = 0; j < sz_draft + 1; ++j) {
+                        bool accept = false;
+                        if (slot.sparams.temp > 0) {
+                            // stochastic verification
+                            llama_token_data_array probs = llama_sampling_prepare(
+                                slot.ctx_sampling, ctx, nullptr, j, true, nullptr);
+                            llama_sample_softmax(ctx, &probs);
+                            if (j < sz_draft) {
+                                llama_token_data_array probs_draft = {
+                                    slot.sampled_draft_probs[j].data(),
+                                    slot.sampled_draft_probs[j].size(), true};
+                                float prob = 0.0f, prob_draft = 0.0f;
+                                for (size_t k = 0; k < probs_draft.size; k++) {
+                                    if (probs.data[k].id == slot.sampled_draft[j]) {
+                                        prob = probs.data[k].p;
+                                    }
+                                    if (probs_draft.data[k].id == slot.sampled_draft[j]) {
+                                        prob_draft = probs_draft.data[k].p;
+                                    }
+                                    if (prob != 0.0f && prob_draft != 0.0f) {
+                                        break;
+                                    }
+                                }
+                                auto r = float(slot.sampled_draft_rng_dist(slot.sampled_draft_rng));
+                                if (r <= prob / prob_draft) {
+                                    tok = slot.sampled_draft[j];
+                                    llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
+                                    slot.push_token_into_result(tok, result, ctx);
+                                    accept = true;
+                                } else {
+                                    float sum_probs = 0.0f;
+                                    // sort by id.
+                                    std::sort(
+                                        probs.data, probs.data + probs.size,
+                                        [](const llama_token_data &a, const llama_token_data &b) {
+                                            return a.id < b.id;
+                                        });
+                                    std::sort(
+                                        probs_draft.data, probs_draft.data + probs_draft.size,
+                                        [](const llama_token_data &a, const llama_token_data &b) {
+                                            return a.id < b.id;
+                                        });
+                                    for (size_t k = 0; k < probs.size; k++) {
+                                        probs.data[k].p =
+                                            std::max(0.0f, probs.data[k].p - probs_draft.data[k].p);
+                                        sum_probs += probs.data[k].p;
+                                    }
+                                    for (size_t k = 0; k < probs.size; k++) {
+                                        probs.data[k].p /= sum_probs;
+                                    }
+                                    // sort by probability desc.
+                                    std::sort(probs.data, probs.data + probs.size,
+                                              [](const llama_token_data &a,
+                                                 const llama_token_data &b) { return a.p > b.p; });
+                                    // sample from the target model
+                                    tok = llama_sample_token(ctx, &probs);
+                                    llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
+                                    slot.push_token_into_result(tok, result, ctx);
+                                }
+                            }
+                        } else {
+                            // greedy verification
+                            tok = llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, j);
+                            llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
+                            slot.push_token_into_result(tok, result, ctx);
+                            if (j < sz_draft && tok == slot.sampled_draft[j]) {
+                                accept = true;
+                            }
+                        }
+                        slot.n_decoded += 1;
+                        if (!accept) {
+                            break;
+                        }
+                        slot.n_drafted_accepted += 1;
+                    }
+                } else {
+                    llama_token tok =
+                        llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, slot.i_batch - i);
+                    llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
+                    slot.push_token_into_result(tok, result, ctx);
+                    slot.n_decoded += 1;
+                }
 
-                slot.n_decoded += 1;
                 if (slot.n_decoded == 1) {
                     slot.t_start_generation = ggml_time_us();
                     slot.t_prompt_processing =
@@ -2292,31 +2604,39 @@ struct server_context {
                     metrics.on_prompt_eval(slot);
                 }
 
-                const size_t n_probs =
-                    std::min(slot.ctx_sampling->cur.size(), (size_t)slot.sparams.n_probs);
-                if (n_probs > 0) {
-                    const size_t n_valid = slot.ctx_sampling->n_valid;
-                    llama_token_data_array cur_p = {slot.ctx_sampling->cur.data(),
-                                                    slot.ctx_sampling->cur.size(), false};
+                if (ctx_draft != nullptr) {
+                    llama_pos pos = n_system_tokens + slot.n_past + slot.n_drafted_accepted;
+                    llama_kv_cache_seq_rm(ctx, slot.id + 1, pos, -1);
+                    llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, pos, -1);
 
-                    // Make sure at least n_probs top tokens are at the front of
-                    // the vector:
-                    if (slot.sparams.temp == 0.0f && n_probs > n_valid) {
-                        llama_sample_top_k(ctx, &cur_p, int32_t(n_probs), 0);
+                    slot.sampled_draft.clear();
+                    slot.sampled_draft_probs.clear();
+
+                    llama_sampling_cp(slot.ctx_sampling, slot.ctx_sampling_draft);
+                    llama_batch_clear(batch_draft);
+                    llama_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos,
+                                    {slot.id + 1}, true);
+                    if (llama_decode(ctx_draft, batch_draft)) {
+                        slot.state = SLOT_STATE_PROCESSING;
+                        slot.command = SLOT_COMMAND_NONE;
+                        slot.release();
+                        send_error(slot, "Failed to draft decode", ERROR_TYPE_SERVER);
+                        continue; // continue loop of slots
                     }
+                    slot.n_drafted += 1;
 
-                    if (slot.sparams.temp == 0.0f) {
-                        // With greedy sampling the probabilities have possibly
-                        // not been calculated.
-                        for (size_t x = 0; x < n_probs; ++x) {
-                            result.probs.push_back({cur_p.data[x].id, x == 0 ? 1.0f : 0.0f});
+                    for (int32_t j = 0; j < params.n_draft; ++j) {
+                        llama_token tok =
+                            llama_sampling_sample(slot.ctx_sampling_draft, ctx_draft, nullptr, 0);
+                        slot.sampled_draft.push_back(tok);
+                        slot.sampled_draft_probs.push_back(slot.ctx_sampling_draft->cur);
+                        llama_sampling_accept(slot.ctx_sampling_draft, ctx_draft, tok, true);
+                        llama_batch_clear(batch_draft);
+                        llama_batch_add(batch_draft, tok, pos + 1 + j, {slot.id + 1}, true);
+                        if (llama_decode(ctx_draft, batch_draft)) {
+                            break;
                         }
-                    } else {
-                        // Tokens filtered out due to e.g. top_k have 0 probability.
-                        for (size_t x = 0; x < n_probs; ++x) {
-                            result.probs.push_back(
-                                {cur_p.data[x].id, x >= n_valid ? 0.0f : cur_p.data[x].p});
-                        }
+                        slot.n_drafted += 1;
                     }
                 }
 

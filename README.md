@@ -145,6 +145,14 @@ logging:
          --log-format {text,json} 
                                   log output format: json or text (default: json)
 
+speculative:
+
+  -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
+  -td,   --threads-draft N        number of threads to use during generation (default: same as --threads)
+  -tbd,  --threads-batch-draft N  number of threads to use during batch and prompt processing (default: same as --threads-draft)
+         --draft N                number of tokens to draft for speculative decoding (default: 5)
+  -ngld, --gpu-layers-draft N     number of layers to store in VRAM for the draft model
+
 ```
 
 ## API Endpoints

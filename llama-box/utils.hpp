@@ -290,7 +290,7 @@ static std::string tokens_to_output_formatted_string(const llama_context *ctx,
 }
 
 struct completion_token_output {
-    llama_token tok;
+    std::vector<llama_token> toks;
     std::string text_to_send;
 
     struct token_prob {
@@ -298,7 +298,7 @@ struct completion_token_output {
         float prob;
     };
 
-    std::vector<token_prob> probs;
+    std::vector<std::vector<token_prob>> probss;
 };
 
 // convert a vector of completion_token_output to json
@@ -311,30 +311,33 @@ static json probs_vector_to_json(const llama_context *ctx,
             json content = json::array();
 
             for (const auto &prob : probs) {
-                const std::string token = tokens_to_output_formatted_string(ctx, prob.tok);
-                float token_logprob = 1.0f;
-                std::vector<unsigned char> token_bytes(token.begin(), token.end());
-                json token_top_logprobs = json::array();
-                for (const auto &p : prob.probs) {
-                    const std::string p_token = tokens_to_output_formatted_string(ctx, p.tok);
-                    float p_token_logprob = p.prob;
-                    std::vector<unsigned char> p_token_bytes(p_token.begin(), p_token.end());
-                    token_top_logprobs.push_back(json{
-                        {"token", p_token},
-                        {"logprob", p_token_logprob},
-                        {"bytes", p_token_bytes},
-                    });
-                    if (p.tok == prob.tok) {
-                        token_logprob = p_token_logprob;
+                const auto sz_toks = int32_t(prob.toks.size());
+                for (int32_t i = 0; i < sz_toks; i++) {
+                    const std::string token = tokens_to_output_formatted_string(ctx, prob.toks[i]);
+                    float token_logprob = 1.0f;
+                    std::vector<unsigned char> token_bytes(token.begin(), token.end());
+                    json token_top_logprobs = json::array();
+                    for (const auto &p : prob.probss[i]) {
+                        const std::string p_token = tokens_to_output_formatted_string(ctx, p.tok);
+                        float p_token_logprob = p.prob;
+                        std::vector<unsigned char> p_token_bytes(p_token.begin(), p_token.end());
+                        token_top_logprobs.push_back(json{
+                            {"token", p_token},
+                            {"logprob", p_token_logprob},
+                            {"bytes", p_token_bytes},
+                        });
+                        if (p.tok == prob.toks[i]) {
+                            token_logprob = p_token_logprob;
+                        }
                     }
-                }
 
-                content.push_back(json{
-                    {"token", token},
-                    {"logprob", token_logprob},
-                    {"bytes", token_bytes},
-                    {"top_logprobs", token_top_logprobs},
-                });
+                    content.push_back(json{
+                        {"token", token},
+                        {"logprob", token_logprob},
+                        {"bytes", token_bytes},
+                        {"top_logprobs", token_top_logprobs},
+                    });
+                }
             }
 
             return json{{"content", content}};
@@ -344,21 +347,24 @@ static json probs_vector_to_json(const llama_context *ctx,
             json top_logprobs = json::array();
 
             for (const auto &prob : probs) {
-                const std::string token = tokens_to_output_formatted_string(ctx, prob.tok);
-                float token_logprob = 1.0f;
-                json token_top_logprobs;
-                for (const auto &p : prob.probs) {
-                    const std::string p_token = tokens_to_output_formatted_string(ctx, p.tok);
-                    float p_token_logprob = p.prob;
-                    token_top_logprobs[p_token] = p_token_logprob;
-                    if (p.tok == prob.tok) {
-                        token_logprob = p_token_logprob;
+                const auto sz_toks = int32_t(prob.toks.size());
+                for (int32_t i = 0; i < sz_toks; i++) {
+                    const std::string token = tokens_to_output_formatted_string(ctx, prob.toks[i]);
+                    float token_logprob = 1.0f;
+                    json token_top_logprobs;
+                    for (const auto &p : prob.probss[i]) {
+                        const std::string p_token = tokens_to_output_formatted_string(ctx, p.tok);
+                        float p_token_logprob = p.prob;
+                        token_top_logprobs[p_token] = p_token_logprob;
+                        if (p.tok == prob.toks[i]) {
+                            token_logprob = p_token_logprob;
+                        }
                     }
-                }
 
-                tokens.push_back(token);
-                token_logprobs.push_back(token_logprob);
-                top_logprobs.push_back(token_top_logprobs);
+                    tokens.push_back(token);
+                    token_logprobs.push_back(token_logprob);
+                    top_logprobs.push_back(token_top_logprobs);
+                }
             }
 
             return json{{"tokens", tokens},
@@ -370,21 +376,23 @@ static json probs_vector_to_json(const llama_context *ctx,
     json out = json::array();
 
     for (const auto &prob : probs) {
-        json probs_for_token = json::array();
+        const auto sz_toks = int32_t(prob.toks.size());
+        for (int32_t i = 0; i < sz_toks; i++) {
+            json probs_for_token = json::array();
+            for (const auto &p : prob.probss[i]) {
+                const std::string tok_str = tokens_to_output_formatted_string(ctx, p.tok);
+                probs_for_token.push_back(json{
+                    {"tok_str", tok_str},
+                    {"prob", p.prob},
+                });
+            }
 
-        for (const auto &p : prob.probs) {
-            const std::string tok_str = tokens_to_output_formatted_string(ctx, p.tok);
-            probs_for_token.push_back(json{
-                {"tok_str", tok_str},
-                {"prob", p.prob},
+            const std::string tok_str = tokens_to_output_formatted_string(ctx, prob.toks[i]);
+            out.push_back(json{
+                {"content", tok_str},
+                {"probs", probs_for_token},
             });
         }
-
-        const std::string tok_str = tokens_to_output_formatted_string(ctx, prob.tok);
-        out.push_back(json{
-            {"content", tok_str},
-            {"probs", probs_for_token},
-        });
     }
 
     return out;
@@ -621,12 +629,17 @@ static json oaicompat_completion_response(const json &request, const json result
         double ttft = json_value(ts, "prompt_ms", 0.0);
         double tpot = json_value(ts, "predicted_per_token_ms", 0.0);
         double tps = json_value(ts, "predicted_per_second", 0.0);
-        res["usage"] = json{{"completion_tokens", completion_tokens},
-                            {"prompt_tokens", prompt_tokens},
-                            {"total_tokens", completion_tokens + prompt_tokens},
-                            {"time_to_first_token_ms", ttft},
-                            {"time_per_output_token_ms", tpot},
-                            {"tokens_per_second", tps}};
+        json usage = json{{"completion_tokens", completion_tokens},
+                          {"prompt_tokens", prompt_tokens},
+                          {"total_tokens", completion_tokens + prompt_tokens},
+                          {"time_to_first_token_ms", ttft},
+                          {"time_per_output_token_ms", tpot},
+                          {"tokens_per_second", tps}};
+        if (ts.contains("drafted_n")) {
+            usage["draft_tokens"] = ts.at("drafted_n");
+            usage["draft_tokens_acceptance"] = ts.at("drafted_accepted_p");
+        }
+        res["usage"] = usage;
     } else if (include_usage) {
         res["usage"] = nullptr;
     }

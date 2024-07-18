@@ -225,6 +225,18 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "logging" });
     opts.push_back({ "logging",     "       --log-format {text,json}",
                                                                      "log output format: json or text (default: json)" });
+
+    opts.push_back({ "speculative" });
+    opts.push_back({ "speculative", "-md,   --model-draft FNAME",    "draft model for speculative decoding (default: unused)" });
+    opts.push_back({ "speculative", "-td,   --threads-draft N",      "number of threads to use during generation (default: same as --threads)" });
+    opts.push_back({ "speculative", "-tbd,  --threads-batch-draft N",
+                                                                     "number of threads to use during batch and prompt processing (default: same as --threads-draft)" });
+    opts.push_back({ "speculative", "       --draft N",              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
+
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "speculative",
+                                   "-ngld, --gpu-layers-draft N",   "number of layers to store in VRAM for the draft model" });
+    }
     // clang-format on
 
     printf("usage: %s [options]\n", argv[0]);
@@ -311,7 +323,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg = argv[i++];
                 bparams.gparams.n_threads = std::stoi(std::string(arg));
                 if (bparams.gparams.n_threads <= 0) {
-                    bparams.gparams.n_threads = std::thread::hardware_concurrency();
+                    bparams.gparams.n_threads = cpu_get_num_math();
                 }
                 continue;
             }
@@ -323,7 +335,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg = argv[i++];
                 bparams.gparams.n_threads_batch = std::stoi(std::string(arg));
                 if (bparams.gparams.n_threads_batch <= 0) {
-                    bparams.gparams.n_threads_batch = std::thread::hardware_concurrency();
+                    bparams.gparams.n_threads_batch = cpu_get_num_math();
                 }
                 continue;
             }
@@ -1148,6 +1160,61 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            // speculative flags
+
+            if (!strcmp(flag, "-md") || !strcmp(flag, "--model-draft")) {
+                if (i == argc) {
+                    missing("--model-draft");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.model_draft = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "-td") || !strcmp(flag, "--threads-draft")) {
+                if (i == argc) {
+                    missing("--threads-draft");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.n_threads_draft = std::stoi(std::string(arg));
+                if (bparams.gparams.n_threads_draft <= 0) {
+                    bparams.gparams.n_threads_draft = cpu_get_num_math();
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "-tbd") || !strcmp(flag, "--threads-batch-draft")) {
+                if (i == argc) {
+                    missing("--threads-batch-draft");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.n_threads_batch_draft = std::stoi(std::string(arg));
+                if (bparams.gparams.n_threads_batch_draft <= 0) {
+                    bparams.gparams.n_threads_batch_draft = cpu_get_num_math();
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--draft")) {
+                if (i == argc) {
+                    missing("--draft");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.n_draft = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (llama_supports_gpu_offload()) {
+                if (!strcmp(flag, "-ngld") || !strcmp(flag, "--gpu-layers-draft")) {
+                    if (i == argc) {
+                        missing("--gpu-layers-draft");
+                    }
+                    char *arg = argv[i++];
+                    bparams.gparams.n_gpu_layers_draft = std::stoi(arg);
+                    continue;
+                }
+            }
+
             unknown(flag);
         }
     } catch (const std::invalid_argument &ex) {
@@ -1158,6 +1225,16 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     if (!bparams.gparams.kv_overrides.empty()) {
         bparams.gparams.kv_overrides.emplace_back();
         bparams.gparams.kv_overrides.back().key[0] = 0;
+    }
+
+    if (bparams.gparams.n_threads_batch <= 0) {
+        bparams.gparams.n_threads_batch = bparams.gparams.n_threads;
+    }
+    if (bparams.gparams.n_threads_draft <= 0) {
+        bparams.gparams.n_threads_draft = bparams.gparams.n_threads;
+    }
+    if (bparams.gparams.n_threads_batch_draft <= 0) {
+        bparams.gparams.n_threads_batch_draft = bparams.gparams.n_threads_draft;
     }
 
     return true;
