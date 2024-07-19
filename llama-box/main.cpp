@@ -806,15 +806,15 @@ struct server_context {
     }
 
     std::string load_chat_template() const {
-        std::vector<char> model_template(2048, 0); // longest known template is about 1200 bytes
-        std::string template_key = "tokenizer.chat_template";
-        int32_t res = llama_model_meta_val_str(model, template_key.c_str(), model_template.data(),
-                                               model_template.size());
-        if (res < 0) {
-            // worst case: there is no information about template, we will use chatml by default
-            return "chatml"; // see llama_chat_apply_template_internal
+        std::string tkey = "tokenizer.chat_template";
+        int32_t tlen = llama_model_meta_val_str(model, tkey.c_str(), nullptr, 0);
+        if (tlen > 0) {
+            std::vector<char> tval(tlen + 1, 0);
+            if (llama_model_meta_val_str(model, tkey.c_str(), tval.data(), tlen + 1) == tlen) {
+                return {tval.data(), (unsigned long)tlen};
+            }
         }
-        return {model_template.data(), (unsigned long)(res)};
+        return "chatml"; // see llama_chat_apply_template_internal
     }
 
     bool init() {
@@ -3006,20 +3006,11 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_props = [&ctx_server](const httplib::Request &, httplib::Response &res) {
-        std::string template_key = "tokenizer.chat_template", curr_tmpl;
-        int32_t tlen = llama_model_meta_val_str(ctx_server.model, template_key.c_str(), nullptr, 0);
-        if (tlen > 0) {
-            std::vector<char> curr_tmpl_buf(tlen + 1, 0);
-            if (llama_model_meta_val_str(ctx_server.model, template_key.c_str(),
-                                         curr_tmpl_buf.data(), curr_tmpl_buf.size()) == tlen) {
-                curr_tmpl = std::string(curr_tmpl_buf.data(), tlen);
-            }
-        }
         json props = {
             {"system_prompt", ctx_server.system_prompt.c_str()},
             {"default_generation_settings", ctx_server.default_generation_settings_for_props},
             {"total_slots", ctx_server.params.n_parallel},
-            {"chat_template", curr_tmpl.c_str()}};
+            {"chat_template", ctx_server.load_chat_template().c_str()}};
 
         res.set_content(props.dump(), "application/json; charset=utf-8");
     };
