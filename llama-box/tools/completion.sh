@@ -85,6 +85,7 @@ completion() {
 
     ANSWER=''
     PRE_CONTENT=''
+    START_TIME=$(date +%s)
 
     while IFS= read -r LINE; do
         if [[ $LINE = data:* ]]; then
@@ -118,7 +119,10 @@ completion() {
                     printf "\n- DT   : %10d    -" "${DRAFTED_N}"
                     printf "\n- DTA  : %10.2f%%   -" "$(echo "${TIMINGS}" | jq -r '.drafted_accepted_p*100')"
                 fi
+                ELAPSED=$(($(date +%s) - START_TIME))
+                printf "\n- TC   : %10.2fs   -" "${ELAPSED}"
                 printf "\n------------------------"
+                break
             fi
         fi
     done < <(curl \

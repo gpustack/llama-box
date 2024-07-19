@@ -183,8 +183,6 @@ struct server_slot {
     llama_sampling_context *ctx_sampling_draft = nullptr;
     std::vector<llama_token> sampled_draft;
     std::vector<std::vector<llama_token_data>> sampled_draft_probs;
-    std::default_random_engine sampled_draft_rng;
-    std::uniform_real_distribution<> sampled_draft_rng_dist;
     int32_t n_drafted = 0;
     int32_t n_drafted_accepted = 0;
 
@@ -213,7 +211,6 @@ struct server_slot {
         sampled.clear();
         sampled_draft.clear();
         sampled_draft_probs.clear();
-        sampled_draft_rng_dist.reset();
         n_drafted = 0;
         n_drafted_accepted = 0;
     }
@@ -1247,9 +1244,7 @@ struct server_context {
             // the draft samplers will copy the target sampler's grammar.
             sparams_draft.grammar.clear();
             // force greedy sampling with probs for the draft model
-            if (sparams_draft.temp <= 0.0f) {
-                sparams_draft.temp = -1.0f;
-            }
+            sparams_draft.temp = -1.0f;
             slot.ctx_sampling_draft = llama_sampling_init(sparams_draft);
             if (slot.ctx_sampling_draft == nullptr) {
                 // for now, the only error that may happen here is invalid
@@ -1257,11 +1252,6 @@ struct server_context {
                 send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
                 return false;
             }
-
-            if (sparams_draft.seed == LLAMA_DEFAULT_SEED) {
-                sparams_draft.seed = std::time(nullptr);
-            }
-            slot.sampled_draft_rng = std::default_random_engine(sparams_draft.seed);
         }
 
         {
@@ -2515,73 +2505,13 @@ struct server_context {
                     auto sz_draft = int32_t(slot.sampled_draft.size());
                     // +1 to allow for the last token to be generated
                     for (int32_t j = 0; j < sz_draft + 1; ++j) {
+                        // greedy verification only
                         bool accept = false;
-                        if (slot.sparams.temp > 0) {
-                            // stochastic verification
-                            llama_token_data_array probs = llama_sampling_prepare(
-                                slot.ctx_sampling, ctx, nullptr, j, true, nullptr);
-                            llama_sample_softmax(ctx, &probs);
-                            if (j < sz_draft) {
-                                llama_token_data_array probs_draft = {
-                                    slot.sampled_draft_probs[j].data(),
-                                    slot.sampled_draft_probs[j].size(), true};
-                                float prob = 0.0f, prob_draft = 0.0f;
-                                for (size_t k = 0; k < probs_draft.size; k++) {
-                                    if (probs.data[k].id == slot.sampled_draft[j]) {
-                                        prob = probs.data[k].p;
-                                    }
-                                    if (probs_draft.data[k].id == slot.sampled_draft[j]) {
-                                        prob_draft = probs_draft.data[k].p;
-                                    }
-                                    if (prob != 0.0f && prob_draft != 0.0f) {
-                                        break;
-                                    }
-                                }
-                                auto r = float(slot.sampled_draft_rng_dist(slot.sampled_draft_rng));
-                                if (r <= prob / prob_draft) {
-                                    tok = slot.sampled_draft[j];
-                                    llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
-                                    slot.push_token_into_result(tok, result, ctx);
-                                    accept = true;
-                                } else {
-                                    float sum_probs = 0.0f;
-                                    // sort by id.
-                                    std::sort(
-                                        probs.data, probs.data + probs.size,
-                                        [](const llama_token_data &a, const llama_token_data &b) {
-                                            return a.id < b.id;
-                                        });
-                                    std::sort(
-                                        probs_draft.data, probs_draft.data + probs_draft.size,
-                                        [](const llama_token_data &a, const llama_token_data &b) {
-                                            return a.id < b.id;
-                                        });
-                                    for (size_t k = 0; k < probs.size; k++) {
-                                        probs.data[k].p =
-                                            std::max(0.0f, probs.data[k].p - probs_draft.data[k].p);
-                                        sum_probs += probs.data[k].p;
-                                    }
-                                    for (size_t k = 0; k < probs.size; k++) {
-                                        probs.data[k].p /= sum_probs;
-                                    }
-                                    // sort by probability desc.
-                                    std::sort(probs.data, probs.data + probs.size,
-                                              [](const llama_token_data &a,
-                                                 const llama_token_data &b) { return a.p > b.p; });
-                                    // sample from the target model
-                                    tok = llama_sample_token(ctx, &probs);
-                                    llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
-                                    slot.push_token_into_result(tok, result, ctx);
-                                }
-                            }
-                        } else {
-                            // greedy verification
-                            tok = llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, j);
-                            llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
-                            slot.push_token_into_result(tok, result, ctx);
-                            if (j < sz_draft && tok == slot.sampled_draft[j]) {
-                                accept = true;
-                            }
+                        tok = llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, j);
+                        llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
+                        slot.push_token_into_result(tok, result, ctx);
+                        if (j < sz_draft && tok == slot.sampled_draft[j]) {
+                            accept = true;
                         }
                         slot.n_decoded += 1;
                         if (!accept) {
