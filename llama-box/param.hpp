@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdarg>
+#include <utility>
 
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/common/grammar-parser.h"
@@ -183,6 +184,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "       --control-vector-layer-range START END",
                                                                      "layer range to apply the control vector(s) to, start and end inclusive" });
     opts.push_back({ "*",           "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: %s)", params.spm_infill ? "enabled" : "disabled" });
+    opts.push_back({ "*",           "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
 
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "*",           "-ngl,  --gpu-layers N",     "number of layers to store in VRAM" });
@@ -925,6 +927,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             if (!strcmp(flag, "--spm-infill")) {
                 bparams.gparams.spm_infill = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "-sp") || !strcmp(flag, "--special")) {
+                bparams.gparams.special = true;
                 continue;
             }
 

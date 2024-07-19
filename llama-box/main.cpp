@@ -1294,7 +1294,7 @@ struct server_context {
         slot.sampled.clear();
         std::string token_str;
         for (const llama_token &tok : result.toks) {
-            token_str += llama_token_to_piece(ctx, tok, false);
+            token_str += llama_token_to_piece(ctx, tok, params.special);
             slot.sampled.push_back(tok);
             if (slot.ctx_sampling->params.use_penalty_prompt_tokens && tok != -1) {
                 // we can change penalty_prompt_tokens because it is always created
