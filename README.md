@@ -149,6 +149,7 @@ general:
          --control-vector-layer-range START END
                                   layer range to apply the control vector(s) to, start and end inclusive
          --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: disabled)
+  -sp,   --special                special tokens output enabled (default: false)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
@@ -176,7 +177,7 @@ server:
                                   only commonly used templates are accepted:
                                   https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
          --chat-template-file FILE
-                                  set a file to load a custom jinja chat template
+                                  set a file to load a custom jinja chat template (default: template taken from model's metadata)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
                                   
