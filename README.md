@@ -1,4 +1,4 @@
-# llama-box
+# LLaMA Box
 
 [![](https://img.shields.io/github/actions/workflow/status/thxcode/llama-box/ci.yml?label=ci)](https://github.com/thxcode/llama-box/actions)
 [![](https://img.shields.io/github/license/thxcode/llama-box?label=license)](https://github.com/thxcode/llama-box#license)
@@ -6,6 +6,51 @@
 
 LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
+
+## Examples
+
+> **Note**: 
+> [LM Studio](https://lmstudio.ai/) provides a fantastic UI for downloading the GGUF model from Hugging Face.
+> The GGUF model files used in the following examples are downloaded via LM Studio.
+
+- Chat completion via [Nous-Hermes-2-Mistral-7B-DPO](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO) model.
+
+    ```shell
+    $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/NousResearch/Nous-Hermes-2-Mistral-7B-DPO/Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf
+    
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+    ```
+
+- Legacy completion via [GLM-4-9B-Chat](https://huggingface.co/THUDM/glm-4-9b-chat) model.
+
+    ```shell
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/second-state/glm-4-9b-chat-GGUF/glm-4-9b-chat-Q5_K_M.gguf
+    
+    $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "glm4", "prompt": "<|system|>You are a helpful assistant.<|user|>Tell me a joke.<|assistant|>"}'
+    ```
+
+- Vision explanation via [LLaVA-Phi-3-Mini](https://huggingface.co/xtuner/llava-phi-3-mini-hf) model.
+
+    ```shell
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-f16.gguf --mmproj ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-mmproj-f16.gguf
+    
+    $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://llava.hliu.cc/file\=/nobackup/haotian/tmp/gradio/ca10383cc943e99941ecffdc4d34c51afb2da472/extreme_ironing.jpg --output - | base64)")"; \
+      echo "{\"model\": \"llava-phi-3\", \"temperature\": 0.1, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/llava-phi-3.json
+    
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/llava-phi-3.json
+    ```
+
+- Draft completion via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct) and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models.
+
+    ```shell
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Qwen2-7B-Instruct-GGUF/Qwen2-7B-Instruct.Q5_K_M.gguf -md ~/.cache/lm-studio/models/QuantFactory/Qwen2-1.5B-Instruct-GGUF/Qwen2-1.5B-Instruct.Q5_K_M.gguf --draft 8
+    
+    $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "stream": true, "prompt": "Write a short story about a cat and a dog, more than 100 words."}'
+    ```
 
 ## Usage
 
@@ -155,7 +200,7 @@ speculative:
 
 ```
 
-## API Endpoints
+## API
 
 - **GET** `/health`: Returns the current state of the llama-box.
     + 503 -> `{"status": "loading model"}` if the model is still being loaded.
@@ -218,8 +263,7 @@ speculative:
 ## Tools
 
 It was so hard to find a Chat UI that was directly compatible with OpenAI, I mean, no installation required (I can live
-with `docker run`), no tokens (or optional), no Ollama required (don't you think Ollama’s API is hard to use?), just a
-simple RESTful API.
+with `docker run`), no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple RESTful API.
 
 So I was inspired by
 the [llama.cpp/chat.sh](https://github.com/ggerganov/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
