@@ -2754,10 +2754,11 @@ int main(int argc, char **argv) {
     server_log_json = params.log_json;
 
     server_context ctx_server;
+    if (params.system_prompt.empty() && !params.mmproj.empty()) {
+        params.system_prompt = "### System: You are a helpful assistant.\n### Human: ";
+    }
     if (!params.system_prompt.empty()) {
         ctx_server.system_prompt = params.system_prompt;
-    } else if (!params.mmproj.empty()) {
-        ctx_server.system_prompt = "### System: You are a helpful assistant.\n### Human: ";
     }
 
     if (params.model_alias == "unknown") {
@@ -2835,7 +2836,6 @@ int main(int argc, char **argv) {
     }
 
     std::unordered_map<std::string, std::string> log_data;
-
     log_data["hostname"] = params.hostname;
     log_data["port"] = std::to_string(params.port);
 
@@ -2857,12 +2857,19 @@ int main(int argc, char **argv) {
     LOG_INFO("server initialized", {});
     state.store(SERVER_STATE_READY);
 
-    // if a custom chat template is not supplied, we will use the one that comes
-    // with the model (if any)
-    if (params.chat_template.empty()) {
-        params.chat_template = ctx_server.load_chat_template();
+    if (params.enable_chat_template) {
+        // if a custom chat template is not supplied, we will use the one that comes
+        // with the model (if any)
+        if (params.chat_template.empty()) {
+            params.chat_template = ctx_server.load_chat_template();
+        }
+        if (params.chat_template.size() <= 20) {
+            for (char &c : params.chat_template) {
+                c = char(std::tolower(c));
+            }
+        }
+        LOG_INFO("chat template", {{"template", params.chat_template}});
     }
-    LOG_INFO("chat template", {{"template", params.chat_template}});
 
     //
     // Handlers
@@ -3005,12 +3012,13 @@ int main(int argc, char **argv) {
         res.set_content(metrics.str(), "text/plain; version=0.0.4");
     };
 
-    const auto handle_props = [&ctx_server](const httplib::Request &, httplib::Response &res) {
+    const auto handle_props = [&ctx_server, &params](const httplib::Request &,
+                                                     httplib::Response &res) {
         json props = {
-            {"system_prompt", ctx_server.system_prompt.c_str()},
-            {"default_generation_settings", ctx_server.default_generation_settings_for_props},
-            {"total_slots", ctx_server.params.n_parallel},
-            {"chat_template", ctx_server.load_chat_template().c_str()}};
+            {"system_prompt", params.system_prompt.c_str()},
+            {"total_slots", params.n_parallel},
+            {"chat_template", params.chat_template.c_str()},
+            {"default_generation_settings", ctx_server.default_generation_settings_for_props}};
 
         res.set_content(props.dump(), "application/json; charset=utf-8");
     };

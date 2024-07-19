@@ -216,7 +216,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                      "only commonly used templates are accepted:\n"
                                                                      "https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template" });
     opts.push_back({ "server",      "       --chat-template-file FILE",
-                                                                     "set a file to load a custom jinja chat template" });
+                                                                     "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
     opts.push_back({ "server",      "-sps,  --slot-prompt-similarity N",
                                                                      "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
     opts.push_back({ "server",      "       --conn-idle N",          "server connection idle in seconds (default: %d)", bparams.conn_idle });
@@ -1093,9 +1093,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--chat-template");
                 }
                 std::string t(arg);
-                if (!llama_chat_verify_template(t)) {
+                if (t.size() > 20 && !llama_chat_verify_template(t)) {
                     invalid("--chat-template");
                 }
+                bparams.gparams.enable_chat_template = true;
                 bparams.gparams.chat_template = t;
                 continue;
             }
@@ -1109,8 +1110,14 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (!file) {
                     invalid("--chat-template-file");
                 }
+                std::string t;
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
-                          std::back_inserter(bparams.gparams.chat_template));
+                          std::back_inserter(t));
+                if (t.size() > 20 && !llama_chat_verify_template(t)) {
+                    invalid("--chat-template-file");
+                }
+                bparams.gparams.enable_chat_template = true;
+                bparams.gparams.chat_template = t;
                 continue;
             }
 
