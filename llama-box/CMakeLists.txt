@@ -62,6 +62,18 @@ add_dependencies(patch version)
 #
 set(TARGET llama-box)
 include_directories(${CMAKE_SOURCE_DIR})
+if (GGML_CANN)
+    if ("cann${CANN_INSTALL_DIR}" STREQUAL "cann" AND DEFINED ENV{ASCEND_TOOLKIT_HOME})
+        set(CANN_INSTALL_DIR $ENV{ASCEND_TOOLKIT_HOME})
+        message(STATUS "CANN: updated CANN_INSTALL_DIR from ASCEND_TOOLKIT_HOME=$ENV{ASCEND_TOOLKIT_HOME}")
+    endif ()
+    if (CANN_INSTALL_DIR)
+        message(STATUS "CANN: updated link directoreis to ${CANN_INSTALL_DIR}/lib64")
+        link_directories(
+                ${CANN_INSTALL_DIR}/lib64
+                ${CANN_INSTALL_DIR}/runtime/lib64/stub)
+    endif ()
+endif ()
 add_executable(${TARGET} main.cpp param.hpp ratelimiter.hpp utils.hpp)
 add_dependencies(${TARGET} patch)
 target_link_libraries(${TARGET} PRIVATE version common llava ${CMAKE_THREAD_LIBS_INIT})
