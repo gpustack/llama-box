@@ -170,6 +170,12 @@ jobs:
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd ${{ github.workspace }}/build/bin/llama-box
+          else
+            exit 1
+          fi
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
@@ -188,13 +194,6 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             rocm/dev-ubuntu-22.04:${{ matrix.version == '6.1' && '6.1.2' || '5.7.1' }}-complete
-          
-          echo "===== RESULT ====="
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd ${{ github.workspace }}/build/bin/llama-box
-          else
-            exit 1
-          fi
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -273,6 +272,12 @@ jobs:
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd ${{ github.workspace }}/build/bin/llama-box
+          else
+            exit 1
+          fi
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
@@ -289,13 +294,6 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             nvidia/cuda:${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}-devel-ubuntu22.04
-          
-          echo "===== RESULT ====="
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd ${{ github.workspace }}/build/bin/llama-box
-          else
-            exit 1
-          fi
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -362,6 +360,12 @@ jobs:
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd ${{ github.workspace }}/build/bin/llama-box
+          else
+            exit 1
+          fi
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
@@ -379,13 +383,6 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             intel/oneapi-basekit:${{ matrix.version == '2024.2' && '2024.2.0' || '2024.1.1' }}-devel-ubuntu22.04
-
-          echo "===== RESULT ====="
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd ${{ github.workspace }}/build/bin/llama-box
-          else
-            exit 1
-          fi
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -452,6 +449,12 @@ jobs:
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd ${{ github.workspace }}/build/bin/llama-box
+          else
+            exit 1
+          fi
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
@@ -467,13 +470,6 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ascendai/cann:${{ matrix.version }}
-
-          echo "===== RESULT ====="
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd ${{ github.workspace }}/build/bin/llama-box
-          else
-            exit 1
-          fi
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
