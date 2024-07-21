@@ -287,17 +287,22 @@ speculative:
 
 ## Tools
 
-It was so hard to find a Chat UI that was directly compatible with OpenAI, I mean, no installation required (I can live
+It was so hard to find a Chat UI that was directly compatible with OpenAI, that mean, no installation required (I can live
 with `docker run`), no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple
 RESTful API.
 
-So I was inspired by
+So we are inspired by
 the [llama.cpp/chat.sh](https://github.com/ggerganov/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
 and adjust it to interact with LLaMA Box.
 
 All you need is a Bash shell and curl.
 
 - **completion.sh**: A simple script to interact with the `/completion` endpoint.
+- **chat.sh**: A simple script to interact with the `/v1/chat/completions` endpoint.
+
+Both `completion.sh` and `chat.sh` are used for talking with the LLaMA Box,
+but `completion.sh` embeds a fixed pattern to format the given prompt format, 
+while `chat.sh` can leverage the chat template from the model's metadata or user defined.
 
 ```shell
 $ # one-shot completion
@@ -305,6 +310,12 @@ $ N_PREDICT=4096 TOP_K=1 ./llama-box/tools/completion.sh "// Quick-sort implemen
 
 $ # interactive completion
 $ N_PREDICT=4096 ./llama-box/tools/completion.sh
+
+$ # one-shot chat
+$ MAX_TOKENS=4096 ./llama-box/tools/chat.sh "Tell me a joke."
+
+$ # interactive chat
+$ MAX_TOKENS=4096 ./llama-box/tools/chat.sh
 ```
 
 ## License

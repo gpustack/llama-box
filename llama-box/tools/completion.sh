@@ -52,35 +52,35 @@ tokenize() {
 }
 
 N_PREDICT="${N_PREDICT:-"-1"}"
+SEED="${SEED:-"-1"}"
+STOP="${STOP:-"[\"\\n### Human:\"]"}"
 TEMP="${TEMP:-"0.8"}"
 TOP_P="${TOP_P:-"0.9"}"
 TOP_K="${TOP_K:-"40"}"
-STOP="${STOP:-"[\"\\n### Human:\"]"}"
-SEED="${SEED:-"-1"}"
 N_KEEP=$(tokenize "${INSTRUCTION}" | wc -l)
 
 completion() {
     PROMPT="$(trim_trailing "$(format_prompt "$1")")"
-    DATA="$(echo -n "$PROMPT" | jq -Rs \
+    DATA="$(echo -n "${PROMPT}" | jq -Rs \
       --argjson n_predict "${N_PREDICT}" \
+      --argjson seed "${SEED}" \
+      --argjson stop "${STOP}" \
       --argjson temp "${TEMP}" \
       --argjson top_p "${TOP_P}" \
       --argjson top_k "${TOP_K}" \
-      --argjson stop "${STOP}" \
-      --argjson seed "${SEED}" \
       --argjson n_keep "${N_KEEP}" \
       '{
         prompt: .,
-        temperature: $temp,
-        top_k: $top_k,
-        top_p: $top_p,
         n_predict: $n_predict,
-        cache_prompt: false,
-        n_keep: $n_keep,
         seed: $seed,
         stop: $stop,
+        temperature: $temp,
+        top_p: $top_p,
+        top_k: $top_k,
+        n_keep: $n_keep,
+        cache_prompt: false,
         stream: true
-    }')"
+      }')"
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
     ANSWER=''
@@ -88,7 +88,7 @@ completion() {
     START_TIME=$(date +%s)
 
     while IFS= read -r LINE; do
-        if [[ $LINE = data:* ]]; then
+        if [[ "${LINE}" = data:* ]]; then
             echo "A: ${LINE}" >> "${LOG_FILE}"
             LINE="${LINE:5}"
             CONTENT="$(echo "${LINE}" | jq -r '.content')"
@@ -109,13 +109,13 @@ completion() {
             printf "%s" "${CONTENT}"
             ANSWER+="${CONTENT}"
             TIMINGS="$(echo "${LINE}" | jq -r '.timings')"
-            if [ "${TIMINGS}" != "null" ]; then
+            if [[ "${TIMINGS}" != "null" ]]; then
                 printf "\n------------------------"
                 printf "\n- TTFT : %10.2fms  -" "$(echo "${TIMINGS}" | jq -r '.prompt_ms')"
                 printf "\n- TBT  : %10.2fms  -" "$(echo "${TIMINGS}" | jq -r '.predicted_per_token_ms')"
                 printf "\n- TPS  : %10.2f    -" "$(echo "${TIMINGS}" | jq -r '.predicted_per_second')"
                 DRAFTED_N="$(echo "${TIMINGS}" | jq -r '.drafted_n')"
-                if [ "${DRAFTED_N}" != "null" ]; then
+                if [[ "${DRAFTED_N}" != "null" ]]; then
                     printf "\n- DT   : %10d    -" "${DRAFTED_N}"
                     printf "\n- DTA  : %10.2f%%   -" "$(echo "${TIMINGS}" | jq -r '.drafted_accepted_p*100')"
                 fi
@@ -141,12 +141,12 @@ completion() {
 echo "====================================================="
 echo "LOG_FILE  : ${LOG_FILE}"
 echo "API_URL   : ${API_URL}"
+echo "N_PREDICT : ${N_PREDICT}"
+echo "SEED      : ${SEED}"
+echo "STOP      : ${STOP}"
 echo "TEMP      : ${TEMP}"
 echo "TOP_P     : ${TOP_P}"
 echo "TOP_K     : ${TOP_K}"
-echo "N_PREDICT : ${N_PREDICT}"
-echo "STOP      : ${STOP}"
-echo "SEED      : ${SEED}"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then

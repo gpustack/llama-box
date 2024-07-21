@@ -498,13 +498,13 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     }
 
     // Handle "logprobs" field
-    if (body.contains("logprobs")) {
+    if (json_value(body, "logprobs", false)) {
         if (chat) {
             llama_params["n_probs"] = std::min(json_value(body, "top_logprobs", 2), 20);
         } else {
             llama_params["n_probs"] = std::min(json_value(body, "logprobs", 2), 5);
         }
-    } else if (body.contains("top_logprobs")) {
+    } else if (!body.contains("logprobs") && body.contains("top_logprobs")) {
         throw std::runtime_error(R"(Illegal param: "top_logprobs" requires "logprobs" to be set)");
     }
 
@@ -563,7 +563,7 @@ static json oaicompat_completion_response(const json &request, const json result
 
     json res = json{
         {"id", completion_id},
-        {"created", std::time(0)},
+        {"created", std::time(nullptr)},
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
     };
 
