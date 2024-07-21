@@ -7,13 +7,34 @@
 LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
 
+## Download
+
+Download LLaMA Box from [the latest release](https://github.com/thxCode/llama-box/releases/latest) page please, now
+LLaMA Box supports the following platforms.
+
+| Backend             | OS/Arch                       | Supported Devices                                                                                                                                                                                                       |
+|---------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Apple Metal 3       | `darwin/amd64` `darwin/arm64` | Install macOS Ventura or later, see https://support.apple.com/en-sg/102894.                                                                                                                                             |
+| NVIDIA CUDA 11.8-s  | `linux/amd64` `windows/amd64` | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
+| NVIDIA CUDA 12.5-s  | `linux/amd64` `windows/amd64` | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
+| NVIDIA CUDA 12.5-l  | `linux/amd64` `windows/amd64` | Compute capability is `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                    |
+| AMD ROCm/HIP 5.5-s  | `windows/amd64`               | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
+| AMD ROCm/HIP 5.7-s  | `linux/amd64` `windows/amd64` | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html, https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.             |
+| AMD ROCm/HIP 5.7-l  | `windows/amd64`               | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.                                 |
+| AMD ROCm/HIP 6.1-s  | `linux/amd64`                 | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
+| AMD ROCm/HIP 6.1-l  | `linux/amd64`                 | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html. |
+| Intel oneAPI 2024.1 | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.1 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
+| Intel oneAPI 2024.2 | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.2 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
+| Ascend CANN 8.0     | `linux/amd64` `linux/arm64`   | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html                                                                                        |                                                                                       |
+
 ## Examples
 
-> **Note**: 
+> **Note**:
 > [LM Studio](https://lmstudio.ai/) provides a fantastic UI for downloading the GGUF model from Hugging Face.
 > The GGUF model files used in the following examples are downloaded via LM Studio.
 
-- Chat completion via [Nous-Hermes-2-Mistral-7B-DPO](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO) model.
+- Chat completion via [Nous-Hermes-2-Mistral-7B-DPO](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO)
+  model.
 
     ```shell
     $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 2048 tokens per session.
@@ -43,7 +64,8 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/llava-phi-3.json
     ```
 
-- Draft completion via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct) and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models.
+- Speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
+  and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models.
 
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
@@ -203,7 +225,7 @@ speculative:
 
 ## API
 
-- **GET** `/health`: Returns the current state of the llama-box.
+- **GET** `/health`: Returns the current state of the LLaMA Box.
     + 503 -> `{"status": "loading model"}` if the model is still being loaded.
     + 500 -> `{"status": "error"}` if the model failed to load.
     + 200 -> `{"status": "ok", "slots_idle": 1, "slots_processing": 2 }` if the model is successfully loaded and the
@@ -213,7 +235,7 @@ speculative:
     + 503 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if the query
       parameter `fail_on_no_slot` is provided and no slots are currently available.
 
-- **GET** `/metrics`: Returns the Prometheus compatible metrics of the llama-box.
+- **GET** `/metrics`: Returns the Prometheus compatible metrics of the LLaMA Box.
     + This endpoint is only available if the `--metrics` flag is enabled.
     + `llamacpp:prompt_tokens_total`: (Counter) Number of prompt tokens processed.
     + `llamacpp:prompt_seconds_total`: (Counter) Prompt process time.
@@ -264,11 +286,12 @@ speculative:
 ## Tools
 
 It was so hard to find a Chat UI that was directly compatible with OpenAI, I mean, no installation required (I can live
-with `docker run`), no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple RESTful API.
+with `docker run`), no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple
+RESTful API.
 
 So I was inspired by
 the [llama.cpp/chat.sh](https://github.com/ggerganov/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
-and adjust it to interact with llama-box.
+and adjust it to interact with LLaMA Box.
 
 All you need is a Bash shell and curl.
 
