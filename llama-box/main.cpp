@@ -1782,6 +1782,8 @@ struct server_context {
                 {"t_tokens_generation_total", metrics.t_tokens_generation_total},
                 {"n_tokens_predicted_total", metrics.n_tokens_predicted_total},
                 {"t_prompt_processing_total", metrics.t_prompt_processing_total},
+                {"n_tokens_drafted_total", metrics.n_tokens_drafted_total},
+                {"n_tokens_drafted_accepted_total", metrics.n_tokens_drafted_accepted_total},
 
                 {"n_prompt_tokens_processed", metrics.n_prompt_tokens_processed},
                 {"t_prompt_processing", metrics.t_prompt_processing},
@@ -2945,6 +2947,8 @@ int main(int argc, char **argv) {
             uint64_t t_prompt_processing_total = data.at("t_prompt_processing_total");
             uint64_t n_tokens_predicted_total = data.at("n_tokens_predicted_total");
             uint64_t t_tokens_generation_total = data.at("t_tokens_generation_total");
+            uint64_t n_tokens_drafted_total = data.at("n_tokens_drafted_total");
+            uint64_t n_tokens_drafted_accepted_total = data.at("n_tokens_drafted_accepted_total");
             uint64_t n_prompt_tokens_processed = data.at("n_prompt_tokens_processed");
             uint64_t t_prompt_processing = data.at("t_prompt_processing");
             uint64_t n_tokens_predicted = data.at("n_tokens_predicted");
@@ -2969,7 +2973,13 @@ int main(int argc, char **argv) {
                    {"value", n_tokens_predicted_total}},
                   {{"name", "tokens_predicted_seconds_total"},
                    {"help", "Predict process time"},
-                   {"value", double(t_tokens_generation_total) / 1.e3}}}},
+                   {"value", double(t_tokens_generation_total) / 1.e3}},
+                  {{"name", "tokens_drafted_total"},
+                   {"help", "Number of speculative decoding tokens processed."},
+                   {"value", n_tokens_drafted_total}},
+                  {{"name", "tokens_drafted_accepted_total"},
+                   {"help", "Number of speculative decoding tokens to be accepted."},
+                   {"value", n_tokens_drafted_accepted_total}}}},
                 {"gauge",
                  {{{"name", "prompt_tokens_seconds"},
                    {"help", "Average prompt throughput in tokens/s."},

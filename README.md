@@ -241,6 +241,8 @@ speculative:
     + `llamacpp:prompt_seconds_total`: (Counter) Prompt process time.
     + `llamacpp:tokens_predicted_total`: (Counter) Number of generation tokens processed.
     + `llamacpp:tokens_predicted_seconds_total`: (Counter) Predict process time.
+    + `llamacpp:tokens_drafted_total`: (Counter) Number of speculative decoding tokens processed.
+    + `llamacpp:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted.
     + `llamacpp:prompt_tokens_seconds`: (Gauge) Average prompt throughput in tokens/s.
     + `llamacpp:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
     + `llamacpp:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
