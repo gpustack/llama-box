@@ -21,9 +21,10 @@ using json = nlohmann::json;
 struct llama_box_params {
     gpt_params gparams;
 
-    int32_t conn_idle = 60;      // connection idle in seconds
-    int32_t conn_keepalive = 15; // connection keep-alive in seconds
-    int32_t n_tps = 0;           // maximum number of tokens per seconds
+    int32_t conn_idle = 60;       // connection idle in seconds
+    int32_t conn_keepalive = 15;  // connection keep-alive in seconds
+    int32_t n_tps = 0;            // maximum number of tokens per seconds
+    int32_t lookup_ngram_min = 0; // minimum n-gram size for lookup cache
 };
 
 static int unknown(const char *flag) {
@@ -95,10 +96,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "-s,    --seed N",               "RNG seed (default: %d, use random seed for < 0)", params.seed });
     opts.push_back({ "*",           "-t,    --threads N",            "number of threads to use during generation (default: %d)", params.n_threads });
     opts.push_back({ "*",           "-tb,   --threads-batch N",      "number of threads to use during batch and prompt processing (default: same as --threads)" });
-    opts.push_back({ "*",           "-lcs,  --lookup-cache-static FILE",
-                                                                     "path to static lookup cache to use for lookup decoding (not updated by generation)" });
-    opts.push_back({ "*",           "-lcd,  --lookup-cache-dynamic FILE",
-                                                                     "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
     opts.push_back({ "*",           "-c,    --ctx-size N",           "size of the prompt context (default: %d, 0 = loaded from model)", params.n_ctx });
     opts.push_back({ "*",           "-n,    --predict N",            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", params.n_predict });
     opts.push_back({ "*",           "-b,    --batch-size N",         "logical maximum batch size (default: %d)", params.n_batch });
@@ -185,7 +182,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                      "layer range to apply the control vector(s) to, start and end inclusive" });
     opts.push_back({ "*",           "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: %s)", params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "*",           "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
-
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "*",           "-ngl,  --gpu-layers N",     "number of layers to store in VRAM" });
         opts.push_back({ "*",           "-sm,   --split-mode SPLIT_MODE",
@@ -229,16 +225,22 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                      "log output format: json or text (default: json)" });
 
     opts.push_back({ "speculative" });
+    opts.push_back({ "speculative", "       --draft N",              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
+    // draft model speculative decoding
     opts.push_back({ "speculative", "-md,   --model-draft FNAME",    "draft model for speculative decoding (default: unused)" });
     opts.push_back({ "speculative", "-td,   --threads-draft N",      "number of threads to use during generation (default: same as --threads)" });
     opts.push_back({ "speculative", "-tbd,  --threads-batch-draft N",
                                                                      "number of threads to use during batch and prompt processing (default: same as --threads-draft)" });
-    opts.push_back({ "speculative", "       --draft N",              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
-
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "speculative",
-                                   "-ngld, --gpu-layers-draft N",   "number of layers to store in VRAM for the draft model" });
+                                    "-ngld, --gpu-layers-draft N",   "number of layers to store in VRAM for the draft model" });
     }
+    // model-free speculative decoding
+    opts.push_back({ "speculative", "       --lookup-ngram-min N",   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", bparams.lookup_ngram_min });
+    opts.push_back({ "speculative", "-lcs,  --lookup-cache-static FILE",
+                                                                     "path to static lookup cache to use for lookup decoding (not updated by generation)" });
+    opts.push_back({ "speculative", "-lcd,  --lookup-cache-dynamic FILE",
+                                                                     "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
     // clang-format on
 
     printf("usage: %s [options]\n", argv[0]);
@@ -339,24 +341,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (bparams.gparams.n_threads_batch <= 0) {
                     bparams.gparams.n_threads_batch = cpu_get_num_math();
                 }
-                continue;
-            }
-
-            if (!strcmp(flag, "-lcs") || !strcmp(flag, "--lookup-cache-static")) {
-                if (i == argc) {
-                    missing("--lookup-cache-static");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.lookup_cache_static = std::string(arg);
-                continue;
-            }
-
-            if (!strcmp(flag, "-lcd") || !strcmp(flag, "--lookup-cache-dynamic")) {
-                if (i == argc) {
-                    missing("--lookup-cache-dynamic");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.lookup_cache_dynamic = std::string(arg);
                 continue;
             }
 
@@ -1176,6 +1160,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             // speculative flags
 
+            if (!strcmp(flag, "--draft")) {
+                if (i == argc) {
+                    missing("--draft");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.n_draft = std::stoi(std::string(arg));
+                continue;
+            }
+
             if (!strcmp(flag, "-md") || !strcmp(flag, "--model-draft")) {
                 if (i == argc) {
                     missing("--model-draft");
@@ -1209,15 +1202,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--draft")) {
-                if (i == argc) {
-                    missing("--draft");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.n_draft = std::stoi(std::string(arg));
-                continue;
-            }
-
             if (llama_supports_gpu_offload()) {
                 if (!strcmp(flag, "-ngld") || !strcmp(flag, "--gpu-layers-draft")) {
                     if (i == argc) {
@@ -1227,6 +1211,33 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     bparams.gparams.n_gpu_layers_draft = std::stoi(arg);
                     continue;
                 }
+            }
+
+            if (!strcmp(flag, "--lookup-ngram-min")) {
+                if (i == argc) {
+                    missing("--lookup-ngram-min");
+                }
+                char *arg = argv[i++];
+                bparams.lookup_ngram_min = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "-lcs") || !strcmp(flag, "--lookup-cache-static")) {
+                if (i == argc) {
+                    missing("--lookup-cache-static");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.lookup_cache_static = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "-lcd") || !strcmp(flag, "--lookup-cache-dynamic")) {
+                if (i == argc) {
+                    missing("--lookup-cache-dynamic");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.lookup_cache_dynamic = std::string(arg);
+                continue;
             }
 
             unknown(flag);

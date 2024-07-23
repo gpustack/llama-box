@@ -48,8 +48,12 @@ TOP_P="${TOP_P:-"1"}"
 
 chat_completion() {
     PROMPT="$(trim_trailing "$1")"
-    DATA="$(echo -n "" | jq -Rs \
-      --argjson messages "[$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]" \
+    if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
+      DATA="$(cat "${PROMPT:1}")"
+    else
+      DATA="{\"messages\": [$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]}"
+    fi
+    DATA="$(echo -n "${DATA}" | jq \
       --argjson frequency_penalty "${FREQUENCY_PENALTY}" \
       --argjson logprobs "${LOGPROBS}" \
       --argjson top_logprobs "${TOP_LOGPROBS}" \
@@ -61,7 +65,6 @@ chat_completion() {
       --argjson temp "${TEMP}" \
       --argjson top_p "${TOP_P}" \
       '{
-        messages: $messages,
         frequency_penalty: $frequency_penalty,
         logprobs: $logprobs,
         top_logprobs: $top_logprobs,
@@ -75,7 +78,7 @@ chat_completion() {
         stream_options: {include_usage: true},
         temperature: $temp,
         top_p: $top_p
-      }')"
+      } * .')"
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
     ANSWER=''

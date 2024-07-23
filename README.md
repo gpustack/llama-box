@@ -34,16 +34,21 @@ LLaMA Box supports the following platforms.
 > The GGUF model files used in the following examples are downloaded via LM Studio.
 
 - Chat completion via [Nous-Hermes-2-Mistral-7B-DPO](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO)
-  model.
+  model. Use GGUF files
+  from [NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF/tree/main?show_file_info=Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf).
 
     ```shell
     $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 2048 tokens per session.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/NousResearch/Nous-Hermes-2-Mistral-7B-DPO/Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF/Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf
     
-    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "hermes2", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+    
+    $ # or use the chat.sh tool
+    $ ./llama-box/tools/chat.sh "Introduce Beijing in 50 words."
     ```
 
-- Legacy completion via [GLM-4-9B-Chat](https://huggingface.co/THUDM/glm-4-9b-chat) model.
+- Legacy completion via [GLM-4-9B-Chat](https://huggingface.co/THUDM/glm-4-9b-chat) model. Use GGUF files
+  from [second-state/glm-4-9b-chat-GGUF](https://huggingface.co/second-state/glm-4-9b-chat-GGUF/tree/main?show_file_info=glm-4-9b-chat-Q5_K_M.gguf).
 
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
@@ -52,26 +57,52 @@ LLaMA Box supports the following platforms.
     $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "glm4", "prompt": "<|system|>You are a helpful assistant.<|user|>Tell me a joke.<|assistant|>"}'
     ```
 
-- Vision explanation via [LLaVA-Phi-3-Mini](https://huggingface.co/xtuner/llava-phi-3-mini-hf) model.
+- Vision explanation via [LLaVA-Phi-3-Mini](https://huggingface.co/xtuner/llava-phi-3-mini-hf) model. Use GGUF files
+  from [xtuner/llava-phi-3-mini-gguf](https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main?show_file_info=llava-phi-3-mini-f16.gguf).
 
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-f16.gguf --mmproj ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-mmproj-f16.gguf
     
     $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://llava.hliu.cc/file\=/nobackup/haotian/tmp/gradio/ca10383cc943e99941ecffdc4d34c51afb2da472/extreme_ironing.jpg --output - | base64)")"; \
-      echo "{\"model\": \"llava-phi-3\", \"temperature\": 0.1, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/llava-phi-3.json
+      echo "{\"model\": \"llava-phi-3\", \"temperature\": 0.1, \"stop\": [\"<|end|>\"], \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
     
-    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/llava-phi-3.json
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
+  
+    $ # or use the chat.sh tool
+    $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
 
-- Speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
-  and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models.
+- Draft model speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
+  and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models. Use GGUF files
+  from [QuantFactory/Qwen2-7B-Instruct-GGUF](https://huggingface.co/QuantFactory/Qwen2-7B-Instruct-GGUF/tree/main?show_file_info=Qwen2-7B-Instruct.Q5_K_M.gguf)
+  and [QuantFactory/Qwen2-1.5B-Instruct-GGUF](https://huggingface.co/QuantFactory/Qwen2-1.5B-Instruct-GGUF/tree/main?show_file_info=Qwen2-1.5B-Instruct.Q5_K_M.gguf).
 
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Qwen2-7B-Instruct-GGUF/Qwen2-7B-Instruct.Q5_K_M.gguf -md ~/.cache/lm-studio/models/QuantFactory/Qwen2-1.5B-Instruct-GGUF/Qwen2-1.5B-Instruct.Q5_K_M.gguf --draft 8
     
     $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "stream": true, "prompt": "Write a short story about a cat and a dog, more than 100 words."}'
+  
+    $ # or use the chat.sh tool
+    $ ./llama-box/tools/chat.sh "Write a short story about a cat and a dog, more than 100 words."
+    ```
+
+- Lookup speculative decoding
+  via [Mistral-Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407) models. Use GGUF files
+  from [QuantFactory/Mistral-Nemo-Instruct-2407-GGUF](https://huggingface.co/QuantFactory/Mistral-Nemo-Instruct-2407-GGUF/tree/main?show_file_info=Mistral-Nemo-Instruct-2407.Q5_K_M.gguf).
+
+    ```shell
+    $ # Provide 2 session(allowing 2 parallel chat users), with a max of 8192 tokens per session.
+    $ llama-box -c 16384 -np 2 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Mistral-Nemo-Instruct-2407-GGUF/Mistral-Nemo-Instruct-2407.Q5_K_M.gguf --lookup-ngram-min 1 --draft 8
+    
+    $ CONTENT="$(curl https://en.wikipedia.org/w/api.php\?action\=query\&format\=json\&titles\=Medusa\&prop\=extracts\&exintro\&explaintext | jq '.query.pages | to_entries | .[0].value.extract | gsub("\n"; "\\n") | gsub("\t"; "\\t")')"; \
+      echo "{\"model\": \"mistral-nemo\", \"stream\": true, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"text\", \"text\": \"Please read the following content and summarize the article in 5 sentences.\"}, {\"type\": \"text\", \"text\": "$CONTENT"}]}]}" > /tmp/data.json
+
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
+    
+    $ # or use the chat.sh tool
+    $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
 
 ## Usage
@@ -88,10 +119,6 @@ general:
   -s,    --seed N                 RNG seed (default: -1, use random seed for < 0)
   -t,    --threads N              number of threads to use during generation (default: 8)
   -tb,   --threads-batch N        number of threads to use during batch and prompt processing (default: same as --threads)
-  -lcs,  --lookup-cache-static FILE
-                                  path to static lookup cache to use for lookup decoding (not updated by generation)
-  -lcd,  --lookup-cache-dynamic FILE
-                                  path to dynamic lookup cache to use for lookup decoding (updated by generation)
   -c,    --ctx-size N             size of the prompt context (default: 0, 0 = loaded from model)
   -n,    --predict N              number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
   -b,    --batch-size N           logical maximum batch size (default: 2048)
@@ -215,11 +242,16 @@ logging:
 
 speculative:
 
+         --draft N                number of tokens to draft for speculative decoding (default: 5)
   -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
   -td,   --threads-draft N        number of threads to use during generation (default: same as --threads)
   -tbd,  --threads-batch-draft N  number of threads to use during batch and prompt processing (default: same as --threads-draft)
-         --draft N                number of tokens to draft for speculative decoding (default: 5)
   -ngld, --gpu-layers-draft N     number of layers to store in VRAM for the draft model
+         --lookup-ngram-min N     minimum n-gram size for lookup cache (default: 0, 0 = disabled)
+  -lcs,  --lookup-cache-static FILE
+                                  path to static lookup cache to use for lookup decoding (not updated by generation)
+  -lcd,  --lookup-cache-dynamic FILE
+                                  path to dynamic lookup cache to use for lookup decoding (updated by generation)
 
 ```
 
@@ -287,7 +319,8 @@ speculative:
 
 ## Tools
 
-It was so hard to find a Chat UI that was directly compatible with OpenAI, that mean, no installation required (I can live
+It was so hard to find a Chat UI that was directly compatible with OpenAI, that mean, no installation required (I can
+live
 with `docker run`), no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple
 RESTful API.
 
@@ -301,7 +334,7 @@ All you need is a Bash shell and curl.
 - **chat.sh**: A simple script to interact with the `/v1/chat/completions` endpoint.
 
 Both `completion.sh` and `chat.sh` are used for talking with the LLaMA Box,
-but `completion.sh` embeds a fixed pattern to format the given prompt format, 
+but `completion.sh` embeds a fixed pattern to format the given prompt format,
 while `chat.sh` can leverage the chat template from the model's metadata or user defined.
 
 ```shell
