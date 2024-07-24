@@ -62,13 +62,16 @@ add_dependencies(patch version)
 #
 set(TARGET llama-box)
 include_directories(${CMAKE_SOURCE_DIR})
+if (GGML_SYCL)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl")
+endif ()
 if (GGML_CANN)
     if ("cann${CANN_INSTALL_DIR}" STREQUAL "cann" AND DEFINED ENV{ASCEND_TOOLKIT_HOME})
         set(CANN_INSTALL_DIR $ENV{ASCEND_TOOLKIT_HOME})
         message(STATUS "CANN: updated CANN_INSTALL_DIR from ASCEND_TOOLKIT_HOME=$ENV{ASCEND_TOOLKIT_HOME}")
     endif ()
     if (CANN_INSTALL_DIR)
-        message(STATUS "CANN: updated link directoreis to ${CANN_INSTALL_DIR}/lib64")
+        message(STATUS "CANN: updated link directories to ${CANN_INSTALL_DIR}/lib64 and ${CANN_INSTALL_DIR}/runtime/lib64/stub")
         link_directories(
                 ${CANN_INSTALL_DIR}/lib64
                 ${CANN_INSTALL_DIR}/runtime/lib64/stub)
