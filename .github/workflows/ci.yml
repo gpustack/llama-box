@@ -39,7 +39,6 @@ jobs:
 
   darwin-metal:
     strategy:
-      # cache-able building with ccache.
       fail-fast: false
       matrix:
         arch: [ amd64, arm64 ]
@@ -53,13 +52,6 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - name: Deps
-        run: |
-          brew update && brew install ccache
-      - name: Setup XCode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.2'
       - name: Setup Cache
         timeout-minutes: 5
         uses: actions/cache@v3
@@ -67,6 +59,13 @@ jobs:
           key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
+      - name: Deps
+        run: |
+          brew update && brew install ccache
+      - name: Setup XCode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.2'
       - name: Build
         # disable OpenMP,
         # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
@@ -100,7 +99,6 @@ jobs:
 
   linux-hip:
     strategy:
-      # cache-able building with ccache.
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/rocm/dev-ubuntu-22.04/tags.
@@ -206,7 +204,6 @@ jobs:
 
   linux-cuda:
     strategy:
-      # cache-able building with ccache.
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
@@ -306,7 +303,6 @@ jobs:
 
   linux-oneapi:
     strategy:
-      # cache-able building with ccache.
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
@@ -395,7 +391,6 @@ jobs:
 
   linux-cann:
     strategy:
-      # cache-able building with ccache.
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=.
@@ -483,7 +478,6 @@ jobs:
   windows-hip:
     continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
-      # cache-able building with ccache.
       fail-fast: false
       matrix:
         # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
@@ -513,12 +507,6 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - name: Deps
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = 'SilentlyContinue'
-
-          choco install ccache curl -y
       - name: Setup Cache
         timeout-minutes: 5
         uses: actions/cache@v3
@@ -526,6 +514,12 @@ jobs:
           key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}\.cache
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install ccache curl -y
       - name: Setup HIP
         run: |
           $ErrorActionPreference = "Stop"
@@ -581,9 +575,7 @@ jobs:
   windows-cuda:
     continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
-      # uncache-able building,
-      # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
-      fail-fast: true
+      fail-fast: false
       matrix:
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
         #     12.5 ==> 12.5.0
@@ -611,6 +603,15 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
+      - name: Setup Cache
+        # doesn't support ccache,
+        # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
+        timeout-minutes: 5
+        uses: actions/cache@v3
+        with:
+          key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
+          path: |
+            ${{ github.workspace }}\build
       - name: Setup CUDA
         # ensure MSBuildExtensions has been configured,
         # see https://github.com/NVlabs/tiny-cuda-nn/issues/164#issuecomment-1280749170.
@@ -658,9 +659,7 @@ jobs:
   windows-oneapi:
     continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
-      # uncache-able building,
-      # as the oneAPI need to configure the environment variables via setvars.bat.
-      fail-fast: true
+      fail-fast: false
       matrix:
         # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=offline.
         #     2024.2 ==> 2024.2.0
@@ -674,6 +673,15 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
+      - name: Setup Cache
+        # doesn't support ccache,
+        # as the oneAPI need to configure the environment variables via setvars.bat.
+        timeout-minutes: 5
+        uses: actions/cache@v3
+        with:
+          key: cache-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\build
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
