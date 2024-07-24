@@ -174,7 +174,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "       --lora FILE",            "apply LoRA adapter (implies --no-mmap)" });
     opts.push_back({ "*",           "       --lora-scaled FILE SCALE",
                                                                      "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
-    opts.push_back({ "*",           "       --lora-base FILE",       "optional model to use as a base for the layers modified by the LoRA adapter" });
     opts.push_back({ "*",           "       --control-vector FILE",  "add a control vector" });
     opts.push_back({ "*",           "       --control-vector-scaled FILE SCALE",
                                                                      "add a control vector with user defined scaling SCALE" });
@@ -860,15 +859,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 bparams.gparams.lora_adapter.emplace_back(std::string(n),
                                                           std::stof(std::string(s)));
                 bparams.gparams.use_mmap = false;
-                continue;
-            }
-
-            if (!strcmp(flag, "--lora-base")) {
-                if (i == argc) {
-                    missing("--lora-base");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.lora_base = std::string(arg);
                 continue;
             }
 

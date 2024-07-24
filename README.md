@@ -191,7 +191,6 @@ general:
          --lora FILE              apply LoRA adapter (implies --no-mmap)
          --lora-scaled FILE SCALE 
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
-         --lora-base FILE         optional model to use as a base for the layers modified by the LoRA adapter
          --control-vector FILE    add a control vector
          --control-vector-scaled FILE SCALE
                                   add a control vector with user defined scaling SCALE
