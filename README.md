@@ -1,15 +1,15 @@
 # LLaMA Box
 
-[![](https://img.shields.io/github/actions/workflow/status/thxcode/llama-box/ci.yml?label=ci)](https://github.com/thxcode/llama-box/actions)
-[![](https://img.shields.io/github/license/thxcode/llama-box?label=license)](https://github.com/thxcode/llama-box#license)
-[![](https://img.shields.io/github/downloads/thxcode/llama-box/total)](https://github.com/thxcode/llama-box/releases)
+[![](https://img.shields.io/github/actions/workflow/status/gpustack/llama-box/ci.yml?label=ci)](https://github.com/gpustack/llama-box/actions)
+[![](https://img.shields.io/github/license/gpustack/llama-box?label=license)](https://github.com/gpustack/llama-box#license)
+[![](https://img.shields.io/github/downloads/gpustack/llama-box/total)](https://github.com/gpustack/llama-box/releases)
 
 LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
 
 ## Download
 
-Download LLaMA Box from [the latest release](https://github.com/thxCode/llama-box/releases/latest) page please, now
+Download LLaMA Box from [the latest release](https://github.com/gpustack/llama-box/releases/latest) page please, now
 LLaMA Box supports the following platforms.
 
 | Backend             | OS/Arch                       | Supported Devices                                                                                                                                                                                                       |
