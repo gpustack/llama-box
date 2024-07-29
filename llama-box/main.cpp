@@ -725,6 +725,9 @@ struct server_context {
     bool load_model(const llama_box_params &bparams) {
         params = bparams.gparams;
 
+        // always disable embedding for the server
+        params.embedding = false;
+
         // load multimodal projection model
         if (!params.mmproj.empty()) {
             if (params.n_ctx < 2048) {
@@ -2438,6 +2441,9 @@ struct server_context {
         if (batch.n_tokens == 0) {
             return;
         }
+
+        // make sure we're in the right embedding mode
+        llama_set_embeddings(ctx, batch_type == 1);
 
         // process the created batch of tokens
         for (int32_t i = 0; i < batch.n_tokens; i += n_batch) {
