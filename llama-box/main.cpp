@@ -725,9 +725,6 @@ struct server_context {
     bool load_model(const llama_box_params &bparams) {
         params = bparams.gparams;
 
-        // always disable embedding for the server
-        params.embedding = false;
-
         // load multimodal projection model
         if (!params.mmproj.empty()) {
             if (params.n_ctx < 2048) {
