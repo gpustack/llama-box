@@ -80,14 +80,14 @@ jobs:
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          
+
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             otool -L ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
           fi
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/build/bin/llama-box
@@ -177,7 +177,7 @@ jobs:
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
-          
+
           echo "===== BUILD ====="
           docker run \
             --rm \
@@ -192,7 +192,7 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             rocm/dev-ubuntu-22.04:${{ matrix.version == '6.1' && '6.1.2' || '5.7.1' }}-complete
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
@@ -278,7 +278,7 @@ jobs:
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
-          
+
           echo "===== BUILD ====="
           docker run \
             --rm \
@@ -291,7 +291,7 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             nvidia/cuda:${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}-devel-ubuntu22.04
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
@@ -479,11 +479,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://mcconline.mthreads.com/repo/s3000-musa-toolkit?repoName=s3000-musa-toolkit&repoNamespace=mcconline&displayName=S3000_MUSA_Toolkit_%E5%9F%BA%E7%A1%80%E9%95%9C%E5%83%8F.
-        #     1.5 ==> musa_rtm_v1.5.2
-        #     2.0 ==> musa_rc_v2.0.0
         arch: [ amd64 ]
-        version: [ '1.5', '2.0' ]
+        version: [ '1.5' ]
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Space
@@ -518,12 +515,14 @@ jobs:
         #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          CMAKE_VERSION: "3.22.1"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          apt-get update && apt-get install -y build-essential git cmake ccache
+          apt-get update && apt-get install -y ccache curl git
           git config --system --add safe.directory '*'
+          curl -s -L https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-$(uname -m).tar.gz | tar -zx -C /usr --strip-components 1
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
@@ -539,7 +538,7 @@ jobs:
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
-          
+
           echo "===== BUILD ====="
           docker run \
             --rm \
@@ -550,8 +549,8 @@ jobs:
             --env CCACHE_DIR \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            registry.mthreads.com/mcconline/s3000-musa-toolkit:${{ matrix.version == '1.5' && 'musa_rtm_v1.5.2' || 'musa_rc_v2.0.0' }}
-          
+            mthreads/musa:${{ matrix.version == '1.5' && '1.5.1-mp_22' }}-devel-ubuntu20.04
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
@@ -610,7 +609,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "I install AMD ROCm HIP SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
@@ -620,7 +619,7 @@ jobs:
 
           Write-Host "I verify AMD ROCm HIP SDK"
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
-          
+
           $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
           "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
@@ -648,7 +647,7 @@ jobs:
           } else {
             exit 1
           }
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}.zip"
@@ -717,7 +716,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "===== BUILD ====="
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
@@ -725,14 +724,14 @@ jobs:
               ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
               -DGGML_OPENMP=off
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
-          
+
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
           } else {
               exit 1
           }
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip"
@@ -778,17 +777,17 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "I install Intel oneAPI SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
             --url "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/${{ matrix.version == '2024.2' && 'e83a8e64-04fc-45df-85c6-c2208d03bdb5/w_BaseKit_p_2024.2.0.635' || '7dff44ba-e3af-4448-841c-0d616c8da6e7/w_BaseKit_p_2024.1.0.595' }}.exe"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
-          
+
           Write-Host "I verify Intel oneAPI SDK"
           & 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' --version
-          
+
           $oneapiPath = "$(Resolve-Path -Path 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' | Split-Path | Split-Path)"
           "ONEAPI_PATH=${oneapiPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
           $oneapiRoot = "$(Split-Path -Path $oneapiPath)"
@@ -802,14 +801,14 @@ jobs:
           Write-Host "ONEAPI_PATH=${env:ONEAPI_PATH}"
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
           & "${{ github.workspace }}\llama-box\scripts\build-windows-oneapi.bat" "${{ github.workspace }}" "${{ matrix.arch }}"
-          
+
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
             exit 1
           }
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"

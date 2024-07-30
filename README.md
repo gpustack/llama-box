@@ -25,9 +25,8 @@ LLaMA Box supports the following platforms.
 | AMD ROCm/HIP 6.1-l         | `linux/amd64`                 | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html. |
 | Intel oneAPI 2024.1        | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.1 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
 | Intel oneAPI 2024.2        | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.2 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
-| Ascend CANN 8.0            | `linux/amd64` `linux/arm64`   | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html.                                                                                       |                                                                                       |
-| Moore Threads MUSA 1.5.2   | `linux/amd64`                 | `MTT S80`, `MTT S3000` or `MTT S4000`, see https://developer.mthreads.com/sdk/download/musa?equipment=&os=Ubuntu&driverVersion=&version=rc2.1.0.                                                                        |                                                                                       |
-| Moore Threads MUSA rc2.0.0 | `linux/amd64`                 | `MTT S80`, `MTT S3000` or `MTT S4000`, see https://developer.mthreads.com/sdk/download/musa?equipment=&os=Ubuntu&driverVersion=&version=1.5.2.                                                                          |                                                                                       |
+| Ascend CANN 8.0            | `linux/amd64` `linux/arm64`   | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html.                                                                                       |
+| Moore Threads MUSA 1.5.1   | `linux/amd64`                 | `MTT S4000`.                                                                                                                                                                                                            |
 
 ## Examples
 
@@ -42,9 +41,9 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF/Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf
-    
+
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "hermes2", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
-    
+
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh "Introduce Beijing in 50 words."
     ```
@@ -55,7 +54,7 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/second-state/glm-4-9b-chat-GGUF/glm-4-9b-chat-Q5_K_M.gguf
-    
+
     $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "glm4", "prompt": "<|system|>You are a helpful assistant.<|user|>Tell me a joke.<|assistant|>"}'
     ```
 
@@ -65,12 +64,12 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-f16.gguf --mmproj ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-mmproj-f16.gguf
-    
+
     $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://llava.hliu.cc/file\=/nobackup/haotian/tmp/gradio/ca10383cc943e99941ecffdc4d34c51afb2da472/extreme_ironing.jpg --output - | base64)")"; \
       echo "{\"model\": \"llava-phi-3\", \"temperature\": 0.1, \"stop\": [\"<|end|>\"], \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
-    
+
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
-  
+
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
@@ -83,9 +82,9 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Qwen2-7B-Instruct-GGUF/Qwen2-7B-Instruct.Q5_K_M.gguf -md ~/.cache/lm-studio/models/QuantFactory/Qwen2-1.5B-Instruct-GGUF/Qwen2-1.5B-Instruct.Q5_K_M.gguf --draft 8
-    
+
     $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "stream": true, "prompt": "Write a short story about a cat and a dog, more than 100 words."}'
-  
+
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh "Write a short story about a cat and a dog, more than 100 words."
     ```
@@ -97,12 +96,12 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 2 session(allowing 2 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 16384 -np 2 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Mistral-Nemo-Instruct-2407-GGUF/Mistral-Nemo-Instruct-2407.Q5_K_M.gguf --lookup-ngram-min 1 --draft 8
-    
+
     $ CONTENT="$(curl https://en.wikipedia.org/w/api.php\?action\=query\&format\=json\&titles\=Medusa\&prop\=extracts\&exintro\&explaintext | jq '.query.pages | to_entries | .[0].value.extract | gsub("\n"; "\\n") | gsub("\t"; "\\t")')"; \
       echo "{\"model\": \"mistral-nemo\", \"stream\": true, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"text\", \"text\": \"Please read the following content and summarize the article in 5 sentences.\"}, {\"type\": \"text\", \"text\": "$CONTENT"}]}]}" > /tmp/data.json
 
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
-    
+
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
@@ -191,7 +190,7 @@ general:
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --lora FILE              apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE 
+         --lora-scaled FILE SCALE
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
          --control-vector FILE    add a control vector
          --control-vector-scaled FILE SCALE
@@ -230,7 +229,7 @@ server:
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-                                  
+
          --conn-idle N            server connection idle in seconds (default: 60)
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
@@ -238,7 +237,7 @@ server:
 
 logging:
 
-         --log-format {text,json} 
+         --log-format {text,json}
                                   log output format: json or text (default: json)
 
 speculative:
