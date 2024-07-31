@@ -649,6 +649,7 @@ struct server_context {
     llama_batch batch;
 
     bool add_bos_token = true;
+    bool add_eos_token = false;
 
     int32_t n_ctx;            // total context for all clients / slots
     int32_t n_tps;            // max tokens per second
@@ -817,7 +818,7 @@ struct server_context {
         lookup_ngram_min = bparams.lookup_ngram_min;
 
         add_bos_token = llama_should_add_bos_token(model);
-        GGML_ASSERT(llama_add_eos_token(model) != 1);
+        add_eos_token = llama_add_eos_token(model);
 
         // sample tokens per second
         if (n_tps < 0) {
@@ -2182,7 +2183,6 @@ struct server_context {
                         slot.t_start_generation = 0;
 
                         if (slot.infill) {
-                            const bool add_bos = llama_should_add_bos_token(model);
                             bool suff_rm_leading_spc = true;
                             if (params.input_suffix.find_first_of(' ') == 0 &&
                                 params.input_suffix.size() > 1) {
@@ -2204,7 +2204,7 @@ struct server_context {
 
                             auto embd_inp = params.spm_infill ? suffix_tokens : prefix_tokens;
                             auto embd_end = params.spm_infill ? prefix_tokens : suffix_tokens;
-                            if (add_bos) {
+                            if (add_bos_token) {
                                 embd_inp.insert(embd_inp.begin(), llama_token_bos(model));
                             }
                             embd_inp.insert(embd_inp.end(), embd_end.begin(), embd_end.end());
@@ -2212,6 +2212,10 @@ struct server_context {
                             const llama_token middle_token = llama_token_middle(model);
                             if (middle_token >= 0) {
                                 embd_inp.push_back(middle_token);
+                            }
+
+                            if (add_eos_token) {
+                                embd_inp.push_back(llama_token_eos(model));
                             }
 
                             prompt_tokens = embd_inp;
