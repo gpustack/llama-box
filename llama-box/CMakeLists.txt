@@ -55,7 +55,8 @@ add_custom_target(patch
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         VERBATIM
 )
-add_dependencies(patch version)
+add_dependencies(patch version build_info)
+add_dependencies(llama patch)
 
 #
 # llama-box
@@ -82,9 +83,8 @@ if (GGML_MUSA)
     set(CMAKE_C_EXTENSIONS OFF)
     set(CMAKE_CXX_COMPILER clang++)
     set(CMAKE_CXX_EXTENSIONS OFF)
-endif()
+endif ()
 add_executable(${TARGET} main.cpp param.hpp ratelimiter.hpp utils.hpp)
-add_dependencies(${TARGET} patch)
 target_link_libraries(${TARGET} PRIVATE version common llava ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 if (WIN32)

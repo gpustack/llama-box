@@ -3396,6 +3396,14 @@ int main(int argc, char **argv) {
 
     const auto handle_completions = [&ctx_server, &res_error](const httplib::Request &req,
                                                               httplib::Response &res) {
+        // llama_supports_embedding_only is a patch.
+        if (llama_supports_embedding_only(ctx_server.ctx)) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to sample from this model",
+                            "text/plain; charset=utf-8");
+            return;
+        }
+
         int tps = 0;
         {
             const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
@@ -3533,6 +3541,14 @@ int main(int argc, char **argv) {
 
     const auto handle_chat_completions = [&ctx_server, &params, &res_error](
                                              const httplib::Request &req, httplib::Response &res) {
+        // llama_supports_embedding_only is a patch.
+        if (llama_supports_embedding_only(ctx_server.ctx)) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to sample from this model",
+                            "text/plain; charset=utf-8");
+            return;
+        }
+
         int tps = 0;
         {
             const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");

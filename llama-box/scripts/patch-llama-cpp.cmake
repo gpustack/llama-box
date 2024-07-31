@@ -37,7 +37,7 @@ if (Git_FOUND)
                     COMMAND ${GIT_EXECUTABLE} -C ${LLAMA_CPP_DIR} apply --whitespace=nowarn ${PATCH_FILE}
                     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             )
-            message(STATUS "Applied patches")
+            message(STATUS "Applied patch file ${PATCH_FILE}")
         else ()
             message(FATAL_ERROR "Failed to apply patches: Cannot apply patch file ${PATCH_FILE}")
         endif ()
