@@ -648,6 +648,17 @@ static json oaicompat_completion_response(const json &request, const json result
 }
 
 static json oaicompat_embedding_request(const struct gpt_params &params, const json &body) {
+    // Print the request for debugging
+    {
+        json body_cp = body;
+        if (body_cp.at("input").is_string()) {
+            body_cp["input"] = "...";
+        } else {
+            body_cp["input"] = "[...]";
+        }
+        LOG_INFO("OAI request", {{"params", body_cp}});
+    }
+
     json llama_params;
 
     // Annotations for OAI compatibility
@@ -658,7 +669,7 @@ static json oaicompat_embedding_request(const struct gpt_params &params, const j
     llama_params["model"] = json_value(body, "model", params.model_alias);
 
     // Handle "input" field
-    llama_params["prompt"] = json_value(body, "input", std::string());
+    llama_params["prompt"] = body.at("input");
 
     // Handle "encoding_format" field
     llama_params["encoding_format"] = json_value(body, "encoding_format", std::string("float"));
