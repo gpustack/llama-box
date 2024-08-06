@@ -12,10 +12,19 @@ index f23355a6..96e16d89 100644
  }
  #endif
 diff --git a/src/llama.cpp b/src/llama.cpp
-index a207451f..f635b15a 100644
+index a7b1c9eb..8ea5885d 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -19158,3 +19158,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
+@@ -16524,7 +16524,7 @@ struct llama_context * llama_new_context_with_model(
+         cparams.n_batch = GGML_KQ_MASK_PAD;
+     }
+ 
+-    cparams.n_ubatch         = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
++    cparams.n_ubatch         = hparams.causal_attn ? std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch) : cparams.n_batch;
+ 
+     cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
+                                hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
+@@ -19171,3 +19171,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
      fputs(text, stderr);
      fflush(stderr);
  }

@@ -747,7 +747,9 @@ struct server_context {
             params_draft.n_threads = params.n_threads_draft;
             params_draft.n_threads_batch = params.n_threads_batch_draft;
             params_draft.warmup = false;
-            std::tie(model_draft, ctx_draft) = llama_init_from_gpt_params(params_draft);
+            llama_init_result ir = llama_init_from_gpt_params(params_draft);
+            model_draft = ir.model;
+            ctx_draft = ir.context;
             if (model_draft == nullptr) {
                 LOG_ERROR("unable to load draft model", {{"model", params.model_draft}});
                 return false;
@@ -776,7 +778,9 @@ struct server_context {
 
         // dedicate one sequence to the system prompt
         params.n_parallel += 1;
-        std::tie(model, ctx) = llama_init_from_gpt_params(params);
+        llama_init_result ir = llama_init_from_gpt_params(params);
+        model = ir.model;
+        ctx = ir.context;
         params.n_parallel -= 1; // but be sneaky about it
         if (model == nullptr) {
             LOG_ERROR("unable to load model", {{"model", params.model}});
@@ -2126,7 +2130,7 @@ struct server_context {
             llama_batch_clear(batch_draft);
         }
 
-        // frist, add sampled tokens from any ongoing sequences
+        // first, add sampled tokens from any ongoing sequences
         for (auto &slot : slots) {
             if (slot.state == SLOT_STATE_IDLE) {
                 continue;
@@ -3134,6 +3138,14 @@ int main(int argc, char **argv) {
 
     const auto handle_infill = [&ctx_server, &res_error](const httplib::Request &req,
                                                          httplib::Response &res) {
+        // llama_supports_embedding_only is a patch.
+        if (llama_supports_embedding_only(ctx_server.ctx)) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to sample from this model",
+                            "text/plain; charset=utf-8");
+            return;
+        }
+
         int tps = 0;
         {
             const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
