@@ -95,6 +95,7 @@ target_compile_features(${TARGET} PUBLIC cxx_std_11)
 #
 # clean patches
 #
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
 add_custom_command(
         TARGET ${TARGET}
         POST_BUILD
@@ -105,3 +106,4 @@ add_custom_command(
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         VERBATIM
 )
+endif ()
