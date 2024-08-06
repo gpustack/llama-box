@@ -2342,6 +2342,8 @@ struct server_context {
                         batch_type = slot_type;
                     } else if (batch_type != slot_type) {
                         continue;
+                    } else if (batch_type == 1 && llama_pooling_type(ctx) > 0) {
+                        continue;
                     }
 
                     // keep only the common part
