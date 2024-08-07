@@ -59,6 +59,7 @@ enum server_task_type {
     SERVER_TASK_TYPE_SLOT_SAVE,
     SERVER_TASK_TYPE_SLOT_RESTORE,
     SERVER_TASK_TYPE_SLOT_ERASE,
+    SERVER_TASK_TYPE_SET_LORA,
 };
 
 struct server_task {
@@ -643,6 +644,7 @@ struct server_context {
     llama_model *model = nullptr;
     llama_context *ctx = nullptr;
     clip_ctx *ctx_clip = nullptr;
+    std::vector<llama_lora_adapter_container> lora_adapters;
 
     gpt_params params;
 
@@ -781,6 +783,7 @@ struct server_context {
         llama_init_result ir = llama_init_from_gpt_params(params);
         model = ir.model;
         ctx = ir.context;
+        lora_adapters = ir.lora_adapters;
         params.n_parallel -= 1; // but be sneaky about it
         if (model == nullptr) {
             LOG_ERROR("unable to load model", {{"model", params.model}});
@@ -1997,6 +2000,14 @@ struct server_context {
             result.stop = true;
             result.error = false;
             result.data = json{{"id_slot", id_slot}, {"n_erased", n_erased}};
+            queue_results.send(result);
+        } break;
+        case SERVER_TASK_TYPE_SET_LORA: {
+            llama_lora_adapters_apply(ctx, lora_adapters);
+
+            server_task_result result;
+            result.id = task.id;
+            result.data = json{{"success", true}};
             queue_results.send(result);
         } break;
         }
@@ -3408,6 +3419,50 @@ int main(int argc, char **argv) {
         }
     };
 
+    const auto handle_lora_adapters = [&](const httplib::Request &, httplib::Response &res) {
+        json result = json::array();
+        for (size_t i = 0; i < ctx_server.lora_adapters.size(); ++i) {
+            auto &la = ctx_server.lora_adapters[i];
+            result.push_back({
+                {"id", i},
+                {"path", la.path},
+                {"scale", la.scale},
+            });
+        }
+        res.set_content(result.dump(), "application/json; charset=utf-8");
+    };
+
+    const auto handle_lora_adapters_apply = [&ctx_server](const httplib::Request &req,
+                                                          httplib::Response &res) {
+        const std::vector<json> request = json::parse(req.body);
+        auto max_idx = int32_t(ctx_server.lora_adapters.size());
+
+        for (llama_lora_adapter_container &la : ctx_server.lora_adapters) {
+            la.scale = 0.0f;
+        }
+        for (json part : request) {
+            int id = part.at("id");
+            float scale = part.at("scale");
+            if (0 <= id && id < max_idx) {
+                ctx_server.lora_adapters[id].scale = scale;
+                continue;
+            }
+            throw std::runtime_error("invalid adapter id");
+        }
+
+        // post the task
+        server_task task;
+        task.type = SERVER_TASK_TYPE_SET_LORA;
+        task.id = ctx_server.queue_tasks.post(task);
+        ctx_server.queue_results.add_waiting_task_id(task.id);
+
+        // get the result
+        server_task_result result = ctx_server.queue_results.recv(task.id);
+        ctx_server.queue_results.remove_waiting_task_id(task.id);
+
+        res.set_content(result.data.dump(), "application/json; charset=utf-8");
+    };
+
     const auto handle_completions = [&ctx_server, &res_error](const httplib::Request &req,
                                                               httplib::Response &res) {
         // llama_supports_embedding_only is a patch.
@@ -3735,8 +3790,15 @@ int main(int argc, char **argv) {
     if (params.endpoint_slots) {
         svr.Get("/slots", handle_slots);
         if (!params.slot_save_path.empty()) {
-            // only enable slot endpoints if slot_save_path is set
+            // only enable slot operate endpoint if slot_save_path is set
             svr.Post("/slots/:id_slot", handle_slots_action);
+        }
+    }
+    if (!params.lora_adapters.empty()) {
+        svr.Get("/lora-adapters", handle_lora_adapters);
+        if (params.lora_init_without_apply) {
+            // only enable lora adapters apply endpoint if lora_init_without_apply is set
+            svr.Post("/lora-adapters", handle_lora_adapters_apply);
         }
     }
     svr.Post("/completion", handle_completions);

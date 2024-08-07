@@ -174,6 +174,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "       --lora FILE",            "apply LoRA adapter (implies --no-mmap)" });
     opts.push_back({ "*",           "       --lora-scaled FILE SCALE",
                                                                      "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
+    opts.push_back({ "*",           "       --lora-init-without-apply",
+                                                                     "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "*",           "       --control-vector FILE",  "add a control vector" });
     opts.push_back({ "*",           "       --control-vector-scaled FILE SCALE",
                                                                      "add a control vector with user defined scaling SCALE" });
@@ -842,7 +844,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--lora");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.lora_adapter.emplace_back(std::string(arg), 1.0f);
+                bparams.gparams.lora_adapters.push_back({
+                    std::string(arg),
+                    1.0f,
+                });
                 bparams.gparams.use_mmap = false;
                 continue;
             }
@@ -856,9 +861,16 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--lora-scaled");
                 }
                 char *s = argv[i++];
-                bparams.gparams.lora_adapter.emplace_back(std::string(n),
-                                                          std::stof(std::string(s)));
+                bparams.gparams.lora_adapters.push_back({
+                    std::string(n),
+                    std::stof(std::string(s)),
+                });
                 bparams.gparams.use_mmap = false;
+                continue;
+            }
+
+            if (!strcmp(flag, "--lora-init-without-apply")) {
+                bparams.gparams.lora_init_without_apply = true;
                 continue;
             }
 

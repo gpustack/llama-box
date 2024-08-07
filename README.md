@@ -12,21 +12,21 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 Download LLaMA Box from [the latest release](https://github.com/gpustack/llama-box/releases/latest) page please, now
 LLaMA Box supports the following platforms.
 
-| Backend                    | OS/Arch                       | Supported Devices                                                                                                                                                                                                       |
-|----------------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Apple Metal 3              | `darwin/amd64` `darwin/arm64` | Install macOS Ventura or later, see https://support.apple.com/en-sg/102894.                                                                                                                                             |
-| NVIDIA CUDA 11.8-s         | `linux/amd64` `windows/amd64` | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
-| NVIDIA CUDA 12.5-s         | `linux/amd64` `windows/amd64` | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
-| NVIDIA CUDA 12.5-l         | `linux/amd64` `windows/amd64` | Compute capability is `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                    |
-| AMD ROCm/HIP 5.5-s         | `windows/amd64`               | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
-| AMD ROCm/HIP 5.7-s         | `linux/amd64` `windows/amd64` | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html, https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.             |
-| AMD ROCm/HIP 5.7-l         | `windows/amd64`               | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.                                 |
-| AMD ROCm/HIP 6.1-s         | `linux/amd64`                 | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
-| AMD ROCm/HIP 6.1-l         | `linux/amd64`                 | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html. |
-| Intel oneAPI 2024.1        | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.1 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
-| Intel oneAPI 2024.2        | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.2 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
-| Ascend CANN 8.0            | `linux/amd64` `linux/arm64`   | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html.                                                                                       |
-| Moore Threads MUSA 1.5.1   | `linux/amd64`                 | `MTT S4000`.                                                                                                                                                                                                            |
+| Backend                  | OS/Arch                       | Supported Devices                                                                                                                                                                                                       |
+|--------------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Apple Metal 3            | `darwin/amd64` `darwin/arm64` | Install macOS Ventura or later, see https://support.apple.com/en-sg/102894.                                                                                                                                             |
+| NVIDIA CUDA 11.8-s       | `linux/amd64` `windows/amd64` | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
+| NVIDIA CUDA 12.5-s       | `linux/amd64` `windows/amd64` | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
+| NVIDIA CUDA 12.5-l       | `linux/amd64` `windows/amd64` | Compute capability is `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                    |
+| AMD ROCm/HIP 5.5-s       | `windows/amd64`               | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
+| AMD ROCm/HIP 5.7-s       | `linux/amd64` `windows/amd64` | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html, https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.             |
+| AMD ROCm/HIP 5.7-l       | `windows/amd64`               | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.                                 |
+| AMD ROCm/HIP 6.1-s       | `linux/amd64`                 | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
+| AMD ROCm/HIP 6.1-l       | `linux/amd64`                 | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html. |
+| Intel oneAPI 2024.1      | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.1 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
+| Intel oneAPI 2024.2      | `linux/amd64` `windows/amd64` | See Linux/Windows distributions with oneAPI 2024.2 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
+| Ascend CANN 8.0          | `linux/amd64` `linux/arm64`   | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html.                                                                                       |
+| Moore Threads MUSA 1.5.1 | `linux/amd64`                 | `MTT S4000`.                                                                                                                                                                                                            |
 
 ## Examples
 
@@ -190,8 +190,10 @@ general:
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --lora FILE              apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE
+         --lora-scaled FILE SCALE 
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
+         --lora-init-without-apply
+                                  load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
          --control-vector FILE    add a control vector
          --control-vector-scaled FILE SCALE
                                   add a control vector with user defined scaling SCALE
@@ -229,7 +231,7 @@ server:
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-
+                                  
          --conn-idle N            server connection idle in seconds (default: 60)
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
@@ -237,7 +239,7 @@ server:
 
 logging:
 
-         --log-format {text,json}
+         --log-format {text,json} 
                                   log output format: json or text (default: json)
 
 speculative:
@@ -296,6 +298,13 @@ speculative:
 
 - **POST** `/slots/:id_slot?action={save|restore|erase}`: Operate specific slot via ID.
     + This endpoint is only available if the `--no-slots` flag is no provided and `--slot-save-path` is provided.
+
+- **GET** `/lora-adapters`: Returns the current LoRA adapters.
+    + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
+
+- **POST** `/lora-adapters`: Operate LoRA adapters apply. To disable an LoRA adapter, either remove it from the list
+  or set scale to 0.
+    + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
 
 - **POST** `/completion`: Returns the completion of the given prompt.
 
