@@ -912,45 +912,54 @@ struct server_context {
         default_generation_settings_for_props = get_formated_generation(slots.front());
         default_generation_settings_for_props["seed"] = -1;
 
-        // the update_slots() logic will always submit a maximum of n_batch
+        // the update_slots() logic will always submit a maximum of n_batch or n_parallel
         // tokens note that n_batch can be > n_ctx (e.g. for non-causal
         // attention models such as BERT where the KV cache is not used)
         const auto n_batch = int32_t(llama_n_batch(ctx));
-        batch = llama_batch_init(n_batch, 0, 1);
+        batch = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
         if (ctx_draft != nullptr) {
-            batch_draft = llama_batch_init(n_batch, 0, 1);
+            batch_draft = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
         }
 
         // load system prompt
         if (!system_prompt.empty()) {
             system_tokens = llama_tokenize(ctx, system_prompt, true);
-            for (int32_t i = 0; i < int32_t(system_tokens.size()); ++i) {
-                llama_batch_add(batch, system_tokens[i], i, {0}, false);
-            }
-            for (int32_t i = 0; i < batch.n_tokens; i += n_batch) {
-                const int32_t n_tokens = std::min(params.n_batch, batch.n_tokens - i);
-                // clang-format off
-                llama_batch batch_view = {
-                    n_tokens,
-                    batch.token + i,
-                    nullptr,
-                    batch.pos + i,
-                    batch.n_seq_id + i,
-                    batch.seq_id + i,
-                    batch.logits + i,
-                    0, 0, 0, // unused
-                };
-                // clang-format on
-                if (llama_decode(ctx, batch_view) != 0) {
+            const auto n_system_tokens = int32_t(system_tokens.size());
+
+            for (int32_t i = 0; i < n_system_tokens; i += n_batch) {
+                llama_batch_clear(batch);
+                if (ctx_draft != nullptr) {
+                    llama_batch_clear(batch_draft);
+                }
+
+                const int32_t n_tokens = std::min(n_batch, n_system_tokens - i);
+                for (int32_t j = 0; j < n_tokens; ++j) {
+                    llama_batch_add(batch, system_tokens[i + j], i + j, {0}, false);
+                }
+                if (ctx_draft != nullptr) {
+                    for (int32_t j = 0; j < n_tokens; ++j) {
+                        llama_batch_add(batch_draft, system_tokens[i + j], i + j, {0}, false);
+                    }
+                }
+
+                if (llama_decode(ctx, batch) != 0) {
                     llama_batch_free(batch);
                     LOG_ERROR("failed to load system prompt", {});
                     return false;
                 }
+                if (ctx_draft != nullptr) {
+                    if (llama_decode(ctx_draft, batch_draft) != 0) {
+                        llama_batch_free(batch_draft);
+                        LOG_ERROR("failed to load system prompt", {});
+                        return false;
+                    }
+                }
             }
+
             // assign the system KV cache to all parallel sequences
             for (int32_t i = 1; i <= params.n_parallel; ++i) {
                 llama_kv_cache_seq_cp(ctx, 0, i, -1, -1);
-                if (ctx_draft) {
+                if (ctx_draft != nullptr) {
                     llama_kv_cache_seq_cp(ctx_draft, 0, i, -1, -1);
                 }
             }
