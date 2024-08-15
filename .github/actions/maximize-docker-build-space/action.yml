@@ -1,0 +1,165 @@
+name: 'Maximize Docker Build Space'
+description: 'Maximize the space available to Docker building'
+
+inputs:
+  root-reserve-mb:
+    description: 'Space to be left free on the root filesystem, in Megabytes.'
+    required: false
+    default: '2048'
+  temp-reserve-mb:
+    description: 'Space to be left free on the temp filesystem (/mnt), in Megabytes.'
+    required: false
+    default: '2048'
+  swap-size-mb:
+    description: 'Swap space to create, in Megabytes.'
+    required: false
+    default: '2048'
+  deep-clean:
+    description: 'Perform a deep clean, removing unnecessary packages.'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Pre
+      shell: bash
+      run: |
+        #!/usr/bin/env bash
+        
+        echo "Memory and swap:"
+        sudo free
+        echo
+        sudo swapon --show
+        echo
+
+        echo "Available storage:"
+        sudo df -h
+        echo
+    - name: Action
+      shell: bash
+      run: |
+        #!/usr/bin/env bash
+        
+        DOCKER_WORKSPACE="/var/lib/docker"
+        if [[ ! -d "${DOCKER_WORKSPACE}" ]]; then
+          sudo mkdir -p "${DOCKER_WORKSPACE}"
+        fi
+        DOCKER_WORKSPACE_OWNER="$(stat -c '%U:%G' "${DOCKER_WORKSPACE}")"
+        
+        GITHUB_WORKSPACE_OWNER="$(stat -c '%U:%G' "${GITHUB_WORKSPACE}")"
+        
+        if [[ ${{ inputs.deep-clean }} == 'true' ]]; then
+          echo "Purging unnecessary packages"
+          sudo apt-get remove -y '^aspnetcore-.*' || true
+          sudo apt-get remove -y '^dotnet-.*' --fix-missing || true
+          sudo apt-get remove -y '^llvm-.*' --fix-missing || true
+          sudo apt-get remove -y 'php.*' --fix-missing || true
+          sudo apt-get remove -y '^mongodb-.*' --fix-missing || true
+          sudo apt-get remove -y '^mysql-.*' --fix-missing || true
+          sudo apt-get remove -y '^postgresql-.*' --fix-missing || true
+          sudo apt-get remove -y --fix-missing \
+            azure-cli \
+            firefox \
+            powershell \
+            mono-devel \
+            libgl1-mesa-dri \
+            microsoft-edge-stable \
+            google-chrome-stable \
+            google-cloud-sdk \
+            google-cloud-cli \
+            apache2 \
+            python3 python3-dev python3-pip python3-venv || true
+          sudo apt-get autoremove -y || true
+          sudo apt-get clean || true
+        fi
+        
+        echo "Purging unnecessary directories"
+        sudo rm -rf /usr/local/.ghcup || true
+        sudo rm -rf /usr/local/julia* || true
+        sudo rm -rf /usr/local/graalvm || true
+        sudo rm -rf /usr/local/lib/android || true
+        sudo rm -rf /usr/local/lib/node_modules || true
+        sudo rm -rf /usr/local/share/chromium || true
+        sudo rm -rf /usr/local/share/powershell || true
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /usr/share/swift || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /opt/pipx || true
+        sudo rm -rf /opt/google/chrome || true
+        sudo rm -rf /opt/microsoft/msedge || true
+        sudo rm -rf /opt/microsoft/powershell || true
+        sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache/CodeQL}" || true
+        
+        echo "Purging unnecessary images"
+        sudo docker image prune --all --force
+        
+        # github runners have an active swap file in /mnt/swapfile
+        # we want to reuse the temp disk, so first unmount swap and clean the temp disk
+        echo "Removing swap"
+        sudo swapoff -a
+        sudo rm -f /mnt/swapfile
+        
+        echo "Creating LVM PV on root fs"
+        # create loop pv image on root fs
+        ROOT_PV_LOOP_PATH="/pv.img"
+        ROOT_RESERVE_KB=$(expr ${{ inputs.root-reserve-mb }} \* 1024)
+        ROOT_FREE_KB=$(df --block-size=1024 --output=avail / | tail -1)
+        ROOT_LVM_SIZE_KB=$(expr $ROOT_FREE_KB - $ROOT_RESERVE_KB)
+        ROOT_LVM_SIZE_BYTES=$(expr $ROOT_LVM_SIZE_KB \* 1024)
+        sudo touch "${ROOT_PV_LOOP_PATH}" && sudo fallocate -z -l "${ROOT_LVM_SIZE_BYTES}" "${ROOT_PV_LOOP_PATH}"
+        export ROOT_LOOP_DEV=$(sudo losetup --find --show "${ROOT_PV_LOOP_PATH}")
+        sudo pvcreate -f "${ROOT_LOOP_DEV}"
+
+        # create pv on temp disk
+        echo "Creating LVM PV on temp fs"
+        TMP_PV_LOOP_PATH="/mnt/pv.img"
+        TMP_RESERVE_KB=$(expr ${{ inputs.temp-reserve-mb }} \* 1024)
+        TMP_FREE_KB=$(df --block-size=1024 --output=avail /mnt | tail -1)
+        TMP_LVM_SIZE_KB=$(expr $TMP_FREE_KB - $TMP_RESERVE_KB)
+        TMP_LVM_SIZE_BYTES=$(expr $TMP_LVM_SIZE_KB \* 1024)
+        sudo touch "${TMP_PV_LOOP_PATH}" && sudo fallocate -z -l "${TMP_LVM_SIZE_BYTES}" "${TMP_PV_LOOP_PATH}"
+        export TMP_LOOP_DEV=$(sudo losetup --find --show "${TMP_PV_LOOP_PATH}")
+        sudo pvcreate -f "${TMP_LOOP_DEV}"
+        
+        VG_NAME=buildvg
+        # create volume group from these pvs
+        sudo vgcreate "${VG_NAME}" "${TMP_LOOP_DEV}" "${ROOT_LOOP_DEV}"
+
+        echo "Recreating swap"
+        # create and activate swap
+        sudo lvcreate -L "${{ inputs.swap-size-mb }}M" -n swap "${VG_NAME}"
+        sudo mkswap "/dev/mapper/${VG_NAME}-swap"
+        sudo swapon "/dev/mapper/${VG_NAME}-swap"
+
+        echo "Recreating docker workspace"
+        # create and mount build volume
+        sudo lvcreate -l 100%FREE -n buildlv "${VG_NAME}"
+        sudo mkfs.ext4 -Enodiscard -m0 "/dev/mapper/${VG_NAME}-buildlv"
+        sudo mount "/dev/mapper/${VG_NAME}-buildlv" "${DOCKER_WORKSPACE}"
+        sudo chown -R "${DOCKER_WORKSPACE_OWNER}" "${DOCKER_WORKSPACE}"
+
+        # if build mount path is a parent of $GITHUB_WORKSPACE, and has been deleted, recreate it
+        if [[ ! -d "${GITHUB_WORKSPACE}" ]]; then
+          echo "Recreating github workspace"
+          sudo mkdir -p "${GITHUB_WORKSPACE}"
+          sudo chown -R "${GITHUB_WORKSPACE_OWNER}" "${GITHUB_WORKSPACE}"
+        fi
+        
+        echo "Restarting Docker"
+        sudo service docker restart
+
+    - name: Post
+      shell: bash
+      run: |
+        #!/usr/bin/env bash
+        
+        echo "Memory and swap:"
+        sudo free
+        echo
+        sudo swapon --show
+        echo
+
+        echo "Available storage:"
+        sudo df -h
+        echo
