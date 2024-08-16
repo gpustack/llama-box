@@ -54,6 +54,8 @@ jobs:
         uses: actions/cache@v3
         with:
           key: cache-darwin-amd64-${{ matrix.instruction }}
+          path: |
+            ${{ github.workspace }}/.cache
       - name: Deps
         run: |
           brew update && brew install ccache
@@ -664,7 +666,7 @@ jobs:
       fail-fast: false
       matrix:
         instruction: [ avx2 ]
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -675,7 +677,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-windows-amd64-${{ matrix.version }}-${{ matrix.size }}
+          key: cache-windows-amd64-${{ matrix.instructions }}
           path: |
             ${{ github.workspace }}\.cache
       - name: Deps
