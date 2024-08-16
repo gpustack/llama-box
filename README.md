@@ -179,6 +179,7 @@ general:
   -cb,   --cont-batching          enable continuous batching (a.k.a dynamic batching) (default: enabled)
   -nocb, --no-cont-batching       disable continuous batching
          --mmproj FILE            path to a multimodal projector file for LLaVA
+         --rpc SERVERS            comma separated list of RPC servers
          --mlock                  force system to keep model in RAM rather than swapping or compressing
          --no-mmap                do not memory-map model (slower load but may reduce pageouts if not using mlock)
          --numa TYPE              attempt optimizations that help on some NUMA systems

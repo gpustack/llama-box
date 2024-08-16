@@ -156,6 +156,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "-cb,   --cont-batching",        "enable continuous batching (a.k.a dynamic batching) (default: %s)", params.cont_batching ? "enabled" : "disabled" });
     opts.push_back({ "*",           "-nocb, --no-cont-batching",     "disable continuous batching" });
     opts.push_back({ "*",           "       --mmproj FILE",          "path to a multimodal projector file for LLaVA" });
+    opts.push_back({ "*",           "       --rpc SERVERS",          "comma separated list of RPC servers" });
     if (llama_supports_mlock()) {
         opts.push_back({ "*",           "       --mlock",                "force system to keep model in RAM rather than swapping or compressing" });
     }
@@ -794,6 +795,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.gparams.mmproj = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc")) {
+                if (i == argc) {
+                    missing("--rpc");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.rpc_servers = arg;
                 continue;
             }
 
