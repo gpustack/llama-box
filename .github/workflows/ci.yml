@@ -35,14 +35,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
 
+
+# Disable OpenMP,
+# see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
+#     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
 jobs:
   
   darwin:
     strategy:
       fail-fast: false
       matrix:
-        instruction: [ avx2 ]
-    runs-on: 'macos-13'
+        include:
+          - arch: "amd64"
+            instruction: "avx2"
+    runs-on: ${{ matrix.arch == 'amd64' && 'macos-13' || 'macos-14' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,7 +59,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-darwin-amd64-${{ matrix.instruction }}
+          key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Deps
@@ -64,9 +70,6 @@ jobs:
         with:
           xcode-version: '15.2'
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
@@ -75,7 +78,7 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=off \
             -DGGML_NATIVE=off \
-            -DGGML_${{ matrix.instruction == 'avx2' && 'AVX2' || 'AVX512' }}=on \
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -89,12 +92,12 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-darwin-amd64-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-darwin-amd64-${{ matrix.instruction }}
+          name: llama-box-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
 
   darwin-metal:
     strategy:
@@ -126,9 +129,6 @@ jobs:
         with:
           xcode-version: '15.2'
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
@@ -161,9 +161,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        instruction: [ avx2 ]
+        include:
+          - arch: "amd64"
+            instruction: "avx2"
+          - arch: 'arm64'
+            instruction: 'neon'
     runs-on: ubuntu-22.04
     steps:
+      - name: Maximize Docker Build Space
+        uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
+        with:
+          deep-clean: false
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -173,45 +181,65 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-linux-amd64-${{ matrix.instruction }}
+          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Deps
-        run: |
-          sudo apt-get update && sudo apt-get install -y build-essential git cmake ccache libopenblas-dev
+      - name: Setup QEMU
+        if: ${{ matrix.arch == 'arm64' }}
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:qemu-v7.0.0
+          platforms: "arm64"
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
-          echo "===== BUILD ====="
+          echo "===== SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          apt-get update && apt-get install -y binutils pkg-config build-essential git cmake ccache libopenblas-dev
+          git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=off \
-            -DGGML_${{ matrix.instruction == 'avx2' && 'AVX2' || 'AVX512' }}=on \
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
+            -DGGML_BLAS_VENDOR=OpenBLAS \
             -DGGML_STATIC=on \
             -DGGML_BLAS=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
           fi
-          
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          echo "===== BUILD ====="
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env CCACHE_DIR \
+            --env VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ubuntu:22.04
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-amd64-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-amd64-${{ matrix.instruction }}
+          name: llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}
 
   linux-hip:
     strategy:
@@ -262,9 +290,6 @@ jobs:
           image: tonistiigi/binfmt:qemu-v7.0.0
           platforms: "arm64"
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
@@ -302,6 +327,7 @@ jobs:
             --env CXX=/opt/rocm/llvm/bin/clang++ \
             --env CCACHE_DIR \
             --env AMDGPU_TARGETS \
+            --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             rocm/dev-ubuntu-22.04:${{ matrix.version == '6.1' && '6.1.2' || '5.7.1' }}-complete
@@ -360,9 +386,6 @@ jobs:
           image: tonistiigi/binfmt:qemu-v7.0.0
           platforms: "arm64"
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
@@ -398,6 +421,7 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env CCACHE_DIR \
             --env CUDA_ARCHITECTURES \
+            --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             nvidia/cuda:${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}-devel-ubuntu22.04
@@ -445,9 +469,6 @@ jobs:
           image: tonistiigi/binfmt:qemu-v7.0.0
           platforms: "arm64"
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
@@ -483,6 +504,7 @@ jobs:
             --env CC=icx \
             --env CXX=icpx \
             --env CCACHE_DIR \
+            --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             intel/oneapi-basekit:${{ matrix.version == '2024.2' && '2024.2.0' || '2024.1.1' }}-devel-ubuntu22.04
@@ -529,9 +551,6 @@ jobs:
           image: tonistiigi/binfmt:qemu-v7.0.0
           platforms: "arm64"
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
@@ -566,6 +585,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env CCACHE_DIR \
+            --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ascendai/cann:${{ matrix.version }}
@@ -610,9 +630,6 @@ jobs:
           image: tonistiigi/binfmt:qemu-v7.0.0
           platforms: "arm64"
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           CMAKE_VERSION: "3.22.1"
@@ -648,6 +665,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env CCACHE_DIR \
+            --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             mthreads/musa:${{ matrix.version == '1.5' && '1.5.1-mp_22' }}-devel-ubuntu20.04
@@ -665,7 +683,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        instruction: [ avx2 ]
+        include:
+          - arch: "amd64"
+            instruction: "avx2"
+          - arch: 'arm64'
+            instruction: 'neon'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -677,7 +699,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v3
         with:
-          key: cache-windows-amd64-${{ matrix.instructions }}
+          key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}\.cache
       - name: Deps
@@ -687,9 +709,6 @@ jobs:
 
           choco install ccache ninja -y
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
         run: |
@@ -698,29 +717,29 @@ jobs:
           
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
-          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+          cmake ${{ matrix.arch == 'amd64' && '-G "Ninja"' || format('-G "Ninja Multi-Config" -D CMAKE_TOOLCHAIN_FILE={0}\llama.cpp\cmake\arm64-windows-llvm.cmake', github.workspace) }} -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_NATIVE=off `
-            -DGGML_${{ matrix.instruction == 'avx2' && 'AVX2' || 'AVX512' }}=on `
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           
           Write-Host "===== RESULT ====="
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
+          if (Test-Path -Path "${{ github.workspace }}\build\bin${{ matrix.arch == 'arm64' && '\Release' || '' }}\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin${{ matrix.arch == 'arm64' && '\Release' || '' }}\llama-box.exe"
           } else {
             exit 1
           }
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-amd64-${{ matrix.instruction }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin${{ matrix.arch == 'arm64' && '\Release' || '' }}\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}\\out\\*.zip
-          name: llama-box-windows-amd64-${{ matrix.instruction }}
+          name: llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}
 
   windows-hip:
     strategy:
@@ -784,9 +803,6 @@ jobs:
           $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
           "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
@@ -872,9 +888,6 @@ jobs:
           use-github-cache: false
           use-local-cache: false
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         env:
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
@@ -957,9 +970,6 @@ jobs:
           $oneapiRoot = "$(Split-Path -Path $oneapiPath)"
           "ONEAPI_ROOT=${oneapiRoot}" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
-        # disable OpenMP,
-        # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
-        #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
