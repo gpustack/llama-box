@@ -1,0 +1,44 @@
+diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
+index 54aa822c..527bf70e 100644
+--- a/examples/llava/clip.cpp
++++ b/examples/llava/clip.cpp
+@@ -20,6 +20,18 @@
+ #include "ggml-cann.h"
+ #endif
+ 
++#ifdef GGML_USE_VULKAN
++#include "ggml-vulkan.h"
++#endif
++
++#ifdef GGML_USE_SYCL
++#include "ggml-sycl.h"
++#endif
++
++#ifdef GGML_USE_KOMPUTE
++#include "ggml-kompute.h"
++#endif
++
+ #define STB_IMAGE_IMPLEMENTATION
+ #include "stb_image.h"
+ 
+@@ -1125,6 +1137,20 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+     LOG_TEE("%s: CLIP using CANN backend\n", __func__);
+ #endif
+ 
++#ifdef GGML_USE_VULKAN
++    new_clip->backend = ggml_backend_vk_init(0);
++    LOG_TEE("%s: CLIP using Vulkan backend\n", __func__);
++#endif
++
++#ifdef GGML_USE_SYCL
++    new_clip->backend = ggml_backend_sycl_init(0);
++    LOG_TEE("%s: CLIP using SYCL backend\n", __func__);
++#endif
++
++#ifdef GGML_USE_KOMPUTE
++    new_clip->backend = ggml_backend_kompute_init(0);
++    LOG_TEE("%s: CLIP using Kompute backend\n", __func__);
++#endif
+ 
+     if (!new_clip->backend) {
+         new_clip->backend = ggml_backend_cpu_init();
