@@ -262,15 +262,13 @@ speculative:
 
 ## API
 
-- **GET** `/health`: Returns the current state of the LLaMA Box.
-    + 503 -> `{"status": "loading model"}` if the model is still being loaded.
-    + 500 -> `{"status": "error"}` if the model failed to load.
-    + 200 -> `{"status": "ok", "slots_idle": 1, "slots_processing": 2 }` if the model is successfully loaded and the
-      server is ready for further requests mentioned below.
-    + 200 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if no slots are currently
-      available.
-    + 503 -> `{"status": "no slot available", "slots_idle": 0, "slots_processing": 32}` if the query
-      parameter `fail_on_no_slot` is provided and no slots are currently available.
+- **GET** `/health`: Returns the heath check result of the LLaMA Box.
+    + HTTP status code 503.
+        - Body: `{"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}
+        - Explanation: the model is still being loaded.
+    + HTTP status code 200.
+        - Body: `{"status": "ok" }`
+        - Explanation: the model is successfully loaded and the server is ready.
 
 - **GET** `/metrics`: Returns the Prometheus compatible metrics of the LLaMA Box.
     + This endpoint is only available if the `--metrics` flag is enabled.
@@ -297,7 +295,12 @@ speculative:
 - **POST** `/detokenize`: Convert tokens to text.
 
 - **GET** `/slots`: Returns the current slots processing state.
+    + If query param `?fail_on_no_slot=1` is set, this endpoint will respond with status code 503 if there is no
+      available slots.
     + This endpoint is only available if the `--no-slots` flag is no provided.
+    + Possible values for `slot[i].state` are:
+        - `0`: slot is available.
+        - `1`: slot is processing.
 
 - **POST** `/slots/:id_slot?action={save|restore|erase}`: Operate specific slot via ID.
     + This endpoint is only available if the `--no-slots` flag is no provided and `--slot-save-path` is provided.

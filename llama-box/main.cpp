@@ -24,6 +24,9 @@
 #include "ratelimiter.hpp"
 #include "utils.hpp"
 
+// mime type for sending response
+#define MIMETYPE_JSON "application/json; charset=utf-8"
+
 using json = nlohmann::json;
 
 bool server_log_json = true;
@@ -48,7 +51,6 @@ enum server_state {
     SERVER_STATE_LOADING_MODEL, // Server is starting up, model not fully
                                 // loaded yet
     SERVER_STATE_READY,         // Server is ready and model is loaded
-    SERVER_STATE_ERROR          // An error occurred, load_model failed
 };
 
 enum server_task_type {
@@ -558,7 +560,7 @@ struct server_queue {
         queue_multitasks.push_back(multi);
     }
 
-    // updatethe remaining subtasks, while appending results to multitask
+    // update the remaining subtasks, while appending results to multitask
     void update_multitask(int id_multi, int id_sub, server_task_result &result) {
         std::lock_guard<std::mutex> lock(mutex_tasks);
         for (auto &multitask : queue_multitasks) {
@@ -969,10 +971,12 @@ struct server_context {
         return true;
     }
 
-    void clean() {
+    void clean(httplib::Server &svr) {
+        svr.stop();
         if (lookup_ngram_min > 0 && !params.lookup_cache_dynamic.empty()) {
             llama_ngram_cache_save(ngram_cache_dynamic, params.lookup_cache_dynamic);
         }
+        llama_backend_free();
     }
 
     std::vector<llama_token> tokenize(const json &prompt, bool add_special) const {
@@ -2913,11 +2917,12 @@ int main(int argc, char **argv) {
     svr.set_default_headers({{"Server", "llama-box"}});
 
     // CORS preflight
-    svr.Options(R"(.*)", [](const httplib::Request &req, httplib::Response &res) {
-        res.set_header("Access-Control-Allow-Origin", req.get_header_value("Origin"));
+    svr.Options(R"(.*)", [](const httplib::Request &, httplib::Response &res) {
+        // Access-Control-Allow-Origin is already set by middleware
+//        res.set_header("Access-Control-Allow-Credentials", "true");
         res.set_header("Access-Control-Allow-Methods", "POST");
         res.set_header("Access-Control-Allow-Headers", "*");
-        return res.set_content("", "application/json; charset=utf-8");
+        return res.set_content("", "text/html"); // blank response, no data
     });
 
     // logger
@@ -2926,7 +2931,7 @@ int main(int argc, char **argv) {
     // error handlers
     auto res_error = [](httplib::Response &res, json error_data) {
         json final_response{{"error", error_data}};
-        res.set_content(final_response.dump(), "application/json; charset=utf-8");
+        res.set_content(final_response.dump(), MIMETYPE_JSON);
         res.status = json_value(error_data, "code", httplib::StatusCode::InternalServerError_500);
     };
     svr.set_exception_handler([&res_error](const httplib::Request &, httplib::Response &res,
@@ -2958,11 +2963,6 @@ int main(int argc, char **argv) {
     svr.set_payload_max_length(1024 * 1024 * 10);
     svr.set_idle_interval(bparams.conn_idle);
     svr.set_keep_alive_timeout(bparams.conn_keepalive);
-    if (!svr.bind_to_port(params.hostname, params.port)) {
-        LOG_ERROR("couldn't bind to server socket",
-                  {{"hostname", params.hostname}, {"port", params.port}});
-        return 1;
-    }
 
     std::unordered_map<std::string, std::string> log_data;
     log_data["hostname"] = params.hostname;
@@ -2971,84 +2971,29 @@ int main(int argc, char **argv) {
     // necessary similarity of prompt for slot selection
     ctx_server.slot_prompt_similarity = params.slot_prompt_similarity;
 
-    // load the model
-    if (!ctx_server.load_model(bparams)) {
-        state.store(SERVER_STATE_ERROR);
-        return 1;
-    }
-    LOG_INFO("model loaded", {});
+    // pre routing
+    svr.set_pre_routing_handler(
+        [&res_error, &state](const httplib::Request &req, httplib::Response &res) {
+            res.set_header("Access-Control-Allow-Origin", req.get_header_value("Origin"));
 
-    // init server
-    if (!ctx_server.init()) {
-        state.store(SERVER_STATE_ERROR);
-        return 1;
-    }
-    LOG_INFO("server initialized", {});
-    state.store(SERVER_STATE_READY);
-
-    if (params.enable_chat_template) {
-        // if a custom chat template is not supplied, we will use the one that comes
-        // with the model (if any)
-        if (params.chat_template.empty()) {
-            params.chat_template = ctx_server.load_chat_template();
-        }
-        if (params.chat_template.size() <= 20) {
-            for (char &c : params.chat_template) {
-                c = char(std::tolower(c));
+            // Server state loading.
+            server_state current_state = state.load();
+            if (current_state == SERVER_STATE_LOADING_MODEL) {
+                res_error(res, format_error_response("Loading model", ERROR_TYPE_UNAVAILABLE));
+                return httplib::Server::HandlerResponse::Handled;
             }
-        }
-        LOG_INFO("chat template", {{"template", params.chat_template}});
-    }
+
+            return httplib::Server::HandlerResponse::Unhandled;
+        });
 
     //
     // Handlers
     //
 
-    const auto handle_health = [&](const httplib::Request &req, httplib::Response &res) {
-        server_state current_state = state.load();
-        switch (current_state) {
-        case SERVER_STATE_READY: {
-            // request slots data using task queue
-            server_task task;
-            task.id_target = -1;
-            task.type = SERVER_TASK_TYPE_METRICS;
-
-            // post the task
-            task.id = ctx_server.queue_tasks.post(task);
-            ctx_server.queue_results.add_waiting_task_id(task.id);
-
-            // get the result
-            server_task_result result = ctx_server.queue_results.recv(task.id);
-            ctx_server.queue_results.remove_waiting_task_id(task.id);
-
-            const int n_idle_slots = result.data.at("idle");
-            const int n_processing_slots = result.data.at("processing");
-
-            json health = {{"status", "ok"},
-                           {"slots_idle", n_idle_slots},
-                           {"slots_processing", n_processing_slots}};
-
-            if (params.endpoint_slots && req.has_param("include_slots")) {
-                health["slots"] = result.data.at("slots");
-            }
-
-            if (n_idle_slots == 0) {
-                health["status"] = "no slot available";
-                if (req.has_param("fail_on_no_slot")) {
-                    res.status = httplib::StatusCode::ServiceUnavailable_503;
-                }
-            }
-
-            res.set_content(health.dump(), "application/json");
-            break;
-        }
-        case SERVER_STATE_LOADING_MODEL:
-            res_error(res, format_error_response("Loading model", ERROR_TYPE_UNAVAILABLE));
-            break;
-        case SERVER_STATE_ERROR:
-            res_error(res, format_error_response("Model failed to load", ERROR_TYPE_SERVER));
-            break;
-        }
+    const auto handle_health = [&](const httplib::Request &, httplib::Response &res) {
+        // error and loading states are handled by middleware
+        json health = {{"status", "ok"}};
+        res.set_content(health.dump(), MIMETYPE_JSON);
     };
 
     const auto handle_metrics = [&](const httplib::Request &, httplib::Response &res) {
@@ -3157,7 +3102,7 @@ int main(int argc, char **argv) {
             {"chat_template", params.chat_template.c_str()},
             {"default_generation_settings", ctx_server.default_generation_settings_for_props}};
 
-        res.set_content(props.dump(), "application/json; charset=utf-8");
+        res.set_content(props.dump(), MIMETYPE_JSON);
     };
 
     const auto handle_infill = [&ctx_server, &res_error](const httplib::Request &req,
@@ -3213,7 +3158,7 @@ int main(int argc, char **argv) {
                                                          "predicted_per_second", double(tps))));
                 const std::string infill =
                     result.data.dump(-1, ' ', false, json::error_handler_t::replace);
-                res.set_content(infill, "application/json; charset=utf-8");
+                res.set_content(infill, MIMETYPE_JSON);
             }
 
             ctx_server.queue_results.remove_waiting_task_id(id_task);
@@ -3274,7 +3219,7 @@ int main(int argc, char **argv) {
             ctx_server.tokenize(request.at("content"), add_special);
 
         const json response = json{{"tokens", tokens}};
-        return res.set_content(response.dump(), "application/json; charset=utf-8");
+        return res.set_content(response.dump(), MIMETYPE_JSON);
     };
 
     const auto handle_detokenize = [&ctx_server, &res_error](const httplib::Request &req,
@@ -3290,10 +3235,10 @@ int main(int argc, char **argv) {
         const std::string content = llama_detokenize(ctx_server.ctx, request.at("tokens"), false);
 
         const json response = json{{"content", content}};
-        return res.set_content(response.dump(), "application/json; charset=utf-8");
+        return res.set_content(response.dump(), MIMETYPE_JSON);
     };
 
-    const auto handle_slots = [&](const httplib::Request &, httplib::Response &res) {
+    const auto handle_slots = [&](const httplib::Request &req, httplib::Response &res) {
         // request slots data using task queue
         server_task task;
         task.id_multi = -1;
@@ -3307,6 +3252,14 @@ int main(int argc, char **argv) {
         // get the result
         server_task_result result = ctx_server.queue_results.recv(task.id);
         ctx_server.queue_results.remove_waiting_task_id(task.id);
+
+        const int n_idle_slots = result.data.at("idle");
+        if (req.has_param("fail_on_no_slot")) {
+            if (n_idle_slots == 0) {
+                res_error(res, format_error_response("no slot available", ERROR_TYPE_UNAVAILABLE));
+                return;
+            }
+        }
 
         res.set_content(result.data.at("slots").dump(), "application/json");
     };
@@ -3440,7 +3393,7 @@ int main(int argc, char **argv) {
                 {"scale", la.scale},
             });
         }
-        res.set_content(result.dump(), "application/json; charset=utf-8");
+        res.set_content(result.dump(), MIMETYPE_JSON);
     };
 
     const auto handle_lora_adapters_apply = [&ctx_server](const httplib::Request &req,
@@ -3471,7 +3424,7 @@ int main(int argc, char **argv) {
         server_task_result result = ctx_server.queue_results.recv(task.id);
         ctx_server.queue_results.remove_waiting_task_id(task.id);
 
-        res.set_content(result.data.dump(), "application/json; charset=utf-8");
+        res.set_content(result.data.dump(), MIMETYPE_JSON);
     };
 
     const auto handle_completions = [&ctx_server, &res_error](const httplib::Request &req,
@@ -3544,7 +3497,7 @@ int main(int argc, char **argv) {
                 }
                 const std::string completions =
                     completions_json.dump(-1, ' ', false, json::error_handler_t::replace);
-                res.set_content(completions, "application/json; charset=utf-8");
+                res.set_content(completions, MIMETYPE_JSON);
             }
 
             ctx_server.queue_results.remove_waiting_task_id(id_task);
@@ -3616,7 +3569,7 @@ int main(int argc, char **argv) {
                              {"meta", ctx_server.model_meta()}},
                         }}};
 
-        res.set_content(models.dump(), "application/json; charset=utf-8");
+        res.set_content(models.dump(), MIMETYPE_JSON);
     };
 
     const auto handle_chat_completions = [&ctx_server, &params, &res_error](
@@ -3684,7 +3637,7 @@ int main(int argc, char **argv) {
                     oaicompat_completion_response(request, result.data, completion_id);
                 const std::string chats_completion =
                     chats_completion_json.dump(-1, ' ', false, json::error_handler_t::replace);
-                res.set_content(chats_completion, "application/json; charset=utf-8");
+                res.set_content(chats_completion, MIMETYPE_JSON);
             }
 
             ctx_server.queue_results.remove_waiting_task_id(id_task);
@@ -3778,7 +3731,7 @@ int main(int argc, char **argv) {
             const json embeddings_json = oaicompat_embedding_response(request, result.data);
 
             const std::string embeddings = embeddings_json.dump();
-            return res.set_content(embeddings, "application/json; charset=utf-8");
+            return res.set_content(embeddings, MIMETYPE_JSON);
         }
 
         ctx_server.queue_results.remove_waiting_task_id(id_task);
@@ -3821,17 +3774,6 @@ int main(int argc, char **argv) {
     }
 
     //
-    // Middlewares
-    //
-
-    svr.set_post_routing_handler([](const httplib::Request &req, httplib::Response &res) {
-        if (req.method == "POST") {
-            res.set_header("Access-Control-Allow-Origin", req.get_header_value("Origin"));
-        }
-        return httplib::Server::HandlerResponse::Handled;
-    });
-
-    //
     // Start
     //
 
@@ -3843,27 +3785,77 @@ int main(int argc, char **argv) {
     log_data["n_threads_http"] = std::to_string(params.n_threads_http);
     svr.new_task_queue = [&params] { return new httplib::ThreadPool(params.n_threads_http); };
 
-    LOG_INFO("HTTP server listening", log_data);
-    // run the HTTP server in a thread - see comment below
-    std::thread t([&]() {
-        if (!svr.listen_after_bind()) {
-            state.store(SERVER_STATE_ERROR);
-            return 1;
+    // bind HTTP listen port, run the HTTP server in a thread
+    if (!svr.bind_to_port(params.hostname, params.port)) {
+        LOG_ERROR("couldn't bind HTTP server socket",
+                  {{"hostname", params.hostname}, {"port", params.port}});
+        ctx_server.clean(svr);
+        LOG_ERROR("exiting due to HTTP server error", {});
+        return 1;
+    }
+    std::thread t([&]() { svr.listen_after_bind(); });
+    svr.wait_until_ready();
+    LOG_INFO("HTTP server is listening", log_data);
+
+    // load the model
+    LOG_INFO("loading model", log_data);
+    if (!ctx_server.load_model(bparams)) {
+        ctx_server.clean(svr);
+        t.join();
+        LOG_ERROR("exiting due to model loading error", {});
+        return 1;
+    }
+    LOG_INFO("model loaded", {});
+
+    // init server
+    LOG_INFO("initializing server", log_data);
+    if (!ctx_server.init()) {
+        ctx_server.clean(svr);
+        t.join();
+        LOG_ERROR("exiting due to server initializing error", {});
+        return 1;
+    }
+    LOG_INFO("server initialized", {});
+    state.store(SERVER_STATE_READY);
+
+    if (params.enable_chat_template) {
+        // if a custom chat template is not supplied, we will use the one that comes
+        // with the model (if any)
+        bool built_in_chat_template = false;
+        if (params.chat_template.empty()) {
+            params.chat_template = ctx_server.load_chat_template();
+            built_in_chat_template = true;
         }
+        if (params.chat_template.size() <= 20) {
+            for (char &c : params.chat_template) {
+                c = char(std::tolower(c));
+            }
+        }
+        LOG_INFO("chat template",
+                 {{"template", params.chat_template},
+                  {"example", llama_chat_format_example(ctx_server.model, params.chat_template)},
+                  {"builtin", built_in_chat_template}});
+    }
 
-        return 0;
-    });
-
+    // clang-format off
     ctx_server.queue_tasks.on_new_task(
-        std::bind(&server_context::process_single_task, &ctx_server, std::placeholders::_1));
+        std::bind(&server_context::process_single_task, &ctx_server,
+                  std::placeholders::_1));
     ctx_server.queue_tasks.on_finish_multitask(
-        std::bind(&server_context::on_finish_multitask, &ctx_server, std::placeholders::_1));
-    ctx_server.queue_tasks.on_update_slots(std::bind(&server_context::update_slots, &ctx_server));
+        std::bind(&server_context::on_finish_multitask, &ctx_server,
+                  std::placeholders::_1));
+    ctx_server.queue_tasks.on_update_slots(
+        std::bind(&server_context::update_slots, &ctx_server));
     ctx_server.queue_results.on_multitask_update(
-        std::bind(&server_queue::update_multitask, &ctx_server.queue_tasks, std::placeholders::_1,
-                  std::placeholders::_2, std::placeholders::_3));
+        std::bind(&server_queue::update_multitask,
+                  &ctx_server.queue_tasks,
+                  std::placeholders::_1,
+                  std::placeholders::_2,
+                  std::placeholders::_3));
+    // clang-format on
 
     shutdown_handler = [&](int) { ctx_server.queue_tasks.terminate(); };
+    ctx_server.queue_tasks.start_loop();
 
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
     struct sigaction sigint_action {};
@@ -3880,12 +3872,9 @@ int main(int argc, char **argv) {
     SetConsoleCtrlHandler(reinterpret_cast<PHANDLER_ROUTINE>(console_ctrl_handler), true);
 #endif
 
-    ctx_server.queue_tasks.start_loop();
-    svr.stop();
+    ctx_server.clean(svr);
     t.join();
-    ctx_server.clean();
 
-    llama_backend_free();
     LOG_INFO("HTTP server stopped", log_data);
     return 0;
 }
