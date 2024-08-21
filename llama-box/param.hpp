@@ -122,8 +122,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "       --frequency-penalty N",  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_freq });
     opts.push_back({ "*",           "       --dynatemp-range N",     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sparams.dynatemp_range });
     opts.push_back({ "*",           "       --dynatemp-exp N",       "dynamic temperature exponent (default: %.1f)", (double)sparams.dynatemp_exponent });
-    opts.push_back({ "*",           "       --mirostat N",           "use Mirostat sampling.\n"
-                                                                     "Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used.\n"
+    opts.push_back({ "*",           "       --mirostat N",           "use Mirostat sampling,\n"
+                                                                     "Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used\n"
                                                                      "(default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", sparams.mirostat });
     opts.push_back({ "*",           "       --mirostat-lr N",        "Mirostat learning rate, parameter eta (default: %.1f)", (double)sparams.mirostat_eta });
     opts.push_back({ "*",           "       --mirostat-ent N",       "Mirostat target entropy, parameter tau (default: %.1f)", (double)sparams.mirostat_tau });
@@ -156,7 +156,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "*",           "-cb,   --cont-batching",        "enable continuous batching (a.k.a dynamic batching) (default: %s)", params.cont_batching ? "enabled" : "disabled" });
     opts.push_back({ "*",           "-nocb, --no-cont-batching",     "disable continuous batching" });
     opts.push_back({ "*",           "       --mmproj FILE",          "path to a multimodal projector file for LLaVA" });
-    opts.push_back({ "*",           "       --rpc SERVERS",          "comma separated list of RPC servers" });
     if (llama_supports_mlock()) {
         opts.push_back({ "*",           "       --mlock",                "force system to keep model in RAM rather than swapping or compressing" });
     }
@@ -182,7 +181,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                      "add a control vector with user defined scaling SCALE" });
     opts.push_back({ "*",           "       --control-vector-layer-range START END",
                                                                      "layer range to apply the control vector(s) to, start and end inclusive" });
-    opts.push_back({ "*",           "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: %s)", params.spm_infill ? "enabled" : "disabled" });
+    opts.push_back({ "*",           "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "*",           "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "*",           "-ngl,  --gpu-layers N",     "number of layers to store in VRAM" });
@@ -220,7 +219,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",      "       --conn-idle N",          "server connection idle in seconds (default: %d)", bparams.conn_idle });
     opts.push_back({ "server",      "       --conn-keepalive N",     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
     opts.push_back({ "server",      "-tps   --tokens-per-second N",  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
-                                                                     "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header.", bparams.n_tps });
+                                                                     "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", bparams.n_tps });
+    opts.push_back({ "server",      "       --rpc SERVERS",          "comma separated list of RPC servers" });
 
     opts.push_back({ "logging" });
     opts.push_back({ "logging",     "       --log-format {text,json}",
@@ -834,15 +834,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--rpc")) {
-                if (i == argc) {
-                    missing("--rpc");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.rpc_servers = arg;
-                continue;
-            }
-
             if (llama_supports_mlock()) {
                 if (!strcmp(flag, "--mlock")) {
                     bparams.gparams.use_mlock = true;
@@ -1186,6 +1177,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.n_tps = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc")) {
+                if (i == argc) {
+                    missing("--rpc");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.rpc_servers = arg;
                 continue;
             }
 

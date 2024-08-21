@@ -147,8 +147,8 @@ general:
          --frequency-penalty N    repeat alpha frequency penalty (default: 0.0, 0.0 = disabled)
          --dynatemp-range N       dynamic temperature range (default: 0.0, 0.0 = disabled)
          --dynatemp-exp N         dynamic temperature exponent (default: 1.0)
-         --mirostat N             use Mirostat sampling.
-                                  Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used.
+         --mirostat N             use Mirostat sampling,
+                                  Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used
                                   (default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)
          --mirostat-lr N          Mirostat learning rate, parameter eta (default: 0.1)
          --mirostat-ent N         Mirostat target entropy, parameter tau (default: 5.0)
@@ -180,7 +180,6 @@ general:
   -cb,   --cont-batching          enable continuous batching (a.k.a dynamic batching) (default: enabled)
   -nocb, --no-cont-batching       disable continuous batching
          --mmproj FILE            path to a multimodal projector file for LLaVA
-         --rpc SERVERS            comma separated list of RPC servers
          --mlock                  force system to keep model in RAM rather than swapping or compressing
          --no-mmap                do not memory-map model (slower load but may reduce pageouts if not using mlock)
          --numa TYPE              attempt optimizations that help on some NUMA systems
@@ -202,7 +201,7 @@ general:
                                   add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
                                   layer range to apply the control vector(s) to, start and end inclusive
-         --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this. (default: disabled)
+         --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                special tokens output enabled (default: false)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
@@ -238,7 +237,8 @@ server:
          --conn-idle N            server connection idle in seconds (default: 60)
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
-                                  when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header.
+                                  when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
+         --rpc SERVERS            comma separated list of RPC servers
 
 logging:
 
