@@ -260,6 +260,24 @@ speculative:
 
 ```
 
+Available environment variables (if the corresponding command-line option is not provided):
+
+- `LLAMA_ARG_MODEL`
+- `LLAMA_ARG_THREADS`
+- `LLAMA_ARG_CTX_SIZE`
+- `LLAMA_ARG_N_PARALLEL`
+- `LLAMA_ARG_BATCH`
+- `LLAMA_ARG_UBATCH`
+- `LLAMA_ARG_N_GPU_LAYERS`
+- `LLAMA_ARG_THREADS_HTTP`
+- `LLAMA_ARG_CHAT_TEMPLATE`
+- `LLAMA_ARG_N_PREDICT`
+- `LLAMA_ARG_METRICS`
+- `LLAMA_ARG_SLOTS`
+- `LLAMA_ARG_EMBEDDINGS`
+- `LLAMA_ARG_FLASH_ATTN`
+- `LLAMA_ARG_DEFRAG_THOLD`
+
 ## API
 
 - **GET** `/health`: Returns the heath check result of the LLaMA Box.

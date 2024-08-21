@@ -271,6 +271,42 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     printf("\n");
 }
 
+//
+// Environment variable utils
+//
+
+template <typename T>
+static typename std::enable_if<std::is_same<T, std::string>::value, void>::type
+get_env(std::string name, T &target) {
+    char *value = std::getenv(name.c_str());
+    target = value ? std::string(value) : target;
+}
+
+template <typename T>
+static
+    typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value, void>::type
+    get_env(std::string name, T &target) {
+    char *value = std::getenv(name.c_str());
+    target = value ? std::stoi(value) : target;
+}
+
+template <typename T>
+static typename std::enable_if<std::is_floating_point<T>::value, void>::type
+get_env(std::string name, T &target) {
+    char *value = std::getenv(name.c_str());
+    target = value ? std::stof(value) : target;
+}
+
+template <typename T>
+static typename std::enable_if<std::is_same<T, bool>::value, void>::type get_env(std::string name,
+                                                                                 T &target) {
+    char *value = std::getenv(name.c_str());
+    if (value) {
+        std::string val(value);
+        target = val == "1" || val == "true";
+    }
+}
+
 static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bparams) {
     try {
         for (int i = 1; i < argc;) {
@@ -1273,6 +1309,23 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     if (bparams.gparams.n_threads_batch_draft <= 0) {
         bparams.gparams.n_threads_batch_draft = bparams.gparams.n_threads_draft;
     }
+
+    // Retrieve params from environment variables
+    get_env("LLAMA_ARG_MODEL", bparams.gparams.model);
+    get_env("LLAMA_ARG_THREADS", bparams.gparams.n_threads);
+    get_env("LLAMA_ARG_CTX_SIZE", bparams.gparams.n_ctx);
+    get_env("LLAMA_ARG_N_PARALLEL", bparams.gparams.n_parallel);
+    get_env("LLAMA_ARG_BATCH", bparams.gparams.n_batch);
+    get_env("LLAMA_ARG_UBATCH", bparams.gparams.n_ubatch);
+    get_env("LLAMA_ARG_N_GPU_LAYERS", bparams.gparams.n_gpu_layers);
+    get_env("LLAMA_ARG_THREADS_HTTP", bparams.gparams.n_threads_http);
+    get_env("LLAMA_ARG_CHAT_TEMPLATE", bparams.gparams.chat_template);
+    get_env("LLAMA_ARG_N_PREDICT", bparams.gparams.n_predict);
+    get_env("LLAMA_ARG_METRICS", bparams.gparams.endpoint_metrics);
+    get_env("LLAMA_ARG_SLOTS", bparams.gparams.endpoint_slots);
+    get_env("LLAMA_ARG_EMBEDDINGS", bparams.gparams.embedding);
+    get_env("LLAMA_ARG_FLASH_ATTN", bparams.gparams.flash_attn);
+    get_env("LLAMA_ARG_DEFRAG_THOLD", bparams.gparams.defrag_thold);
 
     return true;
 }
