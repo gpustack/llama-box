@@ -264,7 +264,7 @@ speculative:
 
 - **GET** `/health`: Returns the heath check result of the LLaMA Box.
     + HTTP status code 503.
-        - Body: `{"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}
+        - Body: `{"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}`
         - Explanation: the model is still being loaded.
     + HTTP status code 200.
         - Body: `{"status": "ok" }`
