@@ -1,0 +1,32 @@
+diff --git a/ggml/include/ggml-metal.h b/ggml/include/ggml-metal.h
+index d483cf1a..98486cb3 100644
+--- a/ggml/include/ggml-metal.h
++++ b/ggml/include/ggml-metal.h
+@@ -62,6 +62,8 @@ GGML_API bool ggml_backend_metal_supports_family(ggml_backend_t backend, int fam
+ // capture all command buffers committed the next time `ggml_backend_graph_compute` is called
+ GGML_API void ggml_backend_metal_capture_next_compute(ggml_backend_t backend);
+ 
++GGML_API void ggml_backend_metal_get_device_memory(size_t * free_mem, size_t * total_mem);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
+index 995f1934..89b932db 100644
+--- a/ggml/src/ggml-metal.m
++++ b/ggml/src/ggml-metal.m
+@@ -3300,3 +3300,14 @@ GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void *
+     GGML_UNUSED(params);
+     GGML_UNUSED(user_data);
+ }
++
++GGML_CALL void ggml_backend_metal_get_device_memory(size_t *free, size_t *total) {
++    id<MTLDevice> device = ggml_backend_metal_get_device();
++    if (free) {
++        *free = device.recommendedMaxWorkingSetSize;
++    }
++    if (total) {
++        *total = device.recommendedMaxWorkingSetSize;
++    }
++    ggml_backend_metal_free_device();
++}

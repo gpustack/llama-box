@@ -7,6 +7,13 @@
 LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
 
+## Notes
+
+- Since v0.0.8, LLaMA Box supports [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
+- Since v0.0.15, LLaMA Box supports draft model speculative decoding.
+- Since v0.0.17, LLaMA Box supports lookup speculative decoding.
+- Since v0.0.34, LLaMA Box supports RPC server mode, which can serve as a remote inference backend.
+
 ## Download
 
 Download LLaMA Box from [the latest release](https://github.com/gpustack/llama-box/releases/latest) page please, now
@@ -117,6 +124,35 @@ general:
 
   -h,    --help, --usage          print usage and exit
          --version                show version and build info
+         --log-format {text,json} 
+                                  log output format: json or text (default: json)
+
+server:
+
+         --host HOST              ip address to listen (default: 127.0.0.1)
+         --port PORT              port to listen (default: 8080)
+  -to    --timeout N              server read/write timeout in seconds (default: 600)
+         --threads-http N         number of threads used to process HTTP requests (default: -1)
+         --system-prompt-file FILE
+                                  set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
+         --metrics                enable prometheus compatible metrics endpoint (default: disabled)
+         --infill                 enable infill endpoint (default: disabled)
+         --embeddings             enable embedding endpoint (default: disabled)
+         --no-slots               disables slots monitoring endpoint (default: enabled)
+         --slot-save-path PATH    path to save slot kv cache (default: disabled)
+         --chat-template JINJA_TEMPLATE
+                                  set custom jinja chat template (default: template taken from model's metadata)
+                                  only commonly used templates are accepted:
+                                  https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
+         --chat-template-file FILE
+                                  set a file to load a custom jinja chat template (default: template taken from model's metadata)
+  -sps,  --slot-prompt-similarity N
+                                  how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
+                                  
+         --conn-idle N            server connection idle in seconds (default: 60)
+         --conn-keepalive N       server connection keep-alive in seconds (default: 15)
+  -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
+                                  when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
   -a,    --alias NAME             model name alias (default: unknown)
   -s,    --seed N                 RNG seed (default: -1, use random seed for < 0)
@@ -211,41 +247,9 @@ general:
   -ts,   --tensor-split SPLIT     fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1
   -mg,   --main-gpu N             the GPU to use for the model (with split-mode = none),
                                   or for intermediate results and KV (with split-mode = row) (default: 0)
-
-server:
-
-         --host HOST              ip address to listen (default: 127.0.0.1)
-         --port PORT              port to listen (default: 8080)
-  -to    --timeout N              server read/write timeout in seconds (default: 600)
-         --threads-http N         number of threads used to process HTTP requests (default: -1)
-         --system-prompt-file FILE
-                                  set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
-         --metrics                enable prometheus compatible metrics endpoint (default: disabled)
-         --infill                 enable infill endpoint (default: disabled)
-         --embeddings             enable embedding endpoint (default: disabled)
-         --no-slots               disables slots monitoring endpoint (default: enabled)
-         --slot-save-path PATH    path to save slot kv cache (default: disabled)
-         --chat-template JINJA_TEMPLATE
-                                  set custom jinja chat template (default: template taken from model's metadata)
-                                  only commonly used templates are accepted:
-                                  https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
-         --chat-template-file FILE
-                                  set a file to load a custom jinja chat template (default: template taken from model's metadata)
-  -sps,  --slot-prompt-similarity N
-                                  how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-                                  
-         --conn-idle N            server connection idle in seconds (default: 60)
-         --conn-keepalive N       server connection keep-alive in seconds (default: 15)
-  -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
-                                  when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
          --rpc SERVERS            comma separated list of RPC servers
 
-logging:
-
-         --log-format {text,json} 
-                                  log output format: json or text (default: json)
-
-speculative:
+server/speculative:
 
          --draft N                number of tokens to draft for speculative decoding (default: 5)
   -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
@@ -258,11 +262,20 @@ speculative:
   -lcd,  --lookup-cache-dynamic FILE
                                   path to dynamic lookup cache to use for lookup decoding (updated by generation)
 
+rpc-server:
+
+         --rpc-server-host HOST   ip address to rpc server listen (default: 0.0.0.0)
+         --rpc-server-port PORT   port to rpc server listen (default: 0)
+         --rpc-server-main-gpu N  the GPU to use for the rpc server (default: 0)
+         --rpc-server-reserve-memory MEM
+                                  reserve memory in MiB (default: 0)
+
 ```
 
 Available environment variables (if the corresponding command-line option is not provided):
 
 - `LLAMA_ARG_MODEL`
+- `LLAMA_ARG_MODEL_ALIAS`
 - `LLAMA_ARG_THREADS`
 - `LLAMA_ARG_CTX_SIZE`
 - `LLAMA_ARG_N_PARALLEL`
@@ -277,6 +290,13 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_EMBEDDINGS`
 - `LLAMA_ARG_FLASH_ATTN`
 - `LLAMA_ARG_DEFRAG_THOLD`
+- `LLAMA_ARG_DRAFT`
+- `LLAMA_ARG_MODEL_DRAFT`
+- `LLAMA_ARG_THREADS_DRAFT`
+- `LLAMA_ARG_N_GPU_LAYERS_DRAFT`
+- `LLAMA_ARG_LOOKUP_NGRAM_MIN`
+- `LLAMA_ARG_LOOKUP_CACHE_STATIC`
+- `LLAMA_ARG_LOOKUP_CACHE_DYNAMIC`
 
 ## API
 

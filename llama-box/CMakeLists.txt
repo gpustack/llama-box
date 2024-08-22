@@ -56,6 +56,7 @@ add_custom_target(patch
         VERBATIM
 )
 add_dependencies(patch version build_info)
+add_dependencies(ggml patch)
 add_dependencies(llama patch)
 
 #
@@ -84,7 +85,7 @@ if (GGML_MUSA)
     set(CMAKE_CXX_COMPILER clang++)
     set(CMAKE_CXX_EXTENSIONS OFF)
 endif ()
-add_executable(${TARGET} main.cpp param.hpp ratelimiter.hpp utils.hpp)
+add_executable(${TARGET} main.cpp param.hpp ratelimiter.hpp rpcserver.hpp utils.hpp)
 if (NOT APPLE AND NOT GGML_SYCL)
     target_link_options(${TARGET} PRIVATE -static-libgcc -static-libstdc++)
 endif ()

@@ -22,6 +22,7 @@
 
 #include "param.hpp"
 #include "ratelimiter.hpp"
+#include "rpcserver.hpp"
 #include "utils.hpp"
 
 // mime type for sending response
@@ -2886,6 +2887,13 @@ int main(int argc, char **argv) {
 
     server_log_json = params.log_json;
 
+    llama_numa_init(params.numa);
+
+    if (bparams.rparams.port > 0) {
+        rpc_server_params &rparams = bparams.rparams;
+        return rpc_server_start(rparams);
+    }
+
     server_context ctx_server;
     if (params.system_prompt.empty() && !params.mmproj.empty()) {
         params.system_prompt = "### System: You are a helpful assistant.\n### Human: ";
@@ -2899,7 +2907,6 @@ int main(int argc, char **argv) {
     }
 
     llama_backend_init();
-    llama_numa_init(params.numa);
 
     LOG_INFO("build info", {{"version", LLAMA_BOX_GIT_VERSION},
                             {"commit", LLAMA_BOX_GIT_COMMIT},
@@ -2919,7 +2926,6 @@ int main(int argc, char **argv) {
     // CORS preflight
     svr.Options(R"(.*)", [](const httplib::Request &, httplib::Response &res) {
         // Access-Control-Allow-Origin is already set by middleware
-//        res.set_header("Access-Control-Allow-Credentials", "true");
         res.set_header("Access-Control-Allow-Methods", "POST");
         res.set_header("Access-Control-Allow-Headers", "*");
         return res.set_content("", "text/html"); // blank response, no data

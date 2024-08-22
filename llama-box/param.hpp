@@ -10,6 +10,7 @@
 #include "llama.cpp/common/json.hpp"
 #include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
+#include "rpcserver.hpp"
 
 // version
 extern const char *LLAMA_BOX_GIT_TREE_STATE;
@@ -20,6 +21,7 @@ using json = nlohmann::json;
 
 struct llama_box_params {
     gpt_params gparams;
+    rpc_server_params rparams;
 
     int32_t conn_idle = 60;       // connection idle in seconds
     int32_t conn_keepalive = 15;  // connection keep-alive in seconds
@@ -77,6 +79,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     };
 
     const auto &params = bparams.gparams;
+    const auto &rparams = bparams.rparams;
     const auto &sparams = params.sparams;
     std::string sampler_type_chars;
     std::string sampler_type_names;
@@ -86,163 +89,174 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     }
     sampler_type_names.pop_back();
 
-    std::vector<opt> opts;
     // clang-format off
+    std::vector<opt> opts;
+    // general //
     opts.push_back({ "general" });
-    opts.push_back({ "*",           "-h,    --help, --usage",        "print usage and exit" });
-    opts.push_back({ "*",           "       --version",              "show version and build info" });
-    opts.push_back({ "*",           "-m,    --model FILE",           "model path (default: %s)", DEFAULT_MODEL_PATH });
-    opts.push_back({ "*",           "-a,    --alias NAME",           "model name alias (default: %s)", params.model_alias.c_str() });
-    opts.push_back({ "*",           "-s,    --seed N",               "RNG seed (default: %d, use random seed for < 0)", params.seed });
-    opts.push_back({ "*",           "-t,    --threads N",            "number of threads to use during generation (default: %d)", params.n_threads });
-    opts.push_back({ "*",           "-tb,   --threads-batch N",      "number of threads to use during batch and prompt processing (default: same as --threads)" });
-    opts.push_back({ "*",           "-c,    --ctx-size N",           "size of the prompt context (default: %d, 0 = loaded from model)", params.n_ctx });
-    opts.push_back({ "*",           "-n,    --predict N",            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", params.n_predict });
-    opts.push_back({ "*",           "-b,    --batch-size N",         "logical maximum batch size (default: %d)", params.n_batch });
-    opts.push_back({ "*",           "-ub,   --ubatch-size N",        "physical maximum batch size (default: %d)", params.n_ubatch });
-    opts.push_back({ "*",           "       --keep N",               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", params.n_keep });
-    opts.push_back({ "*",           "       --chunks N",             "max number of chunks to process (default: %d, -1 = all)", params.n_chunks });
-    opts.push_back({ "*",           "-fa,   --flash-attn",           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
-    opts.push_back({ "*",           "-e,    --escape",               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
-    opts.push_back({ "*",           "       --no-escape",            "do not process escape sequences" });
-    opts.push_back({ "*",           "       --samplers SAMPLERS",    "samplers that will be used for generation in the order, separated by \';\'\n"
-                                                                     "(default: %s)", sampler_type_names.c_str() });
-    opts.push_back({ "*",           "       --sampling-seq SEQUENCE",
-                                                                     "simplified sequence for samplers that will be used (default: %s)", sampler_type_chars.c_str() });
-    opts.push_back({ "*",           "       --penalize-nl",          "penalize newline tokens (default: %s)", sparams.penalize_nl ? "true" : "false" });
-    opts.push_back({ "*",           "       --temp N",               "temperature (default: %.1f)", (double)sparams.temp });
-    opts.push_back({ "*",           "       --top-k N",              "top-k sampling (default: %d, 0 = disabled)", sparams.top_k });
-    opts.push_back({ "*",           "       --top-p N",              "top-p sampling (default: %.1f, 1.0 = disabled)", (double)sparams.top_p });
-    opts.push_back({ "*",           "       --min-p N",              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)sparams.min_p });
-    opts.push_back({ "*",           "       --tfs N",                "tail free sampling, parameter z (default: %.1f, 1.0 = disabled)", (double)sparams.tfs_z });
-    opts.push_back({ "*",           "       --typical N",            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)sparams.typical_p });
-    opts.push_back({ "*",           "       --repeat-last-n N",      "last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", sparams.penalty_last_n });
-    opts.push_back({ "*",           "       --repeat-penalty N",     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)sparams.penalty_repeat });
-    opts.push_back({ "*",           "       --presence-penalty N",   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_present });
-    opts.push_back({ "*",           "       --frequency-penalty N",  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_freq });
-    opts.push_back({ "*",           "       --dynatemp-range N",     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sparams.dynatemp_range });
-    opts.push_back({ "*",           "       --dynatemp-exp N",       "dynamic temperature exponent (default: %.1f)", (double)sparams.dynatemp_exponent });
-    opts.push_back({ "*",           "       --mirostat N",           "use Mirostat sampling,\n"
-                                                                     "Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used\n"
-                                                                     "(default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", sparams.mirostat });
-    opts.push_back({ "*",           "       --mirostat-lr N",        "Mirostat learning rate, parameter eta (default: %.1f)", (double)sparams.mirostat_eta });
-    opts.push_back({ "*",           "       --mirostat-ent N",       "Mirostat target entropy, parameter tau (default: %.1f)", (double)sparams.mirostat_tau });
-    opts.push_back({ "*",           "-l     --logit-bias TOKEN_ID(+/-)BIAS",
-                                                                     "modifies the likelihood of token appearing in the completion,\n"
-                                                                     "i.e. `--logit-bias 15043+1` to increase likelihood of token ' Hello',\n"
-                                                                     "or `--logit-bias 15043-1` to decrease likelihood of token ' Hello'" });
-    opts.push_back({ "*",           "       --grammar GRAMMAR",      "BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '%s')", sparams.grammar.c_str() });
-    opts.push_back({ "*",           "       --grammar-file FILE",    "file to read grammar from" });
-    opts.push_back({ "*",           "-j,    --json-schema SCHEMA",
-                                                                     "JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object\n"
-                                                                     "For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead" });
-    opts.push_back({ "*",           "       --rope-scaling {none,linear,yarn}",
-                                                                     "RoPE frequency scaling method, defaults to linear unless specified by the model" });
-    opts.push_back({ "*",           "       --rope-scale N",         "RoPE context scaling factor, expands context by a factor of N" });
-    opts.push_back({ "*",           "       --rope-freq-base N",     "RoPE base frequency, used by NTK-aware scaling (default: loaded from model)" });
-    opts.push_back({ "*",           "       --rope-freq-scale N",    "RoPE frequency scaling factor, expands context by a factor of 1/N" });
-    opts.push_back({ "*",           "       --yarn-orig-ctx N",      "YaRN: original context size of model (default: %d = model training context size)", params.yarn_orig_ctx });
-    opts.push_back({ "*",           "       --yarn-ext-factor N",    "YaRN: extrapolation mix factor (default: %.1f, 0.0 = full interpolation)", (double)params.yarn_ext_factor });
-    opts.push_back({ "*",           "       --yarn-attn-factor N",   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)params.yarn_attn_factor });
-    opts.push_back({ "*",           "       --yarn-beta-fast N",     "YaRN: low correction dim or beta (default: %.1f)", (double)params.yarn_beta_fast });
-    opts.push_back({ "*",           "       --yarn-beta-slow N",     "YaRN: high correction dim or alpha (default: %.1f)", (double)params.yarn_beta_slow });
-    opts.push_back({ "*",           "-gan,  --grp-attn-n N",         "group-attention factor (default: %d)", params.grp_attn_n });
-    opts.push_back({ "*",           "-gaw,  --grp-attn-w N",         "group-attention width (default: %.1f)", (double)params.grp_attn_w });
-    opts.push_back({ "*",           "-nkvo, --no-kv-offload",        "disable KV offload" });
-    opts.push_back({ "*",           "-ctk,  --cache-type-k TYPE",    "KV cache data type for K (default: %s)", params.cache_type_k.c_str() });
-    opts.push_back({ "*",           "-ctv,  --cache-type-v TYPE",    "KV cache data type for V (default: %s)", params.cache_type_v.c_str() });
-    opts.push_back({ "*",           "-dt,   --defrag-thold N",       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold });
-    opts.push_back({ "*",           "-np,   --parallel N",           "number of parallel sequences to decode (default: %d)", params.n_parallel });
-    opts.push_back({ "*",           "-cb,   --cont-batching",        "enable continuous batching (a.k.a dynamic batching) (default: %s)", params.cont_batching ? "enabled" : "disabled" });
-    opts.push_back({ "*",           "-nocb, --no-cont-batching",     "disable continuous batching" });
-    opts.push_back({ "*",           "       --mmproj FILE",          "path to a multimodal projector file for LLaVA" });
+    opts.push_back({ "general",            "-h,    --help, --usage",        "print usage and exit" });
+    opts.push_back({ "general",            "       --version",              "show version and build info" });
+    opts.push_back({ "general",            "       --log-format {text,json}",
+                                                                            "log output format: json or text (default: json)" });
+    // general //
+    // server //
+    opts.push_back({ "server" });
+    opts.push_back({ "server",             "       --host HOST",            "ip address to listen (default: %s)", params.hostname.c_str() });
+    opts.push_back({ "server",             "       --port PORT",            "port to listen (default: %d)", params.port });
+    opts.push_back({ "server",             "-to    --timeout N",            "server read/write timeout in seconds (default: %d)", params.timeout_read });
+    opts.push_back({ "server",             "       --threads-http N",       "number of threads used to process HTTP requests (default: %d)", params.n_threads_http });
+    opts.push_back({ "server",             "       --system-prompt-file FILE",
+                                                                            "set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications" });
+    opts.push_back({ "server",             "       --metrics",              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --infill",               "enable infill endpoint (default: %s)", params.infill? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --no-slots",             "disables slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --slot-save-path PATH",  "path to save slot kv cache (default: disabled)" });
+    opts.push_back({ "server",             "       --chat-template JINJA_TEMPLATE",
+                                                                            "set custom jinja chat template (default: template taken from model's metadata)\n"
+                                                                            "only commonly used templates are accepted:\n"
+                                                                            "https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template" });
+    opts.push_back({ "server",             "       --chat-template-file FILE",
+                                                                            "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
+    opts.push_back({ "server",             "-sps,  --slot-prompt-similarity N",
+                                                                            "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
+    opts.push_back({ "server",             "       --conn-idle N",          "server connection idle in seconds (default: %d)", bparams.conn_idle });
+    opts.push_back({ "server",             "       --conn-keepalive N",     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
+    opts.push_back({ "server",             "-tps   --tokens-per-second N",  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
+                                                                            "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", bparams.n_tps });
+    opts.push_back({ "server",             "-m,    --model FILE",           "model path (default: %s)", DEFAULT_MODEL_PATH });
+    opts.push_back({ "server",             "-a,    --alias NAME",           "model name alias (default: %s)", params.model_alias.c_str() });
+    opts.push_back({ "server",             "-s,    --seed N",               "RNG seed (default: %d, use random seed for < 0)", params.seed });
+    opts.push_back({ "server",             "-t,    --threads N",            "number of threads to use during generation (default: %d)", params.n_threads });
+    opts.push_back({ "server",             "-tb,   --threads-batch N",      "number of threads to use during batch and prompt processing (default: same as --threads)" });
+    opts.push_back({ "server",             "-c,    --ctx-size N",           "size of the prompt context (default: %d, 0 = loaded from model)", params.n_ctx });
+    opts.push_back({ "server",             "-n,    --predict N",            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", params.n_predict });
+    opts.push_back({ "server",             "-b,    --batch-size N",         "logical maximum batch size (default: %d)", params.n_batch });
+    opts.push_back({ "server",             "-ub,   --ubatch-size N",        "physical maximum batch size (default: %d)", params.n_ubatch });
+    opts.push_back({ "server",             "       --keep N",               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", params.n_keep });
+    opts.push_back({ "server",             "       --chunks N",             "max number of chunks to process (default: %d, -1 = all)", params.n_chunks });
+    opts.push_back({ "server",             "-fa,   --flash-attn",           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "-e,    --escape",               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
+    opts.push_back({ "server",             "       --no-escape",            "do not process escape sequences" });
+    opts.push_back({ "server",             "       --samplers SAMPLERS",    "samplers that will be used for generation in the order, separated by \';\'\n"
+                                                                            "(default: %s)", sampler_type_names.c_str() });
+    opts.push_back({ "server",             "       --sampling-seq SEQUENCE",
+                                                                            "simplified sequence for samplers that will be used (default: %s)", sampler_type_chars.c_str() });
+    opts.push_back({ "server",             "       --penalize-nl",          "penalize newline tokens (default: %s)", sparams.penalize_nl ? "true" : "false" });
+    opts.push_back({ "server",             "       --temp N",               "temperature (default: %.1f)", (double)sparams.temp });
+    opts.push_back({ "server",             "       --top-k N",              "top-k sampling (default: %d, 0 = disabled)", sparams.top_k });
+    opts.push_back({ "server",             "       --top-p N",              "top-p sampling (default: %.1f, 1.0 = disabled)", (double)sparams.top_p });
+    opts.push_back({ "server",             "       --min-p N",              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)sparams.min_p });
+    opts.push_back({ "server",             "       --tfs N",                "tail free sampling, parameter z (default: %.1f, 1.0 = disabled)", (double)sparams.tfs_z });
+    opts.push_back({ "server",             "       --typical N",            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)sparams.typical_p });
+    opts.push_back({ "server",             "       --repeat-last-n N",      "last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", sparams.penalty_last_n });
+    opts.push_back({ "server",             "       --repeat-penalty N",     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)sparams.penalty_repeat });
+    opts.push_back({ "server",             "       --presence-penalty N",   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_present });
+    opts.push_back({ "server",             "       --frequency-penalty N",  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_freq });
+    opts.push_back({ "server",             "       --dynatemp-range N",     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sparams.dynatemp_range });
+    opts.push_back({ "server",             "       --dynatemp-exp N",       "dynamic temperature exponent (default: %.1f)", (double)sparams.dynatemp_exponent });
+    opts.push_back({ "server",             "       --mirostat N",           "use Mirostat sampling,\n"
+                                                                            "Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used\n"
+                                                                            "(default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", sparams.mirostat });
+    opts.push_back({ "server",             "       --mirostat-lr N",        "Mirostat learning rate, parameter eta (default: %.1f)", (double)sparams.mirostat_eta });
+    opts.push_back({ "server",             "       --mirostat-ent N",       "Mirostat target entropy, parameter tau (default: %.1f)", (double)sparams.mirostat_tau });
+    opts.push_back({ "server",             "-l     --logit-bias TOKEN_ID(+/-)BIAS",
+                                                                            "modifies the likelihood of token appearing in the completion,\n"
+                                                                            "i.e. `--logit-bias 15043+1` to increase likelihood of token ' Hello',\n"
+                                                                            "or `--logit-bias 15043-1` to decrease likelihood of token ' Hello'" });
+    opts.push_back({ "server",             "       --grammar GRAMMAR",      "BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '%s')", sparams.grammar.c_str() });
+    opts.push_back({ "server",             "       --grammar-file FILE",    "file to read grammar from" });
+    opts.push_back({ "server",             "-j,    --json-schema SCHEMA",
+                                                                            "JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object\n"
+                                                                            "For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead" });
+    opts.push_back({ "server",             "       --rope-scaling {none,linear,yarn}",
+                                                                            "RoPE frequency scaling method, defaults to linear unless specified by the model" });
+    opts.push_back({ "server",             "       --rope-scale N",         "RoPE context scaling factor, expands context by a factor of N" });
+    opts.push_back({ "server",             "       --rope-freq-base N",     "RoPE base frequency, used by NTK-aware scaling (default: loaded from model)" });
+    opts.push_back({ "server",             "       --rope-freq-scale N",    "RoPE frequency scaling factor, expands context by a factor of 1/N" });
+    opts.push_back({ "server",             "       --yarn-orig-ctx N",      "YaRN: original context size of model (default: %d = model training context size)", params.yarn_orig_ctx });
+    opts.push_back({ "server",             "       --yarn-ext-factor N",    "YaRN: extrapolation mix factor (default: %.1f, 0.0 = full interpolation)", (double)params.yarn_ext_factor });
+    opts.push_back({ "server",             "       --yarn-attn-factor N",   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)params.yarn_attn_factor });
+    opts.push_back({ "server",             "       --yarn-beta-fast N",     "YaRN: low correction dim or beta (default: %.1f)", (double)params.yarn_beta_fast });
+    opts.push_back({ "server",             "       --yarn-beta-slow N",     "YaRN: high correction dim or alpha (default: %.1f)", (double)params.yarn_beta_slow });
+    opts.push_back({ "server",             "-gan,  --grp-attn-n N",         "group-attention factor (default: %d)", params.grp_attn_n });
+    opts.push_back({ "server",             "-gaw,  --grp-attn-w N",         "group-attention width (default: %.1f)", (double)params.grp_attn_w });
+    opts.push_back({ "server",             "-nkvo, --no-kv-offload",        "disable KV offload" });
+    opts.push_back({ "server",             "-ctk,  --cache-type-k TYPE",    "KV cache data type for K (default: %s)", params.cache_type_k.c_str() });
+    opts.push_back({ "server",             "-ctv,  --cache-type-v TYPE",    "KV cache data type for V (default: %s)", params.cache_type_v.c_str() });
+    opts.push_back({ "server",             "-dt,   --defrag-thold N",       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold });
+    opts.push_back({ "server",             "-np,   --parallel N",           "number of parallel sequences to decode (default: %d)", params.n_parallel });
+    opts.push_back({ "server",             "-cb,   --cont-batching",        "enable continuous batching (a.k.a dynamic batching) (default: %s)", params.cont_batching ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "-nocb, --no-cont-batching",     "disable continuous batching" });
+    opts.push_back({ "server",             "       --mmproj FILE",          "path to a multimodal projector file for LLaVA" });
     if (llama_supports_mlock()) {
-        opts.push_back({ "*",           "       --mlock",                "force system to keep model in RAM rather than swapping or compressing" });
+        opts.push_back({ "server",         "       --mlock",                "force system to keep model in RAM rather than swapping or compressing" });
     }
     if (llama_supports_mmap()) {
-        opts.push_back({ "*",           "       --no-mmap",              "do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
+        opts.push_back({ "server",         "       --no-mmap",              "do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
     }
-    opts.push_back({ "*",           "       --numa TYPE",            "attempt optimizations that help on some NUMA systems\n"
-                                                                     "  - distribute: spread execution evenly over all nodes\n"
-                                                                     "  - isolate: only spawn threads on CPUs on the node that execution started on\n"
-                                                                     "  - numactl: use the CPU map provided by numactl\n"
-                                                                     "if run without this previously, it is recommended to drop the system page cache before using this\n"
-                                                                     "see https://github.com/ggerganov/llama.cpp/issues/1437" });
-    opts.push_back({ "*",           "       --override-kv KEY=TYPE:VALUE",
-                                                                     "advanced option to override model metadata by key. may be specified multiple times.\n"
-                                                                     "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
-    opts.push_back({ "*",           "       --lora FILE",            "apply LoRA adapter (implies --no-mmap)" });
-    opts.push_back({ "*",           "       --lora-scaled FILE SCALE",
-                                                                     "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
-    opts.push_back({ "*",           "       --lora-init-without-apply",
-                                                                     "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled" });
-    opts.push_back({ "*",           "       --control-vector FILE",  "add a control vector" });
-    opts.push_back({ "*",           "       --control-vector-scaled FILE SCALE",
-                                                                     "add a control vector with user defined scaling SCALE" });
-    opts.push_back({ "*",           "       --control-vector-layer-range START END",
-                                                                     "layer range to apply the control vector(s) to, start and end inclusive" });
-    opts.push_back({ "*",           "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
-    opts.push_back({ "*",           "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
+    opts.push_back({ "server",             "       --numa TYPE",            "attempt optimizations that help on some NUMA systems\n"
+                                                                            "  - distribute: spread execution evenly over all nodes\n"
+                                                                            "  - isolate: only spawn threads on CPUs on the node that execution started on\n"
+                                                                            "  - numactl: use the CPU map provided by numactl\n"
+                                                                            "if run without this previously, it is recommended to drop the system page cache before using this\n"
+                                                                            "see https://github.com/ggerganov/llama.cpp/issues/1437" });
+    opts.push_back({ "server",             "       --override-kv KEY=TYPE:VALUE",
+                                                                            "advanced option to override model metadata by key. may be specified multiple times.\n"
+                                                                            "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
+    opts.push_back({ "server",             "       --lora FILE",            "apply LoRA adapter (implies --no-mmap)" });
+    opts.push_back({ "server",             "       --lora-scaled FILE SCALE",
+                                                                            "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
+    opts.push_back({ "server",             "       --lora-init-without-apply",
+                                                                            "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --control-vector FILE",  "add a control vector" });
+    opts.push_back({ "server",             "       --control-vector-scaled FILE SCALE",
+                                                                            "add a control vector with user defined scaling SCALE" });
+    opts.push_back({ "server",             "       --control-vector-layer-range START END",
+                                                                            "layer range to apply the control vector(s) to, start and end inclusive" });
+    opts.push_back({ "server",             "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
     if (llama_supports_gpu_offload()) {
-        opts.push_back({ "*",           "-ngl,  --gpu-layers N",     "number of layers to store in VRAM" });
-        opts.push_back({ "*",           "-sm,   --split-mode SPLIT_MODE",
-                                                                     "how to split the model across multiple GPUs, one of:\n"
-                                                                     "  - none: use one GPU only\n"
-                                                                     "  - layer (default): split layers and KV across GPUs\n"
-                                                                     "  - row: split rows across GPUs" });
-        opts.push_back({ "*",           "-ts,   --tensor-split SPLIT",
-                                                                     "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
-        opts.push_back({ "*",           "-mg,   --main-gpu N",       "the GPU to use for the model (with split-mode = none),\n"
-                                                                     "or for intermediate results and KV (with split-mode = row) (default: %d)", params.main_gpu });
+        opts.push_back({ "server",         "-ngl,  --gpu-layers N",         "number of layers to store in VRAM" });
+        opts.push_back({ "server",         "-sm,   --split-mode SPLIT_MODE",
+                                                                            "how to split the model across multiple GPUs, one of:\n"
+                                                                            "  - none: use one GPU only\n"
+                                                                            "  - layer (default): split layers and KV across GPUs\n"
+                                                                            "  - row: split rows across GPUs" });
+        opts.push_back({ "server",         "-ts,   --tensor-split SPLIT",
+                                                                            "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
+        opts.push_back({ "server",         "-mg,   --main-gpu N",           "the GPU to use for the model (with split-mode = none),\n"
+                                                                            "or for intermediate results and KV (with split-mode = row) (default: %d)", params.main_gpu });
     }
-
-    opts.push_back({ "server" });
-    opts.push_back({ "server",      "       --host HOST",            "ip address to listen (default: %s)", params.hostname.c_str() });
-    opts.push_back({ "server",      "       --port PORT",            "port to listen (default: %d)", params.port });
-    opts.push_back({ "server",      "-to    --timeout N",            "server read/write timeout in seconds (default: %d)", params.timeout_read });
-    opts.push_back({ "server",      "       --threads-http N",       "number of threads used to process HTTP requests (default: %d)", params.n_threads_http });
-    opts.push_back({ "server",      "       --system-prompt-file FILE",
-                                                                     "set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications" });
-    opts.push_back({ "server",      "       --metrics",              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
-    opts.push_back({ "server",      "       --infill",               "enable infill endpoint (default: %s)", params.infill? "enabled" : "disabled" });
-    opts.push_back({ "server",      "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
-    opts.push_back({ "server",      "       --no-slots",             "disables slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
-    opts.push_back({ "server",      "       --slot-save-path PATH",  "path to save slot kv cache (default: disabled)" });
-    opts.push_back({ "server",      "       --chat-template JINJA_TEMPLATE",
-                                                                     "set custom jinja chat template (default: template taken from model's metadata)\n"
-                                                                     "only commonly used templates are accepted:\n"
-                                                                     "https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template" });
-    opts.push_back({ "server",      "       --chat-template-file FILE",
-                                                                     "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
-    opts.push_back({ "server",      "-sps,  --slot-prompt-similarity N",
-                                                                     "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
-    opts.push_back({ "server",      "       --conn-idle N",          "server connection idle in seconds (default: %d)", bparams.conn_idle });
-    opts.push_back({ "server",      "       --conn-keepalive N",     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
-    opts.push_back({ "server",      "-tps   --tokens-per-second N",  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
-                                                                     "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", bparams.n_tps });
-    opts.push_back({ "server",      "       --rpc SERVERS",          "comma separated list of RPC servers" });
-
-    opts.push_back({ "logging" });
-    opts.push_back({ "logging",     "       --log-format {text,json}",
-                                                                     "log output format: json or text (default: json)" });
-
-    opts.push_back({ "speculative" });
-    opts.push_back({ "speculative", "       --draft N",              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
-    // draft model speculative decoding
-    opts.push_back({ "speculative", "-md,   --model-draft FNAME",    "draft model for speculative decoding (default: unused)" });
-    opts.push_back({ "speculative", "-td,   --threads-draft N",      "number of threads to use during generation (default: same as --threads)" });
-    opts.push_back({ "speculative", "-tbd,  --threads-batch-draft N",
-                                                                     "number of threads to use during batch and prompt processing (default: same as --threads-draft)" });
+    opts.push_back({ "server",             "       --rpc SERVERS",          "comma separated list of RPC servers" });
+    // server // speculative //
+    opts.push_back({ "server/speculative" });
+    opts.push_back({ "server/speculative", "       --draft N",              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
+    opts.push_back({ "server/speculative", "-md,   --model-draft FNAME",    "draft model for speculative decoding (default: unused)" });
+    opts.push_back({ "server/speculative", "-td,   --threads-draft N",      "number of threads to use during generation (default: same as --threads)" });
+    opts.push_back({ "server/speculative", "-tbd,  --threads-batch-draft N",
+                                                                            "number of threads to use during batch and prompt processing (default: same as --threads-draft)" });
     if (llama_supports_gpu_offload()) {
-        opts.push_back({ "speculative",
-                                    "-ngld, --gpu-layers-draft N",   "number of layers to store in VRAM for the draft model" });
+        opts.push_back({ "server/speculative",
+                                           "-ngld, --gpu-layers-draft N",   "number of layers to store in VRAM for the draft model" });
     }
-    // model-free speculative decoding
-    opts.push_back({ "speculative", "       --lookup-ngram-min N",   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", bparams.lookup_ngram_min });
-    opts.push_back({ "speculative", "-lcs,  --lookup-cache-static FILE",
-                                                                     "path to static lookup cache to use for lookup decoding (not updated by generation)" });
-    opts.push_back({ "speculative", "-lcd,  --lookup-cache-dynamic FILE",
-                                                                     "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
+    opts.push_back({ "server/speculative", "       --lookup-ngram-min N",   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", bparams.lookup_ngram_min });
+    opts.push_back({ "server/speculative", "-lcs,  --lookup-cache-static FILE",
+                                                                            "path to static lookup cache to use for lookup decoding (not updated by generation)" });
+    opts.push_back({ "server/speculative", "-lcd,  --lookup-cache-dynamic FILE",
+                                                                            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
+    // server // speculative //
+    // server //
+    // rpc-server //
+    opts.push_back({ "rpc-server" });
+    opts.push_back({ "rpc-server",       "       --rpc-server-host HOST",   "ip address to rpc server listen (default: %s)", rparams.hostname.c_str() });
+    opts.push_back({ "rpc-server",       "       --rpc-server-port PORT",   "port to rpc server listen (default: %d)", rparams.port });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "rpc-server",   "       --rpc-server-main-gpu N",  "the GPU to use for the rpc server (default: %d)", rparams.main_gpu });
+    }
+    opts.push_back({ "rpc-server",       "       --rpc-server-reserve-memory MEM",
+                                                                            "reserve memory in MiB (default: %zu)", rparams.reserve_memory });
+    // rpc-server //
+
     // clang-format on
 
     printf("usage: %s [options]\n", argv[0]);
@@ -316,7 +330,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 unknown(flag);
             }
 
-            // general flags
+            // general //
 
             if (!strcmp(flag, "-h") || !strcmp(flag, "--help") || !strcmp(flag, "--usage")) {
                 llama_box_params_print_usage(argc, argv, bparams);
@@ -328,6 +342,188 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 fprintf(stderr, "llama.cpp version: %d (%s)\n", LLAMA_BUILD_NUMBER, LLAMA_COMMIT);
                 fprintf(stderr, "built with %s for %s\n", LLAMA_COMPILER, LLAMA_BUILD_TARGET);
                 exit(0);
+            }
+
+            if (!strcmp(flag, "--log-format")) {
+                if (i == argc) {
+                    missing("--log-format");
+                }
+                char *arg = argv[i++];
+                if (!strcmp(arg, "json")) {
+                    bparams.gparams.log_json = true;
+                } else if (!strcmp(arg, "text")) {
+                    bparams.gparams.log_json = false;
+                } else {
+                    unknown("--log-format");
+                }
+                continue;
+            }
+
+            // general //
+
+            // server //
+
+            if (!strcmp(flag, "--host")) {
+                if (i == argc) {
+                    missing("--host");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.hostname = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--port")) {
+                if (i == argc) {
+                    missing("--port");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.port = std::stoi(std::string(arg));
+                if (bparams.gparams.port <= 0 || bparams.gparams.port > 65535) {
+                    invalid("--port");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "-to") || !strcmp(flag, "--timeout")) {
+                if (i == argc) {
+                    missing("--timeout");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.timeout_read = std::stoi(std::string(arg));
+                bparams.gparams.timeout_write = bparams.gparams.timeout_read;
+                continue;
+            }
+
+            if (!strcmp(flag, "--threads-http")) {
+                if (i == argc) {
+                    missing("--threads-http");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.n_threads_http = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "-spf") || !strcmp(flag, "--system-prompt-file")) {
+                if (i == argc) {
+                    missing("--system-prompt-file");
+                }
+                char *arg = argv[i++];
+                std::ifstream file(arg);
+                if (!file) {
+                    invalid("--system-prompt-file");
+                }
+                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
+                          std::back_inserter(bparams.gparams.system_prompt));
+                continue;
+            }
+
+            if (!strcmp(flag, "--metrics")) {
+                bparams.gparams.endpoint_metrics = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--infill")) {
+                bparams.gparams.infill = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--embedding") || !strcmp(flag, "--embeddings")) {
+                bparams.gparams.embedding = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--no-slots")) {
+                bparams.gparams.endpoint_slots = false;
+                continue;
+            }
+
+            if (!strcmp(flag, "--slot-save-path")) {
+                if (i == argc) {
+                    missing("--slot-save-path");
+                }
+                char *arg = argv[i++];
+                if (arg[0] == '\0') {
+                    invalid("--slot-save-path");
+                }
+                std::string p(arg);
+                if (p[p.size() - 1] != DIRECTORY_SEPARATOR) {
+                    p += DIRECTORY_SEPARATOR;
+                }
+                bparams.gparams.slot_save_path = p;
+                continue;
+            }
+
+            if (!strcmp(flag, "--chat-template")) {
+                if (i == argc) {
+                    missing("--chat-template");
+                }
+                char *arg = argv[i++];
+                if (arg[0] == '\0') {
+                    invalid("--chat-template");
+                }
+                std::string t(arg);
+                if (t.size() > 20 && !llama_chat_verify_template(t)) {
+                    invalid("--chat-template");
+                }
+                bparams.gparams.enable_chat_template = true;
+                bparams.gparams.chat_template = t;
+                continue;
+            }
+
+            if (!strcmp(flag, "--chat-template-file")) {
+                if (i == argc) {
+                    missing("--chat-template-file");
+                }
+                char *arg = argv[i++];
+                std::ifstream file(arg);
+                if (!file) {
+                    invalid("--chat-template-file");
+                }
+                std::string t;
+                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
+                          std::back_inserter(t));
+                if (t.size() > 20 && !llama_chat_verify_template(t)) {
+                    invalid("--chat-template-file");
+                }
+                bparams.gparams.enable_chat_template = true;
+                bparams.gparams.chat_template = t;
+                continue;
+            }
+
+            if (!strcmp(flag, "-sps") || !strcmp(flag, "--slot-prompt-similarity")) {
+                if (i == argc) {
+                    missing("--slot-prompt-similarity");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.slot_prompt_similarity = std::stof(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--conn-idle")) { // extend
+                if (i == argc) {
+                    missing("--conn-idle");
+                }
+                char *arg = argv[i++];
+                bparams.conn_idle = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--conn-keepalive")) { // extend
+                if (i == argc) {
+                    missing("--conn-keepalive");
+                }
+                char *arg = argv[i++];
+                bparams.conn_keepalive = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "-tps") || !strcmp(flag, "--tokens-per-second")) { // extend
+                if (i == argc) {
+                    missing("--tokens-per-second");
+                }
+                char *arg = argv[i++];
+                bparams.n_tps = std::stoi(std::string(arg));
+                continue;
             }
 
             if (!strcmp(flag, "-m") || !strcmp(flag, "--model")) {
@@ -998,11 +1194,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (split_arg.size() >= llama_max_devices()) {
                         invalid("--tensor-split");
                     }
-                    for (size_t i = 0; i < llama_max_devices(); ++i) {
-                        if (i < split_arg.size()) {
-                            bparams.gparams.tensor_split[i] = std::stof(split_arg[i]);
+                    for (size_t j = 0; j < llama_max_devices(); ++j) {
+                        if (j < split_arg.size()) {
+                            bparams.gparams.tensor_split[j] = std::stof(split_arg[j]);
                         } else {
-                            bparams.gparams.tensor_split[i] = 0.0f;
+                            bparams.gparams.tensor_split[j] = 0.0f;
                         }
                     }
                     continue;
@@ -1014,170 +1210,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     }
                     char *arg = argv[i++];
                     bparams.gparams.main_gpu = std::stoi(std::string(arg));
+                    if (bparams.gparams.main_gpu < 0 ||
+                        bparams.gparams.main_gpu >= int32_t(llama_max_devices())) {
+                        invalid("--main-gpu");
+                    }
                     continue;
                 }
-            }
-
-            // server flags
-
-            if (!strcmp(flag, "--host")) {
-                if (i == argc) {
-                    missing("--host");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.hostname = std::string(arg);
-                continue;
-            }
-
-            if (!strcmp(flag, "--port")) {
-                if (i == argc) {
-                    missing("--port");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.port = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-to") || !strcmp(flag, "--timeout")) {
-                if (i == argc) {
-                    missing("--timeout");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.timeout_read = std::stoi(std::string(arg));
-                bparams.gparams.timeout_write = bparams.gparams.timeout_read;
-                continue;
-            }
-
-            if (!strcmp(flag, "--threads-http")) {
-                if (i == argc) {
-                    missing("--threads-http");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.n_threads_http = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-spf") || !strcmp(flag, "--system-prompt-file")) {
-                if (i == argc) {
-                    missing("--system-prompt-file");
-                }
-                char *arg = argv[i++];
-                std::ifstream file(arg);
-                if (!file) {
-                    invalid("--system-prompt-file");
-                }
-                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
-                          std::back_inserter(bparams.gparams.system_prompt));
-                continue;
-            }
-
-            if (!strcmp(flag, "--metrics")) {
-                bparams.gparams.endpoint_metrics = true;
-                continue;
-            }
-
-            if (!strcmp(flag, "--infill")) {
-                bparams.gparams.infill = true;
-                continue;
-            }
-
-            if (!strcmp(flag, "--embedding") || !strcmp(flag, "--embeddings")) {
-                bparams.gparams.embedding = true;
-                continue;
-            }
-
-            if (!strcmp(flag, "--no-slots")) {
-                bparams.gparams.endpoint_slots = false;
-                continue;
-            }
-
-            if (!strcmp(flag, "--slot-save-path")) {
-                if (i == argc) {
-                    missing("--slot-save-path");
-                }
-                char *arg = argv[i++];
-                if (arg[0] == '\0') {
-                    invalid("--slot-save-path");
-                }
-                std::string p(arg);
-                if (p[p.size() - 1] != DIRECTORY_SEPARATOR) {
-                    p += DIRECTORY_SEPARATOR;
-                }
-                bparams.gparams.slot_save_path = p;
-                continue;
-            }
-
-            if (!strcmp(flag, "--chat-template")) {
-                if (i == argc) {
-                    missing("--chat-template");
-                }
-                char *arg = argv[i++];
-                if (arg[0] == '\0') {
-                    invalid("--chat-template");
-                }
-                std::string t(arg);
-                if (t.size() > 20 && !llama_chat_verify_template(t)) {
-                    invalid("--chat-template");
-                }
-                bparams.gparams.enable_chat_template = true;
-                bparams.gparams.chat_template = t;
-                continue;
-            }
-
-            if (!strcmp(flag, "--chat-template-file")) {
-                if (i == argc) {
-                    missing("--chat-template-file");
-                }
-                char *arg = argv[i++];
-                std::ifstream file(arg);
-                if (!file) {
-                    invalid("--chat-template-file");
-                }
-                std::string t;
-                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
-                          std::back_inserter(t));
-                if (t.size() > 20 && !llama_chat_verify_template(t)) {
-                    invalid("--chat-template-file");
-                }
-                bparams.gparams.enable_chat_template = true;
-                bparams.gparams.chat_template = t;
-                continue;
-            }
-
-            if (!strcmp(flag, "-sps") || !strcmp(flag, "--slot-prompt-similarity")) {
-                if (i == argc) {
-                    missing("--slot-prompt-similarity");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.slot_prompt_similarity = std::stof(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "--conn-idle")) { // extend
-                if (i == argc) {
-                    missing("--conn-idle");
-                }
-                char *arg = argv[i++];
-                bparams.conn_idle = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "--conn-keepalive")) { // extend
-                if (i == argc) {
-                    missing("--conn-keepalive");
-                }
-                char *arg = argv[i++];
-                bparams.conn_keepalive = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-tps") || !strcmp(flag, "--tokens-per-second")) { // extend
-                if (i == argc) {
-                    missing("--tokens-per-second");
-                }
-                char *arg = argv[i++];
-                bparams.n_tps = std::stoi(std::string(arg));
-                continue;
             }
 
             if (!strcmp(flag, "--rpc")) {
@@ -1189,24 +1227,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            // logging flags
-
-            if (!strcmp(flag, "--log-format")) {
-                if (i == argc) {
-                    missing("--log-format");
-                }
-                char *arg = argv[i++];
-                if (!strcmp(arg, "json")) {
-                    bparams.gparams.log_json = true;
-                } else if (!strcmp(arg, "text")) {
-                    bparams.gparams.log_json = false;
-                } else {
-                    unknown("--log-format");
-                }
-                continue;
-            }
-
-            // speculative flags
+            // server // speculative //
 
             if (!strcmp(flag, "--draft")) {
                 if (i == argc) {
@@ -1288,6 +1309,59 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            // server // speculative //
+
+            // server //
+
+            // rpc-server //
+
+            if (!strcmp(flag, "--rpc-server-host")) {
+                if (i == argc) {
+                    missing("--rpc-server-host");
+                }
+                char *arg = argv[i++];
+                bparams.rparams.hostname = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc-server-port")) {
+                if (i == argc) {
+                    missing("--rpc-server-port");
+                }
+                char *arg = argv[i++];
+                bparams.rparams.port = std::stoi(std::string(arg));
+                if (bparams.rparams.port < 0 || bparams.rparams.port > 65535) {
+                    invalid("--rpc-server-port");
+                }
+                continue;
+            }
+
+            if (llama_supports_gpu_offload()) {
+                if (!strcmp(flag, "--rpc-server-main-gpu")) {
+                    if (i == argc) {
+                        missing("--rpc-server-main-gpu");
+                    }
+                    char *arg = argv[i++];
+                    bparams.rparams.main_gpu = std::stoi(std::string(arg));
+                    if (bparams.rparams.main_gpu < 0 ||
+                        bparams.rparams.main_gpu >= int32_t(llama_max_devices())) {
+                        invalid("--rpc-server-main-gpu");
+                    }
+                    continue;
+                }
+            }
+
+            if (!strcmp(flag, "--rpc-server-reserve-memory")) {
+                if (i == argc) {
+                    missing("--rpc-server-reserve-memory");
+                }
+                char *arg = argv[i++];
+                bparams.rparams.reserve_memory = std::stoul(std::string(arg)) << 20;
+                continue;
+            }
+
+            // rpc-server //
+
             unknown(flag);
         }
     } catch (const std::invalid_argument &ex) {
@@ -1312,6 +1386,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
     // Retrieve params from environment variables
     get_env("LLAMA_ARG_MODEL", bparams.gparams.model);
+    get_env("LLAMA_ARG_MODEL_ALIAS", bparams.gparams.model_alias);
     get_env("LLAMA_ARG_THREADS", bparams.gparams.n_threads);
     get_env("LLAMA_ARG_CTX_SIZE", bparams.gparams.n_ctx);
     get_env("LLAMA_ARG_N_PARALLEL", bparams.gparams.n_parallel);
@@ -1326,6 +1401,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     get_env("LLAMA_ARG_EMBEDDINGS", bparams.gparams.embedding);
     get_env("LLAMA_ARG_FLASH_ATTN", bparams.gparams.flash_attn);
     get_env("LLAMA_ARG_DEFRAG_THOLD", bparams.gparams.defrag_thold);
+    get_env("LLAMA_ARG_DRAFT", bparams.gparams.n_draft);
+    get_env("LLAMA_ARG_MODEL_DRAFT", bparams.gparams.model_draft);
+    get_env("LLAMA_ARG_THREADS_DRAFT", bparams.gparams.n_threads_draft);
+    get_env("LLAMA_ARG_N_GPU_LAYERS_DRAFT", bparams.gparams.n_gpu_layers_draft);
+    get_env("LLAMA_ARG_LOOKUP_NGRAM_MIN", bparams.lookup_ngram_min);
+    get_env("LLAMA_ARG_LOOKUP_CACHE_STATIC", bparams.gparams.lookup_cache_static);
+    get_env("LLAMA_ARG_LOOKUP_CACHE_DYNAMIC", bparams.gparams.lookup_cache_dynamic);
 
     return true;
 }
