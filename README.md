@@ -7,6 +7,14 @@
 LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
 than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
 
+## Agenda
+
+- [Notes](#notes)
+- [Download](#download)
+- [Examples](#examples)
+- [Usage](#usage)
+- [API](#api)
+
 ## Notes
 
 - Since v0.0.8, LLaMA Box supports [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
@@ -113,6 +121,47 @@ LLaMA Box supports the following platforms.
 
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh @/tmp/data.json
+    ```
+
+- RPC server mode.
+
+  In RPC server mode, LLaMA Box functions as the `ggml` backend on a remote host. This setup allows non-RPC server
+  instances (clients) to communicate with the RPC servers, offloading computational tasks to them.
+
+  While the RPC server facilitates the use of larger models, it requires the RPC client to transfer the necessary
+  computational materials. This transfer can lead to increased startup times for the RPC client. Additionally, network
+  latency and bandwidth limitations may impact the overall performance of the RPC client.
+
+  By understanding these dynamics, users can better manage expectations and optimize their use of LLaMA Box in an RPC
+  server environment.
+
+    ```mermaid
+    flowchart TD
+    clix-->|TCP|srva
+    clix-->|TCP|srvb
+    cliy-->|TCP|srvb
+    cliy-.->|TCP|srvn
+    subgraph hostn[Any]
+    srvn["llama-box-*-cuda/metal/... (rpc server)"]
+    end
+    subgraph hostb[Apple Mac Studio]
+    srvb["llama-box-*-metal (rpc server)"]
+    end
+    subgraph hosta[NVIDIA 4090]
+    srva["llama-box-*-cuda (rpc server)"]
+    end
+    subgraph hosty[Apple Mac Max]
+    cliy["llama-box-*-metal"]
+    end
+    subgraph hostx[NVIDIA 4080]
+    clix["llama-box-*-cuda"]
+    end
+    style hostn stroke:#66,stroke-width:2px,stroke-dasharray: 5 5
+    ```
+
+    ```shell
+    $ # Start the RPC server on the main GPU 0, reserve 1 GiB memory.
+    $ llama-box --rpc-server-host
     ```
 
 ## Usage
