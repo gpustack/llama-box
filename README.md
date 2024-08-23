@@ -17,10 +17,10 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 
 ## Notes
 
-- Since v0.0.8, LLaMA Box supports [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
-- Since v0.0.15, LLaMA Box supports draft model speculative decoding.
-- Since v0.0.17, LLaMA Box supports lookup speculative decoding.
 - Since v0.0.34, LLaMA Box supports RPC server mode, which can serve as a remote inference backend.
+- Since v0.0.17, LLaMA Box supports lookup speculative decoding.
+- Since v0.0.15, LLaMA Box supports draft model speculative decoding.
+- Since v0.0.8, LLaMA Box supports [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
 
 ## Download
 
