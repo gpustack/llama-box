@@ -249,9 +249,9 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // rpc-server //
     opts.push_back({ "rpc-server" });
     opts.push_back({ "rpc-server",       "       --rpc-server-host HOST",   "ip address to rpc server listen (default: %s)", rparams.hostname.c_str() });
-    opts.push_back({ "rpc-server",       "       --rpc-server-port PORT",   "port to rpc server listen (default: %d)", rparams.port });
+    opts.push_back({ "rpc-server",       "       --rpc-server-port PORT",   "port to rpc server listen (default: %d, 0 = disabled)", rparams.port });
     if (llama_supports_gpu_offload()) {
-        opts.push_back({ "rpc-server",   "       --rpc-server-main-gpu N",  "the GPU to use for the rpc server (default: %d)", rparams.main_gpu });
+        opts.push_back({ "rpc-server",   "       --rpc-server-main-gpu N",  "the GPU VRAM to use for the rpc server (default: %d, -1 = disabled, use RAM)", rparams.main_gpu });
     }
     opts.push_back({ "rpc-server",       "       --rpc-server-reserve-memory MEM",
                                                                             "reserve memory in MiB (default: %zu)", rparams.reserve_memory });
@@ -1343,8 +1343,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     }
                     char *arg = argv[i++];
                     bparams.rparams.main_gpu = std::stoi(std::string(arg));
-                    if (bparams.rparams.main_gpu < 0 ||
-                        bparams.rparams.main_gpu >= int32_t(llama_max_devices())) {
+                    if (bparams.rparams.main_gpu >= int32_t(llama_max_devices())) {
                         invalid("--rpc-server-main-gpu");
                     }
                     continue;

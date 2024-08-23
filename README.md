@@ -314,8 +314,8 @@ server/speculative:
 rpc-server:
 
          --rpc-server-host HOST   ip address to rpc server listen (default: 0.0.0.0)
-         --rpc-server-port PORT   port to rpc server listen (default: 0)
-         --rpc-server-main-gpu N  the GPU to use for the rpc server (default: 0)
+         --rpc-server-port PORT   port to rpc server listen (default: 0, 0 = disabled)
+         --rpc-server-main-gpu N  the GPU VRAM to use for the rpc server (default: 0, -1 = disabled, use RAM)
          --rpc-server-reserve-memory MEM
                                   reserve memory in MiB (default: 0)
 

@@ -85,13 +85,28 @@ static ggml_backend_t rpc_server_create_backend(int32_t gpu) {
 
     // if there aren't GPU Backends fallback to CPU backend
     if (!backend) {
-        LOG_INFO("using CPU backend", {});
+        LOG_INFO("fallback, using CPU backend", {});
         backend = ggml_backend_cpu_init();
     }
     return backend;
 }
 
 static void rpc_server_get_backend_memory(int32_t gpu, size_t *free_mem, size_t *total_mem) {
+    if (gpu < 0) {
+#ifdef _WIN32
+        MEMORYSTATUSEX status;
+        status.dwLength = sizeof(status);
+        GlobalMemoryStatusEx(&status);
+        *total_mem = status.ullTotalPhys;
+        *free_mem = status.ullAvailPhys;
+#else
+        long pages = sysconf(_SC_PHYS_PAGES);
+        long page_size = sysconf(_SC_PAGE_SIZE);
+        *total_mem = pages * page_size;
+        *free_mem = *total_mem;
+#endif
+        return;
+    }
 #ifdef GGML_USE_CUDA
     ggml_backend_cuda_get_device_memory(gpu, free_mem, total_mem);
 #elif GGML_USE_METAL
@@ -119,7 +134,13 @@ static void rpc_server_get_backend_memory(int32_t gpu, size_t *free_mem, size_t 
 static int rpc_server_start(const rpc_server_params &params) {
     LOG_INFO("starting rpc server", {{"hostname", params.hostname}, {"port", params.port}});
 
-    ggml_backend_t backend = rpc_server_create_backend(params.main_gpu);
+    ggml_backend_t backend;
+    if (params.main_gpu < 0) {
+        LOG_INFO("using CPU backend", {});
+        backend = ggml_backend_cpu_init();
+    } else {
+        backend = rpc_server_create_backend(params.main_gpu);
+    }
     if (!backend) {
         LOG_ERROR("failed to create backend", {});
         return 1;

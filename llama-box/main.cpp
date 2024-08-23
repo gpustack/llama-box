@@ -2868,7 +2868,7 @@ inline void signal_handler(int signal) {
         // in case it hangs, we can force terminate the server by hitting Ctrl+C
         // twice this is for better developer experience, we can remove when the
         // server is stable enough
-        fprintf(stderr, "Received second interrupt, terminating immediately.\n");
+        LOG_WARNING("Received second interrupt, terminating immediately", {});
         exit(1);
     }
 
