@@ -21,7 +21,7 @@ using json = nlohmann::json;
 
 struct llama_box_params {
     gpt_params gparams;
-    rpc_server_params rparams;
+    rpcserver_params rparams;
 
     int32_t conn_idle = 60;       // connection idle in seconds
     int32_t conn_keepalive = 15;  // connection keep-alive in seconds

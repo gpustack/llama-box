@@ -12,21 +12,36 @@ index d483cf1a..98486cb3 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
-index 995f1934..89b932db 100644
+index 995f1934..b52c418b 100644
 --- a/ggml/src/ggml-metal.m
 +++ b/ggml/src/ggml-metal.m
-@@ -3300,3 +3300,14 @@ GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void *
+@@ -3300,3 +3300,29 @@ GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void *
      GGML_UNUSED(params);
      GGML_UNUSED(user_data);
  }
 +
 +GGML_CALL void ggml_backend_metal_get_device_memory(size_t *free, size_t *total) {
 +    id<MTLDevice> device = ggml_backend_metal_get_device();
-+    if (free) {
-+        *free = device.recommendedMaxWorkingSetSize;
-+    }
 +    if (total) {
++#if TARGET_OS_OSX || (TARGET_OS_IOS && __clang_major__ >= 15)
++      if (@available(macOS 10.12, iOS 16.0, *)) {
 +        *total = device.recommendedMaxWorkingSetSize;
++      }
++#elif TARGET_OS_OSX
++      if (device.maxTransferRate != 0) {
++        *total = device.maxTransferRate;
++      } else {
++        *total = 0;
++      }
++#endif
++    }
++    if (free) {
++      size_t allocated = device.currentAllocatedSize;
++      if (total && *total > allocated) {
++        *free = *total - allocated;
++      } else {
++        *free = 0;
++      }
 +    }
 +    ggml_backend_metal_free_device();
 +}

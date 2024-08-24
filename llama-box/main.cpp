@@ -2890,8 +2890,8 @@ int main(int argc, char **argv) {
     llama_numa_init(params.numa);
 
     if (bparams.rparams.port > 0) {
-        rpc_server_params &rparams = bparams.rparams;
-        return rpc_server_start(rparams);
+        rpcserver_params &rparams = bparams.rparams;
+        return rpcserver_start(rparams);
     }
 
     server_context ctx_server;
