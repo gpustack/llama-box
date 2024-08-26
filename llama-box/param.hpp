@@ -1081,7 +1081,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     std::string(arg),
                     1.0f,
                 });
-                bparams.gparams.use_mmap = false;
                 continue;
             }
 
@@ -1098,7 +1097,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     std::string(n),
                     std::stof(std::string(s)),
                 });
-                bparams.gparams.use_mmap = false;
                 continue;
             }
 
