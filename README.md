@@ -161,7 +161,7 @@ LLaMA Box supports the following platforms.
 
     ```shell
     $ # Start the RPC server on the main GPU 0, reserve 1 GiB memory.
-    $ llama-box --rpc-server-host
+    $ llama-box --rpc-server-host 0.0.0.0 --rpc-server-port 8081 --rpc-server-main-gpu 0 --rpc-server-reserve-memory 1024
     ```
 
 ## Usage
