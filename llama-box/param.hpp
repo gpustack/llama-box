@@ -1398,6 +1398,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     get_env("LLAMA_ARG_EMBEDDINGS", bparams.gparams.embedding);
     get_env("LLAMA_ARG_FLASH_ATTN", bparams.gparams.flash_attn);
     get_env("LLAMA_ARG_DEFRAG_THOLD", bparams.gparams.defrag_thold);
+    get_env("LLAMA_ARG_CONT_BATCHING", bparams.gparams.cont_batching);
+    get_env("LLAMA_ARG_HOST", bparams.gparams.hostname);
+    get_env("LLAMA_ARG_PORT", bparams.gparams.port);
     get_env("LLAMA_ARG_DRAFT", bparams.gparams.n_draft);
     get_env("LLAMA_ARG_MODEL_DRAFT", bparams.gparams.model_draft);
     get_env("LLAMA_ARG_THREADS_DRAFT", bparams.gparams.n_threads_draft);
@@ -1405,6 +1408,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     get_env("LLAMA_ARG_LOOKUP_NGRAM_MIN", bparams.lookup_ngram_min);
     get_env("LLAMA_ARG_LOOKUP_CACHE_STATIC", bparams.gparams.lookup_cache_static);
     get_env("LLAMA_ARG_LOOKUP_CACHE_DYNAMIC", bparams.gparams.lookup_cache_dynamic);
+    get_env("LLAMA_ARG_RPC_SERVER_HOST", bparams.rparams.hostname);
+    get_env("LLAMA_ARG_RPC_SERVER_PORT", bparams.rparams.port);
 
     return true;
 }

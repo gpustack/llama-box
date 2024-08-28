@@ -323,29 +323,35 @@ rpc-server:
 
 Available environment variables (if the corresponding command-line option is not provided):
 
-- `LLAMA_ARG_MODEL`
-- `LLAMA_ARG_MODEL_ALIAS`
-- `LLAMA_ARG_THREADS`
-- `LLAMA_ARG_CTX_SIZE`
-- `LLAMA_ARG_N_PARALLEL`
-- `LLAMA_ARG_BATCH`
-- `LLAMA_ARG_UBATCH`
-- `LLAMA_ARG_N_GPU_LAYERS`
-- `LLAMA_ARG_THREADS_HTTP`
-- `LLAMA_ARG_CHAT_TEMPLATE`
-- `LLAMA_ARG_N_PREDICT`
-- `LLAMA_ARG_METRICS`
-- `LLAMA_ARG_SLOTS`
-- `LLAMA_ARG_EMBEDDINGS`
-- `LLAMA_ARG_FLASH_ATTN`
-- `LLAMA_ARG_DEFRAG_THOLD`
-- `LLAMA_ARG_DRAFT`
-- `LLAMA_ARG_MODEL_DRAFT`
-- `LLAMA_ARG_THREADS_DRAFT`
-- `LLAMA_ARG_N_GPU_LAYERS_DRAFT`
-- `LLAMA_ARG_LOOKUP_NGRAM_MIN`
-- `LLAMA_ARG_LOOKUP_CACHE_STATIC`
-- `LLAMA_ARG_LOOKUP_CACHE_DYNAMIC`
+- `LLAMA_ARG_MODEL`: equivalent to `-m`, `--model`.
+- `LLAMA_ARG_MODEL_ALIAS`: equivalent to `-a`, `--model-alias`.
+- `LLAMA_ARG_THREADS`: equivalent to `-t`, `--threads`.
+- `LLAMA_ARG_CTX_SIZE`: equivalent to `-c`, `--ctx-size`.
+- `LLAMA_ARG_N_PARALLEL`: equivalent to `-np`, `--parallel`.
+- `LLAMA_ARG_BATCH`: equivalent to `-b`, `--batch-size`.
+- `LLAMA_ARG_UBATCH`: equivalent to `-ub`, `--ubatch-size`.
+- `LLAMA_ARG_N_GPU_LAYERS`: equivalent to `-ngl`, `--gpu-layers`, `--n-gpu-layers`.
+- `LLAMA_ARG_THREADS_HTTP`: equivalent to `--threads-http`
+- `LLAMA_ARG_CHAT_TEMPLATE`: equivalent to `--chat-template`
+- `LLAMA_ARG_N_PREDICT`: equivalent to `-n`, `--predict`.
+- `LLAMA_ARG_METRICS`: if set to `1`, it will enable metrics endpoint (equivalent to `--metrics`).
+- `LLAMA_ARG_SLOTS`: if set to `0`, it will **disable** slots endpoint (equivalent to `--no-slots`).
+- `LLAMA_ARG_EMBEDDINGS`: if set to `1`, it will enable embeddings endpoint (equivalent to `--embeddings`).
+- `LLAMA_ARG_FLASH_ATTN`: if set to `1`, it will enable flash attention (equivalent to `-fa`, `--flash-attn`).
+- `LLAMA_ARG_CONT_BATCHING`: if set to `0`, it will **disable** continuous batching (equivalent
+  to `--no-cont-batching`). This feature is enabled by default.
+- `LLAMA_ARG_DEFRAG_THOLD`: equivalent to `-dt`, `--defrag-thold`.
+- `LLAMA_ARG_HOST`: equivalent to `--host`
+- `LLAMA_ARG_PORT`: equivalent to `--port`
+- `LLAMA_ARG_DRAFT`: equivalent to `--draft`
+- `LLAMA_ARG_MODEL_DRAFT`: equivalent to `-md`, `--model-draft`.
+- `LLAMA_ARG_THREADS_DRAFT`: equivalent to `-td`, `--threads-draft`.
+- `LLAMA_ARG_N_GPU_LAYERS_DRAFT`: equivalent to `-ngld`, `--gpu-layers-draft`.
+- `LLAMA_ARG_LOOKUP_NGRAM_MIN`: equivalent to `--lookup-ngram-min`.
+- `LLAMA_ARG_LOOKUP_CACHE_STATIC`: equivalent to `-lcs`, `--lookup-cache-static`.
+- `LLAMA_ARG_LOOKUP_CACHE_DYNAMIC`: equivalent to `-lcd`, `--lookup-cache-dynamic`.
+- `LLAMA_ARG_RPC_SERVER_HOST`: equivalent to `--rpc-server-host`.
+- `LLAMA_ARG_RPC_SERVER_PORT`: equivalent to `--rpc-server-port`.
 
 ## API
 
