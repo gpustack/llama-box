@@ -701,7 +701,6 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
         output.clear();
         input.clear();
     }
-    close(sockfd);
 }
 
 // RPC server entry point
@@ -801,7 +800,6 @@ static int rpcserver_start(const rpcserver_params &params) {
         int ret = setsockopt(cli_socketfd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
         if (ret != 0) {
             LOG_ERROR("failed to set client socket TCP_NODELAY", {});
-            close(cli_socketfd);
             continue;
         }
 
@@ -819,7 +817,6 @@ static int rpcserver_start(const rpcserver_params &params) {
         } catch (const std::system_error &e) {
             LOG_ERROR("failed to process client connection",
                       {{"ip", cli_ip}, {"port", cli_port}, {"error", e.what()}});
-            close(cli_socketfd);
         }
     }
 #ifdef _WIN32
