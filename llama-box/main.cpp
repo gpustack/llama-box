@@ -749,8 +749,8 @@ struct server_context {
             gpt_params params_draft = params;
             params_draft.model = params.model_draft;
             params_draft.n_gpu_layers = params.n_gpu_layers_draft;
-            params_draft.n_threads = params.n_threads_draft;
-            params_draft.n_threads_batch = params.n_threads_batch_draft;
+            params_draft.cpuparams = params.draft_cpuparams;
+            params_draft.cpuparams_batch = params.draft_cpuparams_batch;
             params_draft.warmup = false;
             llama_init_result ir = llama_init_from_gpt_params(params_draft);
             model_draft = ir.model;
@@ -2784,7 +2784,7 @@ struct server_context {
                 }
                 const std::vector<uint8_t> buff = base64_decode(img);
                 llava_image_embed *img_embd = llava_image_embed_make_with_bytes(
-                    ctx_clip, params.n_threads, buff.data(), int(buff.size()));
+                    ctx_clip, params.cpuparams.n_threads, buff.data(), int(buff.size()));
                 if (!img_embd) {
                     send_error(slot, "Failed to embed image", ERROR_TYPE_INVALID_REQUEST);
                     return false;
@@ -2912,8 +2912,8 @@ int main(int argc, char **argv) {
                             {"commit", LLAMA_BOX_GIT_COMMIT},
                             {"llama_cpp_build", LLAMA_BUILD_NUMBER},
                             {"llama_cpp_commit", LLAMA_COMMIT}});
-    LOG_INFO("system info", {{"n_threads", params.n_threads},
-                             {"n_threads_batch", params.n_threads_batch},
+    LOG_INFO("system info", {{"n_threads", params.cpuparams.n_threads},
+                             {"n_threads_batch", params.cpuparams_batch.n_threads},
                              {"total_threads", std::thread::hardware_concurrency()},
                              {"system_info", llama_print_system_info()}});
 
@@ -2937,7 +2937,7 @@ int main(int argc, char **argv) {
     // error handlers
     auto res_error = [](httplib::Response &res, json error_data) {
         json final_response{{"error", error_data}};
-        res.set_content(final_response.dump(), MIMETYPE_JSON);
+        res.set_content(final_response.dump(-1, ' ', false, json::error_handler_t::replace), MIMETYPE_JSON);
         res.status = json_value(error_data, "code", httplib::StatusCode::InternalServerError_500);
     };
     svr.set_exception_handler([&res_error](const httplib::Request &, httplib::Response &res,

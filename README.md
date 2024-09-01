@@ -205,8 +205,22 @@ server:
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
   -a,    --alias NAME             model name alias (default: unknown)
   -s,    --seed N                 RNG seed (default: -1, use random seed for < 0)
-  -t,    --threads N              number of threads to use during generation (default: 8)
+  -t,    --threads N              number of threads to use during generation (default: -1)
+  -C,    --cpu-mask M             set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
+  -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
+         --cpu-strict <0|1>       use strict CPU placement (default: 0)
+                                  
+         --priority N             set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: 0)
+                                  
+         --poll <0...100>         use polling level to wait for work (0 - no polling, default: 50)
+                                  
   -tb,   --threads-batch N        number of threads to use during batch and prompt processing (default: same as --threads)
+  -Cb,   --cpu-mask-batch M       set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
+  -Crb,  --cpu-range-batch lo-hi  ranges of CPUs for affinity. Complements --cpu-mask-batch
+         --cpu-strict-batch <0|1> 
+                                  use strict CPU placement (default: same as --cpu-strict)
+         --priority-batch N       set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
+         --poll-batch <0...100>   use polling to wait for work (default: same as --poll
   -c,    --ctx-size N             size of the prompt context (default: 0, 0 = loaded from model)
   -n,    --predict N              number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
   -b,    --batch-size N           logical maximum batch size (default: 2048)
@@ -303,7 +317,23 @@ server/speculative:
          --draft N                number of tokens to draft for speculative decoding (default: 5)
   -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
   -td,   --threads-draft N        number of threads to use during generation (default: same as --threads)
+  -Cd,   --cpu-mask-draft M       set draft model CPU affinity mask. Complements cpu-range-draft (default: same as --cpu-mask)
+  -Crd,  --cpu-range-draft lo-hi  set ranges of CPUs for affinity. Complements --cpu-mask-draft
+         --cpu-strict-draft <0|1> 
+                                  use strict CPU placement for draft model (default: same as --cpu-strict)
+         --priority-draft N       set draft process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: same as --priority)
+         --poll-draft <0..100>    use polling to wait for draft model work (default: same as --poll)
   -tbd,  --threads-batch-draft N  number of threads to use during batch and prompt processing (default: same as --threads-draft)
+  -Cbd,  --cpu-mask-batch-draft M 
+                                  set draft model CPU affinity mask. Complements cpu-range-draft-batch (default: same as --cpu-mask-draft)
+  -Crbd, --cpu-range-batch-draft lo-hi
+                                  set ranges of CPUs for affinity. Complements --cpu-mask-draft-batch)
+         --cpu-strict-batch-draft <0|1>
+                                  use strict CPU placement for draft model (default: --cpu-strict-draft)
+         --priority-batch-draft N 
+                                  set draft process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority-draft)
+         --poll-batch-draft <0..100>
+                                  use polling to wait for draft model work (default: --poll-draft)
   -ngld, --gpu-layers-draft N     number of layers to store in VRAM for the draft model
          --lookup-ngram-min N     minimum n-gram size for lookup cache (default: 0, 0 = disabled)
   -lcs,  --lookup-cache-static FILE

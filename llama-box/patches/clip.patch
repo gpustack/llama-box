@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 94d8294c..baea064a 100644
+index 9b890571..044f1979 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -24,6 +24,10 @@
@@ -13,7 +13,7 @@ index 94d8294c..baea064a 100644
  #define STB_IMAGE_IMPLEMENTATION
  #include "stb_image.h"
  
-@@ -1151,6 +1155,12 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1157,6 +1161,12 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
      LOG_TEE("%s: CLIP using Vulkan backend\n", __func__);
  #endif
  

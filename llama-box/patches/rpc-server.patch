@@ -12,10 +12,10 @@ index d483cf1a..98486cb3 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
-index 995f1934..b52c418b 100644
+index 91b5e61b..ede33729 100644
 --- a/ggml/src/ggml-metal.m
 +++ b/ggml/src/ggml-metal.m
-@@ -3300,3 +3300,29 @@ GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void *
+@@ -3488,3 +3488,29 @@ GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void *
      GGML_UNUSED(params);
      GGML_UNUSED(user_data);
  }
