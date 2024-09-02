@@ -17,6 +17,7 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 
 ## Notes
 
+- Since v0.0.41, LLaMA Box supports [OpenAI Audio API](https://platform.openai.com/docs/api-reference/audio).
 - Since v0.0.34, LLaMA Box supports RPC server mode, which can serve as a remote inference backend.
 - Since v0.0.17, LLaMA Box supports lookup speculative decoding.
 - Since v0.0.15, LLaMA Box supports draft model speculative decoding.
@@ -169,42 +170,49 @@ LLaMA Box supports the following platforms.
 ```shell
 usage: llama-box [options]
 
-general:
-
-  -h,    --help, --usage          print usage and exit
-         --version                show version and build info
-         --log-format {text,json} 
-                                  log output format: json or text (default: json)
-
 server:
 
          --host HOST              ip address to listen (default: 127.0.0.1)
          --port PORT              port to listen (default: 8080)
   -to    --timeout N              server read/write timeout in seconds (default: 600)
          --threads-http N         number of threads used to process HTTP requests (default: -1)
+         --conn-idle N            server connection idle in seconds (default: 60)
+         --conn-keepalive N       server connection keep-alive in seconds (default: 15)
+  -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
+
+server/completion:
+
+  -a,    --alias NAME             model name alias (default: unknown)
+  -s,    --seed N                 RNG seed (default: -1, use random seed for < 0)
+  -ngl,  --gpu-layers N           number of layers to store in VRAM
+  -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
+                                    - none: use one GPU only
+                                    - layer (default): split layers and KV across GPUs
+                                    - row: split rows across GPUs
+  -ts,   --tensor-split SPLIT     fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1
+  -mg,   --main-gpu N             the GPU to use for the model (with split-mode = none),
+                                  or for intermediate results and KV (with split-mode = row) (default: 0)
+         --override-kv KEY=TYPE:VALUE
+                                  advanced option to override model metadata by key. may be specified multiple times.
+                                  types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --system-prompt-file FILE
                                   set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
          --metrics                enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 enable infill endpoint (default: disabled)
          --embeddings             enable embedding endpoint (default: disabled)
          --no-slots               disables slots monitoring endpoint (default: enabled)
-         --slot-save-path PATH    path to save slot kv cache (default: disabled)
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
                                   only commonly used templates are accepted:
                                   https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
          --chat-template-file FILE
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
+         --slot-save-path PATH    path to save slot kv cache (default: disabled)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
                                   
-         --conn-idle N            server connection idle in seconds (default: 60)
-         --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
                                   when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
-  -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
-  -a,    --alias NAME             model name alias (default: unknown)
-  -s,    --seed N                 RNG seed (default: -1, use random seed for < 0)
   -t,    --threads N              number of threads to use during generation (default: -1)
   -C,    --cpu-mask M             set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
   -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
@@ -287,9 +295,6 @@ server:
                                     - numactl: use the CPU map provided by numactl
                                   if run without this previously, it is recommended to drop the system page cache before using this
                                   see https://github.com/ggerganov/llama.cpp/issues/1437
-         --override-kv KEY=TYPE:VALUE
-                                  advanced option to override model metadata by key. may be specified multiple times.
-                                  types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --lora FILE              apply LoRA adapter (implies --no-mmap)
          --lora-scaled FILE SCALE 
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
@@ -302,14 +307,6 @@ server:
                                   layer range to apply the control vector(s) to, start and end inclusive
          --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                special tokens output enabled (default: false)
-  -ngl,  --gpu-layers N           number of layers to store in VRAM
-  -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
-                                    - none: use one GPU only
-                                    - layer (default): split layers and KV across GPUs
-                                    - row: split rows across GPUs
-  -ts,   --tensor-split SPLIT     fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1
-  -mg,   --main-gpu N             the GPU to use for the model (with split-mode = none),
-                                  or for intermediate results and KV (with split-mode = row) (default: 0)
          --rpc SERVERS            comma separated list of RPC servers
 
 server/speculative:
@@ -383,7 +380,9 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_RPC_SERVER_HOST`: equivalent to `--rpc-server-host`.
 - `LLAMA_ARG_RPC_SERVER_PORT`: equivalent to `--rpc-server-port`.
 
-## API
+## Server API
+
+The available endpoints for the LLaMA Box server mode are:
 
 - **GET** `/health`: Returns the heath check result of the LLaMA Box.
     + HTTP status code 503.
@@ -410,13 +409,6 @@ Available environment variables (if the corresponding command-line option is not
 
 - **GET** `/props`: Returns current server settings.
 
-- **POST** `/infill`: Returns the completion of the given prompt.
-    + This endpoint is only available if the `--infill` flag is enabled.
-
-- **POST** `/tokenize`: Convert text to tokens.
-
-- **POST** `/detokenize`: Convert tokens to text.
-
 - **GET** `/slots`: Returns the current slots processing state.
     + If query param `?fail_on_no_slot=1` is set, this endpoint will respond with status code 503 if there is no
       available slots.
@@ -428,23 +420,38 @@ Available environment variables (if the corresponding command-line option is not
 - **POST** `/slots/:id_slot?action={save|restore|erase}`: Operate specific slot via ID.
     + This endpoint is only available if the `--no-slots` flag is no provided and `--slot-save-path` is provided.
 
+- **POST** `/infill`: Returns the completion of the given prompt.
+    + This is only work to `Text-To-Text` models.
+    + This endpoint is only available if the `--infill` flag is enabled.
+
+- **POST** `/tokenize`: Convert text to tokens.
+    + This is only work to `Text-To-Text` or `Embedding` models.
+
+- **POST** `/detokenize`: Convert tokens to text.
+    + This is only work to `Text-To-Text` or `Embedding` models.
+
 - **GET** `/lora-adapters`: Returns the current LoRA adapters.
+    + This is only work to `Text-To-Text` models.
     + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
 
 - **POST** `/lora-adapters`: Operate LoRA adapters apply. To disable an LoRA adapter, either remove it from the list
   or set scale to 0.
+    + This is only work to `Text-To-Text` models.
     + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
 
 - **POST** `/completion`: Returns the completion of the given prompt.
+    + This is only work to `Text-To-Text` models.
 
 - **GET** `/v1/models`: (OpenAI-compatible) Returns the list of available models,
   see https://platform.openai.com/docs/api-reference/models/list.
 
 - **POST** `/v1/completions`: (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/completions/create.
+    + This is only work to `Text-To-Text` models.
 
 - **POST** `/v1/chat/completions` (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/chat/create.
+    + This is only work to `Text-To-Text` or `Image-To-Text` models.
     + This endpoint is compatible with [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision) when
       enabled `--mmproj` flag,
       see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main. (Note: do not support link `url`, use base64
@@ -453,6 +460,7 @@ Available environment variables (if the corresponding command-line option is not
 
 - **POST** `/v1/embeddings`: (OpenAI-compatible) Returns the embeddings of the given prompt,
   see https://platform.openai.com/docs/api-reference/embeddings/create.
+    + This is only work to `Text-To-Text` or `Embedding` models.
     + This endpoint is only available if the `--embeddings` flag is enabled.
 
 ## Tools
