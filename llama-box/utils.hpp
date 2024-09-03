@@ -10,6 +10,9 @@
 #include "llama.cpp/common/json.hpp"
 #include "llama.cpp/include/llama.h"
 
+#define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
+#include "llama.cpp/examples/server/httplib.h"
+
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
 
 using json = nlohmann::json;
@@ -272,6 +275,18 @@ static size_t find_partial_stop_string(const std::string &stop, const std::strin
     return std::string::npos;
 }
 
+static bool json_is_array_of_numbers(json data) {
+    if (data.is_array()) {
+        for (const auto &e : data) {
+            if (!e.is_number()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 // format incomplete utf-8 multibyte character for output
 static std::string tokens_to_output_formatted_string(const llama_context *ctx,
                                                      const llama_token token) {
@@ -396,6 +411,12 @@ static json probs_vector_to_json(const llama_context *ctx,
     }
 
     return out;
+}
+
+static bool server_sent_event(httplib::DataSink &sink, const char *event, json &data) {
+    const std::string str = std::string(event) + ": " +
+                            data.dump(-1, ' ', false, json::error_handler_t::replace) + "\n\n";
+    return sink.write(str.c_str(), str.size());
 }
 
 //
@@ -599,7 +620,6 @@ static json oaicompat_completion_response(const json &request, const json result
                               {"message", json{{"content", content}, {"role", "assistant"}}}};
             }
         }
-
     } else {
         // completion
         res["object"] = "text_completion";
