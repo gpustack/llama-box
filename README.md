@@ -27,23 +27,23 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 Download LLaMA Box from [the latest release](https://github.com/gpustack/llama-box/releases/latest) page please, now
 LLaMA Box supports the following platforms.
 
-| Backend                  | OS/Arch                                      | Supported Devices                                                                                                                                                                                                       |
-|--------------------------|----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| AVX2                     | `darwin/amd64` `linux/amd64` `windows/amd64` | CPUs support AVX2, see https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                           |
-| Advanced SIMD (NEON)     | `linux/arm64` `windows/arm64`                | CPUs support Advanced SIMD (NEON), see https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                      |
-| Apple Metal 3            | `darwin/amd64` `darwin/arm64`                | Install macOS Ventura or later, see https://support.apple.com/en-sg/102894.                                                                                                                                             |
-| NVIDIA CUDA 11.8-s       | `linux/amd64` `windows/amd64`                | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
-| NVIDIA CUDA 12.5-s       | `linux/amd64` `windows/amd64`                | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                |
-| NVIDIA CUDA 12.5-l       | `linux/amd64` `windows/amd64`                | Compute capability is `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                    |
-| AMD ROCm/HIP 5.5-s       | `windows/amd64`                              | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
-| AMD ROCm/HIP 5.7-s       | `linux/amd64` `windows/amd64`                | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html, https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.             |
-| AMD ROCm/HIP 5.7-l       | `windows/amd64`                              | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.                                 |
-| AMD ROCm/HIP 6.1-s       | `linux/amd64`                                | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.                                                                                  |
-| AMD ROCm/HIP 6.1-l       | `linux/amd64`                                | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html. |
-| Intel oneAPI 2024.1      | `linux/amd64` `windows/amd64`                | See Linux/Windows distributions with oneAPI 2024.1 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
-| Intel oneAPI 2024.2      | `linux/amd64` `windows/amd64`                | See Linux/Windows distributions with oneAPI 2024.2 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                              |
-| Ascend CANN 8.0          | `linux/amd64` `linux/arm64`                  | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html.                                                                                       |
-| Moore Threads MUSA 1.5.1 | `linux/amd64`                                | `MTT S4000`.                                                                                                                                                                                                            |
+| Backend                  | OS/Arch                                      | Supported Devices                                                                                                                                                                                                                                                                   |
+|--------------------------|----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| AVX2                     | `darwin/amd64` `linux/amd64` `windows/amd64` | CPUs support AVX2, see https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                                       |
+| Advanced SIMD (NEON)     | `linux/arm64` `windows/arm64`                | CPUs support Advanced SIMD (NEON), see https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                                                                                  |
+| Apple Metal 3            | `darwin/amd64` `darwin/arm64`                | Install macOS Ventura or later, see https://support.apple.com/en-sg/102894.                                                                                                                                                                                                         |
+| NVIDIA CUDA 11.8-s       | `linux/amd64` `windows/amd64`                | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                                                                            |
+| NVIDIA CUDA 12.5-s       | `linux/amd64` `windows/amd64`                | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                                                                            |
+| NVIDIA CUDA 12.5-l       | `linux/amd64` `windows/amd64`                | Compute capability is `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                                                |
+| AMD ROCm/HIP 5.7-s       | `windows/amd64`                              | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.                                                                                                                                              |
+| AMD ROCm/HIP 6.1-s       | `linux/amd64` `windows/amd64`                | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html, <br/>https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.1.2/reference/system-requirements.html. |
+| AMD ROCm/HIP 6.1-l       | `windows/amd64`                              | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx942`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.1.2/reference/system-requirements.html.                                                 |
+| AMD ROCm/HIP 6.2-s       | `linux/amd64`                                | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.0/reference/system-requirements.html.                                                                                                              |
+| AMD ROCm/HIP 6.2-l       | `linux/amd64`                                | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx942`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.0/reference/system-requirements.html.                                                   |
+| Intel oneAPI 2024.1      | `linux/amd64` `windows/amd64`                | See Linux/Windows distributions with oneAPI 2024.1 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                                                                                          |
+| Intel oneAPI 2024.2      | `linux/amd64` `windows/amd64`                | See Linux/Windows distributions with oneAPI 2024.2 from https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                                                                                          |
+| Ascend CANN 8.0          | `linux/amd64` `linux/arm64`                  | See https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha001/quickstart/quickstart/quickstart_18_0002.html.                                                                                                                                                   |
+| Moore Threads MUSA 1.5.1 | `linux/amd64`                                | `MTT S4000`.                                                                                                                                                                                                                                                                        |
 
 ## Examples
 
@@ -384,83 +384,85 @@ Available environment variables (if the corresponding command-line option is not
 The available endpoints for the LLaMA Box server mode are:
 
 - **GET** `/health`: Returns the heath check result of the LLaMA Box.
-    + HTTP status code 503.
-        - Body: `{"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}`
-        - Explanation: the model is still being loaded.
-    + HTTP status code 200.
-        - Body: `{"status": "ok" }`
-        - Explanation: the model is successfully loaded and the server is ready.
+  + HTTP status code 503.
+    - Body: `{"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}`
+    - Explanation: the model is still being loaded.
+  + HTTP status code 200.
+    - Body: `{"status": "ok" }`
+    - Explanation: the model is successfully loaded and the server is ready.
 
 - **GET** `/metrics`: Returns the Prometheus compatible metrics of the LLaMA Box.
-    + This endpoint is only available if the `--metrics` flag is enabled.
-    + `llamacpp:prompt_tokens_total`: (Counter) Number of prompt tokens processed.
-    + `llamacpp:prompt_seconds_total`: (Counter) Prompt process time.
-    + `llamacpp:tokens_predicted_total`: (Counter) Number of generation tokens processed.
-    + `llamacpp:tokens_predicted_seconds_total`: (Counter) Predict process time.
-    + `llamacpp:tokens_drafted_total`: (Counter) Number of speculative decoding tokens processed.
-    + `llamacpp:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted.
-    + `llamacpp:prompt_tokens_seconds`: (Gauge) Average prompt throughput in tokens/s.
-    + `llamacpp:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
-    + `llamacpp:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
-    + `llamacpp:kv_cache_tokens`: (Gauge) KV-cache tokens.
-    + `llamacpp:requests_processing`: (Gauge) Number of request processing.
-    + `llamacpp:requests_deferred`: (Gauge) Number of request deferred.
+  + This endpoint is only available if the `--metrics` flag is enabled.
+  + `llamacpp:prompt_tokens_total`: (Counter) Number of prompt tokens processed.
+  + `llamacpp:prompt_seconds_total`: (Counter) Prompt process time.
+  + `llamacpp:tokens_predicted_total`: (Counter) Number of generation tokens processed.
+  + `llamacpp:tokens_predicted_seconds_total`: (Counter) Predict process time.
+  + `llamacpp:tokens_drafted_total`: (Counter) Number of speculative decoding tokens processed.
+  + `llamacpp:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted.
+  + `llamacpp:n_decode_total`: (Counter) Total number of llama_decode() calls.
+  + `llamacpp:n_busy_slots_per_decode`: (Counter) Average number of busy slots per llama_decode() call.
+  + `llamacpp:prompt_tokens_seconds`: (Gauge) Average prompt throughput in tokens/s.
+  + `llamacpp:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
+  + `llamacpp:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
+  + `llamacpp:kv_cache_tokens`: (Gauge) KV-cache tokens.
+  + `llamacpp:requests_processing`: (Gauge) Number of request processing.
+  + `llamacpp:requests_deferred`: (Gauge) Number of request deferred.
 
 - **GET** `/props`: Returns current server settings.
 
 - **GET** `/slots`: Returns the current slots processing state.
-    + If query param `?fail_on_no_slot=1` is set, this endpoint will respond with status code 503 if there is no
-      available slots.
-    + This endpoint is only available if the `--no-slots` flag is no provided.
-    + Possible values for `slot[i].state` are:
-        - `0`: slot is available.
-        - `1`: slot is processing.
+  + If query param `?fail_on_no_slot=1` is set, this endpoint will respond with status code 503 if there is no
+    available slots.
+  + This endpoint is only available if the `--no-slots` flag is no provided.
+  + Possible values for `slot[i].state` are:
+    - `0`: slot is available.
+    - `1`: slot is processing.
 
 - **POST** `/slots/:id_slot?action={save|restore|erase}`: Operate specific slot via ID.
-    + This endpoint is only available if the `--no-slots` flag is no provided and `--slot-save-path` is provided.
+  + This endpoint is only available if the `--no-slots` flag is no provided and `--slot-save-path` is provided.
 
 - **POST** `/infill`: Returns the completion of the given prompt.
-    + This is only work to `Text-To-Text` models.
-    + This endpoint is only available if the `--infill` flag is enabled.
+  + This is only work to `Text-To-Text` models.
+  + This endpoint is only available if the `--infill` flag is enabled.
 
 - **POST** `/tokenize`: Convert text to tokens.
-    + This is only work to `Text-To-Text` or `Embedding` models.
+  + This is only work to `Text-To-Text` or `Embedding` models.
 
 - **POST** `/detokenize`: Convert tokens to text.
-    + This is only work to `Text-To-Text` or `Embedding` models.
+  + This is only work to `Text-To-Text` or `Embedding` models.
 
 - **GET** `/lora-adapters`: Returns the current LoRA adapters.
-    + This is only work to `Text-To-Text` models.
-    + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
+  + This is only work to `Text-To-Text` models.
+  + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
 
 - **POST** `/lora-adapters`: Operate LoRA adapters apply. To disable an LoRA adapter, either remove it from the list
   or set scale to 0.
-    + This is only work to `Text-To-Text` models.
-    + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
+  + This is only work to `Text-To-Text` models.
+  + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
 
 - **POST** `/completion`: Returns the completion of the given prompt.
-    + This is only work to `Text-To-Text` models.
+  + This is only work to `Text-To-Text` models.
 
 - **GET** `/v1/models`: (OpenAI-compatible) Returns the list of available models,
   see https://platform.openai.com/docs/api-reference/models/list.
 
 - **POST** `/v1/completions`: (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/completions/create.
-    + This is only work to `Text-To-Text` models.
+  + This is only work to `Text-To-Text` models.
 
 - **POST** `/v1/chat/completions` (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/chat/create.
-    + This is only work to `Text-To-Text` or `Image-To-Text` models.
-    + This endpoint is compatible with [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision) when
-      enabled `--mmproj` flag,
-      see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main. (Note: do not support link `url`, use base64
-      encoded image
-      instead.)
+  + This is only work to `Text-To-Text` or `Image-To-Text` models.
+  + This endpoint is compatible with [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision) when
+    enabled `--mmproj` flag,
+    see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main. (Note: do not support link `url`, use base64
+    encoded image
+    instead.)
 
 - **POST** `/v1/embeddings`: (OpenAI-compatible) Returns the embeddings of the given prompt,
   see https://platform.openai.com/docs/api-reference/embeddings/create.
-    + This is only work to `Text-To-Text` or `Embedding` models.
-    + This endpoint is only available if the `--embeddings` flag is enabled.
+  + This is only work to `Text-To-Text` or `Embedding` models.
+  + This endpoint is only available if the `--embeddings` flag is enabled.
 
 ## Tools
 

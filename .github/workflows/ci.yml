@@ -246,25 +246,25 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/rocm/dev-ubuntu-22.04/tags.
+        #     6.2 ==> 6.2.0
         #     6.1 ==> 6.1.2
-        #     5.7 ==> 5.7.1
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html,
-        #     https://rocm.docs.amd.com/en/docs-5.7.1/release/gpu_os_support.html.
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.0/reference/system-requirements.html,
+        #     https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
         arch: [ amd64 ]
-        version: [ '6.1', '5.7' ]
+        version: [ '6.2', '6.1' ]
         size: [ 's', 'l' ]
         exclude:
           - size: 'l'
-            version: '5.7'
+            version: '6.1'
         include:
           - size: 's'
             hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
           - size: 'l'
-            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx1030;gfx1100;gfx1101;gfx1102'
+            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -330,7 +330,7 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            rocm/dev-ubuntu-22.04:${{ matrix.version == '6.1' && '6.1.2' || '5.7.1' }}-complete
+            rocm/dev-ubuntu-22.04:${{ matrix.version == '6.2' && '6.2' || '6.1.2' }}-complete
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -738,25 +738,25 @@ jobs:
       fail-fast: false
       matrix:
         # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
+        #     6.1 ==> 6.1.2
         #     5.7 ==> 5.7.1
-        #     5.5 ==> 5.5.1
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html,
-        #     https://rocm.docs.amd.com/en/docs-5.5.1/release/windows_support.html.
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html,
+        #     https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.
         arch: [ amd64 ]
-        version: [ '5.7', '5.5' ]
+        version: [ '6.1', '5.7' ]
         size: [ 's', 'l' ]
         exclude:
           - size: 'l'
-            version: '5.5'
+            version: '5.7'
         include:
           - size: 's'
             hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
           - size: 'l'
-            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx1030;gfx1100;gfx1101;gfx1102'
+            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -785,7 +785,7 @@ jobs:
           Write-Host "I install AMD ROCm HIP SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
-            --url "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-${{ matrix.version == '5.7' && '23.Q4' || '23.Q3' }}-WinSvr2022-For-HIP.exe"
+            --url "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-${{ matrix.version == '6.1' && '24.Q3' || '23.Q4' }}-WinSvr2022-For-HIP.exe"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-install'
 
