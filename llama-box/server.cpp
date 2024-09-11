@@ -11,6 +11,7 @@
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/common/json-schema-to-grammar.h"
 #include "llama.cpp/common/log.h"
+#include "llama.cpp/common/sampling.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
