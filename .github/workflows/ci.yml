@@ -750,8 +750,9 @@ jobs:
         version: [ '6.1', '5.7' ]
         size: [ 's', 'l' ]
         exclude:
-          - size: 'l'
-            version: '5.7'
+          # NB(thxCode): https://github.com/ggerganov/llama.cpp/pull/8713#issuecomment-2331104373 has broken the compiling
+          #  of ROCm/HIP 5.7, we have temporarily stopped supplying new versions from ROCm/HIP 5.7 until upstream fixes it.
+          - version: '5.7'
         include:
           - size: 's'
             hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'

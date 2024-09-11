@@ -35,7 +35,6 @@ LLaMA Box supports the following platforms.
 | NVIDIA CUDA 11.8-s       | `linux/amd64` `windows/amd64`                | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                                                                            |
 | NVIDIA CUDA 12.5-s       | `linux/amd64` `windows/amd64`                | Compute capability is `8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                                                                            |
 | NVIDIA CUDA 12.5-l       | `linux/amd64` `windows/amd64`                | Compute capability is `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6` or `8.9`, see https://developer.nvidia.com/cuda-gpus.                                                                                                                                                                |
-| AMD ROCm/HIP 5.7-s       | `windows/amd64`                              | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.                                                                                                                                              |
 | AMD ROCm/HIP 6.1-s       | `linux/amd64` `windows/amd64`                | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html, <br/>https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.1.2/reference/system-requirements.html. |
 | AMD ROCm/HIP 6.1-l       | `windows/amd64`                              | LLVM target is `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx942`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.1.2/reference/system-requirements.html.                                                 |
 | AMD ROCm/HIP 6.2-s       | `linux/amd64`                                | LLVM target is `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.0/reference/system-requirements.html.                                                                                                              |
@@ -169,6 +168,13 @@ LLaMA Box supports the following platforms.
 ```shell
 usage: llama-box [options]
 
+general:
+
+  -h,    --help, --usage          print usage and exit
+         --version                show version and build info
+         --log-format {text,json} 
+                                  log output format: json or text (default: json)
+
 server:
 
          --host HOST              ip address to listen (default: 127.0.0.1)
@@ -238,15 +244,15 @@ server/completion:
   -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
          --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';'
-                                  (default: top_k;tfs_z;typical_p;top_p;min_p;temperature)
+                                  (default: top_k;tfs_z;typ_p;top_p;min_p;temperature)
          --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: kfypmt)
          --penalize-nl            penalize newline tokens (default: false)
-         --temp N                 temperature (default: 0.8)
+         --temp T                 temperature (default: 0.8)
          --top-k N                top-k sampling (default: 40, 0 = disabled)
-         --top-p N                top-p sampling (default: 0.9, 1.0 = disabled)
-         --min-p N                min-p sampling (default: 0.1, 0.0 = disabled)
-         --tfs N                  tail free sampling, parameter z (default: 1.0, 1.0 = disabled)
-         --typical N              locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
+         --top-p P                top-p sampling (default: 0.9, 1.0 = disabled)
+         --min-p P                min-p sampling (default: 0.1, 0.0 = disabled)
+         --tfs P                  tail free sampling, parameter z (default: 1.0, 1.0 = disabled)
+         --typical P              locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
          --repeat-last-n N        last n tokens to consider for penalize (default: 64, 0 = disabled, -1 = ctx_size)
          --repeat-penalty N       penalize repeat sequence of tokens (default: 1.0, 1.0 = disabled)
          --presence-penalty N     repeat alpha presence penalty (default: 0.0, 0.0 = disabled)
