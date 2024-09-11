@@ -57,7 +57,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
@@ -116,7 +116,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
           path: |
@@ -179,7 +179,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
@@ -278,7 +278,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
@@ -374,7 +374,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
@@ -457,7 +457,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
@@ -539,7 +539,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}
           path: |
@@ -618,7 +618,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
           path: |
@@ -697,7 +697,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
@@ -767,7 +767,7 @@ jobs:
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
@@ -865,7 +865,7 @@ jobs:
         # doesn't support ccache,
         # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
@@ -933,7 +933,7 @@ jobs:
         # doesn't support ccache,
         # as the oneAPI need to configure the environment variables via setvars.bat.
         timeout-minutes: 5
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: cache-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
