@@ -22,6 +22,7 @@ struct llama_box_params {
     gpt_params gparams;
     rpcserver_params rparams;
 
+    bool endpoint_infill = false;
     int32_t conn_idle = 60;       // connection idle in seconds
     int32_t conn_keepalive = 15;  // connection keep-alive in seconds
     int32_t n_tps = 0;            // maximum number of tokens per seconds
@@ -132,7 +133,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --system-prompt-file FILE",
                                                                             "set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications" });
     opts.push_back({ "server/completion",  "       --metrics",              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",  "       --infill",               "enable infill endpoint (default: %s)", params.infill? "enabled" : "disabled" });
+    opts.push_back({ "server/completion",  "       --infill",               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --no-slots",             "disables slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --chat-template JINJA_TEMPLATE",
@@ -588,7 +589,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (!strcmp(flag, "--infill")) {
-                bparams.gparams.infill = true;
+                bparams.endpoint_infill = true;
                 continue;
             }
 

@@ -3703,7 +3703,7 @@ int main(int argc, char **argv) {
         }
     }
     svr.Get("/v1/models", handle_models);
-    if (params.infill) {
+    if (bparams.endpoint_infill) {
         svr.Post("/infill", handle_infill);
     }
     svr.Post("/completion", handle_completions);
