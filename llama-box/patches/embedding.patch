@@ -1,10 +1,10 @@
 diff --git a/include/llama.h b/include/llama.h
-index f2e70160..b1a8ccde 100644
+index 6334fc30..4bc71ddb 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1188,6 +1188,8 @@ extern "C" {
+@@ -1178,6 +1178,8 @@ extern "C" {
  
-     LLAMA_API void llama_dump_timing_info_yaml(FILE * stream, const struct llama_context * ctx);
+     LLAMA_API void llama_perf_dump_yaml(FILE * stream, const struct llama_context * ctx);
  
 +    LLAMA_API bool llama_supports_embedding_only (const struct llama_context * ctx);
 +
@@ -12,7 +12,7 @@ index f2e70160..b1a8ccde 100644
  }
  #endif
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index dc4138cb..749975ea 100644
+index 2c007477..dcc8af0e 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -265,7 +265,13 @@ private:
@@ -31,10 +31,10 @@ index dc4138cb..749975ea 100644
              }
              return;
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 2274296b..dc4b6d31 100644
+index 6bbaf9fc..9649496d 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -6109,6 +6109,86 @@ static void llm_load_vocab(
+@@ -6278,6 +6278,86 @@ static void llm_load_vocab(
      }
      GGML_ASSERT(vocab.id_to_token.size() == vocab.token_to_id.size());
  
@@ -121,7 +121,7 @@ index 2274296b..dc4b6d31 100644
      // determine the newline token: LLaMA "<0x0A>" == 10 == '\n', Falcon 193 == '\n'
      if (vocab.type == LLAMA_VOCAB_TYPE_SPM) {
          // For Fill-In-the-Middle (FIM)/infill models which where converted
-@@ -6163,86 +6243,6 @@ static void llm_load_vocab(
+@@ -6336,86 +6416,6 @@ static void llm_load_vocab(
          vocab.linefeed_id = ids[0];
      }
  
@@ -208,7 +208,7 @@ index 2274296b..dc4b6d31 100644
      // build special tokens cache
      {
          for (llama_vocab::id id = 0; id < (llama_vocab::id)n_vocab; ++id) {
-@@ -17604,7 +17604,7 @@ struct llama_context * llama_new_context_with_model(
+@@ -18145,7 +18145,7 @@ struct llama_context * llama_new_context_with_model(
          cparams.n_batch = GGML_KQ_MASK_PAD;
      }
  
@@ -217,11 +217,11 @@ index 2274296b..dc4b6d31 100644
  
      cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
                                 hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
-@@ -20342,3 +20342,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
+@@ -20785,3 +20785,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
      fputs(text, stderr);
      fflush(stderr);
  }
 +
 +bool llama_supports_embedding_only(const struct llama_context * ctx) {
-+    return !ctx->cparams.causal_attn;
++  return !ctx->cparams.causal_attn;
 +}

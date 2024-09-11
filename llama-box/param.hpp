@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "llama.cpp/common/common.h"
-#include "llama.cpp/common/grammar-parser.h"
 #include "llama.cpp/common/json-schema-to-grammar.h"
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/json.hpp"
@@ -83,9 +82,9 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     const auto &sparams = params.sparams;
     std::string sampler_type_chars;
     std::string sampler_type_names;
-    for (const auto sampler_type : sparams.samplers_sequence) {
-        sampler_type_chars += static_cast<char>(sampler_type);
-        sampler_type_names += llama_sampling_type_to_str(sampler_type) + ";";
+    for (const auto &sampler : sparams.samplers) {
+        sampler_type_chars += gpt_sampler_type_to_chr(sampler);
+        sampler_type_names += gpt_sampler_type_to_str(sampler) + ";";
     }
     sampler_type_names.pop_back();
 
@@ -110,7 +109,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // completion //
     opts.push_back({ "server/completion" });
     opts.push_back({ "server/completion",  "-a,    --alias NAME",           "model name alias (default: %s)", params.model_alias.c_str() });
-    opts.push_back({ "server/completion",  "-s,    --seed N",               "RNG seed (default: %d, use random seed for < 0)", params.seed });
+    opts.push_back({ "server/completion",  "-s,    --seed N",               "RNG seed (default: %d, use random seed for < 0)", sparams.seed });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/completion",
                                            "-ngl,  --gpu-layers N",         "number of layers to store in VRAM" });
@@ -179,12 +178,12 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --sampling-seq SEQUENCE",
                                                                             "simplified sequence for samplers that will be used (default: %s)", sampler_type_chars.c_str() });
     opts.push_back({ "server/completion",  "       --penalize-nl",          "penalize newline tokens (default: %s)", sparams.penalize_nl ? "true" : "false" });
-    opts.push_back({ "server/completion",  "       --temp N",               "temperature (default: %.1f)", (double)sparams.temp });
+    opts.push_back({ "server/completion",  "       --temp T",               "temperature (default: %.1f)", (double)sparams.temp });
     opts.push_back({ "server/completion",  "       --top-k N",              "top-k sampling (default: %d, 0 = disabled)", sparams.top_k });
-    opts.push_back({ "server/completion",  "       --top-p N",              "top-p sampling (default: %.1f, 1.0 = disabled)", (double)sparams.top_p });
-    opts.push_back({ "server/completion",  "       --min-p N",              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)sparams.min_p });
-    opts.push_back({ "server/completion",  "       --tfs N",                "tail free sampling, parameter z (default: %.1f, 1.0 = disabled)", (double)sparams.tfs_z });
-    opts.push_back({ "server/completion",  "       --typical N",            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)sparams.typical_p });
+    opts.push_back({ "server/completion",  "       --top-p P",              "top-p sampling (default: %.1f, 1.0 = disabled)", (double) sparams.top_p });
+    opts.push_back({ "server/completion",  "       --min-p P",              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)sparams.min_p });
+    opts.push_back({ "server/completion",  "       --tfs P",                "tail free sampling, parameter z (default: %.1f, 1.0 = disabled)", (double)sparams.tfs_z });
+    opts.push_back({ "server/completion",  "       --typical P",            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)sparams.typ_p });
     opts.push_back({ "server/completion",  "       --repeat-last-n N",      "last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", sparams.penalty_last_n });
     opts.push_back({ "server/completion",  "       --repeat-penalty N",     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)sparams.penalty_repeat });
     opts.push_back({ "server/completion",  "       --presence-penalty N",   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_present });
@@ -490,8 +489,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--seed");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.seed = std::stoul(std::string(arg));
-                bparams.gparams.sparams.seed = bparams.gparams.seed;
+                bparams.gparams.sparams.seed = std::stoul(std::string(arg));
                 continue;
             }
 
@@ -877,8 +875,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 const auto sampler_names = string_split(arg, ';');
-                bparams.gparams.sparams.samplers_sequence =
-                    llama_sampling_types_from_names(sampler_names, true);
+                bparams.gparams.sparams.samplers =
+                    gpt_sampler_types_from_names(sampler_names, true);
                 continue;
             }
 
@@ -887,7 +885,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--sampling-seq");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.sparams.samplers_sequence = llama_sampling_types_from_chars(arg);
+                bparams.gparams.sparams.samplers = gpt_sampler_types_from_chars(arg);
                 continue;
             }
 
@@ -947,7 +945,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--typical");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.sparams.typical_p = std::stof(std::string(arg));
+                bparams.gparams.sparams.typ_p = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1045,8 +1043,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 std::string value_str;
                 if (ss >> key && ss >> sign && std::getline(ss, value_str) &&
                     (sign == '+' || sign == '-')) {
-                    bparams.gparams.sparams.logit_bias[key] =
-                        std::stof(value_str) * ((sign == '-') ? -1.0f : 1.0f);
+                    const float bias = std::stof(value_str) * ((sign == '-') ? -1.0f : 1.0f);
+                    bparams.gparams.sparams.logit_bias.push_back({key, bias});
                 } else {
                     invalid("--logit-bias");
                 }

@@ -153,16 +153,17 @@ struct server_slot {
 
     std::string stopping_word;
 
-    bool oaicompat = false;
     bool oaicompat_completion = false;
     bool oaicompat_completion_chat = false;
     bool oaicompat_completion_chat_vision = false;
 
     // sampling
     std::vector<llama_token> sampled;
-    struct llama_sampling_params sparams;
-    llama_sampling_context *ctx_sampling = nullptr;
+
     json json_schema;
+
+    struct gpt_sampler_params sparams;
+    struct gpt_sampler *smpl = nullptr;
 
     int32_t ga_i = 0;   // group-attention state
     int32_t ga_n = 1;   // group-attention factor
@@ -189,7 +190,7 @@ struct server_slot {
     int32_t n_drafted_accepted = 0;
     std::vector<llama_token> sampled_draft;
     // draft-model speculative decoding
-    llama_sampling_context *ctx_sampling_draft = nullptr;
+    struct gpt_sampler *smpl_draft = nullptr;
     // model-free speculative decoding
     int32_t lookup_ngram_min = 0;
     llama_ngram_cache ctx_ngram_cache;
@@ -209,9 +210,9 @@ struct server_slot {
         ga_i = 0;
         n_past_se = 0;
 
-        if (ctx_sampling != nullptr) {
-            llama_sampling_free(ctx_sampling);
-            ctx_sampling = nullptr;
+        if (smpl != nullptr) {
+            gpt_sampler_free(smpl);
+            smpl = nullptr;
         }
 
         sampled.clear();
@@ -226,9 +227,9 @@ struct server_slot {
         n_drafted_accepted = 0;
         sampled_draft.clear();
 
-        if (ctx_sampling_draft != nullptr) {
-            llama_sampling_free(ctx_sampling_draft);
-            ctx_sampling_draft = nullptr;
+        if (smpl_draft != nullptr) {
+            gpt_sampler_free(smpl_draft);
+            smpl_draft = nullptr;
         }
 
         lookup_ngram_min = 0;
@@ -329,8 +330,7 @@ struct server_slot {
         return stop_pos;
     }
 
-    void push_token_into_result(llama_token tok, completion_token_output &result,
-                                llama_context *ctx) {
+    void push_token_into_result(llama_token tok, completion_token_output &result) {
         if (lookup_ngram_min > 0) {
             prompt_tokens.push_back(tok);
             llama_ngram_cache_update(ctx_ngram_cache, lookup_ngram_min, LLAMA_NGRAM_MAX,
@@ -339,33 +339,15 @@ struct server_slot {
 
         result.toks.push_back(tok);
 
-        const size_t n_probs = std::min(ctx_sampling->cur.size(), (size_t)sparams.n_probs);
-        if (n_probs > 0) {
+        if (sparams.n_probs > 0) {
             result.probss.emplace_back();
-
             const auto last_idx = int32_t(result.probss.size() - 1);
-            const size_t n_valid = ctx_sampling->n_valid;
-            llama_token_data_array cur_p = {ctx_sampling->cur.data(), ctx_sampling->cur.size(),
-                                            false};
-
-            // Make sure at least n_probs top tokens are at the front of
-            // the vector:
-            if (sparams.temp == 0.0f && n_probs > n_valid) {
-                llama_sample_top_k(ctx, &cur_p, int32_t(n_probs), 0);
-            }
-
-            if (sparams.temp == 0.0f) {
-                // With greedy sampling the probabilities have possibly
-                // not been calculated.
-                for (size_t x = 0; x < n_probs; ++x) {
-                    result.probss[last_idx].push_back({cur_p.data[x].id, x == 0 ? 1.0f : 0.0f});
-                }
-            } else {
-                // Tokens filtered out due to e.g. top_k have 0 probability.
-                for (size_t x = 0; x < n_probs; ++x) {
-                    result.probss[last_idx].push_back(
-                        {cur_p.data[x].id, x >= n_valid ? 0.0f : cur_p.data[x].p});
-                }
+            const llama_token_data_array *cur_p = gpt_sampler_get_candidates(smpl);
+            for (size_t i = 0; i < (size_t)sparams.n_probs; ++i) {
+                result.probss[last_idx].push_back({
+                    cur_p->data[i].id,
+                    i >= cur_p->size ? 0.0f : cur_p->data[i].p,
+                });
             }
         }
     }
@@ -691,11 +673,11 @@ struct server_context {
 
         // Clear any sampling context
         for (server_slot &slot : slots) {
-            if (slot.ctx_sampling != nullptr) {
-                llama_sampling_free(slot.ctx_sampling);
+            if (slot.smpl != nullptr) {
+                gpt_sampler_free(slot.smpl);
             }
-            if (slot.ctx_sampling_draft != nullptr) {
-                llama_sampling_free(slot.ctx_sampling_draft);
+            if (slot.smpl_draft != nullptr) {
+                gpt_sampler_free(slot.smpl_draft);
             }
             delete slot.token_bkt;
         }
@@ -822,30 +804,32 @@ struct server_context {
         // sample tokens per second
         if (n_tps < 0) {
             LOG_INFO("sampling tokens per second, this will take some time...", {});
-            std::vector<llama_token> embd = {llama_token_bos(model)};
             const int32_t n_check = std::min(n_ctx, params.n_ubatch);
-            llama_sampling_context *ctx_sampling = llama_sampling_init(params.sparams);
+            std::vector<llama_token> check_prompt_tokens = {llama_token_bos(model)};
+            gpt_sampler *check_smpl = gpt_sampler_init(model, params.sparams);
+            int64_t t_start_decoding = ggml_time_us();
+            int32_t n_check_decoded = 0;
             while (true) {
-                auto i = int32_t(embd.size());
+                auto i = int32_t(check_prompt_tokens.size());
                 if (i >= n_check) {
                     break;
                 }
-                if (llama_decode(ctx, llama_batch_get_one(&embd[i - 1], 1, 0, 0))) {
+                if (llama_decode(ctx, llama_batch_get_one(&check_prompt_tokens[i - 1], 1, 0, 0))) {
                     break;
                 }
-                const int32_t id = llama_sampling_sample(ctx_sampling, ctx, nullptr);
+                n_check_decoded++;
+                const int32_t id = gpt_sampler_sample(check_smpl, ctx, 0);
                 if (llama_token_is_eog(model, id)) {
                     break;
                 }
-                llama_sampling_accept(ctx_sampling, ctx, id, false);
-                embd.push_back(id);
+                gpt_sampler_accept(check_smpl, id, false);
+                check_prompt_tokens.push_back(id);
             }
-            const llama_timings timings = llama_get_timings(ctx);
-            n_tps = ceil(1e3 / timings.t_eval_ms * timings.n_eval);
-            llama_sampling_free(ctx_sampling);
+            n_tps = ceil(1e3 / (double(ggml_time_us() - t_start_decoding) / 1e3) * n_check_decoded);
+            gpt_sampler_free(check_smpl);
             llama_kv_cache_clear(ctx);
             llama_synchronize(ctx);
-            llama_reset_timings(ctx);
+            llama_perf_reset(ctx, LLAMA_PERF_TYPE_CONTEXT);
             LOG_INFO("sampled tokens per second", {{"tps", n_tps}});
         }
 
@@ -1090,10 +1074,9 @@ struct server_context {
     }
 
     bool launch_slot_with_task(server_slot &slot, const server_task &task) {
-        llama_sampling_params sparams = params.sparams;
-        auto &data = task.data;
+        gpt_sampler_params sparams = params.sparams;
+        const json &data = task.data;
 
-        slot.oaicompat = json_value(data, "__oaicompat", false);
         slot.oaicompat_completion = json_value(data, "__oaicompat_completion", false);
         slot.oaicompat_completion_chat = json_value(data, "__oaicompat_completion_chat", false);
         slot.oaicompat_completion_chat_vision =
@@ -1111,7 +1094,7 @@ struct server_context {
         slot.sparams.top_p = json_value(data, "top_p", sparams.top_p);
         slot.sparams.min_p = json_value(data, "min_p", sparams.min_p);
         slot.sparams.tfs_z = json_value(data, "tfs_z", sparams.tfs_z);
-        slot.sparams.typical_p = json_value(data, "typical_p", sparams.typical_p);
+        slot.sparams.typ_p = json_value(data, "typical_p", sparams.typ_p);
         slot.sparams.temp = json_value(data, "temperature", sparams.temp);
         slot.sparams.dynatemp_range = json_value(data, "dynatemp_range", sparams.dynatemp_range);
         slot.sparams.dynatemp_exponent =
@@ -1137,7 +1120,9 @@ struct server_context {
                        "specified, but not both",
                        ERROR_TYPE_INVALID_REQUEST);
             return false;
-        } else if (data.contains("json_schema") && !data.contains("grammar")) {
+        }
+
+        if (data.contains("json_schema") && !data.contains("grammar")) {
             try {
                 auto schema = json_value(data, "json_schema", json::object());
                 slot.sparams.grammar = json_schema_to_grammar(schema);
@@ -1182,48 +1167,11 @@ struct server_context {
             }
         }
 
-        // penalize user-provided tokens
-        {
-            slot.sparams.penalty_prompt_tokens.clear();
-            slot.sparams.use_penalty_prompt_tokens = false;
-
-            const auto &penalty_prompt = data.find("penalty_prompt");
-
-            if (penalty_prompt != data.end()) {
-                if (penalty_prompt->is_string()) {
-                    const auto penalty_prompt_string = penalty_prompt->get<std::string>();
-                    slot.sparams.penalty_prompt_tokens =
-                        llama_tokenize(model, penalty_prompt_string, false);
-
-                    if (slot.params.n_predict > 0) {
-                        slot.sparams.penalty_prompt_tokens.reserve(
-                            slot.sparams.penalty_prompt_tokens.size() + slot.params.n_predict);
-                    }
-                    slot.sparams.use_penalty_prompt_tokens = true;
-                } else if (penalty_prompt->is_array()) {
-                    const auto n_tokens = penalty_prompt->size();
-                    slot.sparams.penalty_prompt_tokens.reserve(n_tokens +
-                                                               std::max(0, slot.params.n_predict));
-
-                    const int n_vocab = llama_n_vocab(model);
-                    for (const auto &penalty_token : *penalty_prompt) {
-                        if (penalty_token.is_number_integer()) {
-                            const auto tok = penalty_token.get<llama_token>();
-                            if (tok >= 0 && tok < n_vocab) {
-                                slot.sparams.penalty_prompt_tokens.push_back(tok);
-                            }
-                        }
-                    }
-                    slot.sparams.use_penalty_prompt_tokens = true;
-                }
-            }
-        }
-
         {
             slot.sparams.logit_bias.clear();
 
             if (json_value(data, "ignore_eos", false)) {
-                slot.sparams.logit_bias[llama_token_eos(model)] = -INFINITY;
+                slot.sparams.logit_bias.push_back({llama_token_eos(model), -INFINITY});
             }
 
             const auto &logit_bias = data.find("logit_bias");
@@ -1245,12 +1193,12 @@ struct server_context {
                         if (el[0].is_number_integer()) {
                             llama_token tok = el[0].get<llama_token>();
                             if (tok >= 0 && tok < n_vocab) {
-                                slot.sparams.logit_bias[tok] = bias;
+                                slot.sparams.logit_bias.push_back({tok, bias});
                             }
                         } else if (el[0].is_string()) {
                             auto toks = llama_tokenize(model, el[0].get<std::string>(), false);
                             for (auto tok : toks) {
-                                slot.sparams.logit_bias[tok] = bias;
+                                slot.sparams.logit_bias.push_back({tok, bias});
                             }
                         }
                     }
@@ -1272,28 +1220,27 @@ struct server_context {
         }
 
         {
-            const auto &samplers_sequence = data.find("samplers");
-            if (samplers_sequence != data.end() && samplers_sequence->is_array()) {
+            const auto &samplers = data.find("samplers");
+            if (samplers != data.end() && samplers->is_array()) {
                 std::vector<std::string> sampler_names;
-                for (const auto &sampler_name : *samplers_sequence) {
-                    if (sampler_name.is_string()) {
-                        sampler_names.emplace_back(sampler_name);
+                for (const auto &name : *samplers) {
+                    if (name.is_string()) {
+                        sampler_names.emplace_back(name);
                     }
                 }
-                slot.sparams.samplers_sequence =
-                    llama_sampling_types_from_names(sampler_names, false);
+                slot.sparams.samplers = gpt_sampler_types_from_names(sampler_names, false);
             } else {
-                slot.sparams.samplers_sequence = sparams.samplers_sequence;
+                slot.sparams.samplers = sparams.samplers;
             }
         }
 
         {
-            if (slot.ctx_sampling != nullptr) {
-                llama_sampling_free(slot.ctx_sampling);
+            if (slot.smpl != nullptr) {
+                gpt_sampler_free(slot.smpl);
             }
 
-            slot.ctx_sampling = llama_sampling_init(slot.sparams);
-            if (slot.ctx_sampling == nullptr) {
+            slot.smpl = gpt_sampler_init(model, slot.sparams);
+            if (slot.smpl == nullptr) {
                 // for now, the only error that may happen here is invalid
                 // grammar
                 send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
@@ -1320,23 +1267,6 @@ struct server_context {
                     send_error(task, "Failed to create token bucket", ERROR_TYPE_SERVER);
                     return false;
                 }
-            }
-        }
-
-        if (ctx_draft != nullptr) {
-            if (slot.ctx_sampling_draft != nullptr) {
-                llama_sampling_free(slot.ctx_sampling_draft);
-            }
-
-            llama_sampling_params sparams_draft = slot.sparams;
-            // the draft samplers will copy the target sampler's grammar.
-            sparams_draft.grammar.clear();
-            slot.ctx_sampling_draft = llama_sampling_init(sparams_draft);
-            if (slot.ctx_sampling_draft == nullptr) {
-                // for now, the only error that may happen here is invalid
-                // grammar
-                send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
-                return false;
             }
         }
 
@@ -1387,11 +1317,6 @@ struct server_context {
         for (const llama_token &tok : result.toks) {
             token_str += llama_token_to_piece(ctx, tok, params.special);
             slot.sampled.push_back(tok);
-            if (slot.ctx_sampling->params.use_penalty_prompt_tokens && tok != -1) {
-                // we can change penalty_prompt_tokens because it is always created
-                // from scratch each request
-                slot.ctx_sampling->params.penalty_prompt_tokens.push_back(tok);
-            }
         }
 
         // search stop word and delete it
@@ -1500,14 +1425,10 @@ struct server_context {
     }
 
     json get_formated_generation(const server_slot &slot) const {
-        const auto eos_bias = slot.sparams.logit_bias.find(llama_token_eos(model));
-        const bool ignore_eos = eos_bias != slot.sparams.logit_bias.end() &&
-                                eos_bias->second < 0.0f && std::isinf(eos_bias->second);
-
-        std::vector<std::string> samplers_sequence;
-        samplers_sequence.reserve(slot.sparams.samplers_sequence.size());
-        for (const auto &sampler_type : slot.sparams.samplers_sequence) {
-            samplers_sequence.emplace_back(llama_sampling_type_to_str(sampler_type));
+        std::vector<std::string> samplers;
+        samplers.reserve(slot.sparams.samplers.size());
+        for (const auto &sampler : slot.sparams.samplers) {
+            samplers.emplace_back(gpt_sampler_type_to_str(sampler));
         }
 
         return json{{"n_ctx", slot.n_ctx},
@@ -1521,13 +1442,11 @@ struct server_context {
                     {"top_p", slot.sparams.top_p},
                     {"min_p", slot.sparams.min_p},
                     {"tfs_z", slot.sparams.tfs_z},
-                    {"typical_p", slot.sparams.typical_p},
+                    {"typical_p", slot.sparams.typ_p},
                     {"repeat_last_n", slot.sparams.penalty_last_n},
                     {"repeat_penalty", slot.sparams.penalty_repeat},
                     {"presence_penalty", slot.sparams.penalty_present},
                     {"frequency_penalty", slot.sparams.penalty_freq},
-                    {"penalty_prompt_tokens", slot.sparams.penalty_prompt_tokens},
-                    {"use_penalty_prompt_tokens", slot.sparams.use_penalty_prompt_tokens},
                     {"mirostat", slot.sparams.mirostat},
                     {"mirostat_tau", slot.sparams.mirostat_tau},
                     {"mirostat_eta", slot.sparams.mirostat_eta},
@@ -1536,13 +1455,12 @@ struct server_context {
                     {"max_tokens", slot.params.n_predict}, // User configured n_predict
                     {"n_keep", slot.params.n_keep},
                     {"n_discard", slot.params.n_discard},
-                    {"ignore_eos", ignore_eos},
+                    {"ignore_eos", slot.sparams.ignore_eos},
                     {"stream", slot.params.stream},
-                    {"logit_bias", slot.sparams.logit_bias},
                     {"n_probs", slot.sparams.n_probs},
                     {"min_keep", slot.sparams.min_keep},
                     {"grammar", slot.sparams.grammar},
-                    {"samplers", samplers_sequence}};
+                    {"samplers", samplers}};
     }
 
     void send_error(const server_task &task, const std::string &error,
@@ -2310,7 +2228,7 @@ struct server_context {
                                 GGML_ASSERT(slot.n_prompt_tokens < slot.n_ctx);
                             }
 
-                            llama_sampling_reset(slot.ctx_sampling);
+                            gpt_sampler_reset(slot.smpl);
 
                             if (!slot.params.cache_prompt) {
                                 slot.n_past_se = 0;
@@ -2326,8 +2244,7 @@ struct server_context {
                                 // push the prompt into the sampling context (do
                                 // not apply grammar)
                                 for (int i = 0; i < slot.n_past; ++i) {
-                                    llama_sampling_accept(slot.ctx_sampling, ctx,
-                                                          slot.cache_tokens[i], false);
+                                    gpt_sampler_accept(slot.smpl, slot.cache_tokens[i], false);
                                 }
                             }
                         }
@@ -2386,7 +2303,7 @@ struct server_context {
                         slot.ga_i = 0;
                         // TODO: is the system prompt ever in the sampling
                         // context?
-                        llama_sampling_reset(slot.ctx_sampling);
+                        gpt_sampler_reset(slot.smpl);
                     }
                     if (ctx_draft != nullptr) {
                         if (!llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, p0, -1)) {
@@ -2394,7 +2311,7 @@ struct server_context {
                             if (p0 != 0) {
                                 llama_kv_cache_seq_cp(ctx_draft, 0, slot.id + 1, -1, -1);
                             }
-                            llama_sampling_reset(slot.ctx_sampling_draft);
+                            gpt_sampler_reset(slot.smpl_draft);
                         }
                     }
 
@@ -2606,10 +2523,10 @@ struct server_context {
                         slot.release();
                         slot.i_batch = -1;
                         continue; // continue loop of slots
-                    } else {
-                        // prompt evaluated for next-token prediction
-                        slot.state = SLOT_STATE_GENERATING;
                     }
+
+                    // prompt evaluated for next-token prediction
+                    slot.state = SLOT_STATE_GENERATING;
                 } else if (slot.state != SLOT_STATE_GENERATING) {
                     continue; // continue loop of slots
                 }
@@ -2622,10 +2539,9 @@ struct server_context {
                     for (int32_t j = 0; j < sz_draft + 1; ++j) {
                         // greedy verification only
                         bool accept = false;
-                        tok = llama_sampling_sample(slot.ctx_sampling, ctx, nullptr,
-                                                    slot.i_batch - i + j);
-                        llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
-                        slot.push_token_into_result(tok, result, ctx);
+                        tok = gpt_sampler_sample(slot.smpl, ctx, slot.i_batch - i + j);
+                        gpt_sampler_accept(slot.smpl, tok, true);
+                        slot.push_token_into_result(tok, result);
                         if (j < sz_draft && tok == slot.sampled_draft[j]) {
                             accept = true;
                         }
@@ -2636,10 +2552,9 @@ struct server_context {
                         slot.n_drafted_accepted += 1;
                     }
                 } else {
-                    llama_token tok =
-                        llama_sampling_sample(slot.ctx_sampling, ctx, nullptr, slot.i_batch - i);
-                    llama_sampling_accept(slot.ctx_sampling, ctx, tok, true);
-                    slot.push_token_into_result(tok, result, ctx);
+                    llama_token tok = gpt_sampler_sample(slot.smpl, ctx, slot.i_batch - i);
+                    gpt_sampler_accept(slot.smpl, tok, true);
+                    slot.push_token_into_result(tok, result);
                     slot.n_decoded += 1;
                 }
 
@@ -2656,7 +2571,10 @@ struct server_context {
                     llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, pos, -1);
 
                     slot.sampled_draft.clear();
-                    llama_sampling_cp(slot.ctx_sampling, slot.ctx_sampling_draft);
+                    if (slot.smpl_draft != nullptr) {
+                        gpt_sampler_free(slot.smpl_draft);
+                    }
+                    slot.smpl_draft = gpt_sampler_clone(slot.smpl);
 
                     llama_batch_clear(batch_draft);
                     llama_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos,
@@ -2669,10 +2587,9 @@ struct server_context {
                     slot.n_drafted += 1;
 
                     for (int32_t j = 0; j < params.n_draft; ++j) {
-                        llama_token tok =
-                            llama_sampling_sample(slot.ctx_sampling_draft, ctx_draft, nullptr, 0);
+                        llama_token tok = gpt_sampler_sample(slot.smpl_draft, ctx_draft, 0);
                         slot.sampled_draft.push_back(tok);
-                        llama_sampling_accept(slot.ctx_sampling_draft, ctx_draft, tok, true);
+                        gpt_sampler_accept(slot.smpl_draft, tok, true);
                         if (llama_token_is_eog(model_draft, tok)) {
                             break;
                         }
