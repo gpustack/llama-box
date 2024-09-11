@@ -110,7 +110,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // completion //
     opts.push_back({ "server/completion" });
     opts.push_back({ "server/completion",  "-a,    --alias NAME",           "model name alias (default: %s)", params.model_alias.c_str() });
-    opts.push_back({ "server/completion",  "-s,    --seed N",               "RNG seed (default: %d, use random seed for < 0)", sparams.seed });
+    opts.push_back({ "server/completion",  "-s,    --seed N",               "RNG seed (default: %u, use random seed for %u)", sparams.seed, LLAMA_DEFAULT_SEED });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/completion",
                                            "-ngl,  --gpu-layers N",         "number of layers to store in VRAM" });
