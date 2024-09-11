@@ -37,13 +37,9 @@ enum stop_type {
 
 enum slot_state {
     SLOT_STATE_IDLE,
-    SLOT_STATE_PROCESSING,
-};
-
-enum slot_command {
-    SLOT_COMMAND_NONE,
-    SLOT_COMMAND_LOAD_PROMPT,
-    SLOT_COMMAND_RELEASE,
+    SLOT_STATE_PROCESSING_PROMPT,
+    SLOT_STATE_DONE_PROMPT,
+    SLOT_STATE_GENERATING,
 };
 
 enum server_state {
@@ -124,7 +120,6 @@ struct server_slot {
     struct slot_params params;
 
     slot_state state = SLOT_STATE_IDLE;
-    slot_command command = SLOT_COMMAND_NONE;
 
     // used to determine the slot that has been used the longest
     int64_t t_last_used = -1;
@@ -184,6 +179,8 @@ struct server_slot {
 
     double t_prompt_processing; // ms
     double t_token_generation;  // ms
+
+    std::function<void(int)> callback_on_release;
 
     token_bucket *token_bkt = nullptr; // bucket for tokens per second
 
@@ -253,26 +250,28 @@ struct server_slot {
         return n_remaining > 0; // no budget
     }
 
-    bool available() const {
-        return state == SLOT_STATE_IDLE && command == SLOT_COMMAND_NONE;
-    }
-
     bool is_processing() const {
-        return (state == SLOT_STATE_IDLE && command == SLOT_COMMAND_LOAD_PROMPT) ||
-               state == SLOT_STATE_PROCESSING;
+        return state != SLOT_STATE_IDLE;
     }
 
     void add_token_string(const completion_token_output &token) {
-        if (command == SLOT_COMMAND_RELEASE) {
+        if (!is_processing()) {
             return;
         }
         generated_token_probs.push_back(token);
     }
 
     void release() {
-        if (state == SLOT_STATE_PROCESSING) {
+        if (is_processing()) {
             t_token_generation = double(ggml_time_us() - t_start_generation) / 1e3;
-            command = SLOT_COMMAND_RELEASE;
+            state = SLOT_STATE_IDLE;
+            LOG_INFO("slot released", {
+                                          {"id_slot", id},
+                                          {"id_task", id_task},
+                                          {"n_past", n_past},
+                                          {"truncated", truncated},
+                                      });
+            callback_on_release(id);
         }
     }
 
@@ -390,6 +389,9 @@ struct server_metrics {
     uint64_t n_tokens_drafted = 0;
     uint64_t n_tokens_drafted_accepted = 0;
 
+    uint64_t n_decode_total = 0;
+    uint64_t n_busy_slots_total = 0;
+
     void init() {
         t_start = ggml_time_us();
     }
@@ -410,6 +412,15 @@ struct server_metrics {
         n_tokens_drafted_total += slot.n_drafted;
         n_tokens_drafted_accepted += slot.n_drafted_accepted;
         n_tokens_drafted_accepted_total += slot.n_drafted_accepted;
+    }
+
+    void on_decoded(const std::vector<server_slot> &slots) {
+        n_decode_total++;
+        for (const auto &slot : slots) {
+            if (slot.is_processing()) {
+                n_busy_slots_total++;
+            }
+        }
     }
 
     void reset_bucket() {
@@ -454,6 +465,7 @@ struct server_queue {
 
     // Add multiple tasks to the end of the queue
     int post(std::vector<server_task> &tasks, bool front = false) {
+        std::unique_lock<std::mutex> lock(mutex_tasks);
         for (auto &task : tasks) {
             if (task.id == -1) {
                 task.id = id++;
@@ -472,6 +484,7 @@ struct server_queue {
     void defer(server_task task) {
         std::unique_lock<std::mutex> lock(mutex_tasks);
         queue_tasks_deferred.push_back(std::move(task));
+        condition_tasks.notify_one();
     }
 
     // Get the next id for creating a new task
@@ -492,14 +505,15 @@ struct server_queue {
         callback_update_slots = std::move(callback);
     }
 
-    // Call when the state of one slot is changed
-    void notify_slot_changed() {
+    // Call when the state of one slot is changed, it will move one task from deferred to main queue
+    void pop_deferred_task() {
         // move deferred tasks back to main loop
         std::unique_lock<std::mutex> lock(mutex_tasks);
-        for (auto &task : queue_tasks_deferred) {
-            queue_tasks.push_back(std::move(task));
+        if (!queue_tasks_deferred.empty()) {
+            queue_tasks.emplace_back(std::move(queue_tasks_deferred.front()));
+            queue_tasks_deferred.pop_front();
         }
-        queue_tasks_deferred.clear();
+        condition_tasks.notify_one();
     }
 
     // End the start_loop routine
@@ -527,7 +541,7 @@ struct server_queue {
                     break;
                 }
                 server_task task = queue_tasks.front();
-                queue_tasks.erase(queue_tasks.begin());
+                queue_tasks.pop_front();
                 lock.unlock();
                 callback_new_task(task);
             }
@@ -626,7 +640,7 @@ struct server_context {
 
     gpt_params params;
 
-    llama_batch batch;
+    llama_batch batch = {};
 
     bool add_bos_token = true;
     bool add_eos_token = false;
@@ -882,6 +896,8 @@ struct server_context {
             slot.ga_n = ga_n;
             slot.ga_w = ga_w;
 
+            slot.callback_on_release = [this](int) { queue_tasks.pop_deferred_task(); };
+
             slot.reset();
 
             slots.push_back(slot);
@@ -1022,7 +1038,7 @@ struct server_context {
 
             for (server_slot &slot : slots) {
                 // skip the slot if it is not available
-                if (!slot.available()) {
+                if (slot.is_processing()) {
                     continue;
                 }
 
@@ -1058,7 +1074,7 @@ struct server_context {
             int64_t t_last = ggml_time_us();
             for (server_slot &slot : slots) {
                 // skip the slot if it is not available
-                if (!slot.available()) {
+                if (slot.is_processing()) {
                     continue;
                 }
 
@@ -1351,7 +1367,7 @@ struct server_context {
             }
         }
 
-        slot.command = SLOT_COMMAND_LOAD_PROMPT;
+        slot.state = SLOT_STATE_PROCESSING_PROMPT;
         slot.prompt_tokens.clear();
 
         LOG_INFO("slot is processing task",
@@ -1823,7 +1839,7 @@ struct server_context {
                 queue_tasks.defer(task);
                 break;
             }
-            if (!slot->available()) {
+            if (slot->is_processing()) {
                 // if requested slot is unavailable, we defer this task for
                 // processing later
                 queue_tasks.defer(task);
@@ -1905,6 +1921,9 @@ struct server_context {
                 {"n_tokens_predicted", metrics.n_tokens_predicted},
                 {"t_tokens_generation", metrics.t_tokens_generation},
 
+                {"n_decode_total", metrics.n_decode_total},
+                {"n_busy_slots_total", metrics.n_busy_slots_total},
+
                 {"kv_cache_tokens_count", llama_get_kv_cache_token_count(ctx)},
                 {"kv_cache_used_cells", llama_get_kv_cache_used_cells(ctx)},
 
@@ -1923,7 +1942,7 @@ struct server_context {
                 send_error(task, "Invalid slot ID", ERROR_TYPE_INVALID_REQUEST);
                 break;
             }
-            if (!slot->available()) {
+            if (slot->is_processing()) {
                 // if requested slot is unavailable, we defer this task for
                 // processing later
                 queue_tasks.defer(task);
@@ -1960,7 +1979,7 @@ struct server_context {
                 send_error(task, "Invalid slot ID", ERROR_TYPE_INVALID_REQUEST);
                 break;
             }
-            if (!slot->available()) {
+            if (slot->is_processing()) {
                 // if requested slot is unavailable, we defer this task for
                 // processing later
                 queue_tasks.defer(task);
@@ -2009,7 +2028,7 @@ struct server_context {
                 send_error(task, "Invalid slot ID", ERROR_TYPE_INVALID_REQUEST);
                 break;
             }
-            if (!slot->available()) {
+            if (slot->is_processing()) {
                 // if requested slot is unavailable, we defer this task for
                 // processing later
                 queue_tasks.defer(task);
@@ -2047,30 +2066,11 @@ struct server_context {
     void update_slots() {
         const auto n_system_tokens = int32_t(system_tokens.size());
 
-        // release slots
-        for (auto &slot : slots) {
-            if (slot.command == SLOT_COMMAND_RELEASE) {
-                slot.state = SLOT_STATE_IDLE;
-                slot.command = SLOT_COMMAND_NONE;
-                slot.t_last_used = ggml_time_us();
-
-                LOG_INFO("slot released", {{"id_slot", slot.id},
-                                           {"id_task", slot.id_task},
-                                           {"n_ctx", n_ctx},
-                                           {"n_past", slot.n_past},
-                                           {"n_system_tokens", n_system_tokens},
-                                           {"n_cache_tokens", slot.cache_tokens.size()},
-                                           {"truncated", slot.truncated}});
-
-                queue_tasks.notify_slot_changed();
-            }
-        }
-
         // check if all slots are idle
         {
             bool all_idle = true;
             for (auto &slot : slots) {
-                if (slot.state != SLOT_STATE_IDLE || slot.command != SLOT_COMMAND_NONE) {
+                if (slot.is_processing()) {
                     all_idle = false;
                     break;
                 }
@@ -2156,7 +2156,7 @@ struct server_context {
 
         // first, add sampled tokens from any ongoing sequences
         for (auto &slot : slots) {
-            if (slot.state == SLOT_STATE_IDLE) {
+            if (slot.state != SLOT_STATE_GENERATING) {
                 continue;
             }
 
@@ -2202,7 +2202,7 @@ struct server_context {
         if (params.cont_batching || batch.n_tokens == 0) {
             for (auto &slot : slots) {
                 // this slot still has a prompt to be processed
-                if (slot.state == SLOT_STATE_IDLE && slot.command == SLOT_COMMAND_LOAD_PROMPT) {
+                if (slot.state == SLOT_STATE_PROCESSING_PROMPT) {
                     auto &prompt_tokens = slot.prompt_tokens;
 
                     // we haven't tokenized the prompt yet - do it now:
@@ -2261,8 +2261,6 @@ struct server_context {
                             LOG_INFO("empty prompt - releasing slot",
                                      {{"id_slot", slot.id}, {"id_task", slot.id_task}});
 
-                            slot.state = SLOT_STATE_PROCESSING;
-                            slot.command = SLOT_COMMAND_NONE;
                             slot.release();
                             send_final_response(slot);
                             continue;
@@ -2271,8 +2269,6 @@ struct server_context {
                         if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
                             // this prompt is too large to process - discard it
                             if (slot.n_prompt_tokens > n_ubatch) {
-                                slot.state = SLOT_STATE_PROCESSING;
-                                slot.command = SLOT_COMMAND_NONE;
                                 slot.release();
                                 send_error(slot,
                                            "input is too large to process. "
@@ -2441,8 +2437,6 @@ struct server_context {
 
                     if (slot.oaicompat_completion_chat_vision &&
                         !process_vision_prompt(slot, n_batch)) {
-                        slot.state = SLOT_STATE_PROCESSING;
-                        slot.command = SLOT_COMMAND_NONE;
                         slot.release();
                         continue;
                     }
@@ -2450,8 +2444,7 @@ struct server_context {
                     // entire prompt has been processed - start decoding new
                     // tokens
                     if (slot.n_past == slot.n_prompt_tokens) {
-                        slot.state = SLOT_STATE_PROCESSING;
-                        slot.command = SLOT_COMMAND_NONE;
+                        slot.state = SLOT_STATE_DONE_PROMPT;
 
                         GGML_ASSERT(batch.n_tokens > 0);
 
@@ -2542,6 +2535,7 @@ struct server_context {
             // clang-format on
 
             const int ret = llama_decode(ctx, batch_view);
+            metrics.on_decoded(slots);
             if (ret != 0) {
                 if (n_batch == 1 || ret < 0) {
                     // if you get here, it means the KV cache is full - try
@@ -2551,12 +2545,10 @@ struct server_context {
                               "via the context size",
                               {
                                   {"i", i},
-                                  {"n_batch", ret},
+                                  {"n_batch", n_batch},
                                   {"ret", ret},
                               });
                     for (auto &slot : slots) {
-                        slot.state = SLOT_STATE_PROCESSING;
-                        slot.command = SLOT_COMMAND_NONE;
                         slot.release();
                         send_error(slot, "Input prompt is too big compared to "
                                          "KV size. Please try "
@@ -2603,16 +2595,22 @@ struct server_context {
             }
 
             for (auto &slot : slots) {
-                if (slot.state != SLOT_STATE_PROCESSING || slot.i_batch < (int)i ||
-                    slot.i_batch >= (int)(i + n_tokens)) {
+                if (slot.i_batch < (int)i || slot.i_batch >= (int)(i + n_tokens)) {
                     continue; // continue loop of slots
                 }
 
-                // prompt evaluated for embedding
-                if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
-                    send_embedding(slot, batch_view);
-                    slot.release();
-                    slot.i_batch = -1;
+                if (slot.state == SLOT_STATE_DONE_PROMPT) {
+                    if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
+                        // prompt evaluated for embedding
+                        send_embedding(slot, batch_view);
+                        slot.release();
+                        slot.i_batch = -1;
+                        continue; // continue loop of slots
+                    } else {
+                        // prompt evaluated for next-token prediction
+                        slot.state = SLOT_STATE_GENERATING;
+                    }
+                } else if (slot.state != SLOT_STATE_GENERATING) {
                     continue; // continue loop of slots
                 }
 
@@ -2664,8 +2662,6 @@ struct server_context {
                     llama_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos,
                                     {slot.id + 1}, true);
                     if (llama_decode(ctx_draft, batch_draft)) {
-                        slot.state = SLOT_STATE_PROCESSING;
-                        slot.command = SLOT_COMMAND_NONE;
                         slot.release();
                         send_error(slot, "Failed to draft decode", ERROR_TYPE_SERVER);
                         continue; // continue loop of slots
@@ -2703,6 +2699,7 @@ struct server_context {
                 }
 
                 if (!process_token(result, slot)) {
+                    // release slot because of stop condition
                     slot.release();
                     send_final_response(slot);
                     metrics.on_prediction(slot);
@@ -3012,7 +3009,7 @@ int main(int argc, char **argv) {
         task.data.push_back({{"reset_bucket", true}});
 
         // post the task
-        task.id = ctx_server.queue_tasks.post(task);
+        task.id = ctx_server.queue_tasks.post(task, true); // high-priority task
         ctx_server.queue_results.add_waiting_task_id(task.id);
 
         // get the result
@@ -3028,6 +3025,9 @@ int main(int argc, char **argv) {
             uint64_t t_tokens_generation_total = data.at("t_tokens_generation_total");
             uint64_t n_tokens_drafted_total = data.at("n_tokens_drafted_total");
             uint64_t n_tokens_drafted_accepted_total = data.at("n_tokens_drafted_accepted_total");
+            uint64_t n_decode_total = data.at("n_decode_total");
+            uint64_t n_busy_slots_total = data.at("n_busy_slots_total");
+
             uint64_t n_prompt_tokens_processed = data.at("n_prompt_tokens_processed");
             uint64_t t_prompt_processing = data.at("t_prompt_processing");
             uint64_t n_tokens_predicted = data.at("n_tokens_predicted");
@@ -3058,7 +3058,13 @@ int main(int argc, char **argv) {
                    {"value", n_tokens_drafted_total}},
                   {{"name", "tokens_drafted_accepted_total"},
                    {"help", "Number of speculative decoding tokens to be accepted."},
-                   {"value", n_tokens_drafted_accepted_total}}}},
+                   {"value", n_tokens_drafted_accepted_total}},
+                  {{"name", "n_decode_total"},
+                   {"help", "Total number of llama_decode() calls"},
+                   {"value", n_decode_total}},
+                  {{"name", "n_busy_slots_per_decode"},
+                   {"help", "Average number of busy slots per llama_decode() call"},
+                   {"value", (float)n_busy_slots_total / (float)n_decode_total}}}},
                 {"gauge",
                  {{{"name", "prompt_tokens_seconds"},
                    {"help", "Average prompt throughput in tokens/s."},
@@ -3153,7 +3159,7 @@ int main(int argc, char **argv) {
         task.type = SERVER_TASK_TYPE_METRICS;
 
         // post the task
-        task.id = ctx_server.queue_tasks.post(task);
+        task.id = ctx_server.queue_tasks.post(task, true); // high-priority task
         ctx_server.queue_results.add_waiting_task_id(task.id);
 
         // get the result
