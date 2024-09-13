@@ -927,30 +927,10 @@ jobs:
 
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
 
-          ## static
           Write-Host "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
-            -DGGML_STATIC=on `
-            -DGGML_OPENMP=off `
-            -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
-          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
-          Write-Host "===== RESULT ====="
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
-          } else {
-              exit 1
-          }
-          Move-Item -Force -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -Destination "${{ github.workspace }}\build\bin\Release\llama-box-with-cudart.exe"
-          
-          ## dynamic
-          Write-Host "===== BUILD ====="
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
-            -DGGML_STATIC=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
