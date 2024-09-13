@@ -830,7 +830,7 @@ struct server_context {
             gpt_sampler_free(check_smpl);
             llama_kv_cache_clear(ctx);
             llama_synchronize(ctx);
-            llama_perf_reset(ctx, LLAMA_PERF_TYPE_CONTEXT);
+            llama_perf_context_reset(ctx);
             LOG_INFO("sampled tokens per second", {{"tps", n_tps}});
         }
 
