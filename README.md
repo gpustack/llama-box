@@ -188,7 +188,7 @@ server:
 server/completion:
 
   -a,    --alias NAME             model name alias (default: unknown)
-  -s,    --seed N                 RNG seed (default: -1, use random seed for < 0)
+  -s,    --seed N                 RNG seed (default: 4294967295, use random seed for 4294967295)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only

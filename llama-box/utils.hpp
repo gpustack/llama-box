@@ -713,6 +713,39 @@ static json oaicompat_embedding_response(const json &request, const json &result
     return res;
 }
 
+static bool is_valid_utf8(const std::string &str) {
+    const auto *bytes = reinterpret_cast<const unsigned char *>(str.data());
+    const unsigned char *end = bytes + str.length();
+
+    while (bytes < end) {
+        if (*bytes <= 0x7F) {
+            // 1-byte sequence (0xxxxxxx)
+            bytes++;
+        } else if ((*bytes & 0xE0) == 0xC0) {
+            // 2-byte sequence (110xxxxx 10xxxxxx)
+            if (end - bytes < 2 || (bytes[1] & 0xC0) != 0x80)
+                return false;
+            bytes += 2;
+        } else if ((*bytes & 0xF0) == 0xE0) {
+            // 3-byte sequence (1110xxxx 10xxxxxx 10xxxxxx)
+            if (end - bytes < 3 || (bytes[1] & 0xC0) != 0x80 || (bytes[2] & 0xC0) != 0x80)
+                return false;
+            bytes += 3;
+        } else if ((*bytes & 0xF8) == 0xF0) {
+            // 4-byte sequence (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
+            if (end - bytes < 4 || (bytes[1] & 0xC0) != 0x80 || (bytes[2] & 0xC0) != 0x80 ||
+                (bytes[3] & 0xC0) != 0x80)
+                return false;
+            bytes += 4;
+        } else {
+            // Invalid UTF-8 lead byte
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static json format_error_response(const std::string &message, const enum error_type type) {
     std::string type_str;
     int code = 500;

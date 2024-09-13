@@ -3047,11 +3047,35 @@ int main(int argc, char **argv) {
             return;
         }
 
+        json tokens_json = json::array();
+
         const bool add_special = json_value(request, "add_special", false);
+        const bool with_pieces = json_value(request, "with_pieces", false);
         const std::vector<llama_token> tokens =
             ctx_server.tokenize(request.at("content"), add_special);
+        if (with_pieces) {
+            for (const llama_token &token : tokens) {
+                json piece_json;
 
-        const json response = json{{"tokens", tokens}};
+                std::string piece = llama_token_to_piece(ctx_server.ctx, token);
+                if (is_valid_utf8(piece)) {
+                    // If valid UTF-8, store as string
+                    piece_json = piece;
+                } else {
+                    // Otherwise, store as array of byte values
+                    piece_json = json::array();
+                    for (unsigned char c : piece) {
+                        piece_json.push_back(static_cast<int>(c));
+                    }
+                }
+
+                tokens_json.push_back({{"id", token}, {"piece", piece_json}});
+            }
+        } else {
+            tokens_json = tokens;
+        }
+
+        const json response = json{{"tokens", tokens_json}};
         res_ok(res, response);
     };
 
