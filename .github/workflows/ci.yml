@@ -59,6 +59,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
@@ -118,6 +119,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -181,6 +183,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
@@ -200,6 +203,7 @@ jobs:
           apt-get update && apt-get install -y binutils pkg-config build-essential git cmake ccache libopenblas-dev
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
@@ -219,7 +223,6 @@ jobs:
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
 
-          echo "===== BUILD ====="
           docker run \
             --rm \
             --privileged \
@@ -280,6 +283,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}/.cache
@@ -300,6 +304,7 @@ jobs:
           apt-get update && apt-get install -y build-essential git cmake ccache
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
@@ -316,7 +321,6 @@ jobs:
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
 
-          echo "===== BUILD ====="
           docker run \
             --rm \
             --privileged \
@@ -346,12 +350,12 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
-        #     12.5 ==> 12.5.0
+        #     12.6 ==> 12.6.1
         #     11.8 ==> 11.8.0
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         arch: [ amd64 ]
-        version: [ '12.5', '11.8' ]
+        version: [ '12.6', '11.8' ]
         size: [ 's', 'l' ]
         exclude:
           - size: 'l'
@@ -376,6 +380,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}/.cache
@@ -396,6 +401,8 @@ jobs:
           apt-get update && apt-get install -y build-essential git cmake ccache
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
+          ## dynamic
+          echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
@@ -408,11 +415,25 @@ jobs:
           else
             exit 1
           fi
+          ## static
+          echo "===== BUILD ====="
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build-static -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_STATIC=on \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}/build-static --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          if [ -f ${{ github.workspace }}/build-static/bin/llama-box ]; then
+            ldd ${{ github.workspace }}/build-static/bin/llama-box
+          else
+            exit 1
+          fi
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
 
-          echo "===== BUILD ====="
           docker run \
             --rm \
             --privileged \
@@ -424,11 +445,12 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            nvidia/cuda:${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}-devel-ubuntu22.04
+            nvidia/cuda:${{ matrix.version == '12.6' && '12.6.1' || '11.8.0' }}-devel-ubuntu22.04
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}-static.zip ${{ github.workspace }}/build-static/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -459,6 +481,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -478,6 +501,7 @@ jobs:
           apt-get update && apt-get install -y build-essential git cmake ccache
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
@@ -494,7 +518,6 @@ jobs:
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
 
-          echo "===== BUILD ====="
           docker run \
             --rm \
             --privileged \
@@ -541,6 +564,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -561,6 +585,7 @@ jobs:
           apt-get update && apt-get install -y build-essential git cmake ccache
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
@@ -577,7 +602,6 @@ jobs:
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
 
-          echo "===== BUILD ====="
           docker run \
             --rm \
             --privileged \
@@ -620,6 +644,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -641,6 +666,7 @@ jobs:
           git config --system --add safe.directory '*'
           curl -s -L https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-$(uname -m).tar.gz | tar -zx -C /usr --strip-components 1
           mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
@@ -657,7 +683,6 @@ jobs:
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
 
-          echo "===== BUILD ====="
           docker run \
             --rm \
             --privileged \
@@ -716,7 +741,6 @@ jobs:
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
-          
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
@@ -769,6 +793,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          save-always: true
           key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}\.cache
@@ -783,14 +808,16 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          Write-Host "I install AMD ROCm HIP SDK"
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
             --url "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-${{ matrix.version == '6.1' && '24.Q3' || '23.Q4' }}-WinSvr2022-For-HIP.exe"
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-install'
 
-          Write-Host "I verify AMD ROCm HIP SDK"
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify AMD ROCm HIP SDK"
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
 
           $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
@@ -803,8 +830,9 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
-          Write-Host "===== BUILD ====="
           Write-Host "HIP_PATH=${env:HIP_PATH}"
+          
+          Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
@@ -814,7 +842,6 @@ jobs:
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
-
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
@@ -836,12 +863,12 @@ jobs:
       fail-fast: false
       matrix:
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
-        #     12.5 ==> 12.5.0
+        #     12.6 ==> 12.6.1
         #     11.8 ==> 11.8.0
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         arch: [ amd64 ]
-        version: [ '12.5', '11.8' ]
+        version: [ '12.6', '11.8' ]
         size: [ 's', 'l' ]
         exclude:
           - size: 'l'
@@ -850,11 +877,10 @@ jobs:
           - size: 's'
             cuda_arch: '80-real;86-real;89'
           - size: 'l'
-            version: '12.5'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89'
     # see https://github.com/actions/runner-images?tab=readme-ov-file#available-images,
     #     https://forums.developer.nvidia.com/t/problems-with-latest-vs2022-update/294150.
-    runs-on: ${{ matrix.version == '12.5' && 'windows-2022' || 'windows-2019' }}
+    runs-on: ${{ matrix.version == '12.6' && 'windows-2022' || 'windows-2019' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -870,16 +896,36 @@ jobs:
           key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}\build
+            ${{ github.workspace }}\build-static
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install curl -y
       - name: Setup CUDA
-        # ensure MSBuildExtensions has been configured,
-        # see https://github.com/NVlabs/tiny-cuda-nn/issues/164#issuecomment-1280749170.
-        uses: Jimver/cuda-toolkit@v0.2.16
-        with:
-          cuda: ${{ matrix.version == '12.5' && '12.5.0' || '11.8.0' }}
-          method: 'network'
-          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
-          use-github-cache: false
-          use-local-cache: false
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
+          $CUDA_VERSION = "${{ matrix.version == '12.6' && '12.6.1' || '11.8.0' }}"
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ runner.temp }}\installer.exe" `
+            --url "https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/network_installers/cuda_${CUDA_VERSION}_windows_network.exe"
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
+          Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
+            -ArgumentList '-s','nvcc_${{ matrix.version }}','cudart_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','thrust_${{ matrix.version }}','visual_studio_integration_${{ matrix.version }}'
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify NVIDIA CUDA SDK"
+          & 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' --version
+          
+          $cudaPath = "$(Resolve-Path -Path 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' | Split-Path | Split-Path)"
+          $cudaVersion=($cudaPath | Split-Path -Leaf ) -replace 'v(\d+).(\d+)', '$1_$2' 
+          "CUDA_PATH=${cudaPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CUDA_PATH_V${cudaVersion}=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CUDA_PATH_VX_Y=CUDA_PATH_V${cudaVersion}" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
@@ -887,8 +933,10 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          Write-Host "===== BUILD ====="
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
+
+          ## dynamic
+          Write-Host "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
@@ -896,10 +944,25 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
-
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
+          } else {
+              exit 1
+          }
+          
+          ## static
+          Write-Host "===== BUILD ====="
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build-static -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}\build-static --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build-static --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== RESULT ====="
+          if (Test-Path -Path "${{ github.workspace }}\build-static\bin\Release\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build-static\bin\Release\llama-box.exe"
           } else {
               exit 1
           }
@@ -907,6 +970,7 @@ jobs:
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build-static\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}-static.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -949,14 +1013,16 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          Write-Host "I install Intel oneAPI SDK"
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download Intel oneAPI SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
             --url "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/${{ matrix.version == '2024.2' && 'e83a8e64-04fc-45df-85c6-c2208d03bdb5/w_BaseKit_p_2024.2.0.635' || '7dff44ba-e3af-4448-841c-0d616c8da6e7/w_BaseKit_p_2024.1.0.595' }}.exe"
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install Intel oneAPI SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
 
-          Write-Host "I verify Intel oneAPI SDK"
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify Intel oneAPI SDK"
           & 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' --version
 
           $oneapiPath = "$(Resolve-Path -Path 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' | Split-Path | Split-Path)"
@@ -968,11 +1034,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
-          Write-Host "===== BUILD ====="
           Write-Host "ONEAPI_PATH=${env:ONEAPI_PATH}"
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
+          
+          Write-Host "===== BUILD ====="
           & "${{ github.workspace }}\llama-box\scripts\build-windows-oneapi.bat" "${{ github.workspace }}" "${{ matrix.arch }}"
-
           Write-Host "===== RESULT ====="
           if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
