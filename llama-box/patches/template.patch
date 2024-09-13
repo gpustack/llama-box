@@ -1,0 +1,31 @@
+diff --git a/src/llama.cpp b/src/llama.cpp
+index 65afcc84..04923ad4 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -20581,6 +20581,26 @@ static int32_t llama_chat_apply_template_internal(
+         if (add_ass) {
+             ss << "[|assistant|]";
+         }
++    } else if (tmpl == "falcon" || (tmpl_contains("Falcon:") && tmpl_contains("message['content']"))) {
++        // Falcon
++        std::string system_prompt = "";
++        for (auto message : chat) {
++            std::string role(message->role);
++            if (role == "system") {
++                system_prompt = trim(message->content);
++            } else if (role == "user") {
++                if (!system_prompt.empty()) {
++                    ss << "\n" << system_prompt << "\n\n\n";
++                    system_prompt = "";
++                }
++                ss << "\nUser: " << trim(message->content) << "\n\n\n";
++            } else if (role == "assistant") {
++                ss << "\nAssistant: " << trim(message->content) << "\n\n\n";
++            }
++        }
++        if (add_ass) {
++          ss << "\nAssistant:";
++        }
+     } else {
+         // template not supported
+         return -1;
