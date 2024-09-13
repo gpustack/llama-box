@@ -59,7 +59,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
@@ -119,7 +118,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -183,7 +181,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
@@ -273,7 +270,7 @@ jobs:
       - name: Maximize Docker Build Space
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
-          deep-clean: ${{ matrix.size == 'l' && 'true' || 'false' }}
+          deep-clean: false
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -283,7 +280,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}/.cache
@@ -370,7 +366,8 @@ jobs:
       - name: Maximize Docker Build Space
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
-          deep-clean: ${{ matrix.size == 'l' && 'true' || 'false' }}
+          deep-clean: false
+          root-reserve-mb: 20480
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -380,7 +377,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}/.cache
@@ -482,7 +478,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -565,7 +560,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -645,7 +639,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
@@ -794,7 +787,6 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          save-always: true
           key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}\.cache
