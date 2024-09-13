@@ -273,7 +273,7 @@ jobs:
       - name: Maximize Docker Build Space
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
-          deep-clean: false
+          deep-clean: ${{ matrix.size == 'l' && 'true' || 'false' }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -370,7 +370,7 @@ jobs:
       - name: Maximize Docker Build Space
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
-          deep-clean: false
+          deep-clean: ${{ matrix.size == 'l' && 'true' || 'false' }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
