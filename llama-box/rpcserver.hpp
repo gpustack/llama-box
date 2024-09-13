@@ -25,6 +25,7 @@
 #include <unistd.h>
 #endif
 
+#include "llama.cpp/ggml/src/ggml-impl.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
