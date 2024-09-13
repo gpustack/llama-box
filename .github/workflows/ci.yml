@@ -401,11 +401,12 @@ jobs:
           apt-get update && apt-get install -y build-essential git cmake ccache
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
-          ## dynamic
+          ## static
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_STATIC=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -415,18 +416,19 @@ jobs:
           else
             exit 1
           fi
-          ## static
+          mv -f ${{ github.workspace }}/build/bin/llama-box ${{ github.workspace }}/build/bin/llama-box-with-cudart
+          ## dynamic
           echo "===== BUILD ====="
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build-static -DCMAKE_BUILD_TYPE=Release \
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
-            -DGGML_STATIC=on \
+            -DGGML_STATIC=off \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}/build-static --target llama-box --config Release -- -j $(nproc)
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
-          if [ -f ${{ github.workspace }}/build-static/bin/llama-box ]; then
-            ldd ${{ github.workspace }}/build-static/bin/llama-box
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
           fi
@@ -450,7 +452,6 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}-static.zip ${{ github.workspace }}/build-static/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -896,7 +897,6 @@ jobs:
           key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
           path: |
             ${{ github.workspace }}\build
-            ${{ github.workspace }}\build-static
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
@@ -935,11 +935,30 @@ jobs:
 
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
 
+          ## static
+          Write-Host "===== BUILD ====="
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_STATIC=on `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== RESULT ====="
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
+          } else {
+              exit 1
+          }
+          Move-Item -Force -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -Destination "${{ github.workspace }}\build\bin\Release\llama-box-with-cudart.exe"
+          
           ## dynamic
           Write-Host "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_STATIC=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -951,27 +970,9 @@ jobs:
               exit 1
           }
           
-          ## static
-          Write-Host "===== BUILD ====="
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build-static -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
-            -DGGML_STATIC=on `
-            -DGGML_OPENMP=off `
-            -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build-static --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
-          cmake --build ${{ github.workspace }}\build-static --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
-          Write-Host "===== RESULT ====="
-          if (Test-Path -Path "${{ github.workspace }}\build-static\bin\Release\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build-static\bin\Release\llama-box.exe"
-          } else {
-              exit 1
-          }
-
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip"
-          Compress-Archive -Path "${{ github.workspace }}\build-static\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}-static.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
