@@ -956,6 +956,7 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build-static -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build-static --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
