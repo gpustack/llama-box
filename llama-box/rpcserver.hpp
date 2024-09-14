@@ -25,10 +25,10 @@
 #include <unistd.h>
 #endif
 
-#include "llama.cpp/ggml/src/ggml-impl.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
+#include "llama.cpp/ggml/src/ggml-impl.h"
 #ifdef GGML_USE_CUDA
 #include "llama.cpp/ggml/include/ggml-cuda.h"
 #endif
@@ -150,7 +150,7 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
     return true;
 }
 
-static ggml_backend_t rpcserver_create_backend(int32_t gpu) {
+static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     ggml_backend_t backend = nullptr;
 
 #ifdef GGML_USE_CUDA
@@ -183,6 +183,7 @@ static ggml_backend_t rpcserver_create_backend(int32_t gpu) {
     if (!backend) {
         LOG_INFO("fallback, using CPU backend", {});
         backend = ggml_backend_cpu_init();
+        gpu = -1;
     }
     return backend;
 }
@@ -278,7 +279,7 @@ bool rpcserver::alloc_buffer(const std::vector<uint8_t> &input, std::vector<uint
     size_t free_mem = get_free_memory();
     if (size > free_mem) {
         LOG_ERROR("alloc_buffer failed: out of memory",
-                  {{"request", size >> 20}, {"free", free_mem >> 20}});
+                  {{"request", size >> 20}, {"free_mib", free_mem >> 20}});
         return false;
     }
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
@@ -289,10 +290,11 @@ bool rpcserver::alloc_buffer(const std::vector<uint8_t> &input, std::vector<uint
         remote_ptr = reinterpret_cast<uint64_t>(buffer);
         remote_size = buffer->size;
         buffers.insert(buffer);
-        LOG_INFO("alloc_buffer",
-                 {{"request", size >> 20}, {"free", free_mem >> 20}, {"remote_ptr", remote_ptr}});
+        LOG_INFO(
+            "alloc_buffer",
+            {{"request", size >> 20}, {"free_mib", free_mem >> 20}, {"remote_ptr", remote_ptr}});
     } else {
-        LOG_ERROR("alloc_buffer failed", {{"request", size >> 20}, {"free", free_mem >> 20}});
+        LOG_ERROR("alloc_buffer failed", {{"request", size >> 20}, {"free_mib", free_mem >> 20}});
     }
     // output serialization format: | remote_ptr (8 bytes) | remote_size (8 bytes) |
     output.resize(2 * sizeof(uint64_t), 0);
@@ -382,10 +384,10 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     memcpy(&offset, input.data() + sizeof(rpc_tensor), sizeof(offset));
     const size_t size = input.size() - sizeof(rpc_tensor) - sizeof(offset);
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/nullptr,
+        /*.no_alloc   =*/true,
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
@@ -426,10 +428,10 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     uint64_t size;
     memcpy(&size, input.data() + sizeof(rpc_tensor) + sizeof(offset), sizeof(size));
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/nullptr,
+        /*.no_alloc   =*/true,
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
@@ -468,10 +470,10 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     const auto *rpc_src = (const rpc_tensor *)input.data();
     const auto *rpc_dst = (const rpc_tensor *)(input.data() + sizeof(rpc_src));
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/2 * ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/nullptr,
+        /*.no_alloc   =*/true,
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *src = deserialize_tensor(ctx, rpc_src);
@@ -547,7 +549,8 @@ size_t rpcserver::get_free_memory() const {
     if (free_mem >= capacity) {
         free_mem = capacity;
     }
-    LOG_INFO("backend memory", {{"allocatable", free_mem >> 20}, {"capacity", total_mem >> 20}});
+    LOG_INFO("backend memory",
+             {{"allocatable_mib", free_mem >> 20}, {"capacity_mib", total_mem >> 20}});
     return free_mem;
 }
 
@@ -724,7 +727,7 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
         return nullptr;
     }
 
-    struct sockaddr_in serv_addr {};
+    struct sockaddr_in serv_addr{};
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(host);
@@ -746,7 +749,7 @@ struct rpcserver_params {
     size_t reserve_memory = 0;
 };
 
-static int rpcserver_start(const rpcserver_params &params) {
+static int rpcserver_start(rpcserver_params &params) {
     LOG_INFO("starting rpc server", {{"hostname", params.hostname}, {"port", params.port}});
 
     ggml_backend_t backend;
@@ -764,12 +767,16 @@ static int rpcserver_start(const rpcserver_params &params) {
     size_t free_mem, total_mem;
     rpcserver_get_backend_memory(params.main_gpu, &free_mem, &total_mem);
     if (total_mem < params.reserve_memory) {
-        LOG_ERROR("not enough memory", {{"free", free_mem >> 20}, {"total", total_mem >> 20}});
+        LOG_ERROR("not enough memory",
+                  {{"free_mib", free_mem >> 20}, {"total_mib", total_mem >> 20}});
         return 1;
     }
     total_mem -= params.reserve_memory;
 
-    LOG_INFO("starting rpc server", {{"hostname", params.hostname}, {"port", params.port}});
+    LOG_INFO("starting rpc server", {{"hostname", params.hostname},
+                                     {"port", params.port},
+                                     {"allocatable_mib", free_mem >> 20},
+                                     {"capacity_mib", total_mem >> 20}});
 #ifdef _WIN32
     {
         WSADATA wsaData;
@@ -787,7 +794,7 @@ static int rpcserver_start(const rpcserver_params &params) {
         return 1;
     }
     while (true) {
-        struct sockaddr_in cli_addr {};
+        struct sockaddr_in cli_addr{};
 
         socklen_t cli_addr_len = sizeof(cli_addr);
         int cli_socketfd = accept(server_socket->fd, (struct sockaddr *)&cli_addr, &cli_addr_len);
