@@ -13,7 +13,8 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 - [Download](#download)
 - [Examples](#examples)
 - [Usage](#usage)
-- [API](#api)
+- [Server API](#server-api)
+- [Tools](#tools)
 
 ## Notes
 

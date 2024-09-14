@@ -172,6 +172,7 @@ jobs:
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
+          root-reserve-mb: 20480
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -192,12 +193,14 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
+          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          apt-get update && apt-get install -y binutils pkg-config build-essential git cmake ccache libopenblas-dev
+          apt-get update -y && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git
+          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -226,11 +229,12 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            ubuntu:22.04
+            ubuntu:20.04
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -245,7 +249,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/rocm/dev-ubuntu-22.04/tags.
+        # see https://hub.docker.com/r/rocm/dev-ubuntu-20.04/tags.
         #     6.2 ==> 6.2.0
         #     6.1 ==> 6.1.2
         # build fat binary,
@@ -271,6 +275,7 @@ jobs:
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
+          root-reserve-mb: 20480
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -291,13 +296,15 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
+          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          apt-get update && apt-get install -y build-essential git cmake ccache
+          apt-get update -y && apt-get install -y build-essential ccache curl git
+          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -325,12 +332,13 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env CC=/opt/rocm/llvm/bin/clang \
             --env CXX=/opt/rocm/llvm/bin/clang++ \
+            --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env AMDGPU_TARGETS \
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            rocm/dev-ubuntu-22.04:${{ matrix.version == '6.2' && '6.2' || '6.1.2' }}-complete
+            rocm/dev-ubuntu-20.04:${{ matrix.version == '6.2' && '6.2' || '6.1.2' }}-complete
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -388,13 +396,15 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
+          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          apt-get update && apt-get install -y build-essential git cmake ccache
+          apt-get update -y && apt-get install -y build-essential ccache curl git
+          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           ## static
@@ -438,12 +448,13 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env CUDA_ARCHITECTURES \
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            nvidia/cuda:${{ matrix.version == '12.6' && '12.6.1' || '11.8.0' }}-devel-ubuntu22.04
+            nvidia/cuda:${{ matrix.version == '12.6' && '12.6.1' || '11.8.0' }}-devel-ubuntu20.04
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -458,9 +469,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
-        #     2024.2 ==> 2024.2.0
-        #     2024.1 ==> 2024.1.1
+        # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel-ubuntu20.04.
+        #     2024.2 ==> 2024.2.1-0
+        #     2024.1 ==> 2024.1.0
         arch: [ amd64 ]
         version: [ '2024.2', '2024.1' ]
     runs-on: ubuntu-22.04
@@ -469,6 +480,7 @@ jobs:
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
+          root-reserve-mb: 20480
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -489,12 +501,14 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
+          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          apt-get update && apt-get install -y build-essential git cmake ccache
+          apt-get update -y && apt-get install -y build-essential ccache curl git
+          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -522,11 +536,12 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env CC=icx \
             --env CXX=icpx \
+            --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            intel/oneapi-basekit:${{ matrix.version == '2024.2' && '2024.2.0' || '2024.1.1' }}-devel-ubuntu22.04
+            intel/oneapi-basekit:${{ matrix.version == '2024.2' && '2024.2.1-0' || '2024.1.0' }}-devel-ubuntu20.04
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -541,8 +556,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=.
-        #     8.0 ==> 8.0.RC1
+        # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=ubuntu20.04.
+        #     8.0 ==> 8.0.rc2.alpha003
         arch: [ amd64, arm64 ]
         version: [ '8.0' ]
     runs-on: ubuntu-22.04
@@ -551,6 +566,7 @@ jobs:
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
+          root-reserve-mb: 20480
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -571,13 +587,15 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
+          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
           source /usr/local/Ascend/ascend-toolkit/set_env.sh
-          apt-get update && apt-get install -y build-essential git cmake ccache
+          apt-get update -y && apt-get install -y build-essential ccache curl git
+          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -603,11 +621,12 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            ascendai/cann:${{ matrix.version }}
+            ascendai/cann:${{ matrix.version == '8.0' && '8.0.rc2.alpha003' }}-910b-ubuntu20.04-py3.9
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -622,6 +641,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu20.04.
+        #     1.5 ==> 1.5.1-mp_22
         arch: [ amd64 ]
         version: [ '1.5' ]
     runs-on: ubuntu-22.04
@@ -630,6 +651,7 @@ jobs:
         uses: gpustack/llama-box/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
+          root-reserve-mb: 20480
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -650,15 +672,15 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           CMAKE_VERSION: "3.22.1"
+          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          apt-get update && apt-get install -y ccache curl git
+          apt-get update -y && apt-get install -y build-essential ccache curl git
+          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
-          curl -s -L https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-$(uname -m).tar.gz | tar -zx -C /usr --strip-components 1
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
@@ -683,6 +705,7 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
