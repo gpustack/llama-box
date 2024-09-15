@@ -260,15 +260,7 @@ jobs:
         #     https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
         arch: [ amd64 ]
         version: [ '6.2', '6.1' ]
-        size: [ 's', 'l' ]
-        exclude:
-          - size: 'l'
-            version: '6.1'
-        include:
-          - size: 's'
-            hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
-          - size: 'l'
-            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
+        hip_arch: [ 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102' ]
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -285,7 +277,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
+          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -342,12 +334,12 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}
+          name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}
 
   linux-cuda:
     strategy:
@@ -360,15 +352,7 @@ jobs:
         # see https://developer.nvidia.com/cuda-gpus.
         arch: [ amd64 ]
         version: [ '12.6', '11.8' ]
-        size: [ 's', 'l' ]
-        exclude:
-          - size: 'l'
-            version: '11.8'
-        include:
-          - size: 's'
-            cuda_arch: '80-real;86-real;89'
-          - size: 'l'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89'
+        cuda_arch: [ '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90' ]
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -385,7 +369,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
+          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -458,12 +442,12 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}
+          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
   linux-oneapi:
     strategy:
@@ -789,16 +773,11 @@ jobs:
         #     https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.
         arch: [ amd64 ]
         version: [ '6.1', '5.7' ]
-        size: [ 's', 'l' ]
+        hip_arch: [ 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102' ]
         exclude:
           # NB(thxCode): https://github.com/ggerganov/llama.cpp/pull/8713#issuecomment-2331104373 has broken the compiling
           #  of ROCm/HIP 5.7, we have temporarily stopped supplying new versions from ROCm/HIP 5.7 until upstream fixes it.
           - version: '5.7'
-        include:
-          - size: 's'
-            hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
-          - size: 'l'
-            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -810,7 +789,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
+          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}\.cache
       - name: Deps
@@ -867,12 +846,12 @@ jobs:
 
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}\\out\\*.zip
-          name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.size }}
+          name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}
 
   windows-cuda:
     strategy:
@@ -885,15 +864,7 @@ jobs:
         # see https://developer.nvidia.com/cuda-gpus.
         arch: [ amd64 ]
         version: [ '12.6', '11.8' ]
-        size: [ 's', 'l' ]
-        exclude:
-          - size: 'l'
-            version: '11.8'
-        include:
-          - size: 's'
-            cuda_arch: '80-real;86-real;89'
-          - size: 'l'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89'
+        cuda_arch: [ '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90' ]
     # see https://github.com/actions/runner-images?tab=readme-ov-file#available-images,
     #     https://forums.developer.nvidia.com/t/problems-with-latest-vs2022-update/294150.
     runs-on: ${{ matrix.version == '12.6' && 'windows-2022' || 'windows-2019' }}
@@ -909,7 +880,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.size }}
+          key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}\build
       - name: Deps
@@ -967,12 +938,12 @@ jobs:
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}\\out\\*.zip
-          name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.size }}
+          name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
   windows-oneapi:
     strategy:
