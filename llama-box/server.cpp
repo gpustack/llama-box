@@ -2225,7 +2225,7 @@ struct server_context {
                                 prompt_tokens = std::move(new_tokens);
 
                                 slot.truncated = true;
-                                slot.n_prompt_tokens = n_system_tokens;
+                                slot.n_prompt_tokens = int32_t(prompt_tokens.size());
 
                                 GGML_ASSERT(slot.n_prompt_tokens < slot.n_ctx);
                             }
