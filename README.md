@@ -172,8 +172,11 @@ general:
 
   -h,    --help, --usage          print usage and exit
          --version                show version and build info
-         --log-format {text,json} 
-                                  log output format: json or text (default: json)
+  -v,    --verbose, --log-verbose 
+                                  set verbosity level to infinity (i.e. log all messages, useful for debugging)
+  -lv,   --verbosity, --log-verbosity V
+                                  set the verbosity threshold, messages with a higher verbosity will be ignored
+         --log-colors             enable colored logging
 
 server:
 
@@ -310,6 +313,7 @@ server/completion:
                                   add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
                                   layer range to apply the control vector(s) to, start and end inclusive
+         --no-warmup              skip warming up the model with an empty run
          --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                special tokens output enabled (default: false)
          --rpc SERVERS            comma separated list of RPC servers
@@ -384,6 +388,7 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_LOOKUP_CACHE_DYNAMIC`: equivalent to `-lcd`, `--lookup-cache-dynamic`.
 - `LLAMA_ARG_RPC_SERVER_HOST`: equivalent to `--rpc-server-host`.
 - `LLAMA_ARG_RPC_SERVER_PORT`: equivalent to `--rpc-server-port`.
+- `LLAMA_LOG_VERBOSITY`: equivalent to `--log-verbosity`.
 
 ## Server API
 

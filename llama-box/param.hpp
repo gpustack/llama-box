@@ -95,8 +95,11 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "general" });
     opts.push_back({ "general",            "-h,    --help, --usage",        "print usage and exit" });
     opts.push_back({ "general",            "       --version",              "show version and build info" });
-    opts.push_back({ "general",            "       --log-format {text,json}",
-                                                                            "log output format: json or text (default: json)" });
+    opts.push_back({ "general",            "-v,    --verbose, --log-verbose",
+                                                                            "set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
+    opts.push_back({ "general",            "-lv,   --verbosity, --log-verbosity V",
+                                                                            "set the verbosity threshold, messages with a higher verbosity will be ignored" });
+    opts.push_back({ "general",            "       --log-colors",           "enable colored logging" });
     // general //
     // server //
     opts.push_back({ "server" });
@@ -249,6 +252,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                             "add a control vector with user defined scaling SCALE" });
     opts.push_back({ "server/completion",  "       --control-vector-layer-range START END",
                                                                             "layer range to apply the control vector(s) to, start and end inclusive" });
+    opts.push_back({ "server/completion",  "       --no-warmup",            "skip warming up the model with an empty run" });
     opts.push_back({ "server/completion",  "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
     opts.push_back({ "server/completion",  "       --rpc SERVERS",          "comma separated list of RPC servers" });
@@ -388,18 +392,26 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 exit(0);
             }
 
-            if (!strcmp(flag, "--log-format")) {
+            if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") ||
+                !strcmp(flag, "--log-verbose")) {
+                bparams.gparams.verbosity = INT_MAX;
+                gpt_log_set_verbosity_thold(INT_MAX);
+                continue;
+            }
+
+            if (!strcmp(flag, "-lv") || !strcmp(flag, "--verbosity") ||
+                !strcmp(flag, "--log-verbosity")) {
                 if (i == argc) {
-                    missing("--log-format");
+                    missing("--log-verbosity");
                 }
                 char *arg = argv[i++];
-                if (!strcmp(arg, "json")) {
-                    bparams.gparams.log_json = true;
-                } else if (!strcmp(arg, "text")) {
-                    bparams.gparams.log_json = false;
-                } else {
-                    unknown("--log-format");
-                }
+                bparams.gparams.verbosity = std::stoi(std::string(arg));
+                gpt_log_set_verbosity_thold(bparams.gparams.verbosity);
+                continue;
+            }
+
+            if (!strcmp(flag, "--log-colors")) {
+                gpt_log_set_colors(gpt_log_main(), true);
                 continue;
             }
 
@@ -1355,6 +1367,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--no-warmup")) {
+                bparams.gparams.warmup = false;
+                continue;
+            }
+
             if (!strcmp(flag, "--spm-infill")) {
                 bparams.gparams.spm_infill = true;
                 continue;
@@ -1667,6 +1684,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     get_env("LLAMA_ARG_LOOKUP_CACHE_DYNAMIC", bparams.gparams.lookup_cache_dynamic);
     get_env("LLAMA_ARG_RPC_SERVER_HOST", bparams.rparams.hostname);
     get_env("LLAMA_ARG_RPC_SERVER_PORT", bparams.rparams.port);
+    get_env("LLAMA_LOG_VERBOSITY", bparams.gparams.verbosity);
 
     return true;
 }

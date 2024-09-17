@@ -25,6 +25,7 @@
 #include <unistd.h>
 #endif
 
+#include "llama.cpp/common/log.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
@@ -154,34 +155,34 @@ static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     ggml_backend_t backend = nullptr;
 
 #ifdef GGML_USE_CUDA
-    LOG_INFO("using CUDA backend", {{"gpu", gpu}});
+    SRV_INF("using CUDA backend, gpu: %d\n", gpu);
     backend = ggml_backend_cuda_init(gpu);
     if (!backend) {
-        LOG_ERROR("ggml_backend_cuda_init() failed", {{"gpu", gpu}});
+        SRV_ERR("ggml_backend_cuda_init(%d) failed\n", gpu);
     }
 #elif GGML_USE_METAL
-    LOG_INFO("using METAL backend", {});
+    SRV_INF("using METAL backend, gpu: %d\n", gpu);
     backend = ggml_backend_metal_init();
     if (!backend) {
-        LOG_ERROR("ggml_backend_metal_init() failed", {});
+        SRV_ERR("%s", "ggml_backend_metal_init() failed\n");
     }
 #elif GGML_USE_CANN
-    LOG_INFO("using CANN backend", {{"gpu", gpu}});
+    SRV_INF("using CANN backend, gpu: %d\n", gpu);
     backend = ggml_backend_cann_init(gpu);
     if (!backend) {
-        LOG_ERROR("ggml_backend_cann_init() failed", {{"gpu", gpu}});
+        SRV_ERR("ggml_backend_cann_init(%d) failed\n", gpu);
     }
 #elif GGML_USE_SYCL
-    LOG_INFO("using SYCL backend", {{"gpu", gpu}});
+    SRV_INF("using SYCL backend, gpu: %d\n", gpu);
     backend = ggml_backend_sycl_init(gpu);
     if (!backend) {
-        LOG_ERROR("ggml_backend_sycl_init() failed", {{"gpu", gpu}});
+        SRV_ERR("ggml_backend_sycl_init(%d) failed\n", gpu);
     }
 #endif
 
     // if there aren't GPU Backends fallback to CPU backend
     if (!backend) {
-        LOG_INFO("fallback, using CPU backend", {});
+        SRV_INF("%s", "fallback, using CPU backend\n");
         backend = ggml_backend_cpu_init();
         gpu = -1;
     }
@@ -272,14 +273,16 @@ rpcserver::~rpcserver() {
 bool rpcserver::alloc_buffer(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
     // input serialization format: | size (8 bytes) |
     if (input.size() != sizeof(uint64_t)) {
+        SRV_ERR("%s", "failed: input size invalid\n");
         return false;
     }
     uint64_t size;
     memcpy(&size, input.data(), sizeof(size));
     size_t free_mem = get_free_memory();
     if (size > free_mem) {
-        LOG_ERROR("alloc_buffer failed: out of memory",
-                  {{"request", size >> 20}, {"free_mib", free_mem >> 20}});
+        SRV_ERR("failed: out of memory, "
+                "request_mib = %llu, free_mib = %zu\n",
+                size >> 20, free_mem >> 20);
         return false;
     }
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
@@ -290,16 +293,16 @@ bool rpcserver::alloc_buffer(const std::vector<uint8_t> &input, std::vector<uint
         remote_ptr = reinterpret_cast<uint64_t>(buffer);
         remote_size = buffer->size;
         buffers.insert(buffer);
-        LOG_INFO(
-            "alloc_buffer",
-            {{"request", size >> 20}, {"free_mib", free_mem >> 20}, {"remote_ptr", remote_ptr}});
     } else {
-        LOG_ERROR("alloc_buffer failed", {{"request", size >> 20}, {"free_mib", free_mem >> 20}});
+        SRV_ERR("failed: buffer allocation failed, "
+                "request_mib = %llu, free_mib = %zu\n",
+                size >> 20, free_mem >> 20);
     }
     // output serialization format: | remote_ptr (8 bytes) | remote_size (8 bytes) |
     output.resize(2 * sizeof(uint64_t), 0);
     memcpy(output.data(), &remote_ptr, sizeof(remote_ptr));
     memcpy(output.data() + sizeof(uint64_t), &remote_size, sizeof(remote_size));
+    SRV_DBG("remote_ptr = %llu, request_mib = %llu\n", remote_ptr, size >> 20);
     return true;
 }
 
@@ -309,6 +312,7 @@ void rpcserver::get_alignment(std::vector<uint8_t> &output) {
     // output serialization format: | alignment (8 bytes) |
     output.resize(sizeof(uint64_t), 0);
     memcpy(output.data(), &alignment, sizeof(alignment));
+    SRV_DBG("alignment = %zu\n", alignment);
 }
 
 void rpcserver::get_max_size(std::vector<uint8_t> &output) {
@@ -317,6 +321,7 @@ void rpcserver::get_max_size(std::vector<uint8_t> &output) {
     // output serialization format: | max_size (8 bytes) |
     output.resize(sizeof(uint64_t), 0);
     memcpy(output.data(), &max_size, sizeof(max_size));
+    SRV_DBG("max_size = %zu\n", max_size);
 }
 
 bool rpcserver::buffer_get_base(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
@@ -328,7 +333,7 @@ bool rpcserver::buffer_get_base(const std::vector<uint8_t> &input, std::vector<u
     memcpy(&remote_ptr, input.data(), sizeof(remote_ptr));
     auto buffer = reinterpret_cast<ggml_backend_buffer_t>(remote_ptr);
     if (buffers.find(buffer) == buffers.end()) {
-        LOG_ERROR("buffer_get_base failed", {{"remote_ptr", remote_ptr}});
+        SRV_ERR("failed: remote_ptr = %llu\n", remote_ptr);
         return false;
     }
     void *base = ggml_backend_buffer_get_base(buffer);
@@ -336,29 +341,33 @@ bool rpcserver::buffer_get_base(const std::vector<uint8_t> &input, std::vector<u
     auto base_ptr = reinterpret_cast<uint64_t>(base);
     output.resize(sizeof(uint64_t), 0);
     memcpy(output.data(), &base_ptr, sizeof(base_ptr));
+    SRV_DBG("remote_ptr = %llu, base_ptr = %llu\n", remote_ptr, base_ptr);
     return true;
 }
 
 bool rpcserver::free_buffer(const std::vector<uint8_t> &input) {
     // input serialization format: | remote_ptr (8 bytes) |
     if (input.size() != sizeof(uint64_t)) {
+        SRV_ERR("%s", "failed: input size invalid\n");
         return false;
     }
     uint64_t remote_ptr;
     memcpy(&remote_ptr, input.data(), sizeof(remote_ptr));
     auto buffer = reinterpret_cast<ggml_backend_buffer_t>(remote_ptr);
     if (buffers.find(buffer) == buffers.end()) {
-        LOG_ERROR("free_buffer failed", {{"remote_ptr", remote_ptr}});
+        SRV_ERR("failed: not found remote_ptr = %llu\n", remote_ptr);
         return false;
     }
     ggml_backend_buffer_free(buffer);
     buffers.erase(buffer);
+    SRV_DBG("remote_ptr = %llu\n", remote_ptr);
     return true;
 }
 
 bool rpcserver::buffer_clear(const std::vector<uint8_t> &input) {
     // input serialization format: | remote_ptr (8 bytes) | value (1 byte) |
     if (input.size() != sizeof(uint64_t) + sizeof(uint8_t)) {
+        SRV_ERR("%s", "failed: input size invalid\n");
         return false;
     }
     uint64_t remote_ptr;
@@ -367,16 +376,18 @@ bool rpcserver::buffer_clear(const std::vector<uint8_t> &input) {
     memcpy(&value, input.data() + sizeof(uint64_t), sizeof(value));
     auto buffer = reinterpret_cast<ggml_backend_buffer_t>(remote_ptr);
     if (buffers.find(buffer) == buffers.end()) {
-        LOG_ERROR("buffer_clear failed", {{"remote_ptr", remote_ptr}});
+        SRV_ERR("failed: not found remote_ptr = %llu\n", remote_ptr);
         return false;
     }
     ggml_backend_buffer_clear(buffer, value);
+    SRV_DBG("remote_ptr = %llu\n", remote_ptr);
     return true;
 }
 
 bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     // serialization format: | rpc_tensor | offset (8 bytes) | data (size bytes) |
     if (input.size() < sizeof(rpc_tensor) + sizeof(uint64_t)) {
+        SRV_ERR("%s", "failed: input size invalid\n");
         return false;
     }
     const auto *in_tensor = (const rpc_tensor *)input.data();
@@ -392,7 +403,7 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
     if (tensor == nullptr) {
-        LOG_ERROR("set_tensor failed: error deserializing tensor", {});
+        SRV_ERR("%s", "failed: error deserializing tensor\n");
         ggml_free(ctx);
         return false;
     }
@@ -404,7 +415,7 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
 
         if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 ||
             size > (p1 - in_tensor->data - offset)) {
-            LOG_ERROR("set_tensor failed: tensor->data out of bounds", {});
+            SRV_ERR("%s", "failed: tensor->data out of bounds\n");
             delete tensor;
             ggml_free(ctx);
             return false;
@@ -414,12 +425,14 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     const void *data = input.data() + sizeof(rpc_tensor) + sizeof(offset);
     ggml_backend_tensor_set(tensor, data, offset, size);
     ggml_free(ctx);
+    SRV_DBG("id = %llu, size = %zu\n", in_tensor->id, size);
     return true;
 }
 
 bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
     // serialization format: | rpc_tensor | offset (8 bytes) | size (8 bytes) |
     if (input.size() != sizeof(rpc_tensor) + 2 * sizeof(uint64_t)) {
+        SRV_ERR("%s", "failed: input size invalid\n");
         return false;
     }
     const auto *in_tensor = (const rpc_tensor *)input.data();
@@ -436,7 +449,7 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
     if (tensor == nullptr) {
-        LOG_ERROR("get_tensor failed: error deserializing tensor", {});
+        SRV_ERR("%s", "failed: error deserializing tensor\n");
         ggml_free(ctx);
         return false;
     }
@@ -448,7 +461,7 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
 
         if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 ||
             size > (p1 - in_tensor->data - offset)) {
-            LOG_ERROR("get_tensor failed: tensor->data out of bounds", {});
+            SRV_ERR("%s", "failed: tensor->data out of bounds\n");
             delete tensor;
             ggml_free(ctx);
             return false;
@@ -459,12 +472,14 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     output.resize(size, 0);
     ggml_backend_tensor_get(tensor, output.data(), offset, size);
     ggml_free(ctx);
+    SRV_DBG("id = %llu, size = %llu\n", in_tensor->id, size);
     return true;
 }
 
 bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
     // serialization format: | rpc_tensor src | rpc_tensor dst |
     if (input.size() != 2 * sizeof(rpc_tensor)) {
+        SRV_ERR("%s", "failed: input size invalid\n");
         return false;
     }
     const auto *rpc_src = (const rpc_tensor *)input.data();
@@ -479,7 +494,7 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     ggml_tensor *src = deserialize_tensor(ctx, rpc_src);
     ggml_tensor *dst = deserialize_tensor(ctx, rpc_dst);
     if (src == nullptr || dst == nullptr) {
-        LOG_ERROR("copy_tensor failed: error deserializing tensor", {});
+        SRV_ERR("%s", "failed: error deserializing tensor\n");
         ggml_free(ctx);
         return false;
     }
@@ -489,6 +504,7 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     output.resize(1, 0);
     output[0] = result;
     ggml_free(ctx);
+    SRV_DBG("src_id = %llu, dst_id = %llu\n", rpc_src->id, rpc_dst->id);
     return true;
 }
 
@@ -497,11 +513,13 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     // | n_nodes (4 bytes) | nodes (n_nodes * sizeof(uint64_t) | n_tensors (4 bytes) | tensors
     // (n_tensors * sizeof(rpc_tensor)) |
     if (input.size() < sizeof(uint32_t)) {
+        SRV_ERR("%s", "failed: input size too short\n");
         return false;
     }
     uint32_t n_nodes;
     memcpy(&n_nodes, input.data(), sizeof(n_nodes));
     if (input.size() < sizeof(uint32_t) + n_nodes * sizeof(uint64_t) + sizeof(uint32_t)) {
+        SRV_ERR("%s", "failed: input size too short\n");
         return false;
     }
     const auto *nodes = (const uint64_t *)(input.data() + sizeof(n_nodes));
@@ -510,6 +528,7 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
            sizeof(n_tensors));
     if (input.size() < sizeof(uint32_t) + n_nodes * sizeof(uint64_t) + sizeof(uint32_t) +
                            n_tensors * sizeof(rpc_tensor)) {
+        SRV_ERR("%s", "failed: input size too short\n");
         return false;
     }
     const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) +
@@ -540,6 +559,7 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     output.resize(1, 0);
     output[0] = status;
     ggml_free(ctx);
+    SRV_DBG("status = %d\n", status);
     return true;
 }
 
@@ -549,8 +569,7 @@ size_t rpcserver::get_free_memory() const {
     if (free_mem >= capacity) {
         free_mem = capacity;
     }
-    LOG_INFO("backend memory",
-             {{"allocatable_mib", free_mem >> 20}, {"capacity_mib", total_mem >> 20}});
+    SRV_DBG("allocatable_mib = %zu, capacity_mib = %zu\n", free_mem >> 20, total_mem >> 20);
     return free_mem;
 }
 
@@ -562,6 +581,7 @@ ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_t
     }
     result->buffer = reinterpret_cast<ggml_backend_buffer_t>(tensor->buffer);
     if (result->buffer && buffers.find(result->buffer) == buffers.end()) {
+        SRV_ERR("%s", "failed: buffer not found\n");
         return nullptr;
     }
 
@@ -596,6 +616,7 @@ rpcserver::create_node(uint64_t id, struct ggml_context *ctx,
     const rpc_tensor *tensor = tensor_ptrs.at(id);
     struct ggml_tensor *result = deserialize_tensor(ctx, tensor);
     if (result == nullptr) {
+        SRV_ERR("failed: error deserializing tensor, id = %llu\n", id);
         return nullptr;
     }
     tensor_map[id] = result;
@@ -604,6 +625,7 @@ rpcserver::create_node(uint64_t id, struct ggml_context *ctx,
     }
     result->view_src = create_node(tensor->view_src, ctx, tensor_ptrs, tensor_map);
     result->view_offs = tensor->view_offs;
+    SRV_DBG("id = %llu, type = %u\n", id, tensor->type);
     return result;
 }
 
@@ -616,23 +638,28 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
         }
         if (cmd >= RPC_CMD_COUNT) {
             // fail fast if the command is invalid
-            LOG_ERROR("unknown command", {{"cmd", cmd}});
+            SRV_ERR("unknown command: %d\n", cmd);
             break;
         }
         std::vector<uint8_t> input;
         std::vector<uint8_t> output;
         uint64_t input_size;
         if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
-            LOG_ERROR("failed to receive input size", {});
+            SRV_ERR("cmd %d: failed to receive input size\n", cmd);
             break;
         }
         try {
             input.resize(input_size);
         } catch (const std::bad_alloc &e) {
-            LOG_ERROR("failed to allocate input buffer", {{"size", input_size}});
+            SRV_ERR("cmd %d: failed to allocate input buffer: "
+                    "request_b = %llu\n",
+                    cmd, input_size);
             break;
         }
         if (!rpc_recv_data(sockfd, input.data(), input_size)) {
+            SRV_ERR("cmd %d: failed to receive input data: "
+                    "request_b = %llu\n",
+                    cmd, input_size);
             break;
         }
         bool ok = true;
@@ -695,11 +722,15 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
         }
         uint64_t output_size = output.size();
         if (!rpc_send_data(sockfd, &output_size, sizeof(output_size))) {
-            LOG_ERROR("failed to send output size", {});
+            SRV_ERR("cmd %d: failed to send output size, "
+                    "b = %llu\n",
+                    cmd, output_size);
             break;
         }
         if (!rpc_send_data(sockfd, output.data(), output_size)) {
-            LOG_ERROR("failed to send output data", {});
+            SRV_ERR("cmd %d: failed to send output data, "
+                    "b = %llu\n",
+                    cmd, output_size);
             break;
         }
         output.clear();
@@ -713,17 +744,18 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     std::shared_ptr<rpc_socket_t> srv_socket = rpc_socket_create(sockfd);
     if (srv_socket == nullptr) {
+        SRV_ERR("%s", "failed to create server socket\n");
         return nullptr;
     }
 
     int flag = 1;
     int ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&flag, sizeof(int));
     if (ret != 0) {
-        LOG_ERROR("failed to set server socket SO_REUSEADDR", {});
+        SRV_ERR("failed to set server socket SO_REUSEADDR, errno = %d\n", ret);
         return nullptr;
     }
     if (inet_addr(host) == INADDR_NONE) {
-        LOG_ERROR("invalid host address", {{"host", host}});
+        SRV_ERR("failed to create server socket, host = %s\n", host);
         return nullptr;
     }
 
@@ -736,6 +768,7 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
         return nullptr;
     }
     if (listen(sockfd, 1) < 0) {
+        SRV_ERR("%s", "failed to listen on server socket\n");
         return nullptr;
     }
 
@@ -750,39 +783,37 @@ struct rpcserver_params {
 };
 
 static int rpcserver_start(rpcserver_params &params) {
-    LOG_INFO("starting rpc server", {{"hostname", params.hostname}, {"port", params.port}});
-
     ggml_backend_t backend;
     if (params.main_gpu < 0) {
-        LOG_INFO("using CPU backend", {});
+        SRV_INF("%s", "using CPU backend\n");
         backend = ggml_backend_cpu_init();
     } else {
         backend = rpcserver_create_backend(params.main_gpu);
     }
     if (!backend) {
-        LOG_ERROR("failed to create backend", {});
+        SRV_ERR("%s", "failed to create backend\n");
         return 1;
     }
 
     size_t free_mem, total_mem;
     rpcserver_get_backend_memory(params.main_gpu, &free_mem, &total_mem);
     if (total_mem < params.reserve_memory) {
-        LOG_ERROR("not enough memory",
-                  {{"free_mib", free_mem >> 20}, {"total_mib", total_mem >> 20}});
+        SRV_ERR("not enough memory, "
+                "free_mib = %zu, total_mib = %zu, reserve_mib = %zu\n",
+                free_mem >> 20, total_mem >> 20, params.reserve_memory >> 20);
         return 1;
     }
     total_mem -= params.reserve_memory;
 
-    LOG_INFO("starting rpc server", {{"hostname", params.hostname},
-                                     {"port", params.port},
-                                     {"allocatable_mib", free_mem >> 20},
-                                     {"capacity_mib", total_mem >> 20}});
+    SRV_INF("listening "
+            "hostname = %s, port = %d, allocatable_mib = %zu, capacity_mib = %zu\n",
+            params.hostname.c_str(), params.port, free_mem >> 20, total_mem >> 20);
 #ifdef _WIN32
     {
         WSADATA wsaData;
-        int res = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (res != 0) {
-            LOG_ERROR("WSAStartup failed", {{"result", res}});
+        int ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (ret != 0) {
+            SRV_ERR("WSAStartup failed, errno = %d\n", ret);
             return 1;
         }
     }
@@ -790,7 +821,7 @@ static int rpcserver_start(rpcserver_params &params) {
     std::shared_ptr<rpc_socket_t> server_socket =
         rpcserver_socket_create(params.hostname.c_str(), params.port);
     if (server_socket == nullptr) {
-        LOG_ERROR("failed to create server socket", {});
+        SRV_ERR("%s", "failed to create server socket\n");
         return 1;
     }
     while (true) {
@@ -800,14 +831,14 @@ static int rpcserver_start(rpcserver_params &params) {
         int cli_socketfd = accept(server_socket->fd, (struct sockaddr *)&cli_addr, &cli_addr_len);
         std::shared_ptr<rpc_socket_t> cli_socket = rpc_socket_create(cli_socketfd);
         if (cli_socket == nullptr) {
-            LOG_ERROR("failed to accept client connection", {});
+            SRV_ERR("%s", "failed to accept client connection\n");
             continue;
         }
 
         int flag = 1;
         int ret = setsockopt(cli_socketfd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
         if (ret != 0) {
-            LOG_ERROR("failed to set client socket TCP_NODELAY", {});
+            SRV_ERR("failed to set client socket TCP_NODELAY, errno = %d\n", ret);
             continue;
         }
 
@@ -818,20 +849,19 @@ static int rpcserver_start(rpcserver_params &params) {
         try {
             int32_t main_gpu = params.main_gpu;
             std::thread([backend, main_gpu, total_mem, cli_socket, cli_ip, cli_port]() {
-                LOG_INFO("accepted client connection", {{"ip", cli_ip}, {"port", cli_port}});
+                LOG_INF("cli %25s: %s:%d\n", "accepted", cli_ip, cli_port);
                 rpcserver_serve(backend, main_gpu, total_mem, cli_socket->fd);
-                LOG_INFO("closed client connection", {{"ip", cli_ip}, {"port", cli_port}});
+                LOG_INF("cli %25s: %s:%d\n", "closed", cli_ip, cli_port);
             }).detach();
         } catch (const std::system_error &e) {
-            LOG_ERROR("failed to process client connection",
-                      {{"ip", cli_ip}, {"port", cli_port}, {"error", e.what()}});
+            SRV_ERR("failed to process %s %d, error = %s\n", cli_ip, cli_port, e.what());
         }
     }
 #ifdef _WIN32
     WSACleanup();
 #endif
 
-    LOG_INFO("stopped rpc server", {});
+    SRV_INF("%s", "stopped rpc server\n");
     ggml_backend_free(backend);
     return 0;
 }

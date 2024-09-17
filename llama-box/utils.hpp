@@ -8,12 +8,36 @@
 #include "llama.cpp/common/common.h"
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/json.hpp"
+#include "llama.cpp/common/log.h"
 #include "llama.cpp/include/llama.h"
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
 #include "llama.cpp/examples/server/httplib.h"
 
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
+
+#define SLT_INF(slot, fmt, ...)                                                              \
+    LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
+            __VA_ARGS__)
+#define SLT_WRN(slot, fmt, ...)                                                              \
+    LOG_WRN("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
+            __VA_ARGS__)
+#define SLT_ERR(slot, fmt, ...)                                                              \
+    LOG_ERR("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
+            __VA_ARGS__)
+#define SLT_DBG(slot, fmt, ...)                                                              \
+    LOG_DBG("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
+            __VA_ARGS__)
+
+#define SRV_INF(fmt, ...) LOG_INF("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_WRN(fmt, ...) LOG_WRN("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_ERR(fmt, ...) LOG_ERR("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_DBG(fmt, ...) LOG_DBG("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+
+#define QUE_INF(fmt, ...) LOG_INF("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_WRN(fmt, ...) LOG_WRN("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_ERR(fmt, ...) LOG_ERR("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_DBG(fmt, ...) LOG_DBG("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 
 using json = nlohmann::json;
 
@@ -28,13 +52,6 @@ enum error_type {
     ERROR_TYPE_NOT_SUPPORTED, // custom error
 };
 
-#define LOG_ERROR(MSG, ...) server_log("ERR", __func__, __LINE__, MSG, __VA_ARGS__)
-#define LOG_WARNING(MSG, ...) server_log("WARN", __func__, __LINE__, MSG, __VA_ARGS__)
-#define LOG_INFO(MSG, ...) server_log("INFO", __func__, __LINE__, MSG, __VA_ARGS__)
-
-static inline void server_log(const char *level, const char *function, int line,
-                              const char *message, const json &extra);
-
 template <typename T>
 static T json_value(const json &body, const std::string &key, const T &default_value) {
     // Fallback null to default value
@@ -42,61 +59,13 @@ static T json_value(const json &body, const std::string &key, const T &default_v
         try {
             return body.at(key);
         } catch (NLOHMANN_JSON_NAMESPACE::detail::type_error const &) {
-            std::stringstream ss;
-            ss << "Wrong type supplied for parameter '" << key << "'. Expected '"
-               << json(default_value).type_name() << "', using default value.";
-            LOG_WARNING(ss.str().c_str(), body);
+            SRV_WRN("wrong type supplied for parameter '%s'. Expected '%s', using default value\n",
+                    key.c_str(), json(default_value).type_name());
             return default_value;
         }
     } else {
         return default_value;
     }
-}
-
-extern bool server_log_json;
-
-static inline void server_log(const char *level, const char *function, int line,
-                              const char *message, const json &extra) {
-    std::stringstream ss_tid;
-    ss_tid << std::this_thread::get_id();
-    json log = json{
-        {"tid", ss_tid.str()},
-        {"ts", time(nullptr)},
-    };
-
-    if (server_log_json) {
-        log.merge_patch({
-            {"level", level},
-            {"function", function},
-            {"line", line},
-            {"msg", message},
-        });
-
-        if (!extra.empty()) {
-            log.merge_patch(extra);
-        }
-
-        printf("%s\n", log.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
-        fflush(stdout);
-        return;
-    }
-
-    char buf[1024];
-    snprintf(buf, 1024, "%4s [%30s] %s", level, function, message);
-
-    if (!extra.empty()) {
-        log.merge_patch(extra);
-    }
-    std::stringstream ss;
-    ss << buf << " |";
-    for (const auto &el : log.items()) {
-        const std::string value = el.value().dump(-1, ' ', false, json::error_handler_t::replace);
-        ss << " " << el.key() << "=" << value;
-    }
-
-    const std::string str = ss.str();
-    printf("%.*s\n", (int)str.size(), str.data());
-    fflush(stdout);
 }
 
 //
@@ -221,10 +190,7 @@ static std::string random_string() {
 }
 
 static std::string gen_chatcmplid() {
-    std::stringstream chatcmplid;
-    chatcmplid << "chatcmpl-" << random_string();
-
-    return chatcmplid.str();
+    return "chatcmpl-" + random_string();
 }
 
 static std::string gen_cmplid() {
@@ -275,14 +241,9 @@ static size_t find_partial_stop_string(const std::string &stop, const std::strin
     return std::string::npos;
 }
 
-static bool json_is_array_of_numbers(json data) {
+static bool json_is_array_of_numbers(const json &data) {
     if (data.is_array()) {
-        for (const auto &e : data) {
-            if (!e.is_number()) {
-                return false;
-            }
-        }
-        return true;
+        return std::all_of(data.begin(), data.end(), [](const json &e) { return e.is_number(); });
     }
     return false;
 }
@@ -413,7 +374,7 @@ static json probs_vector_to_json(const llama_context *ctx,
     return out;
 }
 
-static bool server_sent_event(httplib::DataSink &sink, const char *event, json &data) {
+static bool server_sent_event(httplib::DataSink &sink, const char *event, const json &data) {
     const std::string str = std::string(event) + ": " +
                             data.dump(-1, ' ', false, json::error_handler_t::replace) + "\n\n";
     return sink.write(str.c_str(), str.size());
@@ -433,7 +394,8 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
         } else if (body_cp.contains("prompt")) {
             body_cp["prompt"] = "...";
         }
-        LOG_INFO("OAI request", {{"params", body_cp}});
+        SRV_INF("params: %s\n",
+                body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     bool chat = !chat_template.empty();
@@ -676,7 +638,8 @@ static json oaicompat_embedding_request(const struct gpt_params &params, const j
         } else {
             body_cp["input"] = "[...]";
         }
-        LOG_INFO("OAI request", {{"params", body_cp}});
+        SRV_INF("params: %s\n",
+                body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
