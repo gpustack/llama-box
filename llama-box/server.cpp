@@ -567,23 +567,38 @@ struct server_response {
 
     // add the id_task to the list of tasks waiting for response
     void add_waiting_task_id(int id_task) {
-        SRV_DBG("waiting for task id = %d\n", id_task);
         std::unique_lock<std::mutex> lock(mutex_results);
+        SRV_DBG("add task %d to waiting list. current waiting = %d (before add)\n", id_task,
+                (int)waiting_task_ids.size());
         waiting_task_ids.insert(id_task);
     }
 
     // add all tasks to the list of tasks waiting for response
     void add_waiting_tasks(const std::vector<server_task> &tasks) {
-        for (const auto &t : tasks) {
-            add_waiting_task_id(t.id);
+        std::unique_lock<std::mutex> lock(mutex_results);
+        for (const auto &task : tasks) {
+            SRV_DBG("add task %d to waiting list. current waiting = %d (before add)\n", task.id,
+                    (int)waiting_task_ids.size());
+            waiting_task_ids.insert(task.id);
         }
     }
 
     // when the request is finished, we can remove task associated with it
     void remove_waiting_task_id(int id_task) {
-        SRV_DBG("task id = %d is done\n", id_task);
+        SRV_DBG("remove task %d from waiting list. current waiting = %d (before remove)\n", id_task,
+                (int)waiting_task_ids.size());
         std::unique_lock<std::mutex> lock(mutex_results);
         waiting_task_ids.erase(id_task);
+    }
+
+    // remove tasks from the list of tasks waiting for response
+    void remove_waiting_task_ids(const std::unordered_set<int> &id_tasks) {
+        std::unique_lock<std::mutex> lock(mutex_results);
+        for (const auto &id_task : id_tasks) {
+            SRV_DBG("remove task %d from waiting list. current waiting = %d (before remove)\n",
+                    id_task, (int)waiting_task_ids.size());
+            waiting_task_ids.erase(id_task);
+        }
     }
 
     // this function blocks the thread until there is a response for the id_task
@@ -1690,10 +1705,10 @@ struct server_context {
             task.type = SERVER_TASK_TYPE_CANCEL;
             task.id_target = id_task;
             cancel_tasks.push_back(task);
-            queue_results.remove_waiting_task_id(id_task);
         }
         // push to beginning of the queue, so it has highest priority
         queue_tasks.post(cancel_tasks, true);
+        queue_results.remove_waiting_task_ids(id_tasks);
     }
 
     // receive the results from task(s) created by create_tasks_cmpl
@@ -1707,7 +1722,6 @@ struct server_context {
 
             if (result.error) {
                 error_handler(result.data);
-                cancel_tasks(id_tasks);
                 break;
             }
 
@@ -1725,13 +1739,11 @@ struct server_context {
         while (true) {
             server_task_result result = queue_results.recv(id_tasks);
             if (!result_handler(result)) {
-                cancel_tasks(id_tasks);
                 break;
             }
 
             if (result.error) {
                 error_handler(result.data);
-                cancel_tasks(id_tasks);
                 break;
             }
 
@@ -3384,6 +3396,7 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
+            ctx_server.cancel_tasks(task_ids);
             return;
         }
 
@@ -3401,7 +3414,6 @@ int main(int argc, char **argv) {
                         std::string pps = std::to_string(json_value(
                             result.data.at("timings"), "predicted_per_second", double(tps)));
                         sink.done_with_trailer({{"X-Response-Tokens-Per-Second", pps}});
-                        return false;
                     }
                     return true;
                 },
@@ -3508,6 +3520,7 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
+            ctx_server.cancel_tasks(task_ids);
             return;
         }
 
@@ -3533,7 +3546,6 @@ int main(int argc, char **argv) {
                         std::string pps = std::to_string(json_value(
                             result.data.at("timings"), "predicted_per_second", double(tps)));
                         sink.done_with_trailer({{"X-Response-Tokens-Per-Second", pps}});
-                        return false;
                     }
                     return true;
                 },
@@ -3633,6 +3645,7 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
+            ctx_server.cancel_tasks(task_ids);
             return;
         }
 
@@ -3670,7 +3683,6 @@ int main(int argc, char **argv) {
                         std::string pps = std::to_string(json_value(
                             result.data.at("timings"), "predicted_per_second", double(tps)));
                         sink.done_with_trailer({{"X-Response-Tokens-Per-Second", pps}});
-                        return false;
                     }
                     return true;
                 },
@@ -3715,6 +3727,8 @@ int main(int argc, char **argv) {
                 res_ok(res, embeddings_json);
             },
             [&](const json &error_data) { res_error(res, error_data); });
+
+        ctx_server.cancel_tasks(task_ids);
     };
 
     //
