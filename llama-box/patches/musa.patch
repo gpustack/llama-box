@@ -1,8 +1,16 @@
 diff --git a/ggml/src/ggml-cuda/vendors/musa.h b/ggml/src/ggml-cuda/vendors/musa.h
-index 8df57114..e50a103a 100644
+index 8df57114..dc075c54 100644
 --- a/ggml/src/ggml-cuda/vendors/musa.h
 +++ b/ggml/src/ggml-cuda/vendors/musa.h
-@@ -130,3 +130,42 @@
+@@ -78,6 +78,7 @@
+ #define cudaStreamWaitEvent musaStreamWaitEvent
+ #define cudaStream_t musaStream_t
+ #define cudaSuccess musaSuccess
++#define cublasOperation_t mublasOperation_t
+ 
+ // Additional mappings for MUSA virtual memory pool
+ #define CU_DEVICE_ATTRIBUTE_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED MU_DEVICE_ATTRIBUTE_VIRTUAL_ADDRESS_MANAGEMENT_SUPPORTED
+@@ -130,3 +131,42 @@
  #define cudaKernelNodeParams musaKernelNodeParams
  #define cudaStreamCaptureModeRelaxed musaStreamCaptureModeRelaxed
  #define cudaStreamEndCapture musaStreamEndCapture
