@@ -192,7 +192,7 @@ jobs:
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v3
         with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: "arm64"
       - name: Build
         env:
@@ -215,7 +215,7 @@ jobs:
                 dnf config-manager --set-enabled crb
               fi
               yum update -y \
-                && yum install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas ccache curl git
+                && yum install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas openblas-devel ccache curl git
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -239,7 +239,9 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd ${{ github.workspace }}/build/bin/llama-box
+            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
+            # see https://github.com/multiarch/qemu-user-static/issues/172.
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
@@ -309,7 +311,7 @@ jobs:
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v3
         with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: "arm64"
       - name: Build
         env:
@@ -416,7 +418,7 @@ jobs:
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v3
         with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: "arm64"
       - name: Build
         env:
@@ -542,7 +544,7 @@ jobs:
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v3
         with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: "arm64"
       - name: Build
         env:
@@ -650,7 +652,7 @@ jobs:
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v3
         with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: "arm64"
       - name: Build
         env:
@@ -751,7 +753,7 @@ jobs:
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v3
         with:
-          image: tonistiigi/binfmt:qemu-v7.0.0
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: "arm64"
       - name: Build
         env:
