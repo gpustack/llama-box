@@ -1423,6 +1423,17 @@ struct server_context {
                     slot.params.n_predict);
         }
 
+        // if context shift is disabled, we stop when it reaches the context limit
+        if (!params.ctx_shift && slot.n_decoded >= slot.n_ctx) {
+            slot.truncated = true;
+            slot.stopped_limit = true;
+            slot.has_next_token = false;
+
+            SLT_DBG(slot,
+                    "stopped due to running out of context capacity, n_decoded = %d, n_ctx = %d\n",
+                    slot.n_decoded, slot.n_ctx);
+        }
+
         // check the EOT
         for (const llama_token &tok : result.toks) {
             if (llama_token_is_eog(model, tok)) {
@@ -1722,7 +1733,7 @@ struct server_context {
 
             if (result.error) {
                 error_handler(result.data);
-                break;
+                return;
             }
 
             size_t idx = result.data["index"];
@@ -2050,6 +2061,15 @@ struct server_context {
         for (server_slot &slot : slots) {
             if (slot.ga_n == 1) {
                 if (slot.is_processing() && n_system_tokens + slot.n_past >= slot.n_ctx - 1) {
+                    if (!params.ctx_shift) {
+                        // this check is redundant (for good)
+                        // we should never get here, because generation should already stopped in
+                        // process_token()
+                        slot.release();
+                        send_error(slot, "context shift is disabled", ERROR_TYPE_SERVER);
+                        continue;
+                    }
+
                     // Shift context
                     const int n_keep = slot.params.n_keep + add_bos_token;
                     const int n_left = n_system_tokens + slot.n_past - n_keep;
@@ -2223,6 +2243,21 @@ struct server_context {
                                 continue;
                             }
                         } else {
+                            if (!params.ctx_shift) {
+                                // if context shift is disabled, we make sure prompt size is smaller
+                                // than KV size
+                                if ((int)system_tokens.size() + slot.n_prompt_tokens >=
+                                    slot.n_ctx) {
+                                    slot.release();
+                                    send_error(
+                                        slot,
+                                        "the request exceeds the available context size. try "
+                                        "increasing the context size or enable context shift",
+                                        ERROR_TYPE_INVALID_REQUEST);
+                                    continue;
+                                }
+                            }
+
                             if (slot.params.n_keep < 0) {
                                 slot.params.n_keep = slot.n_prompt_tokens;
                             }

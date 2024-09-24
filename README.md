@@ -238,6 +238,7 @@ server/completion:
          --priority-batch N       set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   use polling to wait for work (default: same as --poll
   -c,    --ctx-size N             size of the prompt context (default: 0, 0 = loaded from model)
+         --no-context-shift       disables context shift on inifinite text generation (default: disabled)
   -n,    --predict N              number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
   -b,    --batch-size N           logical maximum batch size (default: 2048)
   -ub,   --ubatch-size N          physical maximum batch size (default: 512)

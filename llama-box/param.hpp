@@ -169,6 +169,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --poll-batch <0...100>", "use polling to wait for work (default: same as --poll"});
 #endif
     opts.push_back({ "server/completion",  "-c,    --ctx-size N",           "size of the prompt context (default: %d, 0 = loaded from model)", params.n_ctx });
+    opts.push_back({ "server/completion",  "       --no-context-shift",     "disables context shift on inifinite text generation (default: %s)", params.ctx_shift ? "disabled" : "enabled" });
     opts.push_back({ "server/completion",  "-n,    --predict N",            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", params.n_predict });
     opts.push_back({ "server/completion",  "-b,    --batch-size N",         "logical maximum batch size (default: %d)", params.n_batch });
     opts.push_back({ "server/completion",  "-ub,   --ubatch-size N",        "physical maximum batch size (default: %d)", params.n_ubatch });
@@ -819,6 +820,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.gparams.n_ctx = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--no-context-shift")) {
+                bparams.gparams.ctx_shift = false;
                 continue;
             }
 
