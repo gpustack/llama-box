@@ -1,0 +1,14 @@
+diff --git a/ggml/src/ggml-cann/common.h b/ggml/src/ggml-cann/common.h
+index e6a57010..b6df2c5d 100644
+--- a/ggml/src/ggml-cann/common.h
++++ b/ggml/src/ggml-cann/common.h
+@@ -213,8 +213,7 @@ struct ggml_backend_cann_context {
+     std::string name;                /**< Name of the device. */
+     aclrtEvent copy_event = nullptr; /**< Event for managing copy operations. */
+ 
+-    aclrtStream streams[GGML_CANN_MAX_STREAMS] = {
+-        {nullptr}}; /**< Array of streams for the device. */
++    aclrtStream streams[GGML_CANN_MAX_STREAMS] = {nullptr}; /**< Array of streams for the device. */
+ 
+     /**
+      * @brief Constructor for initializing the context with a given device.
