@@ -21,6 +21,7 @@ on:
       - "**.mdx"
       - "**.png"
       - "**.jpg"
+      - ".github/workflows/clean.yml"
   pull_request:
     branches:
       - main
@@ -30,6 +31,7 @@ on:
       - "**.mdx"
       - "**.png"
       - "**.jpg"
+      - ".github/workflows/clean.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -204,18 +206,21 @@ jobs:
           #!/bin/bash
           if [ -f /etc/os-release ]; then
             source /etc/os-release
+            cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git
             elif [ "\${ID}" = "rocky" ]; then
-              yum update -y && yum install -y epel-release
+              # NB(thxCode): Enbale EPEL, see 
+              # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
+              yum install -y epel-release
               if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
                 dnf config-manager --set-enabled powertools
               else
                 dnf config-manager --set-enabled crb
               fi
               yum update -y \
-                && yum install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas openblas-devel ccache curl git
+                && yum install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas-static ccache curl git
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -239,6 +244,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -260,7 +266,7 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            ${{ matrix.distro == 'ubuntu20.04' && 'ubuntu:20.04' || 'rockylinux:8.9' }}
+            ${{ matrix.distro == 'ubuntu20.04' && 'ubuntu:20.04' || 'rockylinux:8' }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -324,11 +330,13 @@ jobs:
           #!/bin/bash
           if [ -f /etc/os-release ]; then
             source /etc/os-release
+            cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
             elif [ "\${ID}" = "centos" ]; then
-              yum update -y && yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm \
+              yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
+              yum update -y \
                 && yum install -y gcc gcc-c++ make glibc-static libstdc++-static ccache curl git
             else
               echo "Unsupport distribution: \${ID}"
@@ -350,6 +358,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
@@ -389,12 +398,22 @@ jobs:
       matrix:
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
         #     12.6 ==> 12.6.1
+        #     12.1 ==> 12.1.0
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         arch: [ amd64 ]
-        version: [ '12.6' ]
-        distro: [ 'ubuntu20.04', 'rockylinux8' ]
+        version: [ '12.6', '12.1' ]
+        distro: [ 'ubuntu20.04', 'rockylinux8', 'ubuntu18.04', 'centos7' ]
         cuda_arch: [ '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90' ]
+        exclude:
+          - version: '12.6'
+            distro: 'ubuntu18.04'
+          - version: '12.6'
+            distro: 'centos7'
+          - version: '12.1'
+            distro: 'ubuntu20.04'
+          - version: '12.1'
+            distro: 'rockylinux8'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -431,11 +450,14 @@ jobs:
           #!/bin/bash
           if [ -f /etc/os-release ]; then
             source /etc/os-release
+            cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
             elif [ "\${ID}" = "rocky" ]; then
-              yum update -y && yum install -y epel-release
+              # NB(thxCode): Enbale EPEL, see 
+              # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
+              yum install -y epel-release
               if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
                 dnf config-manager --set-enabled powertools
               else
@@ -443,6 +465,31 @@ jobs:
               fi
               yum update -y \
                 && yum install -y gcc gcc-c++ make glibc-static libstdc++-static ccache curl git
+            elif [ "\${ID}" = "centos" ]; then
+              # NB(thxCode): Patch for CentOS, see
+              # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
+              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+              yum install -y centos-release-scl
+              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+              yum update -y \
+                && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
+              export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
+                && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
+                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info\${INFOPATH}" \
+                && export PCP_DIR="/opt/rh/devtoolset-9/root" \
+                && export PERL5LIB="/opt/rh/devtoolset-9/root//usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root//usr/share/perl5/" \
+                && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
+                && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
+                && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
+              gcc --version
+              yum --enablerepo=extras install -y epel-release
+              yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
+              yum update -y \
+                && yum install -y make glibc-static libstdc++-static ccache curl git
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -465,6 +512,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
@@ -481,6 +529,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
@@ -501,7 +550,7 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            nvidia/cuda:${{ matrix.version == '12.6' && '12.6.1' }}-devel-${{ matrix.distro }}
+            nvidia/cuda:${{ matrix.version == '12.6' && '12.6.1' || (matrix.distro == 'centos7' && '12.1.1' || '12.1.0' ) }}-devel-${{ matrix.distro }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
@@ -556,11 +605,14 @@ jobs:
           #!/bin/bash
           if [ -f /etc/os-release ]; then
             source /etc/os-release
+            cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
             elif [ "\${ID}" = "rocky" ]; then
-              yum update -y && yum install -y epel-release
+              # NB(thxCode): Enbale EPEL, see 
+              # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
+              yum install -y epel-release
               if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
                 dnf config-manager --set-enabled powertools
               else
@@ -588,6 +640,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
@@ -664,6 +717,7 @@ jobs:
           #!/bin/bash
           if [ -f /etc/os-release ]; then
             source /etc/os-release
+            cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
@@ -691,6 +745,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
@@ -765,6 +820,7 @@ jobs:
           #!/bin/bash
           if [ -f /etc/os-release ]; then
             source /etc/os-release
+            cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y && apt-get install -y build-essential ccache curl git
             else
@@ -787,6 +843,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box
           else
             exit 1
