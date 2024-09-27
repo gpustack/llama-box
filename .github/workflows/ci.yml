@@ -48,8 +48,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: "amd64"
-            instruction: "avx2"
+          - arch: 'amd64'
+            instruction: 'avx2'
     runs-on: ${{ matrix.arch == 'amd64' && 'macos-13' || 'macos-14' }}
     steps:
       - name: Checkout
@@ -105,8 +105,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [ amd64, arm64 ]
-        version: [ '3.0' ]
+        arch:
+          - 'amd64'
+          - 'arm64'
+        version:
+          - '3.0'
     # see https://github.com/actions/runner-images?tab=readme-ov-file#available-images,
     #     https://support.apple.com/en-us/102894.
     runs-on: ${{ matrix.arch == 'amd64' && 'macos-13' || 'macos-14' }}
@@ -163,14 +166,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [ amd64, arm64 ]
-        instruction: [ 'avx2', 'neon' ]
-        distro: [ 'ubuntu20.04', 'rockylinux8' ]
-        exclude:
+        # AVX2 ==> CentOS 7.
+        # NEON ==> RockyLinux 8.
+        include:
           - arch: 'amd64'
-            instruction: 'neon'
-          - arch: 'arm64'
             instruction: 'avx2'
+            distro_container_image: 'centos:7'
+          - arch: 'arm64'
+            instruction: 'neon'
+            distro_container_image: 'rockylinux:8'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -187,7 +191,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}-${{ matrix.distro }}
+          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -221,6 +225,37 @@ jobs:
               fi
               yum update -y \
                 && yum install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas-static ccache curl git
+            elif [ "\${ID}" = "centos" ]; then
+              # NB(thxCode): Patch for CentOS, see
+              # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
+              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+              yum install -y centos-release-scl
+              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+              yum update -y \
+                && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
+              export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
+                && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
+                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info\${INFOPATH}" \
+                && export PCP_DIR="/opt/rh/devtoolset-9/root" \
+                && export PERL5LIB="/opt/rh/devtoolset-9/root//usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root//usr/share/perl5/" \
+                && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
+                && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
+                && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
+              yum --enablerepo=extras install -y epel-release
+              yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
+              yum update -y \
+                && yum install -y make glibc-static libstdc++-static openblas-static ccache curl git
+              cat <<EOL >/usr/lib64/pkgconfig/openblas.pc
+          Name: OpenBLAS
+          Description: OpenBLAS library
+          Version: 0.3.3
+          Libs: -L/usr/lib64 -lopenblas
+          Cflags: -I/usr/include/openblas
+          EOL
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -266,34 +301,33 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            ${{ matrix.distro == 'ubuntu20.04' && 'ubuntu:20.04' || 'rockylinux:8' }}
+            ${{ matrix.distro_container_image }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}-${{ matrix.distro }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}-${{ matrix.distro }}
+          name: llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}
 
   linux-hip:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/rocm/dev-ubuntu-20.04/tags,
-        #     https://hub.docker.com/r/rocm/dev-centos-7/tags.
-        #     6.2 ==> 6.2
+        # see https://hub.docker.com/r/rocm/dev-centos-7/tags.
+        #     6.1 ==> 6.1.2, CentOS 7.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.0/reference/system-requirements.html,
-        #     https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
-        arch: [ amd64 ]
-        version: [ '6.2' ]
-        distro: [ 'ubuntu20.04', 'centos7' ]
-        hip_arch: [ 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102' ]
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
+        include:
+          - arch: 'amd64'
+            version: '6.1'
+            distro_container_image: 'rocm/dev-centos-7:6.1.2-complete'
+            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -310,7 +344,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro }}
+          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -381,39 +415,30 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            rocm/dev-${{ matrix.distro == 'ubuntu20.04' && 'ubuntu-20.04' || 'centos-7' }}:${{ matrix.version }}-complete
+            ${{ matrix.distro_container_image }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.distro }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}-${{ matrix.distro }}
+          name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}
 
   linux-cuda:
     strategy:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
-        #     12.6 ==> 12.6.1
-        #     12.1 ==> 12.1.0
+        #     12.4 ==> 12.4.0, CentOS 7; 12.4.1.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
-        arch: [ amd64 ]
-        version: [ '12.6', '12.1' ]
-        distro: [ 'ubuntu20.04', 'rockylinux8', 'ubuntu18.04', 'centos7' ]
-        cuda_arch: [ '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90' ]
-        exclude:
-          - version: '12.6'
-            distro: 'ubuntu18.04'
-          - version: '12.6'
-            distro: 'centos7'
-          - version: '12.1'
-            distro: 'ubuntu20.04'
-          - version: '12.1'
-            distro: 'rockylinux8'
+        include:
+          - arch: 'amd64'
+            version: '12.4'
+            distro_container_image: 'nvidia/cuda:12.4.0-devel-centos7'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -430,7 +455,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro }}
+          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -550,26 +575,27 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            nvidia/cuda:${{ matrix.version == '12.6' && '12.6.1' || (matrix.distro == 'centos7' && '12.1.1' || '12.1.0' ) }}-devel-${{ matrix.distro }}
+            ${{ matrix.distro_container_image }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.distro }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}-${{ matrix.distro }}
+          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
   linux-oneapi:
     strategy:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
-        #     2024.2 ==> 2024.2.1-0
-        arch: [ amd64 ]
-        version: [ '2024.2' ]
-        distro: [ 'ubuntu20.04', 'rockylinux9' ]
+        #     2024.2 ==> 2024.2.1-0, Ubuntu 20.04.
+        include:
+          - arch: 'amd64'
+            version: '2024.2'
+            distro_container_image: 'intel/oneapi-basekit:2024.2.1-0-devel-ubuntu20.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -586,7 +612,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro }}
+          key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -662,26 +688,31 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            intel/oneapi-basekit:${{ matrix.version == '2024.2' && '2024.2.1-0' }}-devel-${{ matrix.distro }}
+            ${{ matrix.distro_container_image }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}-${{ matrix.distro }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}-${{ matrix.distro }}
+          name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
   linux-cann:
     strategy:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=8.0.rc2.alpha003-910b.
-        #     8.0 ==> 8.0.rc2.alpha003
-        arch: [ amd64 ]
-        version: [ '8.0' ]
-        distro: [ 'ubuntu20.04', 'openeuler20.03' ]
+        #     8.0 ==> 8.0.rc2.alpha003, Ubuntu 20.04, OpenEuler 20.03
+        arch:
+          - 'amd64'
+          - 'arm64'
+        version:
+          - '8.0'
+        distro_container_image:
+          - 'ascendai/cann:8.0.rc2.alpha003-910b-openeuler20.03-py3.9'
+          - 'ascendai/cann:8.0.rc2.alpha003-910b-ubuntu20.04-py3.9'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -698,7 +729,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro }}
+          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -723,7 +754,12 @@ jobs:
                 && apt-get install -y build-essential ccache curl git
             elif [ "\${ID}" = "openEuler" ]; then
               yum update -y \
-                && yum install -y gcc gcc-c++ make glibc-static libstdc++-static ccache curl git
+                && yum install -y gcc gcc-c++ gcc-toolset-10-gcc*
+              gcc --version
+              yum update -y \
+                && yum install -y gcc-toolset-10-libstdc++-static make ccache curl git
+              export PATH="/opt/openEuler/gcc-toolset-10/root/usr/bin/:\${PATH}" && \
+                export LD_LIBRARY_PATH="/opt/openEuler/gcc-toolset-10/root/usr/lib64/:\${LD_LIBRARY_PATH}"
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -753,7 +789,7 @@ jobs:
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
-
+          
           docker run \
             --rm \
             --privileged \
@@ -765,26 +801,27 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            ascendai/cann:${{ matrix.version == '8.0' && '8.0.rc2.alpha003' }}-910b-${{ matrix.distro }}-py3.9
-
+            ${{ matrix.distro_container_image }}
+          
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}-${{ matrix.distro }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}--${{ matrix.distro }}
+          name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}
 
   linux-musa:
     strategy:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu20.04.
-        #     1.5 ==> 1.5.1-mp_22
-        arch: [ amd64 ]
-        version: [ '1.5' ]
-        distro: [ 'ubuntu20.04' ]
+        #     1.5 ==> 1.5.1-mp_22, Ubuntu 20.04.
+        include:
+          - arch: 'amd64'
+            version: '1.5'
+            distro_container_image: 'mthreads/musa:1.5.1-mp_22-devel-ubuntu20.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -801,7 +838,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro }}
+          key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -863,21 +900,23 @@ jobs:
             --env VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
-            mthreads/musa:${{ matrix.version == '1.5' && '1.5.1-mp_22' }}-devel-${{ matrix.distro }}
+            ${{ matrix.distro_container_image }}
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}-${{ matrix.distro }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}-${{ matrix.distro }}
+          name: llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}
 
   windows:
     strategy:
       fail-fast: false
       matrix:
+        # AVX2 ==> Windows Server 2022.
+        # NEON ==> Windows Server 2022.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
@@ -932,21 +971,17 @@ jobs:
       fail-fast: false
       matrix:
         # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
-        #     6.1 ==> 6.1.2
-        #     5.7 ==> 5.7.1
+        #     6.1 ==> 6.1.2, Windows Server 2022.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html,
-        #     https://rocm.docs.amd.com/en/docs-5.7.1/release/windows_support.html.
-        arch: [ amd64 ]
-        version: [ '6.1', '5.7' ]
-        hip_arch: [ 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102' ]
-        exclude:
-          # NB(thxCode): https://github.com/ggerganov/llama.cpp/pull/8713#issuecomment-2331104373 has broken the compiling
-          #  of ROCm/HIP 5.7, we have temporarily stopped supplying new versions from ROCm/HIP 5.7 until upstream fixes it.
-          - version: '5.7'
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
+        include:
+          - arch: 'amd64'
+            version: '6.1'
+            distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-WinSvr2022-For-HIP.exe'
+            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -975,7 +1010,7 @@ jobs:
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
-            --url "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-${{ matrix.version == '6.1' && '24.Q3' || '23.Q4' }}-WinSvr2022-For-HIP.exe"
+            --url "${{ matrix.distro_binary_installer }}"
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
@@ -1027,16 +1062,15 @@ jobs:
       fail-fast: false
       matrix:
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
-        #     12.6 ==> 12.6.1
-        #     11.8 ==> 11.8.0
+        #     12.4 ==> 12.4.1, Windows Server 2022.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
-        arch: [ amd64 ]
-        version: [ '12.6', '11.8' ]
-        cuda_arch: [ '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90' ]
-    # see https://github.com/actions/runner-images?tab=readme-ov-file#available-images,
-    #     https://forums.developer.nvidia.com/t/problems-with-latest-vs2022-update/294150.
-    runs-on: ${{ matrix.version == '12.6' && 'windows-2022' || 'windows-2019' }}
+        include:
+          - arch: 'amd64'
+            version: '12.4'
+            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.1/network_installers/cuda_12.4.1_windows_network.exe'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90'
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1064,10 +1098,9 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
-          $CUDA_VERSION = "${{ matrix.version == '12.6' && '12.6.1' || '11.8.0' }}"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
-            --url "https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/network_installers/cuda_${CUDA_VERSION}_windows_network.exe"
+            --url "${{ matrix.distro_binary_installer }}"
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
@@ -1118,11 +1151,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=offline.
-        #     2024.2 ==> 2024.2.0
-        #     2024.1 ==> 2024.1.1
-        arch: [ amd64 ]
-        version: [ '2024.2', '2024.1' ]
+        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=online.
+        #     2024.2 ==> 2024.2.1, Windows Server 2022.
+        include:
+          - arch: 'amd64'
+            version: '2024.2'
+            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/d91caaa0-7306-46ea-a519-79a0423e1903/w_BaseKit_p_2024.2.1.101.exe'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -1153,7 +1187,7 @@ jobs:
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download Intel oneAPI SDK"
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ runner.temp }}\installer.exe" `
-            --url "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/${{ matrix.version == '2024.2' && 'e83a8e64-04fc-45df-85c6-c2208d03bdb5/w_BaseKit_p_2024.2.0.635' || '7dff44ba-e3af-4448-841c-0d616c8da6e7/w_BaseKit_p_2024.1.0.595' }}.exe"
+            --url "${{ matrix.distro_binary_installer }}"
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install Intel oneAPI SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
