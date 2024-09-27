@@ -43,7 +43,16 @@ LLaMA Box supports the following platforms.
 > - **"NVIDIA CUDA 12.4"**, **"AMD ROCm/HIP 6.1"** and _"AVX2"_ Linux releases are built on CentOS 7 (glibc 2.17),
     except _"Advanced SIMD (NEON)"_ which is built on RockyLinux 8 (glibc 2.28).
 > - **"Intel oneAPI 2024.2"** and **"Moore Threads MUSA 1.5"** Linux releases are built on Ubuntu 20.04 (glibc 2.31).
-> - **"Huawei Ascend CANN 8.0"** Linux releases have built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc 2.28).
+> - **"Huawei Ascend CANN 8.0"** Linux releases have built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc
+    2.28).
+
+> [!IMPORTANT]
+> Partial Linux asset might contain the backend toolkit (some dynamic link libraries) and the `llama-box` binary. In an
+> environment without the backend toolkit installed, you can set `LD_LIBRARY_PATH` to point to the unpacked directory
+> to
+> start `llama-box`, for example `LD_LIBRARY_PATH="$(pwd):${LD_LIBRARY_PATH}" ./llama-box --help`. If your environment
+> already has the backend toolkit installed, you can directly use the `llama-box` binary and ignore these dynamic link
+> libraries.
 
 ## Examples
 

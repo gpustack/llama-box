@@ -395,6 +395,17 @@ jobs:
             ldd --version
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
+            echo "***** BEFORE *****"
+            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
+            echo "\${ldd_output}"
+            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
+            for library_path in \${library_paths}; do
+              if [[ -f \${library_path} ]] && [[ \${library_path} == /opt/rocm/lib/* ]]; then
+                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
+              fi
+            done
+            echo "***** AFTER *****"
+            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -540,13 +551,21 @@ jobs:
             ldd --version
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
+            echo "***** BEFORE *****"
+            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
+            echo "\${ldd_output}"
+            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
+            for library_path in \${library_paths}; do
+              if [[ -f \${library_path} ]] && [[ \${library_path} == /usr/local/cuda/lib64/* ]]; then
+                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
+              fi
+            done
+            echo "***** AFTER *****"
+            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
-          cp /usr/local/cuda/lib64/libcudart.so.12 ${{ github.workspace }}/build/bin/
-          cp /usr/local/cuda/lib64/libcublas.so.12 ${{ github.workspace }}/build/bin/
-          cp /usr/local/cuda/lib64/libcublasLt.so.12 ${{ github.workspace }}/build/bin/
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
@@ -657,6 +676,17 @@ jobs:
             ldd --version
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
+            echo "***** BEFORE *****"
+            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
+            echo "\${ldd_output}"
+            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
+            for library_path in \${library_paths}; do
+              if [[ -f \${library_path} ]] && [[ \${library_path} == /opt/intel/oneapi/* ]]; then
+                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
+              fi
+            done
+            echo "***** AFTER *****"
+            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -745,11 +775,11 @@ jobs:
             elif [ "\${ID}" = "openEuler" ]; then
               yum update -y \
                 && yum install -y gcc gcc-c++ gcc-toolset-10-gcc*
-              gcc --version
               yum update -y \
                 && yum install -y gcc-toolset-10-libstdc++-static make ccache curl git
               export PATH="/opt/openEuler/gcc-toolset-10/root/usr/bin/:\${PATH}" && \
                 export LD_LIBRARY_PATH="/opt/openEuler/gcc-toolset-10/root/usr/lib64/:\${LD_LIBRARY_PATH}"
+              gcc --version
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -774,6 +804,17 @@ jobs:
             ldd --version
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
+            echo "***** BEFORE *****"
+            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
+            echo "\${ldd_output}"
+            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
+            for library_path in \${library_paths}; do
+              if [[ -f \${library_path} ]] && [[ \${library_path} == /usr/local/Ascend/ascend-toolkit/latest/lib64/* ]]; then
+                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
+              fi
+            done
+            echo "***** AFTER *****"
+            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -875,6 +916,12 @@ jobs:
             ldd --version
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
+            echo "***** BEFORE *****"
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
+            cp /usr/local/musa/lib/libmusart.so.*.0 ${{ github.workspace }}/build/bin/
+            cp /usr/local/musa/lib/libmublas.so ${{ github.workspace }}/build/bin/
+            echo "***** AFTER *****"
+            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -1217,9 +1264,9 @@ jobs:
           } else {
             exit 1
           }
-          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_sycl_blas*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_core*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_tbb_thread*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_sycl_blas.*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_core.*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_tbb_thread.*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\pi_win_proxy_loader.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\pi_level_zero.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\sycl7.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
