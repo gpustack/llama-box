@@ -393,7 +393,9 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box
+            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
+            # see https://github.com/multiarch/qemu-user-static/issues/172.
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
@@ -431,7 +433,7 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
-        #     12.4 ==> 12.4.0, CentOS 7; 12.4.1.
+        #     12.4 ==> 12.4.0, CentOS 7.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         include:
@@ -526,39 +528,25 @@ jobs:
           curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
-          ## static
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
-            -DGGML_STATIC=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box
+            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
+            # see https://github.com/multiarch/qemu-user-static/issues/172.
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
-          mv -f ${{ github.workspace }}/build/bin/llama-box ${{ github.workspace }}/build/bin/llama-box-with-cudart
-          ## dynamic
-          echo "===== BUILD ====="
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
-            -DGGML_STATIC=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          echo "===== RESULT ====="
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box
-          else
-            exit 1
-          fi
+          cp /usr/local/cuda/lib64/libcudart.so.12 ${{ github.workspace }}/build/bin/
+          cp /usr/local/cuda/lib64/libcublas.so.12 ${{ github.workspace }}/build/bin/
+          cp /usr/local/cuda/lib64/libcublasLt.so.12 ${{ github.workspace }}/build/bin/
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
@@ -667,7 +655,9 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box
+            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
+            # see https://github.com/multiarch/qemu-user-static/issues/172.
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
@@ -782,7 +772,9 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box
+            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
+            # see https://github.com/multiarch/qemu-user-static/issues/172.
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
@@ -881,7 +873,9 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box
+            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
+            # see https://github.com/multiarch/qemu-user-static/issues/172.
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
@@ -1047,6 +1041,10 @@ jobs:
           } else {
             exit 1
           }
+          Copy-Item -Path "${env:HIP_PATH}\bin\hipblas.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:HIP_PATH}\bin\rocblas.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\build\bin\rocblas\library" -ErrorAction Ignore | Out-Null
+          Copy-Item -Path "${env:HIP_PATH}\lib\rocblas\library\*" -Destination "${{ github.workspace }}\build\bin\rocblas\library\" -Recurse -Force -ErrorAction Ignore
 
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1137,6 +1135,9 @@ jobs:
           } else {
               exit 1
           }
+          Copy-Item -Path "${env:CUDA_PATH}\bin\cudart64_*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:CUDA_PATH}\bin\cublas64_*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:CUDA_PATH}\bin\cublasLt64_*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1216,6 +1217,15 @@ jobs:
           } else {
             exit 1
           }
+          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_sycl_blas*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_core*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_tbb_thread*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\pi_win_proxy_loader.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\pi_level_zero.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\sycl7.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\svml_dispmd.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\libmmd.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\libiomp5md.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
 
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
