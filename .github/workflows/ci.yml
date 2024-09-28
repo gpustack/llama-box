@@ -167,14 +167,14 @@ jobs:
       fail-fast: false
       matrix:
         # AVX2 ==> CentOS 7.
-        # NEON ==> RockyLinux 8.
+        # NEON ==> Ubuntu 18.04.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
             distro_container_image: 'centos:7'
           - arch: 'arm64'
             instruction: 'neon'
-            distro_container_image: 'rockylinux:8'
+            distro_container_image: 'ubuntu:18.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -214,6 +214,14 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git
+              if [[ "\${VERSION_ID}" =~ 18\\.* ]]; then
+                apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-9 g++-9
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 30 --slave /usr/bin/g++ g++ /usr/bin/g++-9
+                update-alternatives --config gcc
+              fi
             elif [ "\${ID}" = "rocky" ]; then
               # NB(thxCode): Enbale EPEL, see 
               # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
@@ -917,9 +925,14 @@ jobs:
             # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
             # see https://github.com/multiarch/qemu-user-static/issues/172.
             echo "***** BEFORE *****"
-            ldd ${{ github.workspace }}/build/bin/llama-box || true
-            cp /usr/local/musa/lib/libmusart.so.*.0 ${{ github.workspace }}/build/bin/
-            cp /usr/local/musa/lib/libmublas.so ${{ github.workspace }}/build/bin/
+            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
+            echo "\${ldd_output}"
+            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
+            for library_path in \${library_paths}; do
+              if [[ -f \${library_path} ]] && [[ \${library_path} == /usr/local/musa/lib/* ]]; then
+                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
+              fi
+            done
             echo "***** AFTER *****"
             export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true

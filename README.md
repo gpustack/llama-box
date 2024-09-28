@@ -41,7 +41,7 @@ LLaMA Box supports the following platforms.
 
 > [!NOTE]
 > - **"NVIDIA CUDA 12.4"**, **"AMD ROCm/HIP 6.1"** and _"AVX2"_ Linux releases are built on CentOS 7 (glibc 2.17),
-    except _"Advanced SIMD (NEON)"_ which is built on RockyLinux 8 (glibc 2.28).
+    except _"Advanced SIMD (NEON)"_ which is built on Ubuntu 18.04 (glibc 2.27).
 > - **"Intel oneAPI 2024.2"** and **"Moore Threads MUSA 1.5"** Linux releases are built on Ubuntu 20.04 (glibc 2.31).
 > - **"Huawei Ascend CANN 8.0"** Linux releases have built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc
     2.28).
