@@ -214,13 +214,15 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git
-              if [[ "\${VERSION_ID}" =~ 18\\.* ]]; then
-                apt-get install -y software-properties-common
+              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
                 add-apt-repository -y ppa:ubuntu-toolchain-r/test
                 apt-get update -y \
-                  && apt-get install -y gcc-9 g++-9
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 30 --slave /usr/bin/g++ g++ /usr/bin/g++-9
-                update-alternatives --config gcc
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+                gcc --version
               fi
             elif [ "\${ID}" = "rocky" ]; then
               # NB(thxCode): Enbale EPEL, see 
@@ -376,6 +378,16 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
+              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+                gcc --version
+              fi
             elif [ "\${ID}" = "centos" ]; then
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
               yum update -y \
@@ -500,6 +512,16 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
+              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+                gcc --version
+              fi
             elif [ "\${ID}" = "rocky" ]; then
               # NB(thxCode): Enbale EPEL, see 
               # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
@@ -650,6 +672,16 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
+              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+                gcc --version
+              fi
             elif [ "\${ID}" = "rocky" ]; then
               # NB(thxCode): Enbale EPEL, see 
               # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
@@ -780,6 +812,16 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git
+              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+                gcc --version
+              fi
             elif [ "\${ID}" = "openEuler" ]; then
               yum update -y \
                 && yum install -y gcc gcc-c++ gcc-toolset-10-gcc*
@@ -900,7 +942,18 @@ jobs:
             source /etc/os-release
             cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y && apt-get install -y build-essential ccache curl git
+              apt-get update -y \
+                && apt-get install -y build-essential ccache curl git
+              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+                gcc --version
+              fi
             else
               echo "Unsupport distribution: \$ID"
               exit 1

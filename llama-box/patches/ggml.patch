@@ -1,0 +1,16 @@
+diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
+index fac4466e..e8fbc784 100644
+--- a/ggml/src/ggml.c
++++ b/ggml/src/ggml.c
+@@ -3693,7 +3693,11 @@ static void ggml_init_arm_arch_features(void) {
+     uint32_t hwcap2 = getauxval(AT_HWCAP2);
+ 
+     ggml_arm_arch_features.has_neon = !!(hwcap & HWCAP_ASIMD);
++#if defined(GGML_ARM_CPU_I8MM_DETECT)
+     ggml_arm_arch_features.has_i8mm = !!(hwcap2 & HWCAP2_I8MM);
++#else
++    ggml_arm_arch_features.has_i8mm = 0;
++#endif
+     ggml_arm_arch_features.has_sve  = !!(hwcap & HWCAP_SVE);
+ 
+ #if defined(__ARM_FEATURE_SVE)
