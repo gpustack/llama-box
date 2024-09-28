@@ -1,8 +1,8 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 65afcc84..04923ad4 100644
+index 44afb31d..c151aad2 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -20581,6 +20581,26 @@ static int32_t llama_chat_apply_template_internal(
+@@ -21519,6 +21519,26 @@ static int32_t llama_chat_apply_template_internal(
          if (add_ass) {
              ss << "[|assistant|]";
          }
