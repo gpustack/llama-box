@@ -1665,11 +1665,11 @@ struct server_context {
             }
 
             const float *embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
-            if (embd == NULL) {
+            if (embd == nullptr) {
                 embd = llama_get_embeddings_ith(ctx, i);
             }
 
-            if (embd == NULL) {
+            if (embd == nullptr) {
                 SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n", batch.token[i],
                         batch.seq_id[i][0]);
 
@@ -1686,8 +1686,6 @@ struct server_context {
                 {"score", embd[0]},
             };
         }
-
-        SLT_DBG(slot, "sending rerank result, res = '%s'\n", res.data.dump().c_str());
 
         queue_results.send(res);
     }
@@ -3910,7 +3908,7 @@ int main(int argc, char **argv) {
                 for (const server_task_result &ret : results) {
                     responses.push_back(ret.data);
                 }
-                json rerank_json = jinaicompat_rerank_repsonse(request, responses);
+                json rerank_json = jinaicompat_rerank_response(request, responses);
                 res_ok(res, rerank_json);
             },
             [&](const json &error_data) { res_error(res, error_data); });

@@ -719,15 +719,63 @@ static json jinaaicompat_rerank_request(const struct gpt_params &params, const j
     return llama_params;
 }
 
-static json jinaicompat_rerank_repsonse(const json &request, const json &result) {
+static int32_t jinaicompat_rerank_top_n_response_partition(json &result, int32_t low,
+                                                           int32_t high) {
+    json base = result[low];
+    int i = low, j = high;
+    while (i != j) {
+        while (i < j && json_value(result[j], "score", 0.0) <= json_value(base, "score", 0.0))
+            j--;
+        while (i < j && json_value(result[i], "score", 0.0) >= json_value(base, "score", 0.0))
+            i++;
+        if (i < j) {
+            json temp = result[i];
+            result[i] = result[j];
+            result[j] = temp;
+        }
+    }
+    result[low] = result[i];
+    result[i] = base;
+    return i;
+}
+
+static json jinaicompat_rerank_response(const json &request, json &result) {
+    int32_t top_n = json_value(request, "top_n", 1);
+    json prompt = request.at("prompt");
     json data = json::array();
-    int i = 0;
-    for (const json &rank : result) {
-        data.push_back(json{
-            {"index", i++},
-            {"document", {{"text", request.at("prompt")[i]}}},
-            {"relevance_score", json_value(rank, "score", 0.0)},
-        });
+    if (top_n == int32_t(prompt.size()) - 1) {
+        for (const json &ret : result) {
+            const int32_t idx = json_value(ret, "index", 0);
+            const double scr = json_value(ret, "score", 0.0);
+            data.push_back(json{
+                {"index", idx},
+                {"document", {{"text", prompt[idx + 1]}}},
+                {"relevance_score", scr},
+            });
+        }
+    } else {
+        int32_t start = 0;
+        auto end = int32_t(result.size() - 1);
+        int32_t index = jinaicompat_rerank_top_n_response_partition(result, start, end);
+        while (top_n - 1 != index) {
+            if (top_n - 1 < index) {
+                end = index - 1;
+                index = jinaicompat_rerank_top_n_response_partition(result, start, end);
+            } else {
+                start = index + 1;
+                index = jinaicompat_rerank_top_n_response_partition(result, start, end);
+            }
+        }
+        for (int32_t i = 0; i < top_n; i++) {
+            const json &ret = result[i];
+            const int32_t idx = json_value(ret, "index", 0);
+            const double scr = json_value(ret, "score", 0.0);
+            data.push_back(json{
+                {"index", idx},
+                {"document", {{"text", prompt[idx + 1]}}},
+                {"relevance_score", scr},
+            });
+        }
     }
 
     int num_prompt_tokens = json_value(result, "tokens_evaluated", 0);
