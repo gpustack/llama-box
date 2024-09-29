@@ -18,10 +18,10 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 
 ## Features
 
-- Support RPC server mode, which can serve as a remote inference backend.
-- Support lookup speculative decoding.
-- Support draft model speculative decoding.
 - Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
+- Support speculative decoding: draft model or n-gram lookup.
+- Support [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank).
+- Support RPC server mode, which can serve as a remote inference backend.
 
 ## Supports
 
@@ -47,7 +47,7 @@ LLaMA Box supports the following platforms.
     2.28).
 
 > [!IMPORTANT]
-> Partial Linux asset might contain the backend toolkit (some dynamic link libraries) and the `llama-box` binary. In an
+> Partial Linux assets might contain the backend toolkit (some dynamic link libraries) and the `llama-box` binary. In an
 > environment without the backend toolkit installed, you can set `LD_LIBRARY_PATH` to point to the unpacked directory
 > to
 > start `llama-box`, for example `LD_LIBRARY_PATH="$(pwd):${LD_LIBRARY_PATH}" ./llama-box --help`. If your environment
@@ -116,7 +116,7 @@ LLaMA Box supports the following platforms.
     ```
 
 - Lookup speculative decoding
-  via [Mistral-Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407) models. Use GGUF files
+  via [Mistral-Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407) model. Use GGUF files
   from [QuantFactory/Mistral-Nemo-Instruct-2407-GGUF](https://huggingface.co/QuantFactory/Mistral-Nemo-Instruct-2407-GGUF/tree/main?show_file_info=Mistral-Nemo-Instruct-2407.Q5_K_M.gguf).
 
     ```shell
@@ -131,6 +131,18 @@ LLaMA Box supports the following platforms.
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
+
+- Maximize search relevancy and RAG accuracy
+  via [jinaai/jina-reranker-v1-tiny-en](https://huggingface.co/jinaai/jina-reranker-v1-tiny-en) model. Use GGUF files
+  from [gpustack/jina-reranker-v1-tiny-en-GGUF](https://huggingface.co/gpustack/jina-reranker-v1-tiny-en-GGUF/tree/main?show_file_info=jina-reranker-v1-tiny-en-FP16.gguf).
+
+    ```shell
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/jina-reranker-v1-tiny-en-GGUF/jina-reranker-v1-tiny-en-FP16.gguf --rerank
+    
+    $ curl http://localhost:8080/v1/rerank -H "Content-Type: application/json" -d '{"model":"jina-reranker-v1-tiny-en","query":"Organic skincare products for sensitive skin","top_n":3,"documents":["Eco-friendly kitchenware for modern homes","Biodegradable cleaning supplies for eco-conscious consumers","Organic cotton baby clothes for sensitive skin","Natural organic skincare range for sensitive skin","Tech gadgets for smart homes: 2024 edition","Sustainable gardening tools and compost solutions","Sensitive skin-friendly facial cleansers and toners","Organic food wraps and storage solutions","All-natural pet food for dogs with allergies","oga mats made from recycled materials"]}'
+    ```
+
 
 - RPC server mode.
 
@@ -197,10 +209,15 @@ server:
          --conn-idle N            server connection idle in seconds (default: 60)
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
+  -a,    --alias NAME             model name alias (default: unknown)
+         --metrics                enable prometheus compatible metrics endpoint (default: disabled)
+         --infill                 enable infill endpoint (default: disabled)
+         --embeddings             enable embedding endpoint (default: disabled)
+         --rerank                 enable reranking endpoint (default: disabled)
+         --rpc SERVERS            comma separated list of RPC servers
 
 server/completion:
 
-  -a,    --alias NAME             model name alias (default: unknown)
   -s,    --seed N                 RNG seed (default: 4294967295, use random seed for 4294967295)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
@@ -215,9 +232,6 @@ server/completion:
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --system-prompt-file FILE
                                   set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
-         --metrics                enable prometheus compatible metrics endpoint (default: disabled)
-         --infill                 enable infill endpoint (default: disabled)
-         --embeddings             enable embedding endpoint (default: disabled)
          --no-slots               disables slots monitoring endpoint (default: enabled)
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
@@ -253,7 +267,6 @@ server/completion:
   -b,    --batch-size N           logical maximum batch size (default: 2048)
   -ub,   --ubatch-size N          physical maximum batch size (default: 512)
          --keep N                 number of tokens to keep from the initial prompt (default: 0, -1 = all)
-         --chunks N               max number of chunks to process (default: -1, -1 = all)
   -fa,   --flash-attn             enable Flash Attention (default: disabled)
   -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
@@ -327,7 +340,7 @@ server/completion:
          --no-warmup              skip warming up the model with an empty run
          --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                special tokens output enabled (default: false)
-         --rpc SERVERS            comma separated list of RPC servers
+         --pooling                pooling type for embeddings, use model default if unspecified
 
 server/speculative:
 
@@ -484,7 +497,13 @@ The available endpoints for the LLaMA Box server mode are:
 - **POST** `/v1/embeddings`: (OpenAI-compatible) Returns the embeddings of the given prompt,
   see https://platform.openai.com/docs/api-reference/embeddings/create.
     + This is only work to `Text-To-Text` or `Embedding` models.
-    + This endpoint is only available if the `--embeddings` flag is enabled.
+    + This endpoint is available if the `--embeddings` or `--rerank` flag is enabled.
+
+- **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.
+    + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
+    + This endpoint is only available if the `--rerank` flag is provided.
+    + This is unavailable for the GGUF files created
+      before [llama.cpp#pr9510](https://github.com/ggerganov/llama.cpp/pull/9510).
 
 ## Tools
 

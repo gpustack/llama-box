@@ -60,6 +60,7 @@ enum server_task_type {
 enum server_task_cmpl_type {
     SERVER_TASK_CMPL_TYPE_NORMAL,
     SERVER_TASK_CMPL_TYPE_EMBEDDING,
+    SERVER_TASK_CMPL_TYPE_RERANK,
     SERVER_TASK_CMPL_TYPE_INFILL,
 };
 
@@ -143,6 +144,7 @@ struct server_slot {
     std::vector<completion_token_output> generated_token_probs;
 
     server_task_cmpl_type cmpl_type = SERVER_TASK_CMPL_TYPE_NORMAL;
+
     bool has_next_token = true;
     bool truncated = false;
     bool stopped_eos = false;
@@ -1188,6 +1190,10 @@ struct server_context {
         // get prompt
         if (task.cmpl_type != SERVER_TASK_CMPL_TYPE_INFILL) {
             const auto &prompt = data.find("prompt");
+            if (prompt == data.end()) {
+                send_error(task, "\"prompt\" must be provided", ERROR_TYPE_INVALID_REQUEST);
+                return false;
+            }
 
             if ((prompt->is_string()) || (prompt->is_array() && !prompt->empty())) {
                 slot.prompt = *prompt;
@@ -1629,6 +1635,7 @@ struct server_context {
 
                 res.data = json{
                     {"embedding", std::vector<float>(n_embd, 0.0f)},
+                    {"index", slot.index},
                 };
 
                 continue;
@@ -1643,6 +1650,45 @@ struct server_context {
         }
 
         res.data["tokens_evaluated"] = slot.n_prompt_tokens;
+        queue_results.send(res);
+    }
+
+    void send_rerank(const server_slot &slot, const llama_batch &batch) {
+        server_task_result res;
+        res.id = slot.id_task;
+        res.error = false;
+        res.stop = true;
+
+        for (int i = 0; i < batch.n_tokens; ++i) {
+            if (!batch.logits[i] || batch.seq_id[i][0] != slot.id + 1) {
+                continue;
+            }
+
+            const float *embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
+            if (embd == NULL) {
+                embd = llama_get_embeddings_ith(ctx, i);
+            }
+
+            if (embd == NULL) {
+                SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n", batch.token[i],
+                        batch.seq_id[i][0]);
+
+                res.data = json{
+                    {"index", slot.index},
+                    {"score", -1e6},
+                };
+
+                continue;
+            }
+
+            res.data = json{
+                {"index", slot.index},
+                {"score", embd[0]},
+            };
+        }
+
+        SLT_DBG(slot, "sending rerank result, res = '%s'\n", res.data.dump().c_str());
+
         queue_results.send(res);
     }
 
@@ -1687,13 +1733,27 @@ struct server_context {
             // otherwise, it's a multiple-prompt task, we break it into smaller tasks
             else if (prompt.is_array()) {
                 std::vector<json> prompts = prompt;
-                for (size_t i = 0; i < prompts.size(); i++) {
-                    const auto &e = prompts[i];
-                    if (e.is_string() || json_is_array_of_numbers(e)) {
-                        data["index"] = i;
-                        create_task(data, true, e, tps);
-                    } else {
-                        throw std::runtime_error(error_msg);
+                if (cmpl_type == SERVER_TASK_CMPL_TYPE_RERANK) {
+                    // prompts[0] is the question
+                    // the rest are the answers/documents
+                    SRV_DBG("creating rerank tasks, n_prompts = %d\n", (int)prompts.size() - 1);
+                    for (size_t i = 1; i < prompts.size(); i++) {
+                        json qd;
+                        qd.push_back(prompts[0]);
+                        qd.push_back(prompts[i]);
+                        data["index"] = i - 1;
+                        create_task(data, true, qd);
+                    }
+                } else {
+                    SRV_DBG("creating multi-prompt tasks, n_prompts = %d\n", (int)prompts.size());
+                    for (size_t i = 0; i < prompts.size(); i++) {
+                        const auto &e = prompts[i];
+                        if (e.is_string() || json_is_array_of_numbers(e)) {
+                            data["index"] = i;
+                            create_task(data, true, e);
+                        } else {
+                            throw std::runtime_error(error_msg);
+                        }
                     }
                 }
             }
@@ -1736,7 +1796,8 @@ struct server_context {
                 return;
             }
 
-            size_t idx = result.data["index"];
+            const size_t idx = result.data["index"];
+            GGML_ASSERT(idx < results.size() && "index out of range");
             results[idx] = result;
         }
         result_handler(results);
@@ -2158,6 +2219,7 @@ struct server_context {
         // track if this is an embedding or non-embedding batch
         // if we've added sampled tokens above, we are in non-embedding mode
         // -1: none, 0: non-embedding, 1: embedding
+        // TODO: make enum
         int32_t batch_type = batch.n_tokens > 0 ? 0 : -1;
 
         // next, batch any pending prompts without exceeding n_batch
@@ -2214,6 +2276,30 @@ struct server_context {
                             }
 
                             prompt_tokens = embd_inp;
+                        } else if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_RERANK) {
+                            // require slot.prompt to be array of 2 strings
+                            if (!slot.prompt.is_array() || slot.prompt.size() != 2) {
+                                SLT_ERR(slot, "%s", "invalid prompt for rerank task\n");
+                                slot.release();
+                                send_error(slot, "invalid prompt for rerank task",
+                                           ERROR_TYPE_INVALID_REQUEST);
+                                continue;
+                            }
+
+                            // prompt: <s>query</s><s>doc</s>
+                            prompt_tokens.clear();
+                            prompt_tokens.push_back(llama_token_bos(model));
+                            {
+                                const auto part = tokenize(slot.prompt[0], false);
+                                prompt_tokens.insert(prompt_tokens.end(), part.begin(), part.end());
+                            }
+                            prompt_tokens.push_back(llama_token_eos(model));
+                            prompt_tokens.push_back(llama_token_bos(model));
+                            {
+                                const auto part = tokenize(slot.prompt[1], false);
+                                prompt_tokens.insert(prompt_tokens.end(), part.begin(), part.end());
+                            }
+                            prompt_tokens.push_back(llama_token_eos(model));
                         } else if (!slot.oaicompat_completion_chat_vision) {
                             // add BOS if there isn't system prompt
                             prompt_tokens = tokenize(slot.prompt, system_prompt.empty());
@@ -2232,7 +2318,8 @@ struct server_context {
                             continue;
                         }
 
-                        if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
+                        if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING ||
+                            slot.cmpl_type == SERVER_TASK_CMPL_TYPE_RERANK) {
                             // this prompt is too large to process - discard it
                             if (slot.n_prompt_tokens > n_ubatch) {
                                 slot.release();
@@ -2342,7 +2429,11 @@ struct server_context {
                     }
 
                     // check that we are in the right batch_type, if not defer the slot
-                    int32_t slot_type = slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING ? 1 : 0;
+                    // clang-format off
+                    const int32_t slot_type =
+                        slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING ||
+                        slot.cmpl_type == SERVER_TASK_CMPL_TYPE_RERANK     ? 1 : 0;
+                    // clang-format on
                     if (batch_type == -1) {
                         batch_type = slot_type;
                     } else if (batch_type != slot_type) {
@@ -2581,6 +2672,13 @@ struct server_context {
                     if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_EMBEDDING) {
                         // prompt evaluated for embedding
                         send_embedding(slot, batch_view);
+                        slot.release();
+                        slot.i_batch = -1;
+                        continue; // continue loop of slots
+                    }
+
+                    if (slot.cmpl_type == SERVER_TASK_CMPL_TYPE_RERANK) {
+                        send_rerank(slot, batch_view);
                         slot.release();
                         slot.i_batch = -1;
                         continue; // continue loop of slots
@@ -3766,6 +3864,58 @@ int main(int argc, char **argv) {
         ctx_server.cancel_tasks(task_ids);
     };
 
+    const auto handle_rerank = [&ctx_server, &res_error, &res_ok](const httplib::Request &req,
+                                                                  httplib::Response &res) {
+        json request = json::parse(req.body);
+        if (!request.contains("query")) {
+            res_error(res, format_error_response("\"query\" must be provided",
+                                                 ERROR_TYPE_INVALID_REQUEST));
+            return;
+        }
+        if (!request.at("query").is_string()) {
+            res_error(res, format_error_response("\"query\" must be a string",
+                                                 ERROR_TYPE_INVALID_REQUEST));
+            return;
+        }
+        if (!request.contains("documents")) {
+            res_error(res, format_error_response("\"documents\" must be provided",
+                                                 ERROR_TYPE_INVALID_REQUEST));
+            return;
+        }
+        if (!request.at("documents").is_array()) {
+            res_error(res, format_error_response("\"documents\" must be a array",
+                                                 ERROR_TYPE_INVALID_REQUEST));
+            return;
+        }
+        if (request.at("documents").empty()) {
+            res_error(res, format_error_response("\"documents\" must not be empty",
+                                                 ERROR_TYPE_INVALID_REQUEST));
+            return;
+        }
+        request = jinaaicompat_rerank_request(ctx_server.params, request);
+
+        // post tasks
+        std::vector<server_task> tasks =
+            ctx_server.create_tasks_cmpl(request, SERVER_TASK_CMPL_TYPE_RERANK);
+        ctx_server.queue_results.add_waiting_tasks(tasks);
+        ctx_server.queue_tasks.post(tasks);
+
+        std::unordered_set<int> task_ids = server_task::get_list_id(tasks);
+
+        // process non-streaming requests
+        ctx_server.receive_cmpl_results(
+            task_ids,
+            [&](std::vector<server_task_result> &results) {
+                json responses = json::array();
+                for (const server_task_result &ret : results) {
+                    responses.push_back(ret.data);
+                }
+                json rerank_json = jinaicompat_rerank_repsonse(request, responses);
+                res_ok(res, rerank_json);
+            },
+            [&](const json &error_data) { res_error(res, error_data); });
+    };
+
     //
     // Router
     //
@@ -3800,6 +3950,9 @@ int main(int argc, char **argv) {
     svr.Post("/v1/chat/completions", handle_chat_completions);
     if (params.embedding) {
         svr.Post("/v1/embeddings", handle_embeddings);
+    }
+    if (params.reranking) {
+        svr.Post("/v1/rerank", handle_rerank);
     }
 
     //

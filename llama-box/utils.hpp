@@ -679,6 +679,67 @@ static json oaicompat_embedding_response(const json &request, const json &result
     return res;
 }
 
+static json jinaaicompat_rerank_request(const struct gpt_params &params, const json &body) {
+    // Print the request for debugging
+    {
+        json body_cp = body;
+        if (body_cp.contains("query")) {
+            body_cp["query"] = "...";
+        }
+        if (body_cp.contains("documents")) {
+            body_cp["documents"] = "[...]";
+        }
+        SRV_INF("params: %s\n",
+                body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+    }
+
+    json llama_params;
+
+    // Annotations for OAI compatibility
+    llama_params["__oaicompat"] = true;
+    llama_params["__oaicompat_rerank"] = true;
+
+    // Handle "model" field
+    llama_params["model"] = json_value(body, "model", params.model_alias);
+
+    // Handle "query" and "documents" fields
+    json prompt = json::array();
+    prompt.push_back(json_value(body, "query", std::string("")));
+    for (const json &doc : body.at("documents")) {
+        if (!doc.is_string()) {
+            throw std::runtime_error("Illegal param: documents must be an array of strings");
+        }
+        prompt.push_back(doc.get<std::string>());
+    }
+    llama_params["prompt"] = prompt;
+
+    // Handle "top_n" field
+    llama_params["top_n"] = json_value(body, "top_n", body.at("documents").size());
+
+    return llama_params;
+}
+
+static json jinaicompat_rerank_repsonse(const json &request, const json &result) {
+    json data = json::array();
+    int i = 0;
+    for (const json &rank : result) {
+        data.push_back(json{
+            {"index", i++},
+            {"document", {{"text", request.at("prompt")[i]}}},
+            {"relevance_score", json_value(rank, "score", 0.0)},
+        });
+    }
+
+    int num_prompt_tokens = json_value(result, "tokens_evaluated", 0);
+    json res = json{
+        {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
+        {"object", "list"},
+        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
+        {"results", data}};
+
+    return res;
+}
+
 static bool is_valid_utf8(const std::string &str) {
     const auto *bytes = reinterpret_cast<const unsigned char *>(str.data());
     const unsigned char *end = bytes + str.length();

@@ -110,9 +110,14 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",             "       --conn-idle N",          "server connection idle in seconds (default: %d)", bparams.conn_idle });
     opts.push_back({ "server",             "       --conn-keepalive N",     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
     opts.push_back({ "server",             "-m,    --model FILE",           "model path (default: %s)", DEFAULT_MODEL_PATH });
+    opts.push_back({ "server",             "-a,    --alias NAME",           "model name alias (default: %s)", params.model_alias.c_str() });
+    opts.push_back({ "server",             "       --metrics",              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --infill",               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --rerank",               "enable reranking endpoint (default: %s)", params.reranking ? "enabled" : "disabled" });
+    opts.push_back({ "server/completion",  "       --rpc SERVERS",          "comma separated list of RPC servers" });
     // server // completion //
     opts.push_back({ "server/completion" });
-    opts.push_back({ "server/completion",  "-a,    --alias NAME",           "model name alias (default: %s)", params.model_alias.c_str() });
     opts.push_back({ "server/completion",  "-s,    --seed N",               "RNG seed (default: %u, use random seed for %u)", sparams.seed, LLAMA_DEFAULT_SEED });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/completion",
@@ -135,9 +140,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
     opts.push_back({ "server/completion",  "       --system-prompt-file FILE",
                                                                             "set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications" });
-    opts.push_back({ "server/completion",  "       --metrics",              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",  "       --infill",               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",  "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --no-slots",             "disables slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --chat-template JINJA_TEMPLATE",
                                                                             "set custom jinja chat template (default: template taken from model's metadata)\n"
@@ -174,7 +176,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "-b,    --batch-size N",         "logical maximum batch size (default: %d)", params.n_batch });
     opts.push_back({ "server/completion",  "-ub,   --ubatch-size N",        "physical maximum batch size (default: %d)", params.n_ubatch });
     opts.push_back({ "server/completion",  "       --keep N",               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", params.n_keep });
-    opts.push_back({ "server/completion",  "       --chunks N",             "max number of chunks to process (default: %d, -1 = all)", params.n_chunks });
     opts.push_back({ "server/completion",  "-fa,   --flash-attn",           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "-e,    --escape",               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
     opts.push_back({ "server/completion",  "       --no-escape",            "do not process escape sequences" });
@@ -256,8 +257,10 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --no-warmup",            "skip warming up the model with an empty run" });
     opts.push_back({ "server/completion",  "       --spm-infill",           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "-sp,   --special",              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
-    opts.push_back({ "server/completion",  "       --rpc SERVERS",          "comma separated list of RPC servers" });
     // server // completion //
+    // server // embedding //
+    opts.push_back({ "server/embedding",   "       --pooling",              "pooling type for embeddings, use model default if unspecified" });
+    // server // embedding //
     // server // speculative //
     opts.push_back({ "server/speculative" });
     opts.push_back({ "server/speculative", "       --draft N",              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
@@ -487,6 +490,35 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--metrics")) {
+                bparams.gparams.endpoint_metrics = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--infill")) {
+                bparams.endpoint_infill = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--embedding") || !strcmp(flag, "--embeddings")) {
+                bparams.gparams.embedding = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--reranking") || !strcmp(flag, "--rerank")) {
+                bparams.gparams.reranking = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc")) {
+                if (i == argc) {
+                    missing("--rpc");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.rpc_servers = arg;
+                continue;
+            }
+
             // server // completion//
 
             if (!strcmp(flag, "-a") || !strcmp(flag, "--alias")) {
@@ -593,21 +625,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
                           std::back_inserter(bparams.gparams.system_prompt));
-                continue;
-            }
-
-            if (!strcmp(flag, "--metrics")) {
-                bparams.gparams.endpoint_metrics = true;
-                continue;
-            }
-
-            if (!strcmp(flag, "--infill")) {
-                bparams.endpoint_infill = true;
-                continue;
-            }
-
-            if (!strcmp(flag, "--embedding") || !strcmp(flag, "--embeddings")) {
-                bparams.gparams.embedding = true;
                 continue;
             }
 
@@ -864,15 +881,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--chunks")) {
-                if (i == argc) {
-                    missing("--chunks");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.n_chunks = std::stoi(std::string(arg));
-                continue;
-            }
-
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
                 bparams.gparams.flash_attn = true;
                 continue;
@@ -1059,10 +1067,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 std::stringstream ss(arg);
                 llama_token key;
                 char sign;
-                std::string value_str;
-                if (ss >> key && ss >> sign && std::getline(ss, value_str) &&
+                std::string value;
+                if (ss >> key && ss >> sign && std::getline(ss, value) &&
                     (sign == '+' || sign == '-')) {
-                    const float bias = std::stof(value_str) * ((sign == '-') ? -1.0f : 1.0f);
+                    const float bias = std::stof(value) * ((sign == '-') ? -1.0f : 1.0f);
                     bparams.gparams.sparams.logit_bias.push_back({key, bias});
                 } else {
                     invalid("--logit-bias");
@@ -1388,12 +1396,27 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--rpc")) {
+            // server // embedding //
+
+            if (!strcmp(flag, "--pooling")) {
                 if (i == argc) {
-                    missing("--rpc");
+                    missing("--pooling");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.rpc_servers = arg;
+                std::string value(arg);
+                if (value == "none") {
+                    bparams.gparams.pooling_type = LLAMA_POOLING_TYPE_NONE;
+                } else if (value == "mean") {
+                    bparams.gparams.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+                } else if (value == "cls") {
+                    bparams.gparams.pooling_type = LLAMA_POOLING_TYPE_CLS;
+                } else if (value == "last") {
+                    bparams.gparams.pooling_type = LLAMA_POOLING_TYPE_LAST;
+                } else if (value == "rank") {
+                    bparams.gparams.pooling_type = LLAMA_POOLING_TYPE_RANK;
+                } else {
+                    invalid("--pooling");
+                }
                 continue;
             }
 
