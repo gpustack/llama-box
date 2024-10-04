@@ -39,6 +39,9 @@ LLaMA Box supports the following platforms.
 | _AVX2_                       | `darwin/amd64`<br/> `linux/amd64`<br/> `windows/amd64` | CPUs support AVX2, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                 |
 | _Advanced SIMD (NEON)_       | `linux/arm64`<br/> `windows/arm64`                     | CPUs support Advanced SIMD (NEON), see <br/>https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                                                            |
 
+> [!WARNING]
+> - [PR#9707](https://github.com/ggerganov/llama.cpp/pull/9707) breaks the new releases of **Huawei Ascend CANN 8.0**.
+
 > [!NOTE]
 > - **"NVIDIA CUDA 12.4"**, **"AMD ROCm/HIP 6.1"** and _"AVX2"_ Linux releases are built on CentOS 7 (glibc 2.17),
     except _"Advanced SIMD (NEON)"_ which is built on Ubuntu 18.04 (glibc 2.27).
@@ -46,14 +49,11 @@ LLaMA Box supports the following platforms.
 > - **"Moore Threads MUSA rc3.1"** Linux releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"Huawei Ascend CANN 8.0"** Linux releases have built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc
     2.28).
-
-> [!IMPORTANT]
-> Partial Linux assets might contain the backend toolkit (some dynamic link libraries) and the `llama-box` binary. In an
-> environment without the backend toolkit installed, you can set `LD_LIBRARY_PATH` to point to the unpacked directory
-> to
-> start `llama-box`, for example `LD_LIBRARY_PATH="$(pwd):${LD_LIBRARY_PATH}" ./llama-box --help`. If your environment
-> already has the backend toolkit installed, you can directly use the `llama-box` binary and ignore these dynamic link
-> libraries.
+> - Partial Linux assets might contain the backend toolkit (some dynamic link libraries) and the `llama-box` binary. In
+    an environment without the backend toolkit installed, you can set `LD_LIBRARY_PATH` to point to the unpacked
+    directory to start `llama-box`, for example `LD_LIBRARY_PATH="$(pwd):${LD_LIBRARY_PATH}" ./llama-box --help`. If
+    your environment already has the backend toolkit installed, you can directly use the `llama-box` binary and ignore
+    these dynamic link libraries.
 
 ## Examples
 

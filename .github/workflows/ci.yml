@@ -760,6 +760,7 @@ jobs:
           name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
   linux-cann:
+    if: false
     strategy:
       fail-fast: false
       matrix:
