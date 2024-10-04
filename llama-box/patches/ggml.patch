@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index fac4466e..e8fbc784 100644
+index 03b832d0..f83138a7 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
-@@ -3693,7 +3693,11 @@ static void ggml_init_arm_arch_features(void) {
+@@ -3736,7 +3736,11 @@ static void ggml_init_arm_arch_features(void) {
      uint32_t hwcap2 = getauxval(AT_HWCAP2);
  
      ggml_arm_arch_features.has_neon = !!(hwcap & HWCAP_ASIMD);
