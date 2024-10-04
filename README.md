@@ -28,21 +28,22 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 Download LLaMA Box from [the latest release](https://github.com/gpustack/llama-box/releases/latest) page please, now
 LLaMA Box supports the following platforms.
 
-| Backend                    | OS/Arch                                                | Device Requirement                                                                                                                                                                                                                                                 |
-|----------------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **NVIDIA CUDA 12.4**       | `linux/amd64`<br/> `windows/amd64`                     | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`, see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4. |
-| **AMD ROCm/HIP 6.1**       | `linux/amd64`<br/> `windows/amd64`                     | LLVM target matches `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx942`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see <br/>https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.                        |
-| **Intel oneAPI 2024.2**    | `linux/amd64`<br/> `windows/amd64`                     | Support [Intel oneAPI](https://en.wikipedia.org/wiki/OneAPI_(compute_acceleration)), see <br/>https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                                   |
-| **Huawei Ascend CANN 8.0** | `linux/amd64`<br/> `linux/arm64`                       | `Ascend 310p`, `Ascend 910` or `Ascend 910b`, see <br/>https://www.hiascend.com/document/detail/en/CANNCommunityEdition/600alphaX/softwareinstall/instg/atlasdeploy_03_0015.html.                                                                                  |
-| **Moore Threads MUSA 1.5** | `linux/amd64`<br/>                                     | `MTT S4000`, `MTT S80`, see <br/>https://en.mthreads.com.                                                                                                                                                                                                          |
-| **Apple Metal 3**          | `darwin/amd64`<br/> `darwin/arm64`                     | Support [Apple Metal](https://developer.apple.com/metal/), see <br/>https://support.apple.com/en-sg/102894.                                                                                                                                                        |
-| _AVX2_                     | `darwin/amd64`<br/> `linux/amd64`<br/> `windows/amd64` | CPUs support AVX2, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                 |
-| _Advanced SIMD (NEON)_     | `linux/arm64`<br/> `windows/arm64`                     | CPUs support Advanced SIMD (NEON), see <br/>https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                                                            |
+| Backend                      | OS/Arch                                                | Device Requirement                                                                                                                                                                                                                                                 |
+|------------------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **NVIDIA CUDA 12.4**         | `linux/amd64`<br/> `windows/amd64`                     | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`, see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4. |
+| **AMD ROCm/HIP 6.1**         | `linux/amd64`<br/> `windows/amd64`                     | LLVM target matches `gfx900`, `gfx906`,`gfx908`, `gfx90a`, `gfx940`, `gfx942`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see <br/>https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.                        |
+| **Intel oneAPI 2024.2**      | `linux/amd64`<br/> `windows/amd64`                     | Support [Intel oneAPI](https://en.wikipedia.org/wiki/OneAPI_(compute_acceleration)), see <br/>https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                                   |
+| **Huawei Ascend CANN 8.0**   | `linux/amd64`<br/> `linux/arm64`                       | `Ascend 310p`, `Ascend 910` or `Ascend 910b`, see <br/>https://www.hiascend.com/document/detail/en/CANNCommunityEdition/600alphaX/softwareinstall/instg/atlasdeploy_03_0015.html.                                                                                  |
+| **Moore Threads MUSA rc3.1** | `linux/amd64`<br/>                                     | `MTT S4000`, `MTT S80`, see <br/>https://en.mthreads.com.                                                                                                                                                                                                          |
+| **Apple Metal 3**            | `darwin/amd64`<br/> `darwin/arm64`                     | Support [Apple Metal](https://developer.apple.com/metal/), see <br/>https://support.apple.com/en-sg/102894.                                                                                                                                                        |
+| _AVX2_                       | `darwin/amd64`<br/> `linux/amd64`<br/> `windows/amd64` | CPUs support AVX2, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                 |
+| _Advanced SIMD (NEON)_       | `linux/arm64`<br/> `windows/arm64`                     | CPUs support Advanced SIMD (NEON), see <br/>https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                                                            |
 
 > [!NOTE]
 > - **"NVIDIA CUDA 12.4"**, **"AMD ROCm/HIP 6.1"** and _"AVX2"_ Linux releases are built on CentOS 7 (glibc 2.17),
     except _"Advanced SIMD (NEON)"_ which is built on Ubuntu 18.04 (glibc 2.27).
-> - **"Intel oneAPI 2024.2"** and **"Moore Threads MUSA 1.5"** Linux releases are built on Ubuntu 20.04 (glibc 2.31).
+> - **"Intel oneAPI 2024.2"** Linux releases are built on Ubuntu 20.04 (glibc 2.31).
+> - **"Moore Threads MUSA rc3.1"** Linux releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"Huawei Ascend CANN 8.0"** Linux releases have built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc
     2.28).
 
@@ -218,7 +219,7 @@ server:
 
 server/completion:
 
-  -s,    --seed N                 RNG seed (default: 4294967295, use random seed for 4294967295)
+  -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
