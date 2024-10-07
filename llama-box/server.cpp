@@ -1687,6 +1687,7 @@ struct server_context {
             };
         }
 
+        res.data["tokens_evaluated"] = slot.n_prompt_tokens;
         queue_results.send(res);
     }
 
