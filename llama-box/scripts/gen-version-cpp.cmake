@@ -37,8 +37,8 @@ if (Git_FOUND)
     if (RES EQUAL 0)
         set(GIT_COMMIT ${HEAD})
     endif ()
-    if (DEFINED ENV{VERSION})
-        set(GIT_VERSION $ENV{VERSION})
+    if (DEFINED ENV{LLAMA_BOX_BUILD_VERSION})
+        set(GIT_VERSION $ENV{LLAMA_BOX_BUILD_VERSION})
     else ()
         execute_process(
                 COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD

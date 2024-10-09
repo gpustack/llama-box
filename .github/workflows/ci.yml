@@ -6,7 +6,7 @@ permissions:
   actions: read
 
 env:
-  VERSION: "${{ github.ref_name }}"
+  LLAMA_BOX_BUILD_VERSION: "${{ github.ref_name }}"
 
 on:
   workflow_dispatch: { }
@@ -311,7 +311,7 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
-            --env VERSION \
+            --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
@@ -448,7 +448,7 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env AMDGPU_TARGETS \
-            --env VERSION \
+            --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
@@ -612,7 +612,7 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env CUDA_ARCHITECTURES \
-            --env VERSION \
+            --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
@@ -748,7 +748,7 @@ jobs:
             --env CXX=icpx \
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
-            --env VERSION \
+            --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
@@ -885,7 +885,7 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
-            --env VERSION \
+            --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
@@ -1006,7 +1006,7 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
-            --env VERSION \
+            --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
