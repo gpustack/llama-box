@@ -903,7 +903,7 @@ jobs:
         #     rc3.1.0 ==> rc3.1.0, Ubuntu 20.04.
         include:
           - arch: 'amd64'
-            version: '1.5'
+            version: 'rc3.1'
             distro_container_image: 'mthreads/musa:rc3.1.0-devel-ubuntu22.04'
     runs-on: ubuntu-22.04
     steps:
