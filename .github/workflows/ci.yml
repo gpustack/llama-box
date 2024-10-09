@@ -14,7 +14,8 @@ on:
     tags:
       - "v*.*.*"
     branches:
-      - main
+      - "main"
+      - "branch-v*.*"
     paths-ignore:
       - "docs/**"
       - "**.md"
@@ -24,7 +25,7 @@ on:
       - ".github/workflows/clean.yml"
   pull_request:
     branches:
-      - main
+      - "main"
     paths-ignore:
       - "docs/**"
       - "**.md"
@@ -42,7 +43,7 @@ concurrency:
 # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
 #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
 jobs:
-  
+
   darwin:
     strategy:
       fail-fast: false
@@ -167,13 +168,13 @@ jobs:
       fail-fast: false
       matrix:
         # AVX2 ==> CentOS 7.
-        # NEON ==> Ubuntu 18.04.
+        # NEON+SVE ==> Ubuntu 18.04.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
             distro_container_image: 'centos:7'
           - arch: 'arm64'
-            instruction: 'neon'
+            instruction: 'neon+sve'
             distro_container_image: 'ubuntu:18.04'
     runs-on: ubuntu-22.04
     steps:
@@ -281,6 +282,8 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
+            ${{ matrix.instruction == 'neon+sve' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a+sve"' || '' }} \
+            ${{ matrix.instruction == 'neon+sve' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a+sve"' || '' }} \
             -DGGML_BLAS_VENDOR=OpenBLAS \
             -DGGML_STATIC=on \
             -DGGML_BLAS=on \
@@ -846,6 +849,8 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            ${{ matrix.arch == 'arm64' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a+sve"' || '' }} \
+            ${{ matrix.arch == 'arm64' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a+sve"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -1048,8 +1053,9 @@ jobs:
           
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
-          cmake ${{ matrix.arch == 'arm64' && format('-D CMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-neon.cmake', github.workspace) || '' }} -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_NATIVE=off `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64-msvc.cmake', github.workspace) || '' }} `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
