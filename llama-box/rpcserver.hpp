@@ -189,7 +189,7 @@ static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     return backend;
 }
 
-static void rpcserver_get_backend_memory(int32_t gpu, size_t *free_mem, size_t *total_mem) {
+static void rpcserver_get_backend_memory(ggml_backend_t backend, int32_t gpu, size_t *free_mem, size_t *total_mem) {
     if (gpu < 0) {
 #ifdef _WIN32
         MEMORYSTATUSEX status;
@@ -208,7 +208,7 @@ static void rpcserver_get_backend_memory(int32_t gpu, size_t *free_mem, size_t *
 #ifdef GGML_USE_CUDA
     ggml_backend_cuda_get_device_memory(gpu, free_mem, total_mem);
 #elif GGML_USE_METAL
-    ggml_backend_metal_get_device_memory(free_mem, total_mem);
+    ggml_backend_metal_get_device_memory(backend, free_mem, total_mem);
 #elif GGML_USE_CANN
     ggml_backend_cann_get_device_memory(gpu, free_mem, total_mem);
 #elif GGML_USE_SYCL
@@ -565,7 +565,7 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
 
 size_t rpcserver::get_free_memory() const {
     size_t free_mem, total_mem;
-    rpcserver_get_backend_memory(index, &free_mem, &total_mem);
+    rpcserver_get_backend_memory(backend, index, &free_mem, &total_mem);
     if (free_mem >= capacity) {
         free_mem = capacity;
     }
@@ -796,7 +796,7 @@ static int rpcserver_start(rpcserver_params &params) {
     }
 
     size_t free_mem, total_mem;
-    rpcserver_get_backend_memory(params.main_gpu, &free_mem, &total_mem);
+    rpcserver_get_backend_memory(backend, params.main_gpu, &free_mem, &total_mem);
     if (total_mem < params.reserve_memory) {
         SRV_ERR("not enough memory, "
                 "free_mib = %zu, total_mib = %zu, reserve_mib = %zu\n",

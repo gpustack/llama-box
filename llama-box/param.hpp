@@ -115,6 +115,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",             "       --infill",               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
     opts.push_back({ "server",             "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server",             "       --rerank",               "enable reranking endpoint (default: %s)", params.reranking ? "enabled" : "disabled" });
+    opts.push_back({ "server",             "       --slots",                "enable slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --rpc SERVERS",          "comma separated list of RPC servers" });
     // server // completion //
     opts.push_back({ "server/completion" });
@@ -140,7 +141,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
     opts.push_back({ "server/completion",  "       --system-prompt-file FILE",
                                                                             "set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications" });
-    opts.push_back({ "server/completion",  "       --no-slots",             "disables slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",  "       --chat-template JINJA_TEMPLATE",
                                                                             "set custom jinja chat template (default: template taken from model's metadata)\n"
                                                                             "only commonly used templates are accepted:\n"
@@ -510,6 +510,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--slots")) {
+                bparams.gparams.endpoint_slots = true;
+                continue;
+            }
+
             if (!strcmp(flag, "--rpc")) {
                 if (i == argc) {
                     missing("--rpc");
@@ -625,11 +630,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
                           std::back_inserter(bparams.gparams.system_prompt));
-                continue;
-            }
-
-            if (!strcmp(flag, "--no-slots")) {
-                bparams.gparams.endpoint_slots = false;
                 continue;
             }
 

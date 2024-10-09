@@ -215,6 +215,7 @@ server:
          --infill                 enable infill endpoint (default: disabled)
          --embeddings             enable embedding endpoint (default: disabled)
          --rerank                 enable reranking endpoint (default: disabled)
+         --slots                  enable slots monitoring endpoint (default: disabled)
          --rpc SERVERS            comma separated list of RPC servers
 
 server/completion:
@@ -233,7 +234,6 @@ server/completion:
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --system-prompt-file FILE
                                   set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
-         --no-slots               disables slots monitoring endpoint (default: enabled)
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
                                   only commonly used templates are accepted:

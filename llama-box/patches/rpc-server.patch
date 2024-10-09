@@ -1,47 +1,28 @@
 diff --git a/ggml/include/ggml-metal.h b/ggml/include/ggml-metal.h
-index c3ec572b..1f15d1c1 100644
+index b8d3f678..7d893f0b 100644
 --- a/ggml/include/ggml-metal.h
 +++ b/ggml/include/ggml-metal.h
-@@ -57,6 +57,8 @@ GGML_API bool ggml_backend_metal_supports_family(ggml_backend_t backend, int fam
+@@ -59,6 +59,8 @@ GGML_API bool ggml_backend_metal_supports_family(ggml_backend_t backend, int fam
  // capture all command buffers committed the next time `ggml_backend_graph_compute` is called
  GGML_API void ggml_backend_metal_capture_next_compute(ggml_backend_t backend);
  
-+GGML_API void ggml_backend_metal_get_device_memory(size_t * free_mem, size_t * total_mem);
++GGML_API void ggml_backend_metal_get_device_memory(ggml_backend_t backend, size_t * free_mem, size_t * total_mem);
 +
+ GGML_API ggml_backend_reg_t ggml_backend_metal_reg(void);
+ 
  #ifdef __cplusplus
- }
- #endif
 diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
-index c6a7014f..5d4adba0 100644
+index 172a0f92..ea6f73ee 100644
 --- a/ggml/src/ggml-metal.m
 +++ b/ggml/src/ggml-metal.m
-@@ -3556,3 +3556,29 @@ ggml_backend_t ggml_backend_reg_metal_init(const char * params, void * user_data
-     GGML_UNUSED(params);
-     GGML_UNUSED(user_data);
+@@ -3606,6 +3606,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
+     }
  }
-+
-+void ggml_backend_metal_get_device_memory(size_t *free, size_t *total) {
-+    id<MTLDevice> device = ggml_backend_metal_get_device();
-+    if (total) {
-+#if TARGET_OS_OSX || (TARGET_OS_IOS && __clang_major__ >= 15)
-+      if (@available(macOS 10.12, iOS 16.0, *)) {
-+        *total = device.recommendedMaxWorkingSetSize;
-+      }
-+#elif TARGET_OS_OSX
-+      if (device.maxTransferRate != 0) {
-+        *total = device.maxTransferRate;
-+      } else {
-+        *total = 0;
-+      }
-+#endif
-+    }
-+    if (free) {
-+      size_t allocated = device.currentAllocatedSize;
-+      if (total && *total > allocated) {
-+        *free = *total - allocated;
-+      } else {
-+        *free = 0;
-+      }
-+    }
-+    ggml_backend_metal_free_device();
+ 
++void ggml_backend_metal_get_device_memory(ggml_backend_t backend, size_t *free, size_t *total) {
++    ggml_backend_metal_device_get_memory(backend->device, free, total);
 +}
++
+ static enum ggml_backend_dev_type ggml_backend_metal_device_get_type(ggml_backend_dev_t dev) {
+     return GGML_BACKEND_DEVICE_TYPE_GPU_FULL;
+ 
