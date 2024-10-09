@@ -14,7 +14,8 @@ on:
     tags:
       - "v*.*.*"
     branches:
-      - main
+      - "main"
+      - "branch-v*.*"
     paths-ignore:
       - "docs/**"
       - "**.md"
@@ -24,7 +25,7 @@ on:
       - ".github/workflows/clean.yml"
   pull_request:
     branches:
-      - main
+      - "main"
     paths-ignore:
       - "docs/**"
       - "**.md"
