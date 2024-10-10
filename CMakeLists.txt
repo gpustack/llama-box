@@ -31,6 +31,9 @@ option(LLAMA_SANITIZE_THREAD "llama: enable thread sanitizer" OFF)
 option(LLAMA_SANITIZE_ADDRESS "llama: enable address sanitizer" OFF)
 option(LLAMA_SANITIZE_UNDEFINED "llama: enable undefined sanitizer" OFF)
 
+# utils
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "llama: build common utils library" FORCE)
+
 # extra artifacts
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama: build tests" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama: build examples" FORCE)
