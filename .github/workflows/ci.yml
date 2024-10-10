@@ -427,6 +427,8 @@ jobs:
                 cp \${library_path} ${{ github.workspace }}/build/bin/ || true
               fi
             done
+            echo "***** ITEMS *****"
+            ls -lh ${{ github.workspace }}/build/bin/*
             echo "***** AFTER *****"
             export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -593,6 +595,8 @@ jobs:
                 cp \${library_path} ${{ github.workspace }}/build/bin/ || true
               fi
             done
+            echo "***** ITEMS *****"
+            ls -lh ${{ github.workspace }}/build/bin/*
             echo "***** AFTER *****"
             export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -728,6 +732,8 @@ jobs:
                 cp \${library_path} ${{ github.workspace }}/build/bin/ || true
               fi
             done
+            echo "***** ITEMS *****"
+            ls -lh ${{ github.workspace }}/build/bin/*
             echo "***** AFTER *****"
             export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -869,6 +875,8 @@ jobs:
                 cp \${library_path} ${{ github.workspace }}/build/bin/ || true
               fi
             done
+            echo "***** ITEMS *****"
+            ls -lh ${{ github.workspace }}/build/bin/*
             echo "***** AFTER *****"
             export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -990,6 +998,8 @@ jobs:
                 cp \${library_path} ${{ github.workspace }}/build/bin/ || true
               fi
             done
+            echo "***** ITEMS *****"
+            ls -lh ${{ github.workspace }}/build/bin/*
             echo "***** AFTER *****"
             export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -1162,7 +1172,10 @@ jobs:
           Copy-Item -Path "${env:HIP_PATH}\bin\hipblas.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           Copy-Item -Path "${env:HIP_PATH}\bin\rocblas.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\build\bin\rocblas\library" -ErrorAction Ignore | Out-Null
-          Copy-Item -Path "${env:HIP_PATH}\lib\rocblas\library\*" -Destination "${{ github.workspace }}\build\bin\rocblas\library\" -Recurse -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:HIP_PATH}\bin\rocblas\library\*" -Destination "${{ github.workspace }}\build\bin\rocblas\library\" -Recurse -Force -ErrorAction Ignore
+
+          Write-Host "===== ITEMS ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
 
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1253,9 +1266,12 @@ jobs:
           } else {
               exit 1
           }
-          Copy-Item -Path "${env:CUDA_PATH}\bin\cudart64_*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:CUDA_PATH}\bin\cublas64_*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:CUDA_PATH}\bin\cublasLt64_*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:CUDA_PATH}\bin\cudart64_*.dll" -Destination "${{ github.workspace }}\build\bin\Release\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:CUDA_PATH}\bin\cublas64_*.dll" -Destination "${{ github.workspace }}\build\bin\Release\" -Force -ErrorAction Ignore
+          Copy-Item -Path "${env:CUDA_PATH}\bin\cublasLt64_*.dll" -Destination "${{ github.workspace }}\build\bin\Release\" -Force -ErrorAction Ignore
+          
+          Write-Host "===== ITEMS ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1344,7 +1360,10 @@ jobs:
           Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\svml_dispmd.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\libmmd.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
           Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\libiomp5md.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-
+          
+          Write-Host "===== ITEMS ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
