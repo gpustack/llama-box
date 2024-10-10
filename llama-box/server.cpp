@@ -3007,7 +3007,10 @@ int main(int argc, char **argv) {
 
     // error handlers
     auto res_error = [](httplib::Response &res, json data) {
-        json final_response{{"error", data}};
+        json final_response{
+            {"error", data},
+            {"detail", json_value(data, "message", std::string("Unknown Error"))},
+        };
         res.set_content(final_response.dump(-1, ' ', false, json::error_handler_t::replace),
                         MIMETYPE_JSON);
         res.status = json_value(data, "code", httplib::StatusCode::InternalServerError_500);
@@ -3019,16 +3022,20 @@ int main(int argc, char **argv) {
 
     svr.set_exception_handler([&res_error](const httplib::Request &, httplib::Response &res,
                                            const std::exception_ptr &ep) {
+        error_type err_type = ERROR_TYPE_SERVER;
         std::string message;
         try {
             std::rethrow_exception(ep);
+        } catch (std::runtime_error &e) {
+            err_type = ERROR_TYPE_INVALID_REQUEST;
+            message = e.what();
         } catch (std::exception &e) {
             message = e.what();
         } catch (...) {
             message = "Unknown Exception";
         }
 
-        json formatted_error = format_error_response(message, ERROR_TYPE_SERVER);
+        json formatted_error = format_error_response(message, err_type);
         res_error(res, formatted_error);
     });
     svr.set_error_handler([&res_error](const httplib::Request &, httplib::Response &res) {
