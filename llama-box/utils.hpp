@@ -714,13 +714,23 @@ static json jinaaicompat_rerank_request(const struct gpt_params &params, const j
     llama_params["prompt"] = prompt;
 
     // Handle "top_n" field
-    llama_params["top_n"] = json_value(body, "top_n", body.at("documents").size());
+    size_t documents_size = body.at("documents").size();
+    size_t top_n = json_value(body, "top_n", documents_size);
+    if (top_n > documents_size) {
+        top_n = documents_size;
+    } else if (top_n <= 0) {
+        throw std::runtime_error("Illegal param: top_n must be greater than 0");
+    }
+    llama_params["top_n"] = top_n;
 
     return llama_params;
 }
 
-static int32_t jinaicompat_rerank_top_n_response_partition(json &result, int32_t low,
-                                                           int32_t high) {
+static void jinaicompat_rerank_response_sort(json &result, int32_t low, int32_t high) {
+    if (low >= high) {
+        return;
+    }
+
     json base = result[low];
     int i = low, j = high;
     while (i != j) {
@@ -736,7 +746,8 @@ static int32_t jinaicompat_rerank_top_n_response_partition(json &result, int32_t
     }
     result[low] = result[i];
     result[i] = base;
-    return i;
+    jinaicompat_rerank_response_sort(result, low, i - 1);
+    jinaicompat_rerank_response_sort(result, i + 1, high);
 }
 
 static json jinaicompat_rerank_response(const json &request, json &result) {
@@ -745,9 +756,14 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
     int num_prompt_tokens = 0;
     json prompt = request.at("prompt");
     json data = json::array();
-    if (top_n == int32_t(prompt.size()) - 1) {
-        for (const json &ret : result) {
-            num_prompt_tokens += json_value(ret, "tokens_evaluated", 0);
+
+    int32_t start = 0;
+    auto end = int32_t(result.size() - 1);
+    jinaicompat_rerank_response_sort(result, start, end);
+    for (int32_t i = 0; i <= end; i++) {
+        const json &ret = result[i];
+        num_prompt_tokens += json_value(ret, "tokens_evaluated", 0);
+        if (i < top_n) {
             const int32_t idx = json_value(ret, "index", 0);
             const double scr = json_value(ret, "score", 0.0);
             data.push_back(json{
@@ -755,32 +771,6 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
                 {"document", {{"text", prompt[idx + 1]}}},
                 {"relevance_score", scr},
             });
-        }
-    } else {
-        int32_t start = 0;
-        auto end = int32_t(result.size() - 1);
-        int32_t index = jinaicompat_rerank_top_n_response_partition(result, start, end);
-        while (top_n - 1 != index) {
-            if (top_n - 1 < index) {
-                end = index - 1;
-                index = jinaicompat_rerank_top_n_response_partition(result, start, end);
-            } else {
-                start = index + 1;
-                index = jinaicompat_rerank_top_n_response_partition(result, start, end);
-            }
-        }
-        for (int32_t i = 0; i < int32_t(result.size()); i++) {
-            const json &ret = result[i];
-            num_prompt_tokens += json_value(ret, "tokens_evaluated", 0);
-            if (i < top_n) {
-                const int32_t idx = json_value(ret, "index", 0);
-                const double scr = json_value(ret, "score", 0.0);
-                data.push_back(json{
-                    {"index", idx},
-                    {"document", {{"text", prompt[idx + 1]}}},
-                    {"relevance_score", scr},
-                });
-            }
         }
     }
 
