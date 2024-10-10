@@ -22,7 +22,7 @@ on:
       - "**.mdx"
       - "**.png"
       - "**.jpg"
-      - ".github/workflows/clean.yml"
+      - "!.github/workflows/ci.yml"
   pull_request:
     branches:
       - "main"
@@ -32,7 +32,7 @@ on:
       - "**.mdx"
       - "**.png"
       - "**.jpg"
-      - ".github/workflows/clean.yml"
+      - "!.github/workflows/ci.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
