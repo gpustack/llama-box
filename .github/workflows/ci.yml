@@ -427,6 +427,7 @@ jobs:
                 cp \${library_path} ${{ github.workspace }}/build/bin/ || true
               fi
             done
+            cp -r /opt/rocm/lib/rocblas ${{ github.workspace }}/build/bin/ || true
             echo "***** ITEMS *****"
             ls -lh ${{ github.workspace }}/build/bin/*
             echo "***** AFTER *****"
