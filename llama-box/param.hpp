@@ -19,7 +19,7 @@ extern const char *LLAMA_BOX_GIT_COMMIT;
 using json = nlohmann::json;
 
 struct llama_box_params {
-    gpt_params gparams;
+    common_params gparams;
     rpcserver_params rparams;
 
     bool endpoint_infill = false;
@@ -84,8 +84,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     std::string sampler_type_chars;
     std::string sampler_type_names;
     for (const auto &sampler : sparams.samplers) {
-        sampler_type_chars += gpt_sampler_type_to_chr(sampler);
-        sampler_type_names += gpt_sampler_type_to_str(sampler) + ";";
+        sampler_type_chars += common_sampler_type_to_chr(sampler);
+        sampler_type_names += common_sampler_type_to_str(sampler) + ";";
     }
     sampler_type_names.pop_back();
 
@@ -402,7 +402,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") ||
                 !strcmp(flag, "--log-verbose")) {
                 bparams.gparams.verbosity = INT_MAX;
-                gpt_log_set_verbosity_thold(INT_MAX);
+                common_log_set_verbosity_thold(INT_MAX);
                 continue;
             }
 
@@ -413,12 +413,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.gparams.verbosity = std::stoi(std::string(arg));
-                gpt_log_set_verbosity_thold(bparams.gparams.verbosity);
+                common_log_set_verbosity_thold(bparams.gparams.verbosity);
                 continue;
             }
 
             if (!strcmp(flag, "--log-colors")) {
-                gpt_log_set_colors(gpt_log_main(), true);
+                common_log_set_colors(common_log_main(), true);
                 continue;
             }
 
@@ -663,7 +663,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--chat-template");
                 }
                 std::string t(arg);
-                if (t.size() > 20 && !llama_chat_verify_template(t)) {
+                if (t.size() > 20 && !common_chat_verify_template(t)) {
                     invalid("--chat-template");
                 }
                 bparams.gparams.enable_chat_template = true;
@@ -683,7 +683,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 std::string t;
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
                           std::back_inserter(t));
-                if (t.size() > 20 && !llama_chat_verify_template(t)) {
+                if (t.size() > 20 && !common_chat_verify_template(t)) {
                     invalid("--chat-template-file");
                 }
                 bparams.gparams.enable_chat_template = true;
@@ -908,7 +908,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg = argv[i++];
                 const auto sampler_names = string_split(arg, ';');
                 bparams.gparams.sparams.samplers =
-                    gpt_sampler_types_from_names(sampler_names, true);
+                    common_sampler_types_from_names(sampler_names, true);
                 continue;
             }
 
@@ -917,7 +917,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--sampling-seq");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.sparams.samplers = gpt_sampler_types_from_chars(arg);
+                bparams.gparams.sparams.samplers = common_sampler_types_from_chars(arg);
                 continue;
             }
 

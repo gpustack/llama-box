@@ -189,7 +189,8 @@ static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     return backend;
 }
 
-static void rpcserver_get_backend_memory(ggml_backend_t backend, int32_t gpu, size_t *free_mem, size_t *total_mem) {
+static void rpcserver_get_backend_memory(ggml_backend_t backend, int32_t gpu, size_t *free_mem,
+                                         size_t *total_mem) {
     if (gpu < 0) {
 #ifdef _WIN32
         MEMORYSTATUSEX status;

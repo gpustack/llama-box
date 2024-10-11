@@ -75,7 +75,7 @@ static T json_value(const json &body, const std::string &key, const T &default_v
 // Format given chat. If tmpl is empty, we take the template from model metadata
 inline std::string format_chat(const struct llama_model *model, const std::string &tmpl,
                                const std::vector<json> &messages) {
-    std::vector<llama_chat_msg> chat;
+    std::vector<common_chat_msg> chat;
 
     for (const auto &curr_msg : messages) {
         std::string role = json_value(curr_msg, "role", std::string(""));
@@ -102,7 +102,7 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
         chat.push_back({role, content});
     }
 
-    return llama_chat_apply_template(model, tmpl, chat, true);
+    return common_chat_apply_template(model, tmpl, chat, true);
 }
 
 //
@@ -251,7 +251,7 @@ static bool json_is_array_of_numbers(const json &data) {
 // format incomplete utf-8 multibyte character for output
 static std::string tokens_to_output_formatted_string(const llama_context *ctx,
                                                      const llama_token token) {
-    std::string out = token == -1 ? "" : llama_token_to_piece(ctx, token);
+    std::string out = token == -1 ? "" : common_token_to_piece(ctx, token);
 
     // if the size is 1 and first bit is 1, meaning it's a partial character
     //   (size > 1 meaning it's already a known token)
@@ -632,7 +632,7 @@ static json oaicompat_completion_response(const json &request, const json result
     return res;
 }
 
-static json oaicompat_embedding_request(const struct gpt_params &params, const json &body) {
+static json oaicompat_embedding_request(const struct common_params &params, const json &body) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -679,7 +679,7 @@ static json oaicompat_embedding_response(const json &request, const json &result
     return res;
 }
 
-static json jinaaicompat_rerank_request(const struct gpt_params &params, const json &body) {
+static json jinaaicompat_rerank_request(const struct common_params &params, const json &body) {
     // Print the request for debugging
     {
         json body_cp = body;
