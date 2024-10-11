@@ -15,15 +15,16 @@ on:
     - cron: "0 */12 * * *" # every 12 hours
 
 jobs:
-  sync:
+  sync-gitee:
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Sync Gitee
+      - name: Sync
         env:
           GITHUB_TOKEN: "${{ github.token }}"
           GITHUB_REPOSITORY_NAME: "${{ github.event.repository.name }}"
@@ -94,23 +95,15 @@ jobs:
               # download assets
               info "    Downloading assets..."
               gh release download ${RELEASE_TAG_NAME} --dir /tmp/${RELEASE_TAG_NAME} >/dev/null && ls -lh /tmp/${RELEASE_TAG_NAME}/*
-              # analyze asset size
-              find /tmp/${RELEASE_TAG_NAME} -name "*.zip" -exec du -h {} + | awk '$1 ~ /[0-9]+G|[0-9]+M/ && $1+0 > 100 {print $2}' | while read -r asset; do
-                warn "      Asset ${asset} size exceeds 100MB, repacking to try upload..."
-                folder="/tmp/${RELEASE_TAG_NAME}/$(basename "${asset}" .zip)"
-                mkdir -p ${folder}
-                unzip -q ${asset} -d ${folder} && rm -f ${asset}
-                zip ${asset} ${folder}/llama-box*
-              done
               # upload assets to gitee
-              info "    Uploading assets..."
-              cat /tmp/resp-view-release.json | jq -r '.assets[]' | while read -r asset; do
-                ASSET_NAME=$(echo "${asset}" | jq -r '.name')
+              info "    Uploading assets that do not exceeds 100MB..."
+              find /tmp/${RELEASE_TAG_NAME} -type f -exec du -h {} + | awk '$1 ~ /[0-9]+G|[0-9]+M/ && $1+0 <= 100 {print $2}' | while read -r asset; do
+                ASSET_NAME=$(basename "${asset}")
                 info "      Uploading asset ${ASSET_NAME}..."
-                if [[ ! "$(curl -o /dev/null -w %{http_code} -X POST -F "access_token=${GITEE_TOKEN}" -F "file=@/tmp/${RELEASE_TAG_NAME}/${ASSET_NAME}" https://gitee.com/api/v5/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/attach_files)" =~ ^20.* ]]; then
-                  error "      Failed to upload asset ${ASSET_NAME}, continue..."
-                  continue
-                fi
+                while [[ ! "$(curl -o /dev/null -w %{http_code} -X POST -F "access_token=${GITEE_TOKEN}" -F "file=@${asset}" https://gitee.com/api/v5/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/attach_files)" =~ ^20.* ]]; do
+                  error "      Failed to upload asset ${ASSET_NAME}, retrying..."
+                  sleep 3
+                done
               done
               # cleanup
               rm -rf /tmp/${RELEASE_TAG_NAME}
