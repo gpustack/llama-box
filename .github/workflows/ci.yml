@@ -88,14 +88,14 @@ jobs:
           
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            otool -L ${{ github.workspace }}/build/bin/llama-box
+            otool -L ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -149,14 +149,14 @@ jobs:
 
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            otool -L ${{ github.workspace }}/build/bin/llama-box
+            otool -L ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
           fi
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -293,8 +293,6 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
-            # see https://github.com/multiarch/qemu-user-static/issues/172.
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -318,7 +316,7 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -340,7 +338,7 @@ jobs:
           - arch: 'amd64'
             version: '6.1'
             distro_container_image: 'rocm/dev-centos-7:6.1.2-complete'
-            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
+            hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -416,22 +414,6 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
-            # see https://github.com/multiarch/qemu-user-static/issues/172.
-            echo "***** BEFORE *****"
-            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
-            echo "\${ldd_output}"
-            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
-            for library_path in \${library_paths}; do
-              if [[ -f \${library_path} ]] && [[ \${library_path} == /opt/rocm/lib/* ]]; then
-                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
-              fi
-            done
-            cp -r /opt/rocm/lib/rocblas ${{ github.workspace }}/build/bin/ || true
-            echo "***** ITEMS *****"
-            ls -lh ${{ github.workspace }}/build/bin/*
-            echo "***** AFTER *****"
-            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -458,7 +440,7 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -477,7 +459,7 @@ jobs:
           - arch: 'amd64'
             version: '12.4'
             distro_container_image: 'nvidia/cuda:12.4.0-devel-centos7'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -585,21 +567,6 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
-            # see https://github.com/multiarch/qemu-user-static/issues/172.
-            echo "***** BEFORE *****"
-            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
-            echo "\${ldd_output}"
-            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
-            for library_path in \${library_paths}; do
-              if [[ -f \${library_path} ]] && [[ \${library_path} == /usr/local/cuda/lib64/* ]]; then
-                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
-              fi
-            done
-            echo "***** ITEMS *****"
-            ls -lh ${{ github.workspace }}/build/bin/*
-            echo "***** AFTER *****"
-            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -624,7 +591,7 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -722,21 +689,6 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
-            # see https://github.com/multiarch/qemu-user-static/issues/172.
-            echo "***** BEFORE *****"
-            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
-            echo "\${ldd_output}"
-            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
-            for library_path in \${library_paths}; do
-              if [[ -f \${library_path} ]] && [[ \${library_path} == /opt/intel/oneapi/* ]]; then
-                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
-              fi
-            done
-            echo "***** ITEMS *****"
-            ls -lh ${{ github.workspace }}/build/bin/*
-            echo "***** AFTER *****"
-            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -762,7 +714,7 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -865,21 +817,6 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
-            # see https://github.com/multiarch/qemu-user-static/issues/172.
-            echo "***** BEFORE *****"
-            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
-            echo "\${ldd_output}"
-            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
-            for library_path in \${library_paths}; do
-              if [[ -f \${library_path} ]] && [[ \${library_path} == /usr/local/Ascend/ascend-toolkit/latest/lib64/* ]]; then
-                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
-              fi
-            done
-            echo "***** ITEMS *****"
-            ls -lh ${{ github.workspace }}/build/bin/*
-            echo "***** AFTER *****"
-            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -903,7 +840,7 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -988,21 +925,6 @@ jobs:
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
-            # NB(thxCode): ldd is not available on arm64 mocked by QEMU,
-            # see https://github.com/multiarch/qemu-user-static/issues/172.
-            echo "***** BEFORE *****"
-            ldd_output=\$(ldd ${{ github.workspace }}/build/bin/llama-box || echo "")
-            echo "\${ldd_output}"
-            library_paths=\$(echo "\${ldd_output}" | grep -Eo '=> [^ ]+' | sed 's/=> //')
-            for library_path in \${library_paths}; do
-              if [[ -f \${library_path} ]] && [[ \${library_path} == /usr/local/musa/lib/* ]]; then
-                cp \${library_path} ${{ github.workspace }}/build/bin/ || true
-              fi
-            done
-            echo "***** ITEMS *****"
-            ls -lh ${{ github.workspace }}/build/bin/*
-            echo "***** AFTER *****"
-            export LD_LIBRARY_PATH="${{ github.workspace }}/build/bin:\${LD_LIBRARY_PATH}" 
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -1026,7 +948,7 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/*
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1082,7 +1004,7 @@ jobs:
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1104,7 +1026,7 @@ jobs:
           - arch: 'amd64'
             version: '6.1'
             distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-WinSvr2022-For-HIP.exe'
-            hip_arch: 'gfx900;gfx906;gfx908;gfx90a;gfx940;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
+            hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -1170,17 +1092,10 @@ jobs:
           } else {
             exit 1
           }
-          Copy-Item -Path "${env:HIP_PATH}\bin\hipblas.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:HIP_PATH}\bin\rocblas.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\build\bin\rocblas\library" -ErrorAction Ignore | Out-Null
-          Copy-Item -Path "${env:HIP_PATH}\bin\rocblas\library\*" -Destination "${{ github.workspace }}\build\bin\rocblas\library\" -Recurse -Force -ErrorAction Ignore
-
-          Write-Host "===== ITEMS ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
 
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1199,7 +1114,7 @@ jobs:
           - arch: 'amd64'
             version: '12.4'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.1/network_installers/cuda_12.4.1_windows_network.exe'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -1267,16 +1182,10 @@ jobs:
           } else {
               exit 1
           }
-          Copy-Item -Path "${env:CUDA_PATH}\bin\cudart64_*.dll" -Destination "${{ github.workspace }}\build\bin\Release\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:CUDA_PATH}\bin\cublas64_*.dll" -Destination "${{ github.workspace }}\build\bin\Release\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:CUDA_PATH}\bin\cublasLt64_*.dll" -Destination "${{ github.workspace }}\build\bin\Release\" -Force -ErrorAction Ignore
-          
-          Write-Host "===== ITEMS ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1352,22 +1261,10 @@ jobs:
           } else {
             exit 1
           }
-          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_sycl_blas.*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_core.*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\mkl\latest\bin\mkl_tbb_thread.*.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\pi_win_proxy_loader.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\pi_level_zero.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\sycl7.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\svml_dispmd.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\libmmd.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          Copy-Item -Path "${env:ONEAPI_ROOT}\compiler\latest\bin\libiomp5md.dll" -Destination "${{ github.workspace }}\build\bin\" -Force -ErrorAction Ignore
-          
-          Write-Host "===== ITEMS ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\*" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
