@@ -116,7 +116,10 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",             "       --embeddings",           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server",             "       --rerank",               "enable reranking endpoint (default: %s)", params.reranking ? "enabled" : "disabled" });
     opts.push_back({ "server",             "       --slots",                "enable slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",  "       --rpc SERVERS",          "comma separated list of RPC servers" });
+    if (llama_supports_rpc()) {
+        opts.push_back({ "server/completion",
+                                           "       --rpc SERVERS",          "comma separated list of RPC servers" });
+    }
     // server // completion //
     opts.push_back({ "server/completion" });
     opts.push_back({ "server/completion",  "-s,    --seed N",               "RNG seed (default: %d, use random seed for %d)", sparams.seed, LLAMA_DEFAULT_SEED });
@@ -515,13 +518,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--rpc")) {
-                if (i == argc) {
-                    missing("--rpc");
+            if (llama_supports_rpc()) {
+                if (!strcmp(flag, "--rpc")) {
+                    if (i == argc) {
+                        missing("--rpc");
+                    }
+                    char *arg = argv[i++];
+                    bparams.gparams.rpc_servers = arg;
+                    continue;
                 }
-                char *arg = argv[i++];
-                bparams.gparams.rpc_servers = arg;
-                continue;
             }
 
             // server // completion//
