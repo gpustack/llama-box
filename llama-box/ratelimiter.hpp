@@ -11,8 +11,7 @@ class token_bucket {
 
     void refill() {
         auto const now = std::chrono::steady_clock::now();
-        auto elapsed =
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time).count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time).count();
         if (elapsed < 1000) {
             elapsed = 0;
         }

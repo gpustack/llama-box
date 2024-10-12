@@ -345,30 +345,25 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
 //
 
 template <typename T>
-static typename std::enable_if<std::is_same<T, std::string>::value, void>::type
-get_env(std::string name, T &target) {
+static typename std::enable_if<std::is_same<T, std::string>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
     target = value ? std::string(value) : target;
 }
 
 template <typename T>
-static
-    typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value, void>::type
-    get_env(std::string name, T &target) {
+static typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
     target = value ? std::stoi(value) : target;
 }
 
 template <typename T>
-static typename std::enable_if<std::is_floating_point<T>::value, void>::type
-get_env(std::string name, T &target) {
+static typename std::enable_if<std::is_floating_point<T>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
     target = value ? std::stof(value) : target;
 }
 
 template <typename T>
-static typename std::enable_if<std::is_same<T, bool>::value, void>::type get_env(std::string name,
-                                                                                 T &target) {
+static typename std::enable_if<std::is_same<T, bool>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
     if (value) {
         std::string val(value);
@@ -399,15 +394,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 exit(0);
             }
 
-            if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") ||
-                !strcmp(flag, "--log-verbose")) {
+            if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") || !strcmp(flag, "--log-verbose")) {
                 bparams.gparams.verbosity = INT_MAX;
                 common_log_set_verbosity_thold(INT_MAX);
                 continue;
             }
 
-            if (!strcmp(flag, "-lv") || !strcmp(flag, "--verbosity") ||
-                !strcmp(flag, "--log-verbosity")) {
+            if (!strcmp(flag, "-lv") || !strcmp(flag, "--verbosity") || !strcmp(flag, "--log-verbosity")) {
                 if (i == argc) {
                     missing("--log-verbosity");
                 }
@@ -550,8 +543,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") ||
-                    !strcmp(flag, "--n-gpu-layers")) {
+                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") || !strcmp(flag, "--n-gpu-layers")) {
                     if (i == argc) {
                         missing("--gpu-layers");
                     }
@@ -605,8 +597,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     }
                     char *arg = argv[i++];
                     bparams.gparams.main_gpu = std::stoi(std::string(arg));
-                    if (bparams.gparams.main_gpu < 0 ||
-                        bparams.gparams.main_gpu >= int32_t(llama_max_devices())) {
+                    if (bparams.gparams.main_gpu < 0 || bparams.gparams.main_gpu >= int32_t(llama_max_devices())) {
                         invalid("--main-gpu");
                     }
                     continue;
@@ -633,8 +624,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (!file) {
                     invalid("--system-prompt-file");
                 }
-                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
-                          std::back_inserter(bparams.gparams.system_prompt));
+                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), std::back_inserter(bparams.gparams.system_prompt));
                 continue;
             }
 
@@ -681,8 +671,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--chat-template-file");
                 }
                 std::string t;
-                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
-                          std::back_inserter(t));
+                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), std::back_inserter(t));
                 if (t.size() > 20 && !common_chat_verify_template(t)) {
                     invalid("--chat-template-file");
                 }
@@ -813,8 +802,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--priority-batch");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.cpuparams_batch.priority =
-                    (enum ggml_sched_priority)std::stoul(arg);
+                bparams.gparams.cpuparams_batch.priority = (enum ggml_sched_priority)std::stoul(arg);
                 return true;
             }
 
@@ -907,8 +895,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 const auto sampler_names = string_split(arg, ';');
-                bparams.gparams.sparams.samplers =
-                    common_sampler_types_from_names(sampler_names, true);
+                bparams.gparams.sparams.samplers = common_sampler_types_from_names(sampler_names, true);
                 continue;
             }
 
@@ -987,8 +974,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.gparams.sparams.penalty_last_n = std::stoi(std::string(arg));
-                bparams.gparams.sparams.n_prev = std::max(bparams.gparams.sparams.n_prev,
-                                                          bparams.gparams.sparams.penalty_last_n);
+                bparams.gparams.sparams.n_prev = std::max(bparams.gparams.sparams.n_prev, bparams.gparams.sparams.penalty_last_n);
                 continue;
             }
 
@@ -1073,8 +1059,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 llama_token key;
                 char sign;
                 std::string value;
-                if (ss >> key && ss >> sign && std::getline(ss, value) &&
-                    (sign == '+' || sign == '-')) {
+                if (ss >> key && ss >> sign && std::getline(ss, value) && (sign == '+' || sign == '-')) {
                     const float bias = std::stof(value) * ((sign == '-') ? -1.0f : 1.0f);
                     bparams.gparams.sparams.logit_bias.push_back({key, bias});
                 } else {
@@ -1111,8 +1096,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--json-schema");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.sparams.grammar =
-                    json_schema_to_grammar(json::parse(std::string(arg)));
+                bparams.gparams.sparams.grammar = json_schema_to_grammar(json::parse(std::string(arg)));
                 continue;
             }
 
@@ -1367,8 +1351,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--control-vector-scaled");
                 }
                 char *s = argv[i++];
-                bparams.gparams.control_vectors.push_back(
-                    {std::stof(std::string(s)), std::string(n)});
+                bparams.gparams.control_vectors.push_back({std::stof(std::string(s)), std::string(n)});
                 continue;
             }
 
@@ -1486,8 +1469,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--priority-draft");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.draft_cpuparams.priority =
-                    (enum ggml_sched_priority)std::stoul(arg);
+                bparams.gparams.draft_cpuparams.priority = (enum ggml_sched_priority)std::stoul(arg);
                 return true;
             }
 
@@ -1550,8 +1532,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--priority-batch-draft");
                 }
                 char *arg = argv[i++];
-                bparams.gparams.draft_cpuparams_batch.priority =
-                    (enum ggml_sched_priority)std::stoul(arg);
+                bparams.gparams.draft_cpuparams_batch.priority = (enum ggml_sched_priority)std::stoul(arg);
                 return true;
             }
 
