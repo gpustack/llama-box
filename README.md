@@ -304,8 +304,6 @@ server/completion:
          --yarn-attn-factor N     YaRN: scale sqrt(t) or attention magnitude (default: 1.0)
          --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
          --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
-  -gan,  --grp-attn-n N           group-attention factor (default: 1)
-  -gaw,  --grp-attn-w N           group-attention width (default: 512.0)
   -nkvo, --no-kv-offload          disable KV offload
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)

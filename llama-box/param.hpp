@@ -221,8 +221,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --yarn-attn-factor N",   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)params.yarn_attn_factor });
     opts.push_back({ "server/completion",  "       --yarn-beta-fast N",     "YaRN: low correction dim or beta (default: %.1f)", (double)params.yarn_beta_fast });
     opts.push_back({ "server/completion",  "       --yarn-beta-slow N",     "YaRN: high correction dim or alpha (default: %.1f)", (double)params.yarn_beta_slow });
-    opts.push_back({ "server/completion",  "-gan,  --grp-attn-n N",         "group-attention factor (default: %d)", params.grp_attn_n });
-    opts.push_back({ "server/completion",  "-gaw,  --grp-attn-w N",         "group-attention width (default: %.1f)", (double)params.grp_attn_w });
     opts.push_back({ "server/completion",  "-nkvo, --no-kv-offload",        "disable KV offload" });
     opts.push_back({ "server/completion",  "-ctk,  --cache-type-k TYPE",    "KV cache data type for K (default: %s)", params.cache_type_k.c_str() });
     opts.push_back({ "server/completion",  "-ctv,  --cache-type-v TYPE",    "KV cache data type for V (default: %s)", params.cache_type_v.c_str() });
@@ -1172,24 +1170,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.gparams.yarn_beta_slow = std::stof(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-gan") || !strcmp(flag, "--grp-attn-n")) {
-                if (i == argc) {
-                    missing("--grp-attn-n");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.grp_attn_n = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-gaw") || !strcmp(flag, "--grp-attn-w")) {
-                if (i == argc) {
-                    missing("--grp-attn-w");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.grp_attn_w = std::stoi(std::string(arg));
                 continue;
             }
 
