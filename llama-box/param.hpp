@@ -142,8 +142,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --override-kv KEY=TYPE:VALUE",
                                                                             "advanced option to override model metadata by key. may be specified multiple times.\n"
                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
-    opts.push_back({ "server/completion",  "       --system-prompt-file FILE",
-                                                                            "set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications" });
     opts.push_back({ "server/completion",  "       --chat-template JINJA_TEMPLATE",
                                                                             "set custom jinja chat template (default: template taken from model's metadata)\n"
                                                                             "only commonly used templates are accepted:\n"
@@ -612,19 +610,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (!string_parse_kv_override(arg, bparams.gparams.kv_overrides)) {
                     invalid("--override-kv");
                 }
-                continue;
-            }
-
-            if (!strcmp(flag, "-spf") || !strcmp(flag, "--system-prompt-file")) {
-                if (i == argc) {
-                    missing("--system-prompt-file");
-                }
-                char *arg = argv[i++];
-                std::ifstream file(arg);
-                if (!file) {
-                    invalid("--system-prompt-file");
-                }
-                std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), std::back_inserter(bparams.gparams.system_prompt));
                 continue;
             }
 

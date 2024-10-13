@@ -228,8 +228,6 @@ server/completion:
          --override-kv KEY=TYPE:VALUE
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
-         --system-prompt-file FILE
-                                  set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
                                   only commonly used templates are accepted:
