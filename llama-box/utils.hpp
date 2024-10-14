@@ -682,6 +682,9 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     }
     llama_params["top_n"] = top_n;
 
+    // Handle "return_documents" field
+    llama_params["return_documents"] = json_value(body, "return_documents", true);
+
     return llama_params;
 }
 
@@ -710,10 +713,11 @@ static void jinaicompat_rerank_response_sort(json &result, int32_t low, int32_t 
 }
 
 static json jinaicompat_rerank_response(const json &request, json &result) {
-    int32_t top_n = json_value(request, "top_n", 1);
+    json prompt = request.at("prompt");
+    int32_t top_n = request.at("top_n");
+    bool return_documents = request.at("return_documents");
 
     int num_prompt_tokens = 0;
-    json prompt = request.at("prompt");
     json data = json::array();
 
     int32_t start = 0;
@@ -725,11 +729,14 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         if (i < top_n) {
             const int32_t idx = json_value(ret, "index", 0);
             const double scr = json_value(ret, "score", 0.0);
-            data.push_back(json{
+            json item = json{
                 {"index", idx},
-                {"document", {{"text", prompt[idx + 1]}}},
                 {"relevance_score", scr},
-            });
+            };
+            if (return_documents) {
+                item["document"] = prompt[idx + 1];
+            }
+            data.push_back(item);
         }
     }
 
