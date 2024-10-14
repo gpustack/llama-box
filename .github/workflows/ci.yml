@@ -408,6 +408,8 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_CUDA_DMMV_X=4096 \
+            -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -561,6 +563,9 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_CUDA_DMMV_X=4096 \
+            -DGGML_CUDA_MMV_Y=256 \
+            -DGGML_CUDA_F16=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -1082,6 +1087,8 @@ jobs:
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_CUDA_DMMV_X=4096 `
+            -DGGML_CUDA_MMV_Y=256 `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
@@ -1171,6 +1178,9 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_CUDA_DMMV_X=4096 `
+            -DGGML_CUDA_MMV_Y=256 `
+            -DGGML_CUDA_F16=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
