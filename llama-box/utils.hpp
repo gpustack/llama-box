@@ -16,18 +16,10 @@
 
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
 
-#define SLT_INF(slot, fmt, ...)                                                              \
-    LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
-            __VA_ARGS__)
-#define SLT_WRN(slot, fmt, ...)                                                              \
-    LOG_WRN("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
-            __VA_ARGS__)
-#define SLT_ERR(slot, fmt, ...)                                                              \
-    LOG_ERR("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
-            __VA_ARGS__)
-#define SLT_DBG(slot, fmt, ...)                                                              \
-    LOG_DBG("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, \
-            __VA_ARGS__)
+#define SLT_INF(slot, fmt, ...) LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
+#define SLT_WRN(slot, fmt, ...) LOG_WRN("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
+#define SLT_ERR(slot, fmt, ...) LOG_ERR("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
+#define SLT_DBG(slot, fmt, ...) LOG_DBG("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
 
 #define SRV_INF(fmt, ...) LOG_INF("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define SRV_WRN(fmt, ...) LOG_WRN("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
@@ -59,8 +51,7 @@ static T json_value(const json &body, const std::string &key, const T &default_v
         try {
             return body.at(key);
         } catch (NLOHMANN_JSON_NAMESPACE::detail::type_error const &) {
-            SRV_WRN("wrong type supplied for parameter '%s'. Expected '%s', using default value\n",
-                    key.c_str(), json(default_value).type_name());
+            SRV_WRN("wrong type supplied for parameter '%s'. Expected '%s', using default value\n", key.c_str(), json(default_value).type_name());
             return default_value;
         }
     } else {
@@ -73,8 +64,7 @@ static T json_value(const json &body, const std::string &key, const T &default_v
 //
 
 // Format given chat. If tmpl is empty, we take the template from model metadata
-inline std::string format_chat(const struct llama_model *model, const std::string &tmpl,
-                               const std::vector<json> &messages) {
+inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages) {
     std::vector<llama_chat_msg> chat;
 
     for (const auto &curr_msg : messages) {
@@ -95,8 +85,7 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
                                          "https://github.com/ggerganov/llama.cpp/issues/8367)");
             }
         } else {
-            throw std::runtime_error(
-                "Missing 'content' (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
+            throw std::runtime_error("Missing 'content' (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
         }
 
         chat.push_back({role, content});
@@ -221,8 +210,7 @@ static size_t common_part(const std::string &a, const std::string &b) {
 }
 
 static bool ends_with(const std::string &str, const std::string &suffix) {
-    return str.size() >= suffix.size() &&
-           0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+    return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
 }
 
 static size_t find_partial_stop_string(const std::string &stop, const std::string &text) {
@@ -249,8 +237,7 @@ static bool json_is_array_of_numbers(const json &data) {
 }
 
 // format incomplete utf-8 multibyte character for output
-static std::string tokens_to_output_formatted_string(const llama_context *ctx,
-                                                     const llama_token token) {
+static std::string tokens_to_output_formatted_string(const llama_context *ctx, const llama_token token) {
     std::string out = token == -1 ? "" : llama_token_to_piece(ctx, token);
 
     // if the size is 1 and first bit is 1, meaning it's a partial character
@@ -278,9 +265,7 @@ struct completion_token_output {
 };
 
 // convert a vector of completion_token_output to json
-static json probs_vector_to_json(const llama_context *ctx,
-                                 const std::vector<completion_token_output> &probs,
-                                 const bool oaicompat_completion = false,
+static json probs_vector_to_json(const llama_context *ctx, const std::vector<completion_token_output> &probs, const bool oaicompat_completion = false,
                                  const bool oaicompat_completion_chat = false) {
     if (oaicompat_completion) {
         if (oaicompat_completion_chat) {
@@ -343,9 +328,7 @@ static json probs_vector_to_json(const llama_context *ctx,
                 }
             }
 
-            return json{{"tokens", tokens},
-                        {"token_logprobs", token_logprobs},
-                        {"top_logprobs", top_logprobs}};
+            return json{{"tokens", tokens}, {"token_logprobs", token_logprobs}, {"top_logprobs", top_logprobs}};
         }
     }
 
@@ -375,8 +358,7 @@ static json probs_vector_to_json(const llama_context *ctx,
 }
 
 static bool server_sent_event(httplib::DataSink &sink, const char *event, const json &data) {
-    const std::string str = std::string(event) + ": " +
-                            data.dump(-1, ' ', false, json::error_handler_t::replace) + "\n\n";
+    const std::string str = std::string(event) + ": " + data.dump(-1, ' ', false, json::error_handler_t::replace) + "\n\n";
     return sink.write(str.c_str(), str.size());
 }
 
@@ -384,8 +366,7 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completion_request(const struct llama_model *model, const json &body,
-                                         const std::string &chat_template) {
+static json oaicompat_completion_request(const struct llama_model *model, const json &body, const std::string &chat_template) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -394,8 +375,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
         } else if (body_cp.contains("prompt")) {
             body_cp["prompt"] = "...";
         }
-        SRV_INF("params: %s\n",
-                body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     bool chat = !chat_template.empty();
@@ -444,8 +424,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
                 }
             }
             if (!llama_params.contains("prompt")) {
-                throw std::runtime_error(
-                    R"(Illegal param: only "user" role is supported to request vision completion)");
+                throw std::runtime_error(R"(Illegal param: only "user" role is supported to request vision completion)");
             }
         }
     } else if (body.contains("prompt")) {
@@ -471,9 +450,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
             json json_schema = json_value(response_format, "json_schema", json::object());
             llama_params["json_schema"] = json_value(json_schema, "schema", json::object());
         } else if (!response_type.empty() && response_type != "text") {
-            throw std::runtime_error(
-                R"(Illegal param: "response_format" must be one of "text" or "json_object", but got: )" +
-                response_type);
+            throw std::runtime_error(R"(Illegal param: "response_format" must be one of "text" or "json_object", but got: )" + response_type);
         }
     }
 
@@ -531,8 +508,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     return llama_params;
 }
 
-static json oaicompat_completion_response(const json &request, const json result,
-                                          const std::string &completion_id, bool streaming = false,
+static json oaicompat_completion_response(const json &request, const json result, const std::string &completion_id, bool streaming = false,
                                           bool first = false) {
     bool stopped_word = json_value(result, "stopped_word", false);
     bool stopped_eos = json_value(result, "stopped_eos", false);
@@ -561,28 +537,19 @@ static json oaicompat_completion_response(const json &request, const json result
         if (streaming) {
             res["object"] = "chat.completion.chunk";
             if (!finish && first) {
-                choice = json{{"finish_reason", nullptr},
-                              {"index", 0},
-                              {"delta", json{{"role", "assistant"}}}};
+                choice = json{{"finish_reason", nullptr}, {"index", 0}, {"delta", json{{"role", "assistant"}}}};
             } else if (!finish) {
-                choice = json{{"finish_reason", nullptr},
-                              {"index", 0},
-                              {"delta", json{{"content", content}}}};
+                choice = json{{"finish_reason", nullptr}, {"index", 0}, {"delta", json{{"content", content}}}};
             } else {
                 // finished
-                choice =
-                    json{{"finish_reason", finish_reason}, {"index", 0}, {"delta", json::object()}};
+                choice = json{{"finish_reason", finish_reason}, {"index", 0}, {"delta", json::object()}};
             }
         } else {
             res["object"] = "chat.completion";
             if (!finish) {
-                choice = json{{"finish_reason", nullptr},
-                              {"index", 0},
-                              {"message", json{{"content", content}, {"role", "assistant"}}}};
+                choice = json{{"finish_reason", nullptr}, {"index", 0}, {"message", json{{"content", content}, {"role", "assistant"}}}};
             } else {
-                choice = json{{"finish_reason", finish_reason},
-                              {"index", 0},
-                              {"message", json{{"content", content}, {"role", "assistant"}}}};
+                choice = json{{"finish_reason", finish_reason}, {"index", 0}, {"message", json{{"content", content}, {"role", "assistant"}}}};
             }
         }
     } else {
@@ -614,12 +581,9 @@ static json oaicompat_completion_response(const json &request, const json result
         double ttft = json_value(ts, "prompt_ms", 0.0);
         double tpot = json_value(ts, "predicted_per_token_ms", 0.0);
         double tps = json_value(ts, "predicted_per_second", 0.0);
-        json usage = json{{"completion_tokens", completion_tokens},
-                          {"prompt_tokens", prompt_tokens},
-                          {"total_tokens", completion_tokens + prompt_tokens},
-                          {"time_to_first_token_ms", ttft},
-                          {"time_per_output_token_ms", tpot},
-                          {"tokens_per_second", tps}};
+        json usage =
+            json{{"completion_tokens", completion_tokens}, {"prompt_tokens", prompt_tokens},   {"total_tokens", completion_tokens + prompt_tokens},
+                 {"time_to_first_token_ms", ttft},         {"time_per_output_token_ms", tpot}, {"tokens_per_second", tps}};
         if (ts.contains("drafted_n")) {
             usage["draft_tokens"] = ts.at("drafted_n");
             usage["draft_tokens_acceptance"] = ts.at("drafted_accepted_p");
@@ -641,8 +605,7 @@ static json oaicompat_embedding_request(const struct gpt_params &params, const j
         } else {
             body_cp["input"] = "[...]";
         }
-        SRV_INF("params: %s\n",
-                body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
@@ -665,16 +628,13 @@ static json oaicompat_embedding_request(const struct gpt_params &params, const j
 
 static json oaicompat_embedding_response(const json &request, const json &result) {
     json data = json::array();
-    data.push_back(json{{"embedding", json_value(result, "embedding", json::array())},
-                        {"index", 0},
-                        {"object", "embedding"}});
+    data.push_back(json{{"embedding", json_value(result, "embedding", json::array())}, {"index", 0}, {"object", "embedding"}});
 
     int num_prompt_tokens = json_value(result, "tokens_evaluated", 0);
-    json res = json{
-        {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-        {"object", "list"},
-        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
-        {"data", data}};
+    json res = json{{"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
+                    {"object", "list"},
+                    {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
+                    {"data", data}};
 
     return res;
 }
@@ -689,8 +649,7 @@ static json jinaaicompat_rerank_request(const struct gpt_params &params, const j
         if (body_cp.contains("documents")) {
             body_cp["documents"] = "[...]";
         }
-        SRV_INF("params: %s\n",
-                body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
@@ -774,11 +733,10 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         }
     }
 
-    json res = json{
-        {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-        {"object", "list"},
-        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
-        {"results", data}};
+    json res = json{{"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
+                    {"object", "list"},
+                    {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
+                    {"results", data}};
 
     return res;
 }
@@ -803,8 +761,7 @@ static bool is_valid_utf8(const std::string &str) {
             bytes += 3;
         } else if ((*bytes & 0xF8) == 0xF0) {
             // 4-byte sequence (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
-            if (end - bytes < 4 || (bytes[1] & 0xC0) != 0x80 || (bytes[2] & 0xC0) != 0x80 ||
-                (bytes[3] & 0xC0) != 0x80)
+            if (end - bytes < 4 || (bytes[1] & 0xC0) != 0x80 || (bytes[2] & 0xC0) != 0x80 || (bytes[3] & 0xC0) != 0x80)
                 return false;
             bytes += 4;
         } else {

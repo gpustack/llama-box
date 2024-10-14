@@ -253,8 +253,7 @@ class rpcserver {
 
   private:
     ggml_tensor *deserialize_tensor(struct ggml_context *ctx, const rpc_tensor *tensor);
-    ggml_tensor *create_node(uint64_t id, struct ggml_context *ctx,
-                             const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs,
+    ggml_tensor *create_node(uint64_t id, struct ggml_context *ctx, const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs,
                              std::unordered_map<uint64_t, struct ggml_tensor *> &tensor_map);
 
     ggml_backend_t backend;
@@ -413,8 +412,7 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
         const auto p0 = (size_t)ggml_backend_buffer_get_base(tensor->buffer);
         const size_t p1 = p0 + ggml_backend_buffer_get_size(tensor->buffer);
 
-        if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 ||
-            size > (p1 - in_tensor->data - offset)) {
+        if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
             SRV_ERR("%s", "failed: tensor->data out of bounds\n");
             delete tensor;
             ggml_free(ctx);
@@ -459,8 +457,7 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
         const auto p0 = (size_t)ggml_backend_buffer_get_base(tensor->buffer);
         const size_t p1 = p0 + ggml_backend_buffer_get_size(tensor->buffer);
 
-        if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 ||
-            size > (p1 - in_tensor->data - offset)) {
+        if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
             SRV_ERR("%s", "failed: tensor->data out of bounds\n");
             delete tensor;
             ggml_free(ctx);
@@ -524,18 +521,14 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     }
     const auto *nodes = (const uint64_t *)(input.data() + sizeof(n_nodes));
     uint32_t n_tensors;
-    memcpy(&n_tensors, input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t),
-           sizeof(n_tensors));
-    if (input.size() < sizeof(uint32_t) + n_nodes * sizeof(uint64_t) + sizeof(uint32_t) +
-                           n_tensors * sizeof(rpc_tensor)) {
+    memcpy(&n_tensors, input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t), sizeof(n_tensors));
+    if (input.size() < sizeof(uint32_t) + n_nodes * sizeof(uint64_t) + sizeof(uint32_t) + n_tensors * sizeof(rpc_tensor)) {
         SRV_ERR("%s", "failed: input size too short\n");
         return false;
     }
-    const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) +
-                                               n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
+    const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
 
-    static size_t buf_size =
-        ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
+    static size_t buf_size = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
     struct ggml_init_params params = {
         /*.mem_size   =*/buf_size,
         /*.mem_buffer =*/nullptr,
@@ -574,8 +567,7 @@ size_t rpcserver::get_free_memory() const {
 }
 
 ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_tensor *tensor) {
-    ggml_tensor *result = ggml_new_tensor_4d(ctx, (ggml_type)tensor->type, tensor->ne[0],
-                                             tensor->ne[1], tensor->ne[2], tensor->ne[3]);
+    ggml_tensor *result = ggml_new_tensor_4d(ctx, (ggml_type)tensor->type, tensor->ne[0], tensor->ne[1], tensor->ne[2], tensor->ne[3]);
     for (uint32_t i = 0; i < GGML_MAX_DIMS; i++) {
         result->nb[i] = tensor->nb[i];
     }
@@ -590,8 +582,7 @@ ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_t
     auto buffer_start = (uint64_t)ggml_backend_buffer_get_base(result->buffer);
     auto buffer_size = (uint64_t)ggml_backend_buffer_get_size(result->buffer);
     GGML_ASSERT(tensor->data + tensor_size >= tensor->data); // check for overflow
-    GGML_ASSERT(tensor->data >= buffer_start &&
-                tensor->data + tensor_size <= buffer_start + buffer_size);
+    GGML_ASSERT(tensor->data >= buffer_start && tensor->data + tensor_size <= buffer_start + buffer_size);
 
     result->op = (ggml_op)tensor->op;
     for (uint32_t i = 0; i < GGML_MAX_OP_PARAMS / sizeof(int32_t); i++) {
@@ -603,10 +594,8 @@ ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_t
     return result;
 }
 
-ggml_tensor *
-rpcserver::create_node(uint64_t id, struct ggml_context *ctx,
-                       const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs,
-                       std::unordered_map<uint64_t, struct ggml_tensor *> &tensor_map) {
+ggml_tensor *rpcserver::create_node(uint64_t id, struct ggml_context *ctx, const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs,
+                                    std::unordered_map<uint64_t, struct ggml_tensor *> &tensor_map) {
     if (id == 0) {
         return nullptr;
     }
@@ -818,8 +807,7 @@ static int rpcserver_start(rpcserver_params &params) {
         }
     }
 #endif
-    std::shared_ptr<rpc_socket_t> server_socket =
-        rpcserver_socket_create(params.hostname.c_str(), params.port);
+    std::shared_ptr<rpc_socket_t> server_socket = rpcserver_socket_create(params.hostname.c_str(), params.port);
     if (server_socket == nullptr) {
         SRV_ERR("%s", "failed to create server socket\n");
         return 1;

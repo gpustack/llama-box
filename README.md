@@ -224,8 +224,6 @@ server/completion:
          --override-kv KEY=TYPE:VALUE
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
-         --system-prompt-file FILE
-                                  set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
                                   only commonly used templates are accepted:
@@ -302,8 +300,6 @@ server/completion:
          --yarn-attn-factor N     YaRN: scale sqrt(t) or attention magnitude (default: 1.0)
          --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
          --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
-  -gan,  --grp-attn-n N           group-attention factor (default: 1)
-  -gaw,  --grp-attn-w N           group-attention width (default: 512.0)
   -nkvo, --no-kv-offload          disable KV offload
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
