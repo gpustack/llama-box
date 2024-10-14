@@ -305,6 +305,7 @@ server/completion:
          --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
          --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
   -nkvo, --no-kv-offload          disable KV offload
+         --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting (default: 0)
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: -1.0, < 0 - disabled)
@@ -385,6 +386,7 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_UBATCH`: equivalent to `-ub`, `--ubatch-size`.
 - `LLAMA_ARG_N_GPU_LAYERS`: equivalent to `-ngl`, `--gpu-layers`, `--n-gpu-layers`.
 - `LLAMA_ARG_THREADS_HTTP`: equivalent to `--threads-http`
+- `LLAMA_ARG_CACHE_REUSE`: equivalent to `--cache-reuse`
 - `LLAMA_ARG_CHAT_TEMPLATE`: equivalent to `--chat-template`
 - `LLAMA_ARG_N_PREDICT`: equivalent to `-n`, `--predict`.
 - `LLAMA_ARG_METRICS`: if set to `1`, it will enable metrics endpoint (equivalent to `--metrics`).

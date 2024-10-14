@@ -193,7 +193,7 @@ static std::string gen_cmplid() {
 // other common utils
 //
 
-static size_t common_part(const std::vector<llama_token> &a, const std::vector<llama_token> &b) {
+static size_t longest_common_prefix(const std::vector<llama_token> &a, const std::vector<llama_token> &b) {
     size_t i;
     for (i = 0; i < a.size() && i < b.size() && a[i] == b[i]; i++) {
     }
@@ -201,7 +201,7 @@ static size_t common_part(const std::vector<llama_token> &a, const std::vector<l
     return i;
 }
 
-static size_t common_part(const std::string &a, const std::string &b) {
+static size_t longest_common_prefix(const std::string &a, const std::string &b) {
     size_t i;
     for (i = 0; i < a.size() && i < b.size() && a[i] == b[i]; i++) {
     }
