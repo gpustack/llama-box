@@ -62,7 +62,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
+          key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Deps
@@ -124,7 +124,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Deps
@@ -192,7 +192,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
+          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -355,7 +355,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -478,7 +478,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -629,7 +629,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -756,7 +756,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}
+          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -877,7 +877,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -981,7 +981,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
+          key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}\build
       - name: Build
@@ -1042,7 +1042,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}\.cache
       - name: Deps
@@ -1134,7 +1134,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}\build
       - name: Deps
@@ -1224,7 +1224,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}${{ startsWith(github.ref_name, 'branch-v') && format('-{0}', github.ref_name) || '' }}
           path: |
             ${{ github.workspace }}\build
       - name: Deps
