@@ -109,6 +109,7 @@ struct slot_params {
 
     json input_prefix;
     json input_suffix;
+    json extra_context;
 };
 
 struct server_slot {
@@ -136,10 +137,11 @@ struct server_slot {
     int32_t n_prompt_tokens = 0;
     int32_t n_prompt_tokens_processed = 0;
 
-    // can be either a string, array of strings or array of token ids
-    json prompt;
+    json prompt; // can be either a string, array of strings or array of token ids
+
     // when a task is submitted, we first tokenize the prompt and store it here
     std::vector<llama_token> prompt_tokens;
+    std::vector<llama_token> extra_tokens;
 
     std::string generated_text;
     std::vector<llama_token> cache_tokens;
@@ -1039,6 +1041,7 @@ struct server_context {
         slot.params.n_discard = json_value(data, "n_discard", 0);
         slot.params.input_prefix = json_value(data, "input_prefix", params.input_prefix);
         slot.params.input_suffix = json_value(data, "input_suffix", params.input_suffix);
+        slot.params.extra_context = json_value(data, "extra_context", json::array());
 
         slot.sparams.top_k = json_value(data, "top_k", sparams.top_k);
         slot.sparams.top_p = json_value(data, "top_p", sparams.top_p);
@@ -1059,8 +1062,8 @@ struct server_context {
         slot.sparams.seed = json_value(data, "seed", sparams.seed);
         slot.sparams.n_probs = json_value(data, "n_probs", sparams.n_probs);
         slot.sparams.min_keep = json_value(data, "min_keep", sparams.min_keep);
-        // slot.params.t_max_prompt_ms    = json_value(data, "t_max_prompt_ms",   slot.params.t_max_predict_ms); // TODO: implement
-        slot.params.t_max_predict_ms = json_value(data, "t_max_predict_ms", slot.params.t_max_predict_ms);
+        // slot.params.t_max_prompt_ms    = json_value(data, "t_max_prompt_ms",   -1); // TODO: implement
+        slot.params.t_max_predict_ms = json_value(data, "t_max_predict_ms", -1);
 
         // process "json_schema" and "grammar"
         if (data.contains("json_schema") && !data.at("json_schema").is_null() && data.contains("grammar") && !data.at("grammar").is_null()) {
@@ -1070,7 +1073,6 @@ struct server_context {
                        ERROR_TYPE_INVALID_REQUEST);
             return false;
         }
-
         if (data.contains("json_schema") && !data.contains("grammar")) {
             try {
                 auto schema = json_value(data, "json_schema", json::object());
@@ -1083,10 +1085,29 @@ struct server_context {
             slot.sparams.grammar = json_value(data, "grammar", sparams.grammar);
         }
 
+        // process "n_predict"
         if (slot.n_predict > 0 && slot.params.n_predict > slot.n_predict) {
             // Might be better to reject the request with a 400 ?
             slot.params.n_predict = slot.n_predict;
             SLT_WRN(slot, "n_predict = %d exceeds server configuration, setting to %d", slot.n_predict, slot.n_predict);
+        }
+
+        // process "extra_context"
+        if (slot.params.extra_context.is_array() && !slot.params.extra_context.empty()) {
+            SLT_DBG(slot, "extra_context chunks: %d\n", (int)slot.params.extra_context.size());
+            for (const json &chunk : slot.params.extra_context) {
+                // { "text": string, "filename": string }
+                if (!chunk.contains("text") || !chunk["text"].is_string()) {
+                    send_error(task, "extra_context chunk must contain a \"text\" field with a string value", ERROR_TYPE_INVALID_REQUEST);
+                    return false;
+                }
+                // filename is optional
+                if (chunk.contains("filename") && !chunk["filename"].is_string()) {
+                    send_error(task, "extra_context chunk's \"filename\" field must be a string", ERROR_TYPE_INVALID_REQUEST);
+                    return false;
+                }
+                SLT_DBG(slot, "extra_context chunk in file '%s':\n%s\n", chunk.value("filename", "").c_str(), chunk.value("text", "").c_str());
+            }
         }
 
         // get prompt
@@ -2139,14 +2160,69 @@ struct server_context {
                             prompt_tokens.push_back(llama_token_eos(model));
                         } break;
                         case SERVER_TASK_CMPL_TYPE_INFILL: {
+                            // use FIM repo-level pattern:
+                            // ref: https://arxiv.org/pdf/2409.12186
+                            //
+                            // [FIM_REP]myproject
+                            // [FIM_SEP]filename0
+                            // extra chunk 0
+                            // [FIM_SEP]filename1
+                            // extra chunk 1
+                            // ...
+                            // [FIM_SEP]filename
+                            // [FIM_PRE]prefix[FIM_SUF]suffix[FIM_MID]
+                            //
                             auto prefix_tokens = tokenize(slot.params.input_prefix, false, false);
                             auto suffix_tokens = tokenize(slot.params.input_suffix, false, false);
 
-                            // for now pick context to fit in a single batch (ratio prefix:suffix = 3:1, TODO: configurable?)
-                            const int n_suffix_take = std::min<int>(int(suffix_tokens.size()), n_batch / 4);
-                            const int n_prefix_take = std::min<int>(int(prefix_tokens.size()), (n_batch - 3) - n_suffix_take);
+                            slot.extra_tokens.clear();
+                            if (llama_token_fim_rep(model) != LLAMA_TOKEN_NULL) {
+                                static const auto k_fim_repo = tokenize("myproject\n", false, false);
 
-                            prefix_tokens.erase(prefix_tokens.begin(), prefix_tokens.begin() + long(prefix_tokens.size()) - n_prefix_take);
+                                slot.extra_tokens.push_back(llama_token_fim_rep(model));
+                                slot.extra_tokens.insert(slot.extra_tokens.end(), k_fim_repo.begin(), k_fim_repo.end());
+                            }
+
+                            for (const auto &chunk : slot.params.extra_context) {
+                                // { "text": string, "filename": string }
+                                const std::string text = chunk.value("text", "");
+                                const std::string filename = chunk.value("filename", "tmp");
+
+                                if (llama_token_fim_sep(model) != LLAMA_TOKEN_NULL) {
+                                    const auto k_fim_file = tokenize(filename + "\n", false, false);
+
+                                    slot.extra_tokens.insert(slot.extra_tokens.end(), llama_token_fim_sep(model));
+                                    slot.extra_tokens.insert(slot.extra_tokens.end(), k_fim_file.begin(), k_fim_file.end());
+                                } else {
+                                    // chunk separator in binary form to avoid confusing the AI
+                                    static const char k_chunk_prefix_str[] = {0x0a, 0x0a, 0x2d, 0x2d, 0x2d, 0x20, 0x73, 0x6e, 0x69, 0x70,
+                                                                              0x70, 0x65, 0x74, 0x20, 0x2d, 0x2d, 0x2d, 0x0a, 0x0a, 0x00};
+                                    static const auto k_chunk_prefix_tokens = tokenize(k_chunk_prefix_str, false, false);
+
+                                    slot.extra_tokens.insert(slot.extra_tokens.end(), k_chunk_prefix_tokens.begin(), k_chunk_prefix_tokens.end());
+                                }
+
+                                const auto chunk_tokens = tokenize(text, false, false);
+                                slot.extra_tokens.insert(slot.extra_tokens.end(), chunk_tokens.begin(), chunk_tokens.end());
+                            }
+
+                            if (llama_token_fim_sep(model) != LLAMA_TOKEN_NULL) {
+                                // TODO: current filename
+                                static const auto k_fim_file = tokenize("filename\n", false, false);
+
+                                slot.extra_tokens.insert(slot.extra_tokens.end(), llama_token_fim_sep(model));
+                                slot.extra_tokens.insert(slot.extra_tokens.end(), k_fim_file.begin(), k_fim_file.end());
+                            }
+
+                            // for now pick FIM context to fit in a batch (ratio prefix:suffix = 3:1, TODO: configurable?)
+                            const int n_suffix_take = std::min<int>(suffix_tokens.size(), (n_batch) / 4);
+                            const int n_prefix_take = std::min<int>(prefix_tokens.size(), (n_batch - 3) - n_suffix_take);
+
+                            // fill the rest of the context with extra chunks
+                            const int n_extra_take =
+                                std::min<int>(std::max<int>(0, slot.n_ctx - (n_batch)-2 * slot.n_predict), slot.extra_tokens.size());
+
+                            prefix_tokens.erase(prefix_tokens.begin(), prefix_tokens.begin() + prefix_tokens.size() - n_prefix_take);
                             suffix_tokens.resize(n_suffix_take);
 
                             prefix_tokens.insert(prefix_tokens.begin(), llama_token_fim_pre(model));
@@ -2158,6 +2234,12 @@ struct server_context {
                             if (llama_add_bos_token(model)) {
                                 embd_inp.insert(embd_inp.begin(), llama_token_bos(model));
                             }
+
+                            SLT_DBG(slot, "extra: n_ctx = %d, n_extra_take = %d, n_extra = %d\n", slot.n_ctx, n_extra_take,
+                                    (int)slot.extra_tokens.size());
+
+                            // put the extra context before the FIM prefix
+                            embd_inp.insert(embd_inp.begin(), slot.extra_tokens.end() - n_extra_take, slot.extra_tokens.end());
 
                             embd_inp.insert(embd_inp.end(), embd_end.begin(), embd_end.end());
                             embd_inp.push_back(llama_token_fim_mid(model));
@@ -2267,11 +2349,15 @@ struct server_context {
 
                                         while (head_c + n_match < slot.cache_tokens.size() && head_p + n_match < prompt_tokens.size() &&
                                                slot.cache_tokens[head_c + n_match] == prompt_tokens[head_p + n_match]) {
-                                            if (llama_token_is_control(model, slot.cache_tokens[head_c + n_match])) {
+                                            if (llama_token_is_control(model, slot.cache_tokens[head_c + n_match]) &&
+                                                slot.cache_tokens[head_c + n_match] != llama_token_fim_rep(model) &&
+                                                slot.cache_tokens[head_c + n_match] != llama_token_fim_sep(model)) {
                                                 break;
                                             }
 
-                                            if (llama_token_is_control(model, prompt_tokens[head_p + n_match])) {
+                                            if (llama_token_is_control(model, prompt_tokens[head_p + n_match]) &&
+                                                prompt_tokens[head_p + n_match] != llama_token_fim_rep(model) &&
+                                                prompt_tokens[head_p + n_match] != llama_token_fim_sep(model)) {
                                                 break;
                                             }
 
@@ -2367,7 +2453,7 @@ struct server_context {
                         }
                     }
 
-                    SLT_INF(slot, "kv cache rm [%d, end)\n", slot.n_past);
+                    SLT_DBG(slot, "kv cache rm [%d, end)\n", slot.n_past);
 
                     // remove the non-common part from the cache
                     slot.cache_tokens.resize(slot.n_past);
