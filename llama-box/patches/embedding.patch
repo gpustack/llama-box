@@ -1,8 +1,8 @@
 diff --git a/include/llama.h b/include/llama.h
-index 7cae1bbe..ae299bef 100644
+index 02bc7f08..70eab59c 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1210,6 +1210,8 @@ extern "C" {
+@@ -1249,6 +1249,8 @@ extern "C" {
  
      LLAMA_API void llama_perf_dump_yaml(FILE * stream, const struct llama_context * ctx);
  
@@ -12,10 +12,10 @@ index 7cae1bbe..ae299bef 100644
  }
  #endif
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 3443b068..3ba2381d 100644
+index 8d44c73c..21688e28 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -19226,7 +19226,7 @@ struct llama_context * llama_new_context_with_model(
+@@ -19320,7 +19320,7 @@ struct llama_context * llama_new_context_with_model(
          cparams.n_batch = GGML_KQ_MASK_PAD;
      }
  
@@ -24,7 +24,7 @@ index 3443b068..3ba2381d 100644
  
      cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
                                 hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
-@@ -21880,3 +21880,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
+@@ -21999,3 +21999,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
      fputs(text, stderr);
      fflush(stderr);
  }
