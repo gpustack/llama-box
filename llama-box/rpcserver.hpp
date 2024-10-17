@@ -423,7 +423,7 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     const void *data = input.data() + sizeof(rpc_tensor) + sizeof(offset);
     ggml_backend_tensor_set(tensor, data, offset, size);
     ggml_free(ctx);
-    SRV_DBG("id = %lu, size = %zu\n", in_tensor->id, size);
+    SRV_DBG("id = %lu, size = %zu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     return true;
 }
 
@@ -469,7 +469,7 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     output.resize(size, 0);
     ggml_backend_tensor_get(tensor, output.data(), offset, size);
     ggml_free(ctx);
-    SRV_DBG("id = %lu, size = %lu\n", in_tensor->id, size);
+    SRV_DBG("id = %lu, size = %lu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     return true;
 }
 
@@ -501,7 +501,7 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     output.resize(1, 0);
     output[0] = result;
     ggml_free(ctx);
-    SRV_DBG("src_id = %lu, dst_id = %lu\n", rpc_src->id, rpc_dst->id);
+    SRV_DBG("src_id = %lu, dst_id = %lu, name = %s, type = %s\n", rpc_src->id, rpc_dst->id, rpc_src->name, ggml_type_name((ggml_type)rpc_dst->type));
     return true;
 }
 
@@ -614,7 +614,9 @@ ggml_tensor *rpcserver::create_node(uint64_t id, struct ggml_context *ctx, const
     }
     result->view_src = create_node(tensor->view_src, ctx, tensor_ptrs, tensor_map);
     result->view_offs = tensor->view_offs;
-    SRV_DBG("id = %lu, type = %u\n", id, tensor->type);
+
+    SRV_DBG("id = %lu, name = %s, type = %s, op = %s\n", id, tensor->name, ggml_type_name(static_cast<ggml_type>(tensor->type)),
+            ggml_op_name(static_cast<ggml_op>(tensor->op)));
     return result;
 }
 
