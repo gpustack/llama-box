@@ -56,7 +56,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -118,7 +118,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -186,7 +186,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -349,7 +349,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -472,7 +472,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -623,7 +623,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -750,7 +750,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -871,7 +871,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -975,7 +975,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -1036,7 +1036,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         timeout-minutes: 5
@@ -1126,7 +1126,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         # doesn't support ccache,
@@ -1216,7 +1216,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
         # doesn't support ccache,
