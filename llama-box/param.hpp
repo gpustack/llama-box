@@ -455,6 +455,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg = argv[i++];
                 bparams.gparams.n_threads_http = std::stoi(std::string(arg));
+                if (bparams.gparams.n_threads_http <= 0) {
+                    bparams.gparams.n_threads_http = cpu_get_num_math();
+                }
                 continue;
             }
 
@@ -1646,25 +1649,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
         return false;
     }
 
-    if (bparams.gparams.cpuparams_batch.n_threads <= 0) {
-        bparams.gparams.cpuparams_batch.n_threads = bparams.gparams.cpuparams.n_threads;
-    }
-    if (bparams.gparams.draft_cpuparams.n_threads <= 0) {
-        bparams.gparams.draft_cpuparams.n_threads = bparams.gparams.cpuparams.n_threads;
-    }
-    if (bparams.gparams.draft_cpuparams_batch.n_threads <= 0) {
-        bparams.gparams.draft_cpuparams_batch.n_threads = bparams.gparams.draft_cpuparams.n_threads;
-    }
-    postprocess_cpu_params(bparams.gparams.cpuparams, nullptr);
-    postprocess_cpu_params(bparams.gparams.cpuparams_batch, &bparams.gparams.cpuparams);
-    postprocess_cpu_params(bparams.gparams.draft_cpuparams, &bparams.gparams.cpuparams);
-    postprocess_cpu_params(bparams.gparams.draft_cpuparams_batch, &bparams.gparams.cpuparams_batch);
-
-    if (!bparams.gparams.kv_overrides.empty()) {
-        bparams.gparams.kv_overrides.emplace_back();
-        bparams.gparams.kv_overrides.back().key[0] = 0;
-    }
-
     // Retrieve params from environment variables
     get_env("LLAMA_ARG_MODEL", bparams.gparams.model);
     get_env("LLAMA_ARG_MODEL_ALIAS", bparams.gparams.model_alias);
@@ -1696,6 +1680,21 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     get_env("LLAMA_ARG_RPC_SERVER_HOST", bparams.rparams.hostname);
     get_env("LLAMA_ARG_RPC_SERVER_PORT", bparams.rparams.port);
     get_env("LLAMA_LOG_VERBOSITY", bparams.gparams.verbosity);
+
+    // Postprocess params
+    postprocess_cpu_params(bparams.gparams.cpuparams, nullptr);
+    postprocess_cpu_params(bparams.gparams.cpuparams_batch, &bparams.gparams.cpuparams);
+    postprocess_cpu_params(bparams.gparams.draft_cpuparams, &bparams.gparams.cpuparams);
+    postprocess_cpu_params(bparams.gparams.draft_cpuparams_batch, &bparams.gparams.draft_cpuparams);
+    if (bparams.gparams.n_threads_http < 1) {
+        // +2 threads for monitoring endpoints: /metrics and /slots
+        bparams.gparams.n_threads_http = std::max(bparams.gparams.n_parallel + 2, bparams.gparams.cpuparams.n_threads - 1);
+    }
+
+    if (!bparams.gparams.kv_overrides.empty()) {
+        bparams.gparams.kv_overrides.emplace_back();
+        bparams.gparams.kv_overrides.back().key[0] = 0;
+    }
 
     return true;
 }

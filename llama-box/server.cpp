@@ -2862,11 +2862,9 @@ int main(int argc, char **argv) {
 
     llama_backend_init();
 
+    LOG_INF("\n");
     LOG_INF("build: %s (%s) by %s with llama.cpp %d (%s)\n", LLAMA_BOX_GIT_VERSION, LLAMA_BOX_GIT_COMMIT, LLAMA_COMPILER, LLAMA_BUILD_NUMBER,
             LLAMA_COMMIT);
-    LOG_INF("system info: n_threads = %d, n_threads_batch = %d, total_threads = %d\n", params.cpuparams.n_threads, params.cpuparams_batch.n_threads,
-            std::thread::hardware_concurrency());
-    LOG_INF("\n");
     LOG_INF("%s\n", common_params_get_system_info(params).c_str());
     LOG_INF("\n");
 
@@ -2932,10 +2930,6 @@ int main(int argc, char **argv) {
     svr.set_payload_max_length(1024 * 1024 * 10);
     svr.set_idle_interval(bparams.conn_idle);
     svr.set_keep_alive_timeout(bparams.conn_keepalive);
-
-    std::unordered_map<std::string, std::string> log_data;
-    log_data["hostname"] = params.hostname;
-    log_data["port"] = std::to_string(params.port);
 
     // necessary similarity of prompt for slot selection
     ctx_server.slot_prompt_similarity = params.slot_prompt_similarity;
@@ -3773,11 +3767,6 @@ int main(int argc, char **argv) {
     // Start
     //
 
-    if (params.n_threads_http < 1) {
-        // +2 threads for monitoring endpoints: /metrics and /slots
-        params.n_threads_http = std::max(params.n_parallel + 2, (int32_t)std::thread::hardware_concurrency() - 1);
-    }
-    log_data["n_threads_http"] = std::to_string(params.n_threads_http);
     svr.new_task_queue = [&params] { return new httplib::ThreadPool(params.n_threads_http); };
 
     // bind HTTP listen port, run the HTTP server in a thread
