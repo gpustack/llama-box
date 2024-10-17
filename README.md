@@ -187,7 +187,7 @@ general:
 
   -h,    --help, --usage          print usage and exit
          --version                show version and build info
-  -v,    --verbose, --log-verbose 
+  -v,    --verbose, --log-verbose
                                   set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V
                                   set the verbosity threshold, messages with a higher verbosity will be ignored
@@ -233,22 +233,22 @@ server/completion:
          --slot-save-path PATH    path to save slot kv cache (default: disabled)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-                                  
+
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
                                   when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
   -t,    --threads N              number of threads to use during generation (default: -1)
   -C,    --cpu-mask M             set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
   -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
          --cpu-strict <0|1>       use strict CPU placement (default: 0)
-                                  
+
          --priority N             set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: 0)
-                                  
+
          --poll <0...100>         use polling level to wait for work (0 - no polling, default: 50)
-                                  
+
   -tb,   --threads-batch N        number of threads to use during batch and prompt processing (default: same as --threads)
   -Cb,   --cpu-mask-batch M       set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
   -Crb,  --cpu-range-batch lo-hi  ranges of CPUs for affinity. Complements --cpu-mask-batch
-         --cpu-strict-batch <0|1> 
+         --cpu-strict-batch <0|1>
                                   use strict CPU placement (default: same as --cpu-strict)
          --priority-batch N       set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   use polling to wait for work (default: same as --poll
@@ -262,13 +262,15 @@ server/completion:
   -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
          --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';'
-                                  (default: top_k;tfs_z;typ_p;top_p;min_p;temperature)
-         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: kfypmt)
+                                  (default: top_k;tfs_z;typ_p;top_p;min_p;xtc;temperature)
+         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: kfypmxt)
          --penalize-nl            penalize newline tokens (default: false)
          --temp T                 temperature (default: 0.8)
          --top-k N                top-k sampling (default: 40, 0 = disabled)
          --top-p P                top-p sampling (default: 0.9, 1.0 = disabled)
          --min-p P                min-p sampling (default: 0.1, 0.0 = disabled)
+         --xtc-probability N      xtc probability (default: 0.0, 0.0 = disabled)
+         --xtc-threshold N        xtc threshold (default: 0.1, 1.0 = disabled)
          --tfs P                  tail free sampling, parameter z (default: 1.0, 1.0 = disabled)
          --typical P              locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
          --repeat-last-n N        last n tokens to consider for penalize (default: 64, 0 = disabled, -1 = ctx_size)
@@ -318,7 +320,7 @@ server/completion:
                                   if run without this previously, it is recommended to drop the system page cache before using this
                                   see https://github.com/ggerganov/llama.cpp/issues/1437
          --lora FILE              apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE 
+         --lora-scaled FILE SCALE
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
          --lora-init-without-apply
                                   load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
@@ -336,24 +338,6 @@ server/speculative:
 
          --draft N                number of tokens to draft for speculative decoding (default: 5)
   -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
-  -td,   --threads-draft N        number of threads to use during generation (default: same as --threads)
-  -Cd,   --cpu-mask-draft M       set draft model CPU affinity mask. Complements cpu-range-draft (default: same as --cpu-mask)
-  -Crd,  --cpu-range-draft lo-hi  set ranges of CPUs for affinity. Complements --cpu-mask-draft
-         --cpu-strict-draft <0|1> 
-                                  use strict CPU placement for draft model (default: same as --cpu-strict)
-         --priority-draft N       set draft process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: same as --priority)
-         --poll-draft <0..100>    use polling to wait for draft model work (default: same as --poll)
-  -tbd,  --threads-batch-draft N  number of threads to use during batch and prompt processing (default: same as --threads-draft)
-  -Cbd,  --cpu-mask-batch-draft M 
-                                  set draft model CPU affinity mask. Complements cpu-range-draft-batch (default: same as --cpu-mask-draft)
-  -Crbd, --cpu-range-batch-draft lo-hi
-                                  set ranges of CPUs for affinity. Complements --cpu-mask-draft-batch)
-         --cpu-strict-batch-draft <0|1>
-                                  use strict CPU placement for draft model (default: --cpu-strict-draft)
-         --priority-batch-draft N 
-                                  set draft process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority-draft)
-         --poll-batch-draft <0..100>
-                                  use polling to wait for draft model work (default: --poll-draft)
   -ngld, --gpu-layers-draft N     number of layers to store in VRAM for the draft model
          --lookup-ngram-min N     minimum n-gram size for lookup cache (default: 0, 0 = disabled)
   -lcs,  --lookup-cache-static FILE
@@ -396,7 +380,6 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_PORT`: equivalent to `--port`
 - `LLAMA_ARG_DRAFT`: equivalent to `--draft`
 - `LLAMA_ARG_MODEL_DRAFT`: equivalent to `-md`, `--model-draft`.
-- `LLAMA_ARG_THREADS_DRAFT`: equivalent to `-td`, `--threads-draft`.
 - `LLAMA_ARG_N_GPU_LAYERS_DRAFT`: equivalent to `-ngld`, `--gpu-layers-draft`.
 - `LLAMA_ARG_LOOKUP_NGRAM_MIN`: equivalent to `--lookup-ngram-min`.
 - `LLAMA_ARG_LOOKUP_CACHE_STATIC`: equivalent to `-lcs`, `--lookup-cache-static`.

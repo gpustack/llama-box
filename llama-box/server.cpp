@@ -668,6 +668,10 @@ struct server_context {
     common_ngram_cache ngram_cache_static;
     common_ngram_cache ngram_cache_dynamic;
 
+    // thread pool
+    ggml_threadpool *threadpool = nullptr;
+    ggml_threadpool *threadpool_batch = nullptr;
+
     ~server_context() {
         // Clear any sampling context
         for (server_slot &slot : slots) {
@@ -682,6 +686,7 @@ struct server_context {
         slots.clear();
 
         if (ctx != nullptr) {
+            llama_detach_threadpool(ctx);
             llama_free(ctx);
             ctx = nullptr;
         }
@@ -692,6 +697,7 @@ struct server_context {
         llama_batch_free(batch);
 
         if (ctx_draft != nullptr) {
+            llama_detach_threadpool(ctx_draft);
             llama_free(ctx_draft);
             ctx_draft = nullptr;
         }
@@ -708,6 +714,15 @@ struct server_context {
 
         ngram_cache_static.clear();
         ngram_cache_dynamic.clear();
+
+        if (threadpool != nullptr) {
+            ggml_threadpool_free(threadpool);
+            threadpool = nullptr;
+        }
+        if (threadpool_batch != nullptr) {
+            ggml_threadpool_free(threadpool_batch);
+            threadpool_batch = nullptr;
+        }
     }
 
     bool load_model(const llama_box_params &bparams) {
@@ -838,6 +853,28 @@ struct server_context {
             llama_synchronize(ctx);
             llama_perf_context_reset(ctx);
             SRV_INF("sampled tokens per second, tps = %d\n", n_tps);
+        }
+
+        // thread pool
+        {
+            struct ggml_threadpool_params tpp = ggml_threadpool_params_from_cpu_params(params.cpuparams);
+            threadpool = ggml_threadpool_new(&tpp);
+            if (!threadpool) {
+                SRV_ERR("threadpool create failed : n_threads %d\n", tpp.n_threads);
+                return false;
+            }
+
+            struct ggml_threadpool_params tpp_batch = ggml_threadpool_params_from_cpu_params(params.cpuparams_batch);
+            threadpool_batch = ggml_threadpool_new(&tpp_batch);
+            if (!threadpool_batch) {
+                SRV_ERR("threadpool_batch create failed : n_threads %d\n", tpp_batch.n_threads);
+                return false;
+            }
+
+            llama_attach_threadpool(ctx, threadpool, threadpool_batch);
+            if (ctx_draft != nullptr) {
+                llama_attach_threadpool(ctx_draft, threadpool, threadpool_batch);
+            }
         }
 
         return true;
@@ -3759,16 +3796,20 @@ int main(int argc, char **argv) {
     // Start
     //
 
-    svr.new_task_queue = [&params] { return new httplib::ThreadPool(params.n_threads_http); };
+    // +2 threads for monitoring endpoints: /metrics and /slots
+    const int32_t n_threads_http_addition = 2;
+    int32_t n_threads_http = params.n_threads_http;
+    if (n_threads_http < 1) {
+        n_threads_http = params.n_parallel + 2;
+    }
+    svr.new_task_queue = [&n_threads_http] { return new httplib::ThreadPool(n_threads_http); };
 
     // bind HTTP listen port, run the HTTP server in a thread
     SRV_INF("listening, "
-            "hostname = %s, port = %d\n",
-            params.hostname.c_str(), params.port);
+            "hostname = %s, port = %d, n_threads = %d + %d\n",
+            params.hostname.c_str(), params.port, n_threads_http, n_threads_http_addition);
     if (!svr.bind_to_port(params.hostname, params.port)) {
-        SRV_ERR("existing due to listening error, "
-                "hostname = %s, port = %d\n",
-                params.hostname.c_str(), params.port);
+        SRV_ERR("%s", "existing due to listening error\n");
         ctx_server.clean(svr);
         return 1;
     }
