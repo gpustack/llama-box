@@ -187,7 +187,7 @@ general:
 
   -h,    --help, --usage          print usage and exit
          --version                show version and build info
-  -v,    --verbose, --log-verbose
+  -v,    --verbose, --log-verbose 
                                   set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V
                                   set the verbosity threshold, messages with a higher verbosity will be ignored
@@ -241,7 +241,7 @@ server/completion:
   -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
          --cpu-strict <0|1>       use strict CPU placement (default: 0)
 
-         --priority N             set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: 0)
+         --prio N                 set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: 0)
 
          --poll <0...100>         use polling level to wait for work (0 - no polling, default: 50)
 
@@ -250,7 +250,7 @@ server/completion:
   -Crb,  --cpu-range-batch lo-hi  ranges of CPUs for affinity. Complements --cpu-mask-batch
          --cpu-strict-batch <0|1>
                                   use strict CPU placement (default: same as --cpu-strict)
-         --priority-batch N       set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
+         --prio-batch N           set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   use polling to wait for work (default: same as --poll
   -c,    --ctx-size N             size of the prompt context (default: 0, 0 = loaded from model)
          --no-context-shift       disables context shift on inifinite text generation (default: disabled)
@@ -303,7 +303,8 @@ server/completion:
          --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
          --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
   -nkvo, --no-kv-offload          disable KV offload
-         --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting (default: 0)
+         --cache-prompt           enable caching prompt (default: disabled)
+         --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting, implicit --cache-prompt if value (default: 0)
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: -1.0, < 0 - disabled)
