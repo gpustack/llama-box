@@ -644,9 +644,6 @@ struct server_context {
 
     llama_batch batch = {};
 
-    bool add_bos_token = true;
-    bool add_eos_token = false;
-
     int32_t n_ctx;            // total context for all clients / slots
     int32_t n_tps;            // max tokens per second
     int32_t lookup_ngram_min; // min ngram for lookup cache
@@ -672,21 +669,6 @@ struct server_context {
     common_ngram_cache ngram_cache_dynamic;
 
     ~server_context() {
-        if (ctx_clip != nullptr) {
-            clip_free(ctx_clip);
-            ctx_clip = nullptr;
-        }
-
-        if (ctx != nullptr) {
-            llama_free(ctx);
-            ctx = nullptr;
-        }
-
-        if (model != nullptr) {
-            llama_free_model(model);
-            model = nullptr;
-        }
-
         // Clear any sampling context
         for (server_slot &slot : slots) {
             if (slot.smpl != nullptr) {
@@ -699,6 +681,14 @@ struct server_context {
         }
         slots.clear();
 
+        if (ctx != nullptr) {
+            llama_free(ctx);
+            ctx = nullptr;
+        }
+        if (model != nullptr) {
+            llama_free_model(model);
+            model = nullptr;
+        }
         llama_batch_free(batch);
 
         if (ctx_draft != nullptr) {
@@ -710,6 +700,11 @@ struct server_context {
             model_draft = nullptr;
         }
         llama_batch_free(batch_draft);
+
+        if (ctx_clip != nullptr) {
+            clip_free(ctx_clip);
+            ctx_clip = nullptr;
+        }
 
         ngram_cache_static.clear();
         ngram_cache_dynamic.clear();
@@ -812,9 +807,6 @@ struct server_context {
         n_ctx = int32_t(llama_n_ctx(ctx));
         n_tps = bparams.n_tps;
         lookup_ngram_min = bparams.lookup_ngram_min;
-
-        add_bos_token = llama_add_bos_token(model);
-        add_eos_token = llama_add_eos_token(model);
 
         // sample tokens per second
         if (n_tps < 0) {
@@ -2035,7 +2027,7 @@ struct server_context {
                 }
 
                 // Shift context
-                const int n_keep = slot.params.n_keep + add_bos_token;
+                const int n_keep = slot.params.n_keep + llama_add_bos_token(model);
                 const int n_left = slot.n_past - n_keep;
                 const int n_discard = slot.params.n_discard ? slot.params.n_discard : (n_left / 2);
 
