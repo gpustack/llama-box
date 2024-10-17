@@ -22,6 +22,7 @@ struct llama_box_params {
     common_params gparams;
     rpcserver_params rparams;
 
+    bool cache_prompt = false;
     bool endpoint_infill = false;
     int32_t conn_idle = 60;       // connection idle in seconds
     int32_t conn_keepalive = 15;  // connection keep-alive in seconds
@@ -224,7 +225,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --yarn-beta-fast N",     "YaRN: low correction dim or beta (default: %.1f)", (double)params.yarn_beta_fast });
     opts.push_back({ "server/completion",  "       --yarn-beta-slow N",     "YaRN: high correction dim or alpha (default: %.1f)", (double)params.yarn_beta_slow });
     opts.push_back({ "server/completion",  "-nkvo, --no-kv-offload",        "disable KV offload" });
-    opts.push_back({ "server/completion",  "       --cache-reuse N",        "min chunk size to attempt reusing from the cache via KV shifting (default: %d)", params.n_cache_reuse });
+    opts.push_back({ "server/completion",  "       --cache-prompt",         "enable caching prompt (default: %s)", bparams.cache_prompt ? "enabled" : "disabled" });
+    opts.push_back({ "server/completion",  "       --cache-reuse N",        "min chunk size to attempt reusing from the cache via KV shifting, implicit --cache-prompt if value (default: %d)", params.n_cache_reuse });
     opts.push_back({ "server/completion",  "-ctk,  --cache-type-k TYPE",    "KV cache data type for K (default: %s)", params.cache_type_k.c_str() });
     opts.push_back({ "server/completion",  "-ctv,  --cache-type-v TYPE",    "KV cache data type for V (default: %s)", params.cache_type_v.c_str() });
     opts.push_back({ "server/completion",  "-dt,   --defrag-thold N",       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold });
@@ -1177,12 +1179,20 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--cache-prompt")) {
+                bparams.cache_prompt = true;
+                continue;
+            }
+
             if (!strcmp(flag, "--cache-reuse")) {
                 if (i == argc) {
                     missing("--cache-reuse");
                 }
                 char *arg = argv[i++];
                 bparams.gparams.n_cache_reuse = std::stoi(std::string(arg));
+                if (bparams.gparams.n_cache_reuse > 0) {
+                    bparams.cache_prompt = true;
+                }
                 continue;
             }
 

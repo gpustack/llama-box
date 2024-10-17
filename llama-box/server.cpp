@@ -647,6 +647,7 @@ struct server_context {
     int32_t n_ctx;            // total context for all clients / slots
     int32_t n_tps;            // max tokens per second
     int32_t lookup_ngram_min; // min ngram for lookup cache
+    bool cache_prompt;        // remember the prompt to avoid reprocessing all prompt
 
     // slots / clients
     std::vector<server_slot> slots;
@@ -822,6 +823,7 @@ struct server_context {
         n_ctx = int32_t(llama_n_ctx(ctx));
         n_tps = bparams.n_tps;
         lookup_ngram_min = bparams.lookup_ngram_min;
+        cache_prompt = bparams.cache_prompt;
 
         // sample tokens per second
         if (n_tps < 0) {
@@ -1064,7 +1066,7 @@ struct server_context {
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && ctx_clip != nullptr;
 
         slot.params.stream = json_value(data, "stream", false);
-        slot.params.cache_prompt = json_value(data, "cache_prompt", false);
+        slot.params.cache_prompt = json_value(data, "cache_prompt", cache_prompt);
         slot.params.n_keep = json_value(data, "n_keep", params.n_keep);
         slot.params.n_predict = json_value(data, "n_predict", params.n_predict);
         slot.params.n_discard = json_value(data, "n_discard", 0);
@@ -2033,7 +2035,7 @@ struct server_context {
                 }
             }
 
-            if (all_idle) {
+            if (all_idle && !cache_prompt) {
                 llama_kv_cache_clear(ctx);
                 if (ctx_draft != nullptr) {
                     llama_kv_cache_clear(ctx_draft);
@@ -2356,7 +2358,7 @@ struct server_context {
 
                             common_sampler_reset(slot.smpl);
 
-                            if (slot.params.cache_prompt) {
+                            if (slot.params.cache_prompt && !slot.cache_tokens.empty()) {
                                 // reuse any previously computed tokens that are
                                 // common with the new prompt
                                 slot.n_past = int32_t(longest_common_prefix(slot.cache_tokens, prompt_tokens));
@@ -2368,7 +2370,7 @@ struct server_context {
                                 }
 
                                 // reuse chunks from the cached prompt by shifting their KV cache in the new position
-                                if (params.n_cache_reuse > 0) {
+                                if (params.n_cache_reuse > 0 && slot.n_past > 0) {
                                     size_t head_c = slot.n_past; // cache
                                     size_t head_p = slot.n_past; // current prompt
 
@@ -2416,7 +2418,7 @@ struct server_context {
 
                         if (slot.n_past == slot.n_prompt_tokens && slot.n_past > 0) {
                             // we have to evaluate at least 1 token to generate logits.
-                            SLT_WRN(slot,
+                            SLT_DBG(slot,
                                     "need to evaluate at least 1 token to generate logits, "
                                     "n_past = %d, n_prompt_tokens = %d\n",
                                     slot.n_past, slot.n_prompt_tokens);
