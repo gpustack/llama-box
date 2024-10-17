@@ -39,10 +39,6 @@ LLaMA Box supports the following platforms.
 | _AVX2_                       | `darwin/amd64`<br/> `linux/amd64`<br/> `windows/amd64` | CPUs support AVX2, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                                                                                                                                         |
 | _Advanced SIMD (NEON)_       | `linux/arm64`<br/> `windows/arm64`                     | CPUs support Advanced SIMD (NEON), see <br/>https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                                                                                                                                                                                    |
 
-> [!WARNING]
-> - [PR#9707](https://github.com/ggerganov/llama.cpp/pull/9707) might break the new releases of **Huawei Ascend CANN 8.0
-    **.
-
 > [!NOTE]
 > - **"NVIDIA CUDA 12.4"**, **"AMD ROCm/HIP 6.1"** and _"AVX2"_ Linux releases are built on CentOS 7 (glibc 2.17),
     except _"Advanced SIMD (NEON)"_ which is built on Ubuntu 18.04 (glibc 2.27).
