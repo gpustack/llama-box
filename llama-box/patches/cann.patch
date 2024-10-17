@@ -1,3 +1,49 @@
+diff --git a/ggml/src/ggml-cann.cpp b/ggml/src/ggml-cann.cpp
+index ec3c0a68..ec4ba927 100644
+--- a/ggml/src/ggml-cann.cpp
++++ b/ggml/src/ggml-cann.cpp
+@@ -1712,11 +1712,15 @@ static bool ggml_backend_cann_supports_op(ggml_backend_t backend,
+             switch (op->src[0]->type) {
+                 case GGML_TYPE_F16:
+                 case GGML_TYPE_F32:
++                    return true;
+                 case GGML_TYPE_Q8_0:
+                     // TODO: fix me
+                     // Current groupsize should not be greater than k-1 in
+                     // aclnnWeightQuantBatchMatmulV2GetWorkspaceSize().
+                 case GGML_TYPE_Q4_0:
++                    if (op->src[0]->ne[1] > 65535) {
++                        return false;
++                    }
+                     return true;
+                 default:
+                     return false;
+@@ -1729,8 +1733,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_t backend,
+             switch (op->src[0]->type) {
+                 case GGML_TYPE_F32:
+                 case GGML_TYPE_F16:
++                    return true;
+                 case GGML_TYPE_Q4_0:
+                 case GGML_TYPE_Q8_0:
++                    if (op->src[0]->ne[1] > 65535) {
++                        return false;
++                    }
+                     return true;
+                 default:
+                     return false;
+@@ -1740,8 +1748,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_t backend,
+             switch (op->type) {
+                 case GGML_TYPE_F32:
+                 case GGML_TYPE_F16:
++                    return true;
+                 case GGML_TYPE_Q8_0:
+                 case GGML_TYPE_Q4_0:
++                    if (op->src[0]->ne[1] > 65535) {
++                        return false;
++                    }
+                     return true;
+                 default:
+                     return false;
 diff --git a/ggml/src/ggml-cann/common.h b/ggml/src/ggml-cann/common.h
 index edfa4961..2a74515f 100644
 --- a/ggml/src/ggml-cann/common.h

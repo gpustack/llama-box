@@ -189,7 +189,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",  "       --top-k N",              "top-k sampling (default: %d, 0 = disabled)", sparams.top_k });
     opts.push_back({ "server/completion",  "       --top-p P",              "top-p sampling (default: %.1f, 1.0 = disabled)", (double) sparams.top_p });
     opts.push_back({ "server/completion",  "       --min-p P",              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)sparams.min_p });
-    opts.push_back({ "server/completion",  "       ---xtc-probability N",   "xtc probability (default: %.1f, 0.0 = disabled)", (double)sparams.xtc_probability });
+    opts.push_back({ "server/completion",  "       --xtc-probability N",    "xtc probability (default: %.1f, 0.0 = disabled)", (double)sparams.xtc_probability });
     opts.push_back({ "server/completion",  "       --xtc-threshold N",      "xtc threshold (default: %.1f, 1.0 = disabled)", (double)sparams.xtc_threshold });
     opts.push_back({ "server/completion",  "       --tfs P",                "tail free sampling, parameter z (default: %.1f, 1.0 = disabled)", (double)sparams.tfs_z });
     opts.push_back({ "server/completion",  "       --typical P",            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)sparams.typ_p });
