@@ -80,7 +80,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=off \
-            -DGGML_NATIVE=off \
+            -DGGML_NATIVE=on \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -88,6 +88,7 @@ jobs:
           
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            otool --version
             otool -L ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -142,13 +143,14 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=on -DGGML_METAL_EMBED_LIBRARY=on \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
 
           echo "===== RESULT ====="
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            otool --version
             otool -L ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
@@ -168,11 +170,15 @@ jobs:
       fail-fast: false
       matrix:
         # AVX2 ==> CentOS 7.
+        # AVX512 ==> RockyLinux 8.9.
         # NEON ==> Ubuntu 18.04.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
             distro_container_image: 'centos:7'
+          - arch: 'amd64'
+            instruction: 'avx512'
+            distro_container_image: 'rockylinux:8.9'
           - arch: 'arm64'
             instruction: 'neon'
             distro_container_image: 'ubuntu:18.04'
@@ -214,8 +220,8 @@ jobs:
             cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
-                && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git
-              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git bc
+              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
                 apt-get update -y \
                   && apt-get install -y software-properties-common
                 add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -223,19 +229,21 @@ jobs:
                   && apt-get install -y gcc-11 g++-11
                 update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
                 update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-                gcc --version
               fi
             elif [ "\${ID}" = "rocky" ]; then
               # NB(thxCode): Enbale EPEL, see 
               # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
-              yum install -y epel-release
+              dnf install -y epel-release
               if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
                 dnf config-manager --set-enabled powertools
               else
                 dnf config-manager --set-enabled crb
               fi
-              yum update -y \
-                && yum install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas-static ccache curl git
+              dnf install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas-static ccache curl git
+              if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
+                dnf install -y gcc-toolset-11
+                source scl_source enable gcc-toolset-11
+              fi
             elif [ "\${ID}" = "centos" ]; then
               # NB(thxCode): Patch for CentOS, see
               # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
@@ -282,6 +290,7 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
+            ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on -DGGML_AVX512_BF16=on' || '' }} \
             ${{ matrix.instruction == 'neon' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.instruction == 'neon' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             -DGGML_BLAS_VENDOR=OpenBLAS \
@@ -376,23 +385,10 @@ jobs:
           if [ -f /etc/os-release ]; then
             source /etc/os-release
             cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y build-essential ccache curl git
-              if [[ "\$(uname -m)" == "aarch64" ]]; then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-                gcc --version
-              fi
-            elif [ "\${ID}" = "centos" ]; then
+            if [ "\${ID}" = "centos" ]; then
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
               yum update -y \
-                && yum install -y gcc gcc-c++ make glibc-static libstdc++-static ccache curl git
+                && yum install -y make glibc-static libstdc++-static ccache curl git
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -407,7 +403,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_NATIVE=on \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
@@ -499,31 +495,7 @@ jobs:
           if [ -f /etc/os-release ]; then
             source /etc/os-release
             cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y build-essential ccache curl git
-              if [[ "\$(uname -m)" == "aarch64" ]]; then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-                gcc --version
-              fi
-            elif [ "\${ID}" = "rocky" ]; then
-              # NB(thxCode): Enbale EPEL, see 
-              # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
-              yum install -y epel-release
-              if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
-                dnf config-manager --set-enabled powertools
-              else
-                dnf config-manager --set-enabled crb
-              fi
-              yum update -y \
-                && yum install -y gcc gcc-c++ make glibc-static libstdc++-static ccache curl git
-            elif [ "\${ID}" = "centos" ]; then
+            if [ "\${ID}" = "centos" ]; then
               # NB(thxCode): Patch for CentOS, see
               # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
               sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
@@ -543,7 +515,6 @@ jobs:
                 && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
                 && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
                 && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
-              gcc --version
               yum --enablerepo=extras install -y epel-release
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
               yum update -y \
@@ -562,7 +533,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_NATIVE=on \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_CUDA_F16=on \
@@ -651,8 +622,8 @@ jobs:
             cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
-                && apt-get install -y build-essential ccache curl git
-              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                && apt-get install -y build-essential ccache curl git bc
+              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
                 apt-get update -y \
                   && apt-get install -y software-properties-common
                 add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -660,19 +631,7 @@ jobs:
                   && apt-get install -y gcc-11 g++-11
                 update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
                 update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-                gcc --version
               fi
-            elif [ "\${ID}" = "rocky" ]; then
-              # NB(thxCode): Enbale EPEL, see 
-              # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
-              yum install -y epel-release
-              if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
-                dnf config-manager --set-enabled powertools
-              else
-                dnf config-manager --set-enabled crb
-              fi
-              yum update -y \
-                && yum install -y gcc gcc-c++ make glibc-static libstdc++-static ccache curl git
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -687,7 +646,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -778,8 +737,8 @@ jobs:
             cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
-                && apt-get install -y build-essential ccache curl git
-              if [[ "\$(uname -m)" == "aarch64" ]]; then
+                && apt-get install -y build-essential ccache curl git bc
+              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
                 apt-get update -y \
                   && apt-get install -y software-properties-common
                 add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -787,7 +746,6 @@ jobs:
                   && apt-get install -y gcc-11 g++-11
                 update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
                 update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-                gcc --version
               fi
             elif [ "\${ID}" = "openEuler" ]; then
               yum update -y \
@@ -796,7 +754,6 @@ jobs:
                 && yum install -y gcc-toolset-10-libstdc++-static make ccache curl git
               export PATH="/opt/openEuler/gcc-toolset-10/root/usr/bin/:\${PATH}" && \
                 export LD_LIBRARY_PATH="/opt/openEuler/gcc-toolset-10/root/usr/lib64/:\${LD_LIBRARY_PATH}"
-              gcc --version
             else
               echo "Unsupport distribution: \${ID}"
               exit 1
@@ -812,7 +769,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_NATIVE=on \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
@@ -899,7 +856,7 @@ jobs:
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
                 && apt-get install -y build-essential ccache curl git cmake
-              if [[ "\$(uname -m)" == "aarch64" ]]; then
+              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
                 apt-get update -y \
                   && apt-get install -y software-properties-common
                 add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -907,7 +864,6 @@ jobs:
                   && apt-get install -y gcc-11 g++-11
                 update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
                 update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-                gcc --version
               fi
             else
               echo "Unsupport distribution: \$ID"
@@ -922,7 +878,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
+            -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -964,10 +920,13 @@ jobs:
       fail-fast: false
       matrix:
         # AVX2 ==> Windows Server 2022.
+        # AVX512 ==> Windows Server 2022.
         # NEON ==> Windows Server 2022.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
+          - arch: 'amd64'
+            instruction: 'avx512'
           - arch: 'arm64'
             instruction: 'neon'
     runs-on: windows-2022
@@ -992,9 +951,10 @@ jobs:
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_NATIVE=off `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64-msvc.cmake', github.workspace) || '' }} `
+            -DGGML_NATIVE=off `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} `
+            ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on -DGGML_AVX512_BF16=on' || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
@@ -1086,7 +1046,7 @@ jobs:
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=on' || '-DGGML_NATIVE=off' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
             -DGGML_OPENMP=off `
@@ -1177,7 +1137,7 @@ jobs:
           Write-Host "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=on' || '-DGGML_NATIVE=off' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
             -DGGML_CUDA_F16=on `

@@ -22,6 +22,7 @@ option(LLAMA_CCACHE "llama: use ccache if available" ON)
 
 # debug
 option(LLAMA_ALL_WARNINGS "llama: enable all compiler warnings" ON)
+option(LLAMA_ALL_WARNINGS_3RD_PARTY "llama: enable all compiler warnings in 3rd party libs" OFF)
 
 # build
 option(LLAMA_FATAL_WARNINGS "llama: enable -Werror flag" OFF)
@@ -41,6 +42,19 @@ set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama: build server example" FORCE)
 
 # 3rd party libs
 set(LLAMA_CURL OFF CACHE BOOL "llama: use libcurl to download model from an URL" FORCE)
+
+# change the default for these ggml options
+if (NOT DEFINED GGML_LLAMAFILE)
+    set(GGML_LLAMAFILE_DEFAULT ON)
+endif()
+
+if (NOT DEFINED GGML_AMX)
+    set(GGML_AMX OFF)
+endif()
+
+if (NOT DEFINED GGML_CUDA_GRAPHS)
+    set(GGML_CUDA_GRAPHS_DEFAULT ON)
+endif()
 
 #
 # Compile flags
