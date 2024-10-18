@@ -179,7 +179,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
-        uses: gpustack/.github/actions/maximize-docker-build-space@main
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
           root-reserve-mb: 20480
@@ -342,7 +342,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
-        uses: gpustack/.github/actions/maximize-docker-build-space@main
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
           root-reserve-mb: 20480
@@ -465,7 +465,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
-        uses: gpustack/.github/actions/maximize-docker-build-space@main
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
           root-reserve-mb: 20480
@@ -616,7 +616,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
-        uses: gpustack/.github/actions/maximize-docker-build-space@main
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
           root-reserve-mb: 20480
@@ -743,7 +743,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
-        uses: gpustack/.github/actions/maximize-docker-build-space@main
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
           root-reserve-mb: 20480
@@ -864,7 +864,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
-        uses: gpustack/.github/actions/maximize-docker-build-space@main
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
         with:
           deep-clean: false
           root-reserve-mb: 20480
