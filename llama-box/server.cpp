@@ -842,7 +842,7 @@ struct server_context {
                 if (i >= n_check) {
                     break;
                 }
-                if (llama_decode(ctx, llama_batch_get_one(&check_prompt_tokens[i - 1], 1, 0, 0))) {
+                if (llama_decode(ctx, llama_batch_get_one(&check_prompt_tokens[i - 1], 1))) {
                     break;
                 }
                 n_check_decoded++;
@@ -974,7 +974,7 @@ struct server_context {
                     prompt_tokens.push_back(jp.get<llama_token>());
                 }
             }
-        } else {
+        } else if (prompt.is_string()) {
             std::string s = prompt.get<std::string>();
             prompt_tokens = common_tokenize(ctx, s, add_special, parse_special);
         }
@@ -2576,7 +2576,6 @@ struct server_context {
                 batch.n_seq_id + i,
                 batch.seq_id + i,
                 batch.logits + i,
-                0, 0, 0, // unused
             };
             // clang-format on
 
@@ -2624,7 +2623,6 @@ struct server_context {
                     batch_draft.n_seq_id + i,
                     batch_draft.seq_id + i,
                     batch_draft.logits + i,
-                    0, 0, 0, // unused
                 };
                 // clang-format on
 
@@ -2785,7 +2783,6 @@ struct server_context {
                         batch.n_seq_id + j,
                         batch.seq_id   + j,
                         batch.logits   + j,
-                        0, 0, 0,
                     };
                     // clang-format on
                     if (llama_decode(ctx, batch_view)) {
@@ -2829,7 +2826,6 @@ struct server_context {
                         nullptr,
                         nullptr,
                         nullptr,
-                        slot.n_past, 1, slot.id + 1,
                     };
                     // clang-format on
                     if (llama_decode(ctx, batch_img)) {
