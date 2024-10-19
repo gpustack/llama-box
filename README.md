@@ -38,14 +38,19 @@ LLaMA Box supports the following platforms.
 | **Apple Metal 3**            | `darwin/amd64`<br/> `darwin/arm64`                     | Support [Apple Metal](https://developer.apple.com/metal/), see <br/>https://support.apple.com/en-sg/102894.                                                                                                                                                                                                                                                                                |
 | _AVX2_                       | `darwin/amd64`<br/> `linux/amd64`<br/> `windows/amd64` | CPUs support AVX2, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                                                                                                                                         |
 | _Advanced SIMD (NEON)_       | `linux/arm64`<br/> `windows/arm64`                     | CPUs support Advanced SIMD (NEON), see <br/>https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon).                                                                                                                                                                                                                                                                    |
+| _AVX512_                     | `linux/amd64`<br/> `windows/amd64`                     | CPUs support AVX512, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#AVX-512.                                                                                                                                                                                                                                                                                            |
 
 > [!NOTE]
-> - **"NVIDIA CUDA 12.4"**, **"AMD ROCm/HIP 6.1"** and _"AVX2"_ Linux releases are built on CentOS 7 (glibc 2.17),
-    except _"Advanced SIMD (NEON)"_ which is built on Ubuntu 18.04 (glibc 2.27).
-> - **"Intel oneAPI 2024.2"** Linux releases are built on Ubuntu 20.04 (glibc 2.31).
-> - **"Moore Threads MUSA rc3.1"** Linux releases are built on Ubuntu 22.04 (glibc 2.34).
-> - **"Huawei Ascend CANN 8.0"** Linux releases have built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc
-    2.28).
+>
+> Since v0.0.60, the build of Linux releases are as follows:
+>
+> - **"NVIDIA CUDA 12.4"** and **"AMD ROCm/HIP 6.1"** releases are built on CentOS 7 (glibc 2.17),
+> - **"Intel oneAPI 2024.2"** releases are built on Ubuntu 20.04 (glibc 2.31).
+> - **"Huawei Ascend CANN 8.0"** releases are built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc 2.28).
+> - **"Moore Threads MUSA rc3.1"** releases are built on Ubuntu 22.04 (glibc 2.34).
+> - _"AVX2"_ releases are built on CentOS 7 (glibc 2.17).
+> - _"Advanced SIMD (NEON)"_ releases are built on Ubuntu 18.04 (glibc 2.27).
+> - _"AVX512"_ releases are built on RockyLinux 8.9 (glibc 2.28).
 
 ## Examples
 
