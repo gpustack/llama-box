@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cann.cpp b/ggml/src/ggml-cann.cpp
-index ec3c0a68..587ff267 100644
+index af0fb603..32e0b4db 100644
 --- a/ggml/src/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann.cpp
-@@ -407,10 +407,11 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -409,10 +409,11 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
              // add to the pool
              pool_size += reserve_size;
  
@@ -18,7 +18,7 @@ index ec3c0a68..587ff267 100644
          }
  
          GGML_ASSERT(pool_addr != 0);
-@@ -1712,11 +1713,15 @@ static bool ggml_backend_cann_supports_op(ggml_backend_t backend,
+@@ -1706,11 +1707,15 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
              switch (op->src[0]->type) {
                  case GGML_TYPE_F16:
                  case GGML_TYPE_F32:
@@ -34,7 +34,7 @@ index ec3c0a68..587ff267 100644
                      return true;
                  default:
                      return false;
-@@ -1729,8 +1734,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_t backend,
+@@ -1723,8 +1728,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
              switch (op->src[0]->type) {
                  case GGML_TYPE_F32:
                  case GGML_TYPE_F16:
@@ -47,7 +47,7 @@ index ec3c0a68..587ff267 100644
                      return true;
                  default:
                      return false;
-@@ -1740,8 +1749,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_t backend,
+@@ -1734,8 +1743,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
              switch (op->type) {
                  case GGML_TYPE_F32:
                  case GGML_TYPE_F16:
