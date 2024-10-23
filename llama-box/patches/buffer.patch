@@ -1,8 +1,8 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index e1ca478e..3b52cd19 100644
+index 24e1f1f0..2e10ae9e 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -8999,7 +8999,7 @@ static bool llm_load_tensors(
+@@ -9050,7 +9050,7 @@ static bool llm_load_tensors(
  
      // print memory requirements
      for (ggml_backend_buffer_t buf : model.bufs) {
