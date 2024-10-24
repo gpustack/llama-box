@@ -665,10 +665,13 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     json prompt = json::array();
     prompt.push_back(json_value(body, "query", std::string("")));
     for (const json &doc : body.at("documents")) {
-        if (!doc.is_string()) {
-            throw std::runtime_error("Illegal param: documents must be an array of strings");
+        if (doc.is_string()) {
+            prompt.push_back(doc.get<std::string>());
+        } else if (doc.is_object() && doc.contains("text")) {
+            prompt.push_back(doc.at("text").get<std::string>());
+        } else {
+            throw std::runtime_error("Illegal param: documents must be an array of strings or objects with a 'text' field");
         }
-        prompt.push_back(doc.get<std::string>());
     }
     llama_params["prompt"] = prompt;
 
@@ -683,7 +686,11 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     llama_params["top_n"] = top_n;
 
     // Handle "return_documents" field
-    llama_params["return_documents"] = json_value(body, "return_documents", true);
+    bool return_documents = json_value(body, "return_documents", true);
+    llama_params["return_documents"] = return_documents;
+    if (return_documents) {
+        llama_params["__oaicompat_rerank_documents"] = body.at("documents");
+    }
 
     return llama_params;
 }
@@ -713,9 +720,12 @@ static void jinaicompat_rerank_response_sort(json &result, int32_t low, int32_t 
 }
 
 static json jinaicompat_rerank_response(const json &request, json &result) {
-    json prompt = request.at("prompt");
+    json documents;
     int32_t top_n = request.at("top_n");
     bool return_documents = request.at("return_documents");
+    if (return_documents) {
+        documents = request.at("__oaicompat_rerank_documents");
+    }
 
     int num_prompt_tokens = 0;
     json data = json::array();
@@ -734,14 +744,19 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
                 {"relevance_score", scr},
             };
             if (return_documents) {
-                item["document"] = prompt[idx + 1];
+                if (documents[idx].is_string()) {
+                    item["document"] = json{
+                        {"text", documents[idx]},
+                    };
+                } else {
+                    item["document"] = documents[idx];
+                }
             }
             data.push_back(item);
         }
     }
 
     json res = json{{"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-                    {"object", "list"},
                     {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
                     {"results", data}};
 
