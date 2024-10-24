@@ -1248,6 +1248,20 @@ struct server_context {
                 send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
                 return false;
             }
+
+            if (ctx_draft != nullptr) {
+                if (slot.smpl_draft != nullptr) {
+                    common_sampler_free(slot.smpl_draft);
+                }
+
+                slot.smpl_draft = common_sampler_clone(slot.smpl);
+                if (slot.smpl_draft == nullptr) {
+                    // for now, the only error that may happen here is invalid
+                    // grammar
+                    send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
+                    return false;
+                }
+            }
         }
 
         {
@@ -2394,18 +2408,10 @@ struct server_context {
                                 GGML_ASSERT(slot.n_prompt_tokens < slot.n_ctx);
                             }
 
-                            common_sampler_reset(slot.smpl);
-
                             if (slot.params.cache_prompt && !slot.cache_tokens.empty()) {
                                 // reuse any previously computed tokens that are
                                 // common with the new prompt
                                 slot.n_past = int32_t(longest_common_prefix(slot.cache_tokens, prompt_tokens));
-
-                                // push the prompt into the sampling context (do
-                                // not apply grammar)
-                                for (int i = 0; i < slot.n_past; ++i) {
-                                    common_sampler_accept(slot.smpl, slot.cache_tokens[i], false);
-                                }
 
                                 // reuse chunks from the cached prompt by shifting their KV cache in the new position
                                 if (params.n_cache_reuse > 0 && slot.n_past > 0) {
@@ -2436,8 +2442,6 @@ struct server_context {
 
                                             for (size_t i = 0; i < n_match; i++) {
                                                 slot.cache_tokens[head_p + i] = slot.cache_tokens[head_c + i];
-
-                                                common_sampler_accept(slot.smpl, slot.cache_tokens[head_p + i], false);
 
                                                 slot.n_past++;
                                             }
@@ -2494,11 +2498,8 @@ struct server_context {
                     if (!llama_kv_cache_seq_rm(ctx, slot.id + 1, slot_npast, -1)) {
                         // could not partially delete (likely using a on-Transformer model)
                         llama_kv_cache_seq_rm(ctx, slot.id + 1, -1, -1);
-
                         // there is no common part left
                         slot.n_past = 0;
-
-                        common_sampler_reset(slot.smpl);
                     }
                     if (ctx_draft != nullptr) {
                         if (!llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, slot_npast, -1)) {
@@ -2506,7 +2507,6 @@ struct server_context {
                             if (slot_npast != 0) {
                                 llama_kv_cache_seq_cp(ctx_draft, 0, slot.id + 1, -1, -1);
                             }
-                            common_sampler_reset(slot.smpl_draft);
                         }
                     }
 
@@ -2535,12 +2535,25 @@ struct server_context {
                         continue;
                     }
 
-                    // entire prompt has been processed - start decoding new
-                    // tokens
+                    // entire prompt has been processed
                     if (slot.n_past == slot.n_prompt_tokens) {
                         slot.state = SLOT_STATE_DONE_PROMPT;
 
                         GGML_ASSERT(batch.n_tokens > 0);
+
+                        common_sampler_reset(slot.smpl);
+                        // Process all prompt tokens through sampler system
+                        for (int i = 0; i < slot.n_prompt_tokens; ++i) {
+                            common_sampler_accept(slot.smpl, prompt_tokens[i], false);
+                        }
+
+                        if (ctx_draft != nullptr) {
+                            common_sampler_reset(slot.smpl_draft);
+                            // Process all prompt tokens through sampler system
+                            for (int i = 0; i < slot.n_prompt_tokens; ++i) {
+                                common_sampler_accept(slot.smpl_draft, prompt_tokens[i], false);
+                            }
+                        }
 
                         // extract the logits only for the last token
                         batch.logits[batch.n_tokens - 1] = true;
@@ -2696,10 +2709,6 @@ struct server_context {
                     llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, pos, -1);
 
                     slot.sampled_draft.clear();
-                    if (slot.smpl_draft != nullptr) {
-                        common_sampler_free(slot.smpl_draft);
-                    }
-                    slot.smpl_draft = common_sampler_clone(slot.smpl);
 
                     common_batch_clear(batch_draft);
                     common_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos, {slot.id + 1}, true);
