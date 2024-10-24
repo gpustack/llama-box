@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann.cpp b/ggml/src/ggml-cann.cpp
-index af0fb603..32a7f10e 100644
+index af0fb603..d7f73859 100644
 --- a/ggml/src/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann.cpp
 @@ -122,6 +122,10 @@ static ggml_cann_device_info ggml_cann_init() {
@@ -25,16 +25,24 @@ index af0fb603..32a7f10e 100644
  #ifdef DEBUG_CANN_MALLOC
          int nnz = 0;
          size_t max_size = 0;
-@@ -247,7 +256,7 @@ struct ggml_cann_pool_leg : public ggml_cann_pool {
+@@ -246,13 +255,11 @@ struct ggml_cann_pool_leg : public ggml_cann_pool {
+             return ptr;
          }
          void* ptr;
-         size_t look_ahead_size = (size_t)(1.05 * size);
+-        size_t look_ahead_size = (size_t)(1.05 * size);
 -        look_ahead_size = 256 * ((look_ahead_size + 255) / 256);
-+        look_ahead_size = GGML_PAD(look_ahead_size, 256);
          ggml_cann_set_device(device);
          ACL_CHECK(
-             aclrtMalloc(&ptr, look_ahead_size, ACL_MEM_MALLOC_HUGE_FIRST));
-@@ -294,9 +303,9 @@ struct ggml_cann_pool_leg : public ggml_cann_pool {
+-            aclrtMalloc(&ptr, look_ahead_size, ACL_MEM_MALLOC_HUGE_FIRST));
+-        *actual_size = look_ahead_size;
+-        pool_size += look_ahead_size;
++            aclrtMalloc(&ptr, size, ACL_MEM_MALLOC_HUGE_FIRST));
++        *actual_size = size;
++        pool_size += size;
+ #ifdef DEBUG_CANN_MALLOC
+         GGML_LOG_INFO(
+             "%s[%d]: %d buffers, max_size = %u MB, pool_size = %u MB, "
+@@ -294,9 +301,9 @@ struct ggml_cann_pool_leg : public ggml_cann_pool {
   */
  struct ggml_cann_pool_vmm : public ggml_cann_pool {
      /**
@@ -46,7 +54,7 @@ index af0fb603..32a7f10e 100644
  
      /**
       * @brief The device ID associated with this buffer pool.
-@@ -334,6 +343,7 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -334,6 +341,7 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
      std::vector<void*> map_offsets;
  
      /**
@@ -54,7 +62,7 @@ index af0fb603..32a7f10e 100644
       * @brief Constructor to initialize the buffer pool with virtual memory for
       * a specific device.
       *
-@@ -341,7 +351,11 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -341,7 +349,11 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
       */
      explicit ggml_cann_pool_vmm(int device)
          : device(device),
@@ -67,7 +75,7 @@ index af0fb603..32a7f10e 100644
  
      /**
       * @brief Destructor to free all buffers in the virtual memory pool.
-@@ -370,17 +384,19 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -370,17 +382,19 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
          // round up the allocation size to the alignment to ensure that all
          // allocations are aligned for all data types
          const size_t alignment = 128;
@@ -91,7 +99,7 @@ index af0fb603..32a7f10e 100644
  
              // allocate more physical memory
              aclrtPhysicalMemProp prop = {};
-@@ -396,7 +412,7 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -396,7 +410,7 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
              // reserve virtual address space (if not already reserved)
              if (pool_addr == 0) {
                  ACL_CHECK(aclrtReserveMemAddress(
@@ -100,7 +108,7 @@ index af0fb603..32a7f10e 100644
              }
  
              // map at the end of the pool
-@@ -409,10 +425,11 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -409,10 +423,11 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
              // add to the pool
              pool_size += reserve_size;
  
@@ -116,14 +124,16 @@ index af0fb603..32a7f10e 100644
          }
  
          GGML_ASSERT(pool_addr != 0);
-@@ -457,8 +474,8 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -457,8 +472,10 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
   */
  std::unique_ptr<ggml_cann_pool> ggml_backend_cann_context::new_pool_for_device(
      int device) {
 -    // return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_leg(device));
 -    return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_vmm(device));
-+     return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_leg(device));
-+     // return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_vmm(device));
++    if (device == 0) {
++        return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_vmm(device));
++    }
++    return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_leg(device));
  }
  
  // cann buffer
