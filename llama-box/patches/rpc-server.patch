@@ -12,10 +12,10 @@ index b8d3f678..7d893f0b 100644
  
  #ifdef __cplusplus
 diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
-index 172a0f92..ea6f73ee 100644
+index e9541441..469570e1 100644
 --- a/ggml/src/ggml-metal.m
 +++ b/ggml/src/ggml-metal.m
-@@ -3606,6 +3606,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
+@@ -3698,6 +3698,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
      }
  }
  
