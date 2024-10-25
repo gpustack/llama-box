@@ -2696,24 +2696,32 @@ int main(int argc, char **argv) {
 
     llama_numa_init(params.numa);
 
-    if (bparams.rparams.port > 0) {
-        rpcserver_params &rparams = bparams.rparams;
-        return rpcserver_start(rparams);
-    }
-
-    server_context ctx_server;
-
-    if (params.model_alias == "unknown") {
-        params.model_alias = params.model;
-    }
-
-    llama_backend_init();
-
     LOG_INF("\n");
     LOG_INF("build: %s (%s) by %s with llama.cpp %d (%s)\n", LLAMA_BOX_GIT_VERSION, LLAMA_BOX_GIT_COMMIT, LLAMA_COMPILER, LLAMA_BUILD_NUMBER,
             LLAMA_COMMIT);
     LOG_INF("%s\n", common_params_get_system_info(params).c_str());
     LOG_INF("\n");
+
+    //
+    // serve as rpc server
+    //
+
+    if (bparams.rparams.port > 0) {
+        rpcserver_params &rparams = bparams.rparams;
+        return rpcserver_start(rparams);
+    }
+
+    //
+    // serve as http server
+    //
+
+    if (params.model_alias == "unknown") {
+        params.model_alias = params.model;
+    }
+
+    server_context ctx_server;
+
+    llama_backend_init();
 
     httplib::Server svr;
     std::atomic<server_state> state{SERVER_STATE_LOADING_MODEL};
