@@ -2131,13 +2131,15 @@ struct server_context {
                                 slot.n_prompt_tokens);
 
                         if (slot.inf_type == SERVER_TASK_INF_TYPE_EMBEDDING || slot.inf_type == SERVER_TASK_INF_TYPE_RERANK) {
-                            // this prompt is too large to process - discard it
                             if (slot.n_prompt_tokens > n_ubatch) {
                                 slot.release();
-                                send_error(slot,
-                                           "input is too large to process, "
-                                           "please increase the physical batch size",
-                                           ERROR_TYPE_SERVER);
+                                send_error(slot, "input is too large to process, please increase the physical batch size", ERROR_TYPE_SERVER);
+                                continue;
+                            }
+
+                            if (slot.n_prompt_tokens > slot.n_ctx) {
+                                slot.release();
+                                send_error(slot, "input is larger than the max context size. skipping", ERROR_TYPE_INVALID_REQUEST);
                                 continue;
                             }
                         } else {

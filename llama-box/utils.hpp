@@ -585,10 +585,12 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     // Print the request for debugging
     {
         json body_cp = body;
-        if (body_cp.contains("messages")) {
-            body_cp["messages"] = "[...]";
-        } else if (body_cp.contains("prompt")) {
-            body_cp["prompt"] = "...";
+        if (common_log_verbosity_thold < 2) {
+            if (body_cp.contains("messages")) {
+                body_cp["messages"] = "[...]";
+            } else if (body_cp.contains("prompt")) {
+                body_cp["prompt"] = "...";
+            }
         }
         SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
@@ -815,10 +817,12 @@ static json oaicompat_embedding_request(const struct common_params &params, cons
     // Print the request for debugging
     {
         json body_cp = body;
-        if (body_cp.at("input").is_string()) {
-            body_cp["input"] = "...";
-        } else {
-            body_cp["input"] = "[...]";
+        if (common_log_verbosity_thold < 2) {
+            if (body_cp.at("input").is_string()) {
+                body_cp["input"] = "...";
+            } else {
+                body_cp["input"] = "[...]";
+            }
         }
         SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
@@ -858,11 +862,13 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     // Print the request for debugging
     {
         json body_cp = body;
-        if (body_cp.contains("query")) {
-            body_cp["query"] = "...";
-        }
-        if (body_cp.contains("documents")) {
-            body_cp["documents"] = "[...]";
+        if (common_log_verbosity_thold < 2) {
+            if (body_cp.contains("query")) {
+                body_cp["query"] = "...";
+            }
+            if (body_cp.contains("documents")) {
+                body_cp["documents"] = "[...]";
+            }
         }
         SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
