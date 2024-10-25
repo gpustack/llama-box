@@ -18,9 +18,12 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 
 ## Features
 
-- Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
+- Compatible with [OpenAI Completion API](https://beta.openai.com/docs/api-reference/completions).
+- Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
+    + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
+- Compatible with [OpenAI Embedding API](https://platform.openai.com/docs/api-reference/embeddings).
+- Compatible with [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank).
 - Support speculative decoding: draft model or n-gram lookup.
-- Support [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank).
 - Support RPC server mode, which can serve as a remote inference backend.
 
 ## Supports
