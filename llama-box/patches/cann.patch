@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann.cpp b/ggml/src/ggml-cann.cpp
-index af0fb603..d7f73859 100644
+index af0fb603..d20407ce 100644
 --- a/ggml/src/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann.cpp
 @@ -122,6 +122,10 @@ static ggml_cann_device_info ggml_cann_init() {
@@ -82,7 +82,7 @@ index af0fb603..d7f73859 100644
 -        size = alignment * ((size + alignment - 1) / alignment);
 +        size = GGML_PAD(size, alignment);
 +        if (size == 0) {
-+           size = alignment;
++            size = alignment;
 +        }
  
          size_t avail = pool_size - pool_used;
@@ -192,11 +192,11 @@ index af0fb603..d7f73859 100644
 -        (ggml_backend_cann_buffer_type_context*)buft->context;
 -
 -    ggml_cann_set_device(buft_ctx->device);
+-
+-    size = std::max(size, (size_t)1);
 +    ggml_backend_cann_context* cann_ctx =
 +        (ggml_backend_cann_context*)buft->device->context;
  
--    size = std::max(size, (size_t)1);
--
 -    void* dev_ptr;
 -    aclError err = aclrtMalloc(&dev_ptr, size, ACL_MEM_MALLOC_HUGE_FIRST);
 -    if (err != ACL_SUCCESS) {
@@ -227,7 +227,24 @@ index af0fb603..d7f73859 100644
                  /* .context  = */
                   new ggml_backend_cann_buffer_type_context{
                      i, "CANN" + std::to_string(i)},
-@@ -1706,11 +1710,15 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
+@@ -1215,10 +1219,15 @@ static void * ggml_cann_host_malloc(size_t size) {
+         return nullptr;
+     }
+ 
++    const size_t alignment = 128;
++    size = GGML_PAD(size, alignment);
++    if (size == 0) {
++        size = alignment;
++    }
++
+     void * hostPtr = nullptr;
+     aclError err = aclrtMallocHost((void **) &hostPtr, size);
+     if (err != ACL_SUCCESS) {
+-
+         GGML_LOG_WARN("%s: failed to allocate %.2f MiB of pinned memory: %s\n", __func__,
+                            size / 1024.0 / 1024.0, aclGetRecentErrMsg());
+         return nullptr;
+@@ -1706,11 +1715,15 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
              switch (op->src[0]->type) {
                  case GGML_TYPE_F16:
                  case GGML_TYPE_F32:
@@ -243,7 +260,7 @@ index af0fb603..d7f73859 100644
                      return true;
                  default:
                      return false;
-@@ -1723,8 +1731,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
+@@ -1723,8 +1736,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
              switch (op->src[0]->type) {
                  case GGML_TYPE_F32:
                  case GGML_TYPE_F16:
@@ -256,7 +273,7 @@ index af0fb603..d7f73859 100644
                      return true;
                  default:
                      return false;
-@@ -1734,8 +1746,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
+@@ -1734,8 +1751,12 @@ static bool ggml_backend_cann_supports_op(ggml_backend_dev_t dev,
              switch (op->type) {
                  case GGML_TYPE_F32:
                  case GGML_TYPE_F16:
@@ -269,7 +286,7 @@ index af0fb603..d7f73859 100644
                      return true;
                  default:
                      return false;
-@@ -1902,17 +1918,17 @@ struct ggml_backend_cann_device_context {
+@@ -1902,17 +1923,17 @@ struct ggml_backend_cann_device_context {
  };
  
  static const char * ggml_backend_cann_device_get_name(ggml_backend_dev_t dev) {
@@ -290,7 +307,7 @@ index af0fb603..d7f73859 100644
      ggml_backend_cann_get_device_memory(ctx->device, free, total);
  }
  
-@@ -1939,7 +1955,7 @@ static void ggml_backend_cann_device_get_props(ggml_backend_dev_t dev, ggml_back
+@@ -1939,7 +1960,7 @@ static void ggml_backend_cann_device_get_props(ggml_backend_dev_t dev, ggml_back
  
  static ggml_backend_t ggml_backend_cann_device_init(ggml_backend_dev_t dev, const char * params) {
      GGML_UNUSED(params);
@@ -299,7 +316,7 @@ index af0fb603..d7f73859 100644
      return ggml_backend_cann_init(ctx->device);
  }
  
-@@ -1959,7 +1975,7 @@ static ggml_backend_t ggml_backend_cann_device_init(ggml_backend_dev_t dev, cons
+@@ -1959,7 +1980,7 @@ static ggml_backend_t ggml_backend_cann_device_init(ggml_backend_dev_t dev, cons
  static bool ggml_backend_cann_supports_buft(
      ggml_backend_dev_t dev, ggml_backend_buffer_type_t buft) {
      if (ggml_backend_buft_is_cann(buft)) {
@@ -308,7 +325,7 @@ index af0fb603..d7f73859 100644
          ggml_backend_cann_buffer_type_context * buft_ctx =
                          (ggml_backend_cann_buffer_type_context *)buft->context;
          return buft_ctx->device == dev_ctx->device;
-@@ -1968,7 +1984,7 @@ static bool ggml_backend_cann_supports_buft(
+@@ -1968,7 +1989,7 @@ static bool ggml_backend_cann_supports_buft(
  }
  
  static ggml_backend_buffer_type_t ggml_backend_cann_device_get_buffer_type(ggml_backend_dev_t dev) {
@@ -317,7 +334,7 @@ index af0fb603..d7f73859 100644
      return ggml_backend_cann_buffer_type(ctx->device);
  }
  
-@@ -1989,7 +2005,7 @@ static ggml_backend_buffer_type_t ggml_backend_cann_device_get_host_buffer_type(
+@@ -1989,7 +2010,7 @@ static ggml_backend_buffer_type_t ggml_backend_cann_device_get_host_buffer_type(
   */
  static ggml_backend_event_t ggml_backend_cann_device_event_new(
      ggml_backend_dev_t dev) {
@@ -326,7 +343,7 @@ index af0fb603..d7f73859 100644
  
      ggml_cann_set_device(dev_ctx->device);
  
-@@ -2097,11 +2113,7 @@ ggml_backend_reg_t ggml_backend_cann_reg() {
+@@ -2097,11 +2118,7 @@ ggml_backend_reg_t ggml_backend_cann_reg() {
              ggml_backend_cann_reg_context * ctx = new ggml_backend_cann_reg_context;
  
              for (int i = 0; i < ggml_cann_info().device_count; i++) {
@@ -339,7 +356,7 @@ index af0fb603..d7f73859 100644
                  ggml_backend_dev_t dev = new ggml_backend_device {
                      /* .interface = */ ggml_backend_cann_device_interface,
                      /* .reg       = */ &reg,
-@@ -2129,17 +2141,12 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
+@@ -2129,17 +2146,12 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
          return nullptr;
      }
  
