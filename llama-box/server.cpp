@@ -1041,6 +1041,10 @@ struct server_context {
         slot.sparams.penalty_repeat = json_value(data, "repeat_penalty", sparams.penalty_repeat);
         slot.sparams.penalty_freq = json_value(data, "frequency_penalty", sparams.penalty_freq);
         slot.sparams.penalty_present = json_value(data, "presence_penalty", sparams.penalty_present);
+        slot.sparams.dry_multiplier = json_value(data, "dry_multiplier", sparams.dry_multiplier);
+        slot.sparams.dry_base = json_value(data, "dry_base", sparams.dry_base);
+        slot.sparams.dry_allowed_length = json_value(data, "dry_allowed_length", sparams.dry_allowed_length);
+        slot.sparams.dry_penalty_last_n = json_value(data, "dry_penalty_last_n", sparams.dry_penalty_last_n);
         slot.sparams.mirostat = json_value(data, "mirostat", sparams.mirostat);
         slot.sparams.mirostat_tau = json_value(data, "mirostat_tau", sparams.mirostat_tau);
         slot.sparams.mirostat_eta = json_value(data, "mirostat_eta", sparams.mirostat_eta);
