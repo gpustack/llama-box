@@ -1,5 +1,5 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index a34dabe2..25299064 100755
+index a34dabe2..57089379 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
 @@ -2644,7 +2644,67 @@ class XLMRobertaModel(BertModel):
@@ -71,9 +71,9 @@ index a34dabe2..25299064 100755
  
          sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
          sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
-@@ -2731,6 +2791,92 @@ class XLMRobertaModel(BertModel):
-         return super().modify_tensors(data_torch, name, bid)
+@@ -2730,6 +2790,121 @@ class XLMRobertaModel(BertModel):
  
+         return super().modify_tensors(data_torch, name, bid)
  
 +@Model.register("NewForSequenceClassification")
 +class NewModel(BertModel):
@@ -143,6 +143,36 @@ index a34dabe2..25299064 100755
 +        self.gguf_writer.add_add_bos_token(True)
 +        self.gguf_writer.add_add_eos_token(True)
 +
++    def set_gguf_parameters(self):
++        embd_size = self.hparams["hidden_size"]
++        block_count = self.hparams["num_hidden_layers"]
++        head_count = self.hparams["num_attention_heads"]
++        ctx_length = self.hparams["max_position_embeddings"]
++
++        self.gguf_writer.add_causal_attention(False)
++        self.gguf_writer.add_context_length(ctx_length)
++        self.gguf_writer.add_embedding_length(embd_size)
++        self.gguf_writer.add_block_count(block_count)
++        self.gguf_writer.add_feed_forward_length(self.hparams["intermediate_size"])
++        self.gguf_writer.add_rope_dimension_count(embd_size // head_count)
++        self.gguf_writer.add_layer_norm_eps(self.hparams["layer_norm_eps"])
++        self.gguf_writer.add_head_count(head_count)
++        self.gguf_writer.add_file_type(self.ftype)
++
++        if self.hparams.get("rope_scaling") is not None and "factor" in self.hparams["rope_scaling"]:
++            rt = self.hparams.get('rope_theta', 10000)
++            ty = self.hparams["rope_scaling"].get("type", "")
++            fc = self.hparams["rope_scaling"].get("factor", 1.0)
++            if ty == "ntk":
++                n_dims = embd_size / head_count
++                self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
++                self.gguf_writer.add_rope_freq_base(10000 * math.pow(fc, n_dims / (n_dims - 2.0)))
++            elif ty == "linear":
++                self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
++                self.gguf_writer.add_rope_freq_base(rt)
++                self.gguf_writer.add_rope_scaling_factor(fc)
++
++
 +    def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
 +        # if name starts with "new.", remove the prefix
 +        # e.g. https://huggingface.co/Alibaba-NLP/gte-multilingual-reranker-base/tree/main
@@ -160,10 +190,9 @@ index a34dabe2..25299064 100755
 +
 +        return [(self.map_tensor_name(name), data_torch)]
 +
-+
+ 
  @Model.register("GemmaForCausalLM")
  class GemmaModel(Model):
-     model_arch = gguf.MODEL_ARCH.GEMMA
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
 index 7ab08b03..a6b04470 100644
 --- a/gguf-py/gguf/constants.py
