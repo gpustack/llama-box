@@ -1,10 +1,10 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 24e1f1f0..3753c96b 100644
+index 4cb669bc..86f7ff68 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -21713,6 +21713,26 @@ static int32_t llama_chat_apply_template_internal(
-                 ss << message->content << "\n\n";
-             }
+@@ -21716,6 +21716,26 @@ static int32_t llama_chat_apply_template_internal(
+         if (add_ass) {
+             ss << "<|start_of_role|>assistant<|end_of_role|>\n";
          }
 +    } else if (tmpl == "falcon" || (tmpl_contains("Falcon:") && tmpl_contains("message['content']"))) {
 +        // Falcon

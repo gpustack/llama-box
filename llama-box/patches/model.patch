@@ -290,7 +290,7 @@ index f4a787c5..6a82387b 100644
  
          MODEL_TENSOR.SSM_IN: (
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 50eebc2c..9e678a1a 100644
+index 4cb669bc..cc259c19 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -169,6 +169,7 @@ enum llm_arch {
@@ -407,7 +407,7 @@ index 50eebc2c..9e678a1a 100644
                              layer.ffn_down_b = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd});
                          } else {
                              layer.ffn_gate = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff});
-@@ -11503,7 +11539,7 @@ struct llm_build_context {
+@@ -11496,7 +11532,7 @@ struct llm_build_context {
          // token types are hardcoded to zero ("Sentence A")
          struct ggml_tensor * type_row0 = ggml_view_1d(ctx0, model.type_embd, n_embd, 0);
          inpL = ggml_add(ctx0, inpL, type_row0);
@@ -416,7 +416,7 @@ index 50eebc2c..9e678a1a 100644
              inpL = ggml_add(ctx0, ggml_get_rows(ctx0, model.pos_embd, inp_pos), inpL);
          }
          cb(inpL, "inp_embd", -1);
-@@ -11524,7 +11560,7 @@ struct llm_build_context {
+@@ -11517,7 +11553,7 @@ struct llm_build_context {
              struct ggml_tensor * Vcur;
  
              // self-attention
@@ -425,7 +425,7 @@ index 50eebc2c..9e678a1a 100644
                  Qcur = ggml_add(ctx0, llm_build_lora_mm(lctx, ctx0, model.layers[il].wq, cur), model.layers[il].bq);
                  cb(Qcur, "Qcur", il);
  
-@@ -11554,6 +11590,11 @@ struct llm_build_context {
+@@ -11547,6 +11583,11 @@ struct llm_build_context {
                  cur = llm_build_lora_mm(lctx, ctx0, model.layers[il].wqkv, cur);
                  cb(cur, "wqkv", il);
  
@@ -437,7 +437,7 @@ index 50eebc2c..9e678a1a 100644
                  Qcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd,     n_tokens, cur->nb[1], 0*sizeof(float)*(n_embd)));
                  Kcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd)));
                  Vcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd + n_embd_gqa)));
-@@ -11639,6 +11680,13 @@ struct llm_build_context {
+@@ -11632,6 +11673,13 @@ struct llm_build_context {
                          model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
                          NULL,
                          LLM_FFN_GELU, LLM_FFN_SEQ, cb, il);
@@ -451,7 +451,7 @@ index 50eebc2c..9e678a1a 100644
              } else if (model.arch == LLM_ARCH_JINA_BERT_V2) {
                  cur = llm_build_ffn(ctx0, lctx, cur,
                          model.layers[il].ffn_up,   NULL,                        NULL,
-@@ -16386,6 +16434,7 @@ static struct ggml_cgraph * llama_build_graph(
+@@ -16379,6 +16427,7 @@ static struct ggml_cgraph * llama_build_graph(
                  result = llm.build_refact();
              } break;
          case LLM_ARCH_BERT:
@@ -459,7 +459,7 @@ index 50eebc2c..9e678a1a 100644
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
              {
-@@ -19697,6 +19746,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
+@@ -19690,6 +19739,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
          case LLM_ARCH_BERT:
