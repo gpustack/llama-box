@@ -22,7 +22,8 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
 - Compatible with [OpenAI Embedding API](https://platform.openai.com/docs/api-reference/embeddings).
-- Compatible with [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank).
+- Compatible with [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank),
+  see our [Hugging Face Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
 - Support speculative decoding: draft model or n-gram lookup.
 - Support RPC server mode, which can serve as a remote inference backend.
 
@@ -227,41 +228,42 @@ server/completion:
                                     - layer (default): split layers and KV across GPUs
                                     - row: split rows across GPUs
   -ts,   --tensor-split SPLIT     fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1
-  -mg,   --main-gpu N             the GPU to use for the model (with split-mode = none),
-                                  or for intermediate results and KV (with split-mode = row) (default: 0)
+  -mg,   --main-gpu N             the GPU to use for the model (with split-mode = none), or for intermediate results and KV (with split-mode = row) (default: 0)
          --override-kv KEY=TYPE:VALUE
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
-                                  only commonly used templates are accepted:
-                                  https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
+                                  only commonly used templates are accepted: https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
          --chat-template-file FILE
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
          --slot-save-path PATH    path to save slot kv cache (default: disabled)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-
+                                  
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
                                   when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
   -t,    --threads N              number of threads to use during generation (default: -1)
   -C,    --cpu-mask M             set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
   -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
          --cpu-strict <0|1>       use strict CPU placement (default: 0)
-
-         --prio N                 set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: 0)
-
+                                  
+         --prio N                 set process/thread priority (default: 0), one of:
+                                    - 0-normal
+                                    - 1-medium
+                                    - 2-high
+                                    - 3-realtime
          --poll <0...100>         use polling level to wait for work (0 - no polling, default: 50)
-
+                                  
   -tb,   --threads-batch N        number of threads to use during batch and prompt processing (default: same as --threads)
   -Cb,   --cpu-mask-batch M       set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
   -Crb,  --cpu-range-batch lo-hi  ranges of CPUs for affinity. Complements --cpu-mask-batch
-         --cpu-strict-batch <0|1>
+         --cpu-strict-batch <0|1> 
                                   use strict CPU placement (default: same as --cpu-strict)
          --prio-batch N           set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   use polling to wait for work (default: same as --poll
   -c,    --ctx-size N             size of the prompt context (default: 0, 0 = loaded from model)
-         --no-context-shift       disables context shift on inifinite text generation (default: disabled)
+         --no-context-shift       disables context shift on infinite text generation (default: disabled)
   -n,    --predict N              number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
   -b,    --batch-size N           logical maximum batch size (default: 2048)
   -ub,   --ubatch-size N          physical maximum batch size (default: 512)
@@ -269,9 +271,8 @@ server/completion:
   -fa,   --flash-attn             enable Flash Attention (default: disabled)
   -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
-         --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';'
-                                  (default: top_k;tfs_z;typ_p;top_p;min_p;xtc;temperature)
-         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: kfypmxt)
+         --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';' (default: dry;top_k;typ_p;top_p;min_p;xtc;temperature)
+         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: dkypmxt)
          --penalize-nl            penalize newline tokens (default: false)
          --temp T                 temperature (default: 0.8)
          --top-k N                top-k sampling (default: 40, 0 = disabled)
@@ -279,27 +280,28 @@ server/completion:
          --min-p P                min-p sampling (default: 0.1, 0.0 = disabled)
          --xtc-probability N      xtc probability (default: 0.0, 0.0 = disabled)
          --xtc-threshold N        xtc threshold (default: 0.1, 1.0 = disabled)
-         --tfs P                  tail free sampling, parameter z (default: 1.0, 1.0 = disabled)
          --typical P              locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
          --repeat-last-n N        last n tokens to consider for penalize (default: 64, 0 = disabled, -1 = ctx_size)
          --repeat-penalty N       penalize repeat sequence of tokens (default: 1.0, 1.0 = disabled)
          --presence-penalty N     repeat alpha presence penalty (default: 0.0, 0.0 = disabled)
          --frequency-penalty N    repeat alpha frequency penalty (default: 0.0, 0.0 = disabled)
+         --dry-multiplier N       set DRY sampling multiplier (default: 0.0, 0.0 = disabled)
+         --dry-base N             set DRY sampling base value (default: 1.75)
+         --dry--allowed-length N  set allowed length for DRY sampling (default: 2)
+         --dry-penalty-last-n N   set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
+         --dry-sequence-breaker N 
+                                  add sequence breaker for DRY sampling, clearing out default breakers (
+                                  ;:;";*) in the process; use "none" to not use any sequence breakers
          --dynatemp-range N       dynamic temperature range (default: 0.0, 0.0 = disabled)
          --dynatemp-exp N         dynamic temperature exponent (default: 1.0)
-         --mirostat N             use Mirostat sampling,
-                                  Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used
-                                  (default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)
+         --mirostat N             use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)
          --mirostat-lr N          Mirostat learning rate, parameter eta (default: 0.1)
          --mirostat-ent N         Mirostat target entropy, parameter tau (default: 5.0)
   -l     --logit-bias TOKEN_ID(+/-)BIAS
-                                  modifies the likelihood of token appearing in the completion,
-                                  i.e. `--logit-bias 15043+1` to increase likelihood of token ' Hello',
-                                  or `--logit-bias 15043-1` to decrease likelihood of token ' Hello'
+                                  modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello'
          --grammar GRAMMAR        BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '')
          --grammar-file FILE      file to read grammar from
-  -j,    --json-schema SCHEMA     JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object
-                                  For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead
+  -j,    --json-schema SCHEMA     JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead
          --rope-scaling {none,linear,yarn}
                                   RoPE frequency scaling method, defaults to linear unless specified by the model
          --rope-scale N           RoPE context scaling factor, expands context by a factor of N
@@ -326,10 +328,9 @@ server/completion:
                                     - distribute: spread execution evenly over all nodes
                                     - isolate: only spawn threads on CPUs on the node that execution started on
                                     - numactl: use the CPU map provided by numactl
-                                  if run without this previously, it is recommended to drop the system page cache before using this
-                                  see https://github.com/ggerganov/llama.cpp/issues/1437
+                                  if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437
          --lora FILE              apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE
+         --lora-scaled FILE SCALE 
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
          --lora-init-without-apply
                                   load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
@@ -341,9 +342,8 @@ server/completion:
          --no-warmup              skip warming up the model with an empty run
          --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                special tokens output enabled (default: false)
-         --pooling                pooling type for embeddings, use model default if unspecified
 
-server/speculative:
+server/completion/speculative:
 
          --draft N                number of tokens to draft for speculative decoding (default: 5)
   -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
@@ -353,6 +353,7 @@ server/speculative:
                                   path to static lookup cache to use for lookup decoding (not updated by generation)
   -lcd,  --lookup-cache-dynamic FILE
                                   path to dynamic lookup cache to use for lookup decoding (updated by generation)
+         --pooling                pooling type for embeddings, use model default if unspecified
 
 rpc-server:
 
