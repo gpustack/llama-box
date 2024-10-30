@@ -1,0 +1,320 @@
+diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
+index a34dabe2..57089379 100755
+--- a/convert_hf_to_gguf.py
++++ b/convert_hf_to_gguf.py
+@@ -2644,7 +2644,67 @@ class XLMRobertaModel(BertModel):
+ 
+         tokenizer_path = self.dir_model / 'sentencepiece.bpe.model'
+         if not tokenizer_path.is_file():
+-            raise FileNotFoundError(f"File not found: {tokenizer_path}")
++            from transformers import XLMRobertaTokenizerFast
++            tokenizer = XLMRobertaTokenizerFast.from_pretrained(self.dir_model)
++
++            vocab_size = self.hparams.get('vocab_size', tokenizer.vocab_size)
++            tokens: list[bytes] = [f"[PAD{i}]".encode("utf-8") for i in range(vocab_size)]
++            scores: list[float] = [-10000.0] * vocab_size
++            toktypes: list[int] = [SentencePieceTokenTypes.UNUSED] * vocab_size
++
++            with open(self.dir_model / "tokenizer.json", encoding="utf-8") as f:
++                tokenizer_data = json.load(f)
++            add_prefix = False
++            remove_whitespaces = True
++            precompiled_charsmap = (
++                tokenizer_data["normalizer"]["precompiled_charsmap"]
++                if "precompiled_charsmap" in tokenizer_data["normalizer"]
++                else None
++            )
++
++            unk_id = (
++                tokenizer_data["model"]["unk_id"]
++                if "unk_id" in tokenizer_data["model"]
++                else None
++            )
++            vocab = tokenizer_data["model"]["vocab"]
++            added_tokens = {}
++            for added_token in tokenizer_data["added_tokens"]:
++                added_tokens[added_token["id"]] = added_token
++            for token_id in range(len(vocab)):
++                piece = vocab[token_id][0]
++                text = piece.encode("utf-8")
++                score = vocab[token_id][1]
++
++                toktype = SentencePieceTokenTypes.NORMAL
++                if token_id in added_tokens:
++                    if token_id == unk_id:
++                        toktype = SentencePieceTokenTypes.UNKNOWN
++                    elif added_tokens[token_id]["special"]:
++                        toktype = SentencePieceTokenTypes.CONTROL
++
++                tokens[token_id] = text
++                scores[token_id] = score
++                toktypes[token_id] = toktype
++
++            self.gguf_writer.add_tokenizer_model("t5")
++            self.gguf_writer.add_tokenizer_pre("default")
++            self.gguf_writer.add_token_list(tokens)
++            self.gguf_writer.add_token_scores(scores)
++            self.gguf_writer.add_token_types(toktypes)
++            self.gguf_writer.add_add_space_prefix(add_prefix)
++            self.gguf_writer.add_token_type_count(1)
++            self.gguf_writer.add_remove_extra_whitespaces(remove_whitespaces)
++            if precompiled_charsmap:
++                self.gguf_writer.add_precompiled_charsmap(precompiled_charsmap)
++
++            special_vocab = gguf.SpecialVocab(self.dir_model, n_vocab=len(tokens))
++            special_vocab.add_to_gguf(self.gguf_writer)
++
++            self.gguf_writer.add_add_bos_token(True)
++            self.gguf_writer.add_add_eos_token(True)
++
++            return
+ 
+         sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
+         sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
+@@ -2730,6 +2790,121 @@ class XLMRobertaModel(BertModel):
+ 
+         return super().modify_tensors(data_torch, name, bid)
+ 
++@Model.register("NewForSequenceClassification")
++class NewModel(BertModel):
++    model_arch = gguf.MODEL_ARCH.NEW
++
++    def __init__(self, *args, **kwargs):
++        super().__init__(*args, **kwargs)
++
++    def set_vocab(self):
++        from transformers import AutoTokenizer
++        tokenizer = AutoTokenizer.from_pretrained(self.dir_model)
++
++        vocab_size = self.hparams.get('vocab_size', tokenizer.vocab_size)
++        tokens: list[bytes] = [f"[PAD{i}]".encode("utf-8") for i in range(vocab_size)]
++        scores: list[float] = [-10000.0] * vocab_size
++        toktypes: list[int] = [SentencePieceTokenTypes.UNUSED] * vocab_size
++
++        with open(self.dir_model / "tokenizer.json", encoding="utf-8") as f:
++            tokenizer_data = json.load(f)
++        add_prefix = True
++        remove_whitespaces = True
++        precompiled_charsmap = (
++            tokenizer_data["normalizer"]["precompiled_charsmap"]
++            if "precompiled_charsmap" in tokenizer_data["normalizer"]
++            else None
++        )
++
++        unk_id = (
++            tokenizer_data["model"]["unk_id"]
++            if "unk_id" in tokenizer_data["model"]
++            else None
++        )
++        vocab = tokenizer_data["model"]["vocab"]
++        added_tokens = {}
++        for added_token in tokenizer_data["added_tokens"]:
++            added_tokens[added_token["id"]] = added_token
++        for token_id in range(len(vocab)):
++            piece = vocab[token_id][0]
++            text = piece.encode("utf-8")
++            score = vocab[token_id][1]
++
++            toktype = SentencePieceTokenTypes.NORMAL
++            if token_id in added_tokens:
++                if token_id == unk_id:
++                    toktype = SentencePieceTokenTypes.UNKNOWN
++                elif added_tokens[token_id]["special"]:
++                    toktype = SentencePieceTokenTypes.CONTROL
++
++            tokens[token_id] = text
++            scores[token_id] = score
++            toktypes[token_id] = toktype
++
++        self.gguf_writer.add_tokenizer_model("t5")
++        self.gguf_writer.add_tokenizer_pre("default")
++        self.gguf_writer.add_token_list(tokens)
++        self.gguf_writer.add_token_scores(scores)
++        self.gguf_writer.add_token_types(toktypes)
++        self.gguf_writer.add_add_space_prefix(add_prefix)
++        self.gguf_writer.add_token_type_count(1)
++        self.gguf_writer.add_remove_extra_whitespaces(remove_whitespaces)
++        if precompiled_charsmap:
++            self.gguf_writer.add_precompiled_charsmap(precompiled_charsmap)
++
++        special_vocab = gguf.SpecialVocab(self.dir_model, n_vocab=len(tokens))
++        special_vocab.add_to_gguf(self.gguf_writer)
++
++        self.gguf_writer.add_add_bos_token(True)
++        self.gguf_writer.add_add_eos_token(True)
++
++    def set_gguf_parameters(self):
++        embd_size = self.hparams["hidden_size"]
++        block_count = self.hparams["num_hidden_layers"]
++        head_count = self.hparams["num_attention_heads"]
++        ctx_length = self.hparams["max_position_embeddings"]
++
++        self.gguf_writer.add_causal_attention(False)
++        self.gguf_writer.add_context_length(ctx_length)
++        self.gguf_writer.add_embedding_length(embd_size)
++        self.gguf_writer.add_block_count(block_count)
++        self.gguf_writer.add_feed_forward_length(self.hparams["intermediate_size"])
++        self.gguf_writer.add_rope_dimension_count(embd_size // head_count)
++        self.gguf_writer.add_layer_norm_eps(self.hparams["layer_norm_eps"])
++        self.gguf_writer.add_head_count(head_count)
++        self.gguf_writer.add_file_type(self.ftype)
++
++        if self.hparams.get("rope_scaling") is not None and "factor" in self.hparams["rope_scaling"]:
++            rt = self.hparams.get('rope_theta', 10000)
++            ty = self.hparams["rope_scaling"].get("type", "")
++            fc = self.hparams["rope_scaling"].get("factor", 1.0)
++            if ty == "ntk":
++                n_dims = embd_size / head_count
++                self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
++                self.gguf_writer.add_rope_freq_base(10000 * math.pow(fc, n_dims / (n_dims - 2.0)))
++            elif ty == "linear":
++                self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
++                self.gguf_writer.add_rope_freq_base(rt)
++                self.gguf_writer.add_rope_scaling_factor(fc)
++
++
++    def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
++        # if name starts with "new.", remove the prefix
++        # e.g. https://huggingface.co/Alibaba-NLP/gte-multilingual-reranker-base/tree/main
++        if name.startswith("new."):
++            name = name[4:]
++
++        name_mapper = {
++            "pooler.dense.weight": "classifier.dense.weight",
++            "pooler.dense.bias": "classifier.dense.bias",
++            "classifier.weight": "classifier.out_proj.weight",
++            "classifier.bias": "classifier.out_proj.bias",
++        }
++        if name in name_mapper:
++            name = name_mapper[name]
++
++        return [(self.map_tensor_name(name), data_torch)]
++
+ 
+ @Model.register("GemmaForCausalLM")
+ class GemmaModel(Model):
+diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
+index 7ab08b03..a6b04470 100644
+--- a/gguf-py/gguf/constants.py
++++ b/gguf-py/gguf/constants.py
+@@ -208,6 +208,7 @@ class MODEL_ARCH(IntEnum):
+     REFACT       = auto()
+     BERT         = auto()
+     NOMIC_BERT   = auto()
++    NEW          = auto()
+     JINA_BERT_V2 = auto()
+     BLOOM        = auto()
+     STABLELM     = auto()
+@@ -369,6 +370,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+     MODEL_ARCH.REFACT:         "refact",
+     MODEL_ARCH.BERT:           "bert",
+     MODEL_ARCH.NOMIC_BERT:     "nomic-bert",
++    MODEL_ARCH.NEW:            "new",
+     MODEL_ARCH.JINA_BERT_V2:   "jina-bert-v2",
+     MODEL_ARCH.BLOOM:          "bloom",
+     MODEL_ARCH.STABLELM:       "stablelm",
+@@ -620,6 +622,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+         MODEL_TENSOR.ATTN_Q,
+         MODEL_TENSOR.ATTN_K,
+         MODEL_TENSOR.ATTN_V,
++        MODEL_TENSOR.ATTN_QKV,
+         MODEL_TENSOR.ATTN_OUT,
+         MODEL_TENSOR.FFN_DOWN,
+         MODEL_TENSOR.FFN_UP,
+@@ -641,6 +644,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+         MODEL_TENSOR.FFN_UP,
+         MODEL_TENSOR.LAYER_OUT_NORM,
+     ],
++    MODEL_ARCH.NEW: [
++        MODEL_TENSOR.TOKEN_EMBD,
++        MODEL_TENSOR.TOKEN_EMBD_NORM,
++        MODEL_TENSOR.TOKEN_TYPES,
++        MODEL_TENSOR.OUTPUT_NORM,
++        MODEL_TENSOR.ATTN_OUT_NORM,
++        MODEL_TENSOR.ATTN_QKV,
++        MODEL_TENSOR.ATTN_OUT,
++        MODEL_TENSOR.FFN_DOWN,
++        MODEL_TENSOR.FFN_UP,
++        MODEL_TENSOR.LAYER_OUT_NORM,
++        MODEL_TENSOR.CLS,
++        MODEL_TENSOR.CLS_OUT,
++    ],
+     MODEL_ARCH.JINA_BERT_V2: [
+         MODEL_TENSOR.TOKEN_EMBD,
+         MODEL_TENSOR.TOKEN_EMBD_NORM,
+diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
+index f4a787c5..6a82387b 100644
+--- a/gguf-py/gguf/tensor_mapping.py
++++ b/gguf-py/gguf/tensor_mapping.py
+@@ -138,9 +138,11 @@ class TensorNameMap:
+             "h.{bid}.attn.c_attn",                                                 # gpt2
+             "transformer.h.{bid}.mixer.Wqkv",                                      # phi2
+             "encoder.layers.{bid}.attn.Wqkv",                                      # nomic-bert
++            "encoder.layers.{bid}.mixer.Wqkv",                                     # jina-bert-v2
+             "model.layers.{bid}.self_attn.qkv_proj",                               # phi3
+             "encoder.layers.{bid}.self_attention.query_key_value",                 # chatglm
+             "transformer.layers.{bid}.attn.qkv_proj",                              # openelm
++            "encoder.layer.{bid}.attention.qkv_proj",                              # new
+         ),
+ 
+         # Attention query
+@@ -196,6 +198,7 @@ class TensorNameMap:
+             "model.layers.{bid}.self_attn.dense",                           # persimmon
+             "h.{bid}.attn.c_proj",                                          # gpt2
+             "transformer.h.{bid}.mixer.out_proj",                           # phi2
++            "encoder.layers.{bid}.mixer.out_proj",                          # jina-bert-v2
+             "model.layers.layers.{bid}.self_attn.o_proj",                   # plamo
+             "model.layers.{bid}.attention.wo",                              # internlm2
+             "encoder.layers.{bid}.attn.out_proj",                           # nomic-bert
+@@ -204,6 +207,7 @@ class TensorNameMap:
+             "encoder.layers.{bid}.self_attention.dense",                    # chatglm
+             "transformer.layers.{bid}.attn.out_proj",                       # openelm
+             "transformer.h.{bid}.attn.attention.out_proj",                  # exaone
++            "encoder.layer.{bid}.attention.o_proj",                         # new
+         ),
+ 
+         # Attention output norm
+@@ -212,6 +216,7 @@ class TensorNameMap:
+             "encoder.layers.{bid}.norm1",                      # nomic-bert
+             "transformer.decoder_layer.{bid}.rms_norm_1",      # Grok
+             "transformer.blocks.{bid}.norm_attn_norm.norm_2",  # dbrx
++            "encoder.layer.{bid}.attn_ln",                     # new
+         ),
+ 
+         MODEL_TENSOR.ATTN_POST_NORM: (
+@@ -290,9 +295,11 @@ class TensorNameMap:
+             "encoder.layers.{bid}.mlp.fc11",                          # nomic-bert
+             "model.layers.{bid}.mlp.c_fc",                            # starcoder2
+             "encoder.layer.{bid}.mlp.gated_layers_v",                 # jina-bert-v2
++            "encoder.layers.{bid}.mlp.fc1",                           # jina-bert-v2
+             "model.layers.{bid}.residual_mlp.w3",                     # arctic
+             "encoder.layers.{bid}.mlp.dense_h_to_4h",                 # chatglm
+             "transformer.h.{bid}.mlp.c_fc_1",                         # exaone
++            "encoder.layer.{bid}.mlp.up_gate_proj",                   # new
+         ),
+ 
+         MODEL_TENSOR.FFN_UP_EXP: (
+@@ -360,11 +367,13 @@ class TensorNameMap:
+             "encoder.layers.{bid}.mlp.fc2",                           # nomic-bert
+             "model.layers.{bid}.mlp.c_proj",                          # starcoder2
+             "encoder.layer.{bid}.mlp.wo",                             # jina-bert-v2
++            "encoder.layers.{bid}.mlp.fc2",                           # jina-bert-v2
+             "transformer.layers.{bid}.ffn.proj_2",                    # openelm
+             "model.layers.{bid}.residual_mlp.w2",                     # arctic
+             "encoder.layer.{bid}.mlp.down_layer",                     # jina-bert-v2
+             "encoder.layers.{bid}.mlp.dense_4h_to_h",                 # chatglm
+             "model.layers.h.{bid}.mlp.c_proj",                        # exaone
++            "encoder.layer.{bid}.mlp.down_proj",                      # new
+         ),
+ 
+         MODEL_TENSOR.FFN_DOWN_EXP: (
+@@ -407,7 +416,8 @@ class TensorNameMap:
+             "encoder.layers.{bid}.norm2",                   # nomic-bert
+             "transformer.decoder_layer.{bid}.rms_norm_3",   # Grok
+             "encoder.layer.{bid}.mlp.layernorm",            # jina-bert-v2
+-            "encoder.layer.{bid}.layer_norm_2"              # jina-v2-code
++            "encoder.layer.{bid}.layer_norm_2",             # jina-v2-code
++            "encoder.layer.{bid}.mlp_ln"                    # new
+         ),
+ 
+         MODEL_TENSOR.SSM_IN: (

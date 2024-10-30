@@ -1,328 +1,8 @@
-diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index a34dabe2..57089379 100755
---- a/convert_hf_to_gguf.py
-+++ b/convert_hf_to_gguf.py
-@@ -2644,7 +2644,67 @@ class XLMRobertaModel(BertModel):
- 
-         tokenizer_path = self.dir_model / 'sentencepiece.bpe.model'
-         if not tokenizer_path.is_file():
--            raise FileNotFoundError(f"File not found: {tokenizer_path}")
-+            from transformers import XLMRobertaTokenizerFast
-+            tokenizer = XLMRobertaTokenizerFast.from_pretrained(self.dir_model)
-+
-+            vocab_size = self.hparams.get('vocab_size', tokenizer.vocab_size)
-+            tokens: list[bytes] = [f"[PAD{i}]".encode("utf-8") for i in range(vocab_size)]
-+            scores: list[float] = [-10000.0] * vocab_size
-+            toktypes: list[int] = [SentencePieceTokenTypes.UNUSED] * vocab_size
-+
-+            with open(self.dir_model / "tokenizer.json", encoding="utf-8") as f:
-+                tokenizer_data = json.load(f)
-+            add_prefix = False
-+            remove_whitespaces = True
-+            precompiled_charsmap = (
-+                tokenizer_data["normalizer"]["precompiled_charsmap"]
-+                if "precompiled_charsmap" in tokenizer_data["normalizer"]
-+                else None
-+            )
-+
-+            unk_id = (
-+                tokenizer_data["model"]["unk_id"]
-+                if "unk_id" in tokenizer_data["model"]
-+                else None
-+            )
-+            vocab = tokenizer_data["model"]["vocab"]
-+            added_tokens = {}
-+            for added_token in tokenizer_data["added_tokens"]:
-+                added_tokens[added_token["id"]] = added_token
-+            for token_id in range(len(vocab)):
-+                piece = vocab[token_id][0]
-+                text = piece.encode("utf-8")
-+                score = vocab[token_id][1]
-+
-+                toktype = SentencePieceTokenTypes.NORMAL
-+                if token_id in added_tokens:
-+                    if token_id == unk_id:
-+                        toktype = SentencePieceTokenTypes.UNKNOWN
-+                    elif added_tokens[token_id]["special"]:
-+                        toktype = SentencePieceTokenTypes.CONTROL
-+
-+                tokens[token_id] = text
-+                scores[token_id] = score
-+                toktypes[token_id] = toktype
-+
-+            self.gguf_writer.add_tokenizer_model("t5")
-+            self.gguf_writer.add_tokenizer_pre("default")
-+            self.gguf_writer.add_token_list(tokens)
-+            self.gguf_writer.add_token_scores(scores)
-+            self.gguf_writer.add_token_types(toktypes)
-+            self.gguf_writer.add_add_space_prefix(add_prefix)
-+            self.gguf_writer.add_token_type_count(1)
-+            self.gguf_writer.add_remove_extra_whitespaces(remove_whitespaces)
-+            if precompiled_charsmap:
-+                self.gguf_writer.add_precompiled_charsmap(precompiled_charsmap)
-+
-+            special_vocab = gguf.SpecialVocab(self.dir_model, n_vocab=len(tokens))
-+            special_vocab.add_to_gguf(self.gguf_writer)
-+
-+            self.gguf_writer.add_add_bos_token(True)
-+            self.gguf_writer.add_add_eos_token(True)
-+
-+            return
- 
-         sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
-         sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
-@@ -2730,6 +2790,121 @@ class XLMRobertaModel(BertModel):
- 
-         return super().modify_tensors(data_torch, name, bid)
- 
-+@Model.register("NewForSequenceClassification")
-+class NewModel(BertModel):
-+    model_arch = gguf.MODEL_ARCH.NEW
-+
-+    def __init__(self, *args, **kwargs):
-+        super().__init__(*args, **kwargs)
-+
-+    def set_vocab(self):
-+        from transformers import AutoTokenizer
-+        tokenizer = AutoTokenizer.from_pretrained(self.dir_model)
-+
-+        vocab_size = self.hparams.get('vocab_size', tokenizer.vocab_size)
-+        tokens: list[bytes] = [f"[PAD{i}]".encode("utf-8") for i in range(vocab_size)]
-+        scores: list[float] = [-10000.0] * vocab_size
-+        toktypes: list[int] = [SentencePieceTokenTypes.UNUSED] * vocab_size
-+
-+        with open(self.dir_model / "tokenizer.json", encoding="utf-8") as f:
-+            tokenizer_data = json.load(f)
-+        add_prefix = True
-+        remove_whitespaces = True
-+        precompiled_charsmap = (
-+            tokenizer_data["normalizer"]["precompiled_charsmap"]
-+            if "precompiled_charsmap" in tokenizer_data["normalizer"]
-+            else None
-+        )
-+
-+        unk_id = (
-+            tokenizer_data["model"]["unk_id"]
-+            if "unk_id" in tokenizer_data["model"]
-+            else None
-+        )
-+        vocab = tokenizer_data["model"]["vocab"]
-+        added_tokens = {}
-+        for added_token in tokenizer_data["added_tokens"]:
-+            added_tokens[added_token["id"]] = added_token
-+        for token_id in range(len(vocab)):
-+            piece = vocab[token_id][0]
-+            text = piece.encode("utf-8")
-+            score = vocab[token_id][1]
-+
-+            toktype = SentencePieceTokenTypes.NORMAL
-+            if token_id in added_tokens:
-+                if token_id == unk_id:
-+                    toktype = SentencePieceTokenTypes.UNKNOWN
-+                elif added_tokens[token_id]["special"]:
-+                    toktype = SentencePieceTokenTypes.CONTROL
-+
-+            tokens[token_id] = text
-+            scores[token_id] = score
-+            toktypes[token_id] = toktype
-+
-+        self.gguf_writer.add_tokenizer_model("t5")
-+        self.gguf_writer.add_tokenizer_pre("default")
-+        self.gguf_writer.add_token_list(tokens)
-+        self.gguf_writer.add_token_scores(scores)
-+        self.gguf_writer.add_token_types(toktypes)
-+        self.gguf_writer.add_add_space_prefix(add_prefix)
-+        self.gguf_writer.add_token_type_count(1)
-+        self.gguf_writer.add_remove_extra_whitespaces(remove_whitespaces)
-+        if precompiled_charsmap:
-+            self.gguf_writer.add_precompiled_charsmap(precompiled_charsmap)
-+
-+        special_vocab = gguf.SpecialVocab(self.dir_model, n_vocab=len(tokens))
-+        special_vocab.add_to_gguf(self.gguf_writer)
-+
-+        self.gguf_writer.add_add_bos_token(True)
-+        self.gguf_writer.add_add_eos_token(True)
-+
-+    def set_gguf_parameters(self):
-+        embd_size = self.hparams["hidden_size"]
-+        block_count = self.hparams["num_hidden_layers"]
-+        head_count = self.hparams["num_attention_heads"]
-+        ctx_length = self.hparams["max_position_embeddings"]
-+
-+        self.gguf_writer.add_causal_attention(False)
-+        self.gguf_writer.add_context_length(ctx_length)
-+        self.gguf_writer.add_embedding_length(embd_size)
-+        self.gguf_writer.add_block_count(block_count)
-+        self.gguf_writer.add_feed_forward_length(self.hparams["intermediate_size"])
-+        self.gguf_writer.add_rope_dimension_count(embd_size // head_count)
-+        self.gguf_writer.add_layer_norm_eps(self.hparams["layer_norm_eps"])
-+        self.gguf_writer.add_head_count(head_count)
-+        self.gguf_writer.add_file_type(self.ftype)
-+
-+        if self.hparams.get("rope_scaling") is not None and "factor" in self.hparams["rope_scaling"]:
-+            rt = self.hparams.get('rope_theta', 10000)
-+            ty = self.hparams["rope_scaling"].get("type", "")
-+            fc = self.hparams["rope_scaling"].get("factor", 1.0)
-+            if ty == "ntk":
-+                n_dims = embd_size / head_count
-+                self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
-+                self.gguf_writer.add_rope_freq_base(10000 * math.pow(fc, n_dims / (n_dims - 2.0)))
-+            elif ty == "linear":
-+                self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
-+                self.gguf_writer.add_rope_freq_base(rt)
-+                self.gguf_writer.add_rope_scaling_factor(fc)
-+
-+
-+    def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
-+        # if name starts with "new.", remove the prefix
-+        # e.g. https://huggingface.co/Alibaba-NLP/gte-multilingual-reranker-base/tree/main
-+        if name.startswith("new."):
-+            name = name[4:]
-+
-+        name_mapper = {
-+            "pooler.dense.weight": "classifier.dense.weight",
-+            "pooler.dense.bias": "classifier.dense.bias",
-+            "classifier.weight": "classifier.out_proj.weight",
-+            "classifier.bias": "classifier.out_proj.bias",
-+        }
-+        if name in name_mapper:
-+            name = name_mapper[name]
-+
-+        return [(self.map_tensor_name(name), data_torch)]
-+
- 
- @Model.register("GemmaForCausalLM")
- class GemmaModel(Model):
-diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 7ab08b03..a6b04470 100644
---- a/gguf-py/gguf/constants.py
-+++ b/gguf-py/gguf/constants.py
-@@ -208,6 +208,7 @@ class MODEL_ARCH(IntEnum):
-     REFACT       = auto()
-     BERT         = auto()
-     NOMIC_BERT   = auto()
-+    NEW          = auto()
-     JINA_BERT_V2 = auto()
-     BLOOM        = auto()
-     STABLELM     = auto()
-@@ -369,6 +370,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
-     MODEL_ARCH.REFACT:         "refact",
-     MODEL_ARCH.BERT:           "bert",
-     MODEL_ARCH.NOMIC_BERT:     "nomic-bert",
-+    MODEL_ARCH.NEW:            "new",
-     MODEL_ARCH.JINA_BERT_V2:   "jina-bert-v2",
-     MODEL_ARCH.BLOOM:          "bloom",
-     MODEL_ARCH.STABLELM:       "stablelm",
-@@ -620,6 +622,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
-         MODEL_TENSOR.ATTN_Q,
-         MODEL_TENSOR.ATTN_K,
-         MODEL_TENSOR.ATTN_V,
-+        MODEL_TENSOR.ATTN_QKV,
-         MODEL_TENSOR.ATTN_OUT,
-         MODEL_TENSOR.FFN_DOWN,
-         MODEL_TENSOR.FFN_UP,
-@@ -641,6 +644,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
-         MODEL_TENSOR.FFN_UP,
-         MODEL_TENSOR.LAYER_OUT_NORM,
-     ],
-+    MODEL_ARCH.NEW: [
-+        MODEL_TENSOR.TOKEN_EMBD,
-+        MODEL_TENSOR.TOKEN_EMBD_NORM,
-+        MODEL_TENSOR.TOKEN_TYPES,
-+        MODEL_TENSOR.OUTPUT_NORM,
-+        MODEL_TENSOR.ATTN_OUT_NORM,
-+        MODEL_TENSOR.ATTN_QKV,
-+        MODEL_TENSOR.ATTN_OUT,
-+        MODEL_TENSOR.FFN_DOWN,
-+        MODEL_TENSOR.FFN_UP,
-+        MODEL_TENSOR.LAYER_OUT_NORM,
-+        MODEL_TENSOR.CLS,
-+        MODEL_TENSOR.CLS_OUT,
-+    ],
-     MODEL_ARCH.JINA_BERT_V2: [
-         MODEL_TENSOR.TOKEN_EMBD,
-         MODEL_TENSOR.TOKEN_EMBD_NORM,
-diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index f4a787c5..6a82387b 100644
---- a/gguf-py/gguf/tensor_mapping.py
-+++ b/gguf-py/gguf/tensor_mapping.py
-@@ -138,9 +138,11 @@ class TensorNameMap:
-             "h.{bid}.attn.c_attn",                                                 # gpt2
-             "transformer.h.{bid}.mixer.Wqkv",                                      # phi2
-             "encoder.layers.{bid}.attn.Wqkv",                                      # nomic-bert
-+            "encoder.layers.{bid}.mixer.Wqkv",                                     # jina-bert-v2
-             "model.layers.{bid}.self_attn.qkv_proj",                               # phi3
-             "encoder.layers.{bid}.self_attention.query_key_value",                 # chatglm
-             "transformer.layers.{bid}.attn.qkv_proj",                              # openelm
-+            "encoder.layer.{bid}.attention.qkv_proj",                              # new
-         ),
- 
-         # Attention query
-@@ -196,6 +198,7 @@ class TensorNameMap:
-             "model.layers.{bid}.self_attn.dense",                           # persimmon
-             "h.{bid}.attn.c_proj",                                          # gpt2
-             "transformer.h.{bid}.mixer.out_proj",                           # phi2
-+            "encoder.layers.{bid}.mixer.out_proj",                          # jina-bert-v2
-             "model.layers.layers.{bid}.self_attn.o_proj",                   # plamo
-             "model.layers.{bid}.attention.wo",                              # internlm2
-             "encoder.layers.{bid}.attn.out_proj",                           # nomic-bert
-@@ -204,6 +207,7 @@ class TensorNameMap:
-             "encoder.layers.{bid}.self_attention.dense",                    # chatglm
-             "transformer.layers.{bid}.attn.out_proj",                       # openelm
-             "transformer.h.{bid}.attn.attention.out_proj",                  # exaone
-+            "encoder.layer.{bid}.attention.o_proj",                         # new
-         ),
- 
-         # Attention output norm
-@@ -212,6 +216,7 @@ class TensorNameMap:
-             "encoder.layers.{bid}.norm1",                      # nomic-bert
-             "transformer.decoder_layer.{bid}.rms_norm_1",      # Grok
-             "transformer.blocks.{bid}.norm_attn_norm.norm_2",  # dbrx
-+            "encoder.layer.{bid}.attn_ln",                     # new
-         ),
- 
-         MODEL_TENSOR.ATTN_POST_NORM: (
-@@ -290,9 +295,11 @@ class TensorNameMap:
-             "encoder.layers.{bid}.mlp.fc11",                          # nomic-bert
-             "model.layers.{bid}.mlp.c_fc",                            # starcoder2
-             "encoder.layer.{bid}.mlp.gated_layers_v",                 # jina-bert-v2
-+            "encoder.layers.{bid}.mlp.fc1",                           # jina-bert-v2
-             "model.layers.{bid}.residual_mlp.w3",                     # arctic
-             "encoder.layers.{bid}.mlp.dense_h_to_4h",                 # chatglm
-             "transformer.h.{bid}.mlp.c_fc_1",                         # exaone
-+            "encoder.layer.{bid}.mlp.up_gate_proj",                   # new
-         ),
- 
-         MODEL_TENSOR.FFN_UP_EXP: (
-@@ -360,11 +367,13 @@ class TensorNameMap:
-             "encoder.layers.{bid}.mlp.fc2",                           # nomic-bert
-             "model.layers.{bid}.mlp.c_proj",                          # starcoder2
-             "encoder.layer.{bid}.mlp.wo",                             # jina-bert-v2
-+            "encoder.layers.{bid}.mlp.fc2",                           # jina-bert-v2
-             "transformer.layers.{bid}.ffn.proj_2",                    # openelm
-             "model.layers.{bid}.residual_mlp.w2",                     # arctic
-             "encoder.layer.{bid}.mlp.down_layer",                     # jina-bert-v2
-             "encoder.layers.{bid}.mlp.dense_4h_to_h",                 # chatglm
-             "model.layers.h.{bid}.mlp.c_proj",                        # exaone
-+            "encoder.layer.{bid}.mlp.down_proj",                      # new
-         ),
- 
-         MODEL_TENSOR.FFN_DOWN_EXP: (
-@@ -407,7 +416,8 @@ class TensorNameMap:
-             "encoder.layers.{bid}.norm2",                   # nomic-bert
-             "transformer.decoder_layer.{bid}.rms_norm_3",   # Grok
-             "encoder.layer.{bid}.mlp.layernorm",            # jina-bert-v2
--            "encoder.layer.{bid}.layer_norm_2"              # jina-v2-code
-+            "encoder.layer.{bid}.layer_norm_2",             # jina-v2-code
-+            "encoder.layer.{bid}.mlp_ln"                    # new
-         ),
- 
-         MODEL_TENSOR.SSM_IN: (
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 4cb669bc..cc259c19 100644
+index ef1b8ee5..ab9c6ae7 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -169,6 +169,7 @@ enum llm_arch {
+@@ -157,6 +157,7 @@ enum llm_arch {
      LLM_ARCH_BERT,
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_JINA_BERT_V2,
@@ -330,7 +10,7 @@ index 4cb669bc..cc259c19 100644
      LLM_ARCH_BLOOM,
      LLM_ARCH_STABLELM,
      LLM_ARCH_QWEN,
-@@ -220,6 +221,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
+@@ -208,6 +209,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
      { LLM_ARCH_STARCODER,       "starcoder"    },
      { LLM_ARCH_REFACT,          "refact"       },
      { LLM_ARCH_BERT,            "bert"         },
@@ -338,7 +18,7 @@ index 4cb669bc..cc259c19 100644
      { LLM_ARCH_NOMIC_BERT,      "nomic-bert"   },
      { LLM_ARCH_JINA_BERT_V2,    "jina-bert-v2" },
      { LLM_ARCH_BLOOM,           "bloom"        },
-@@ -795,6 +797,23 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
+@@ -783,6 +785,23 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
              { LLM_TENSOR_ATTN_Q,          "blk.%d.attn_q" },
              { LLM_TENSOR_ATTN_K,          "blk.%d.attn_k" },
              { LLM_TENSOR_ATTN_V,          "blk.%d.attn_v" },
@@ -362,81 +42,81 @@ index 4cb669bc..cc259c19 100644
              { LLM_TENSOR_ATTN_OUT,        "blk.%d.attn_output" },
              { LLM_TENSOR_LAYER_OUT_NORM,  "blk.%d.layer_output_norm" },
              { LLM_TENSOR_FFN_DOWN,        "blk.%d.ffn_down" },
-@@ -5616,6 +5635,17 @@ static void llm_load_hparams(
+@@ -5571,6 +5590,17 @@ static void llm_load_hparams(
                          model.type = e_model::MODEL_335M; break; // bge-large
                  }
              } break;
 +        case LLM_ARCH_NEW:
 +            {
-+              ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-+              ml.get_key(LLM_KV_ATTENTION_CAUSAL,           hparams.causal_attn);
-+              ml.get_key(LLM_KV_TOKENIZER_TOKEN_TYPE_COUNT, hparams.n_vocab_type);
-+              ml.get_key(LLM_KV_POOLING_TYPE,               hparams.pooling_type, false);
++                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
++                ml.get_key(LLM_KV_ATTENTION_CAUSAL,           hparams.causal_attn);
++                ml.get_key(LLM_KV_TOKENIZER_TOKEN_TYPE_COUNT, hparams.n_vocab_type);
++                ml.get_key(LLM_KV_POOLING_TYPE,               hparams.pooling_type, false);
 +
-+              if (hparams.n_layer == 12 && hparams.n_embd == 768) {
-+                model.type = e_model::MODEL_137M;
-+              }
++                if (hparams.n_layer == 12 && hparams.n_embd == 768) {
++                    model.type = e_model::MODEL_137M;
++                }
 +            } break;
          case LLM_ARCH_JINA_BERT_V2:
              {
                  ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-@@ -7518,13 +7548,14 @@ static bool llm_load_tensors(
+@@ -7777,13 +7807,14 @@ static bool llm_load_tensors(
                      }
                  } break;
              case LLM_ARCH_BERT:
 +            case LLM_ARCH_NEW:
              case LLM_ARCH_NOMIC_BERT:
                  {
-                     model.tok_embd     = ml.create_tensor(ctx_input, tn(LLM_TENSOR_TOKEN_EMBD,  "weight"), {n_embd, n_vocab});
-                     model.type_embd    = ml.create_tensor(ctx_input, tn(LLM_TENSOR_TOKEN_TYPES, "weight"), {n_embd, n_vocab_type});
+                     model.tok_embd     = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD,  "weight"), {n_embd, n_vocab}, 0);
+                     model.type_embd    = create_tensor(tn(LLM_TENSOR_TOKEN_TYPES, "weight"), {n_embd, n_vocab_type}, 0);
  
 -                    if (model.arch == LLM_ARCH_BERT) {
--                        model.pos_embd = ml.create_tensor(ctx_input, tn(LLM_TENSOR_POS_EMBD,    "weight"), {n_embd, n_ctx_train});
+-                        model.pos_embd = create_tensor(tn(LLM_TENSOR_POS_EMBD,    "weight"), {n_embd, n_ctx_train}, 0);
 +                    if (model.arch == LLM_ARCH_BERT || model.arch == LLM_ARCH_NEW) {
-+                        model.pos_embd = ml.create_tensor(ctx_input, tn(LLM_TENSOR_POS_EMBD,    "weight"), {n_embd, n_ctx_train}, llama_model_loader::TENSOR_NOT_REQUIRED);
++                        model.pos_embd = create_tensor(tn(LLM_TENSOR_POS_EMBD,    "weight"), {n_embd, n_ctx_train}, llama_model_loader::TENSOR_NOT_REQUIRED);
  
-                         model.cls   = ml.create_tensor(ctx_output, tn(LLM_TENSOR_CLS, "weight"), {n_embd, n_embd}, llama_model_loader::TENSOR_NOT_REQUIRED);
-                         model.cls_b = ml.create_tensor(ctx_output, tn(LLM_TENSOR_CLS, "bias"),   {n_embd},         llama_model_loader::TENSOR_NOT_REQUIRED);
-@@ -7542,8 +7573,8 @@ static bool llm_load_tensors(
- 
+                         model.cls   = create_tensor(tn(LLM_TENSOR_CLS, "weight"), {n_embd, n_embd}, llama_model_loader::TENSOR_NOT_REQUIRED);
+                         model.cls_b = create_tensor(tn(LLM_TENSOR_CLS, "bias"),   {n_embd},         llama_model_loader::TENSOR_NOT_REQUIRED);
+@@ -7798,8 +7829,8 @@ static bool llm_load_tensors(
+                     for (int i = 0; i < n_layer; ++i) {
                          auto & layer = model.layers[i];
  
 -                        if (model.arch == LLM_ARCH_BERT) {
--                            layer.wq = ml.create_tensor(ctx_split, tn(LLM_TENSOR_ATTN_Q,   "weight", i), {n_embd, n_embd});
-+                        layer.wq = ml.create_tensor(ctx_split, tn(LLM_TENSOR_ATTN_Q,   "weight", i), {n_embd, n_embd}, llama_model_loader::TENSOR_NOT_REQUIRED);
+-                            layer.wq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "weight", i), {n_embd, n_embd}, 0);
++                        layer.wq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "weight", i), {n_embd, n_embd}, llama_model_loader::TENSOR_NOT_REQUIRED);
 +                        if (layer.wq != nullptr) {
-                             layer.bq = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_ATTN_Q,   "bias", i),   {n_embd});
+                             layer.bq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "bias", i),   {n_embd}, 0);
  
-                             layer.wk = ml.create_tensor(ctx_split, tn(LLM_TENSOR_ATTN_K,   "weight", i), {n_embd, n_embd_gqa});
-@@ -7553,6 +7584,7 @@ static bool llm_load_tensors(
-                             layer.bv = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_ATTN_V,   "bias", i),   {n_embd_gqa});
+                             layer.wk = create_tensor(tn(LLM_TENSOR_ATTN_K,   "weight", i), {n_embd, n_embd_gqa}, 0);
+@@ -7809,6 +7840,7 @@ static bool llm_load_tensors(
+                             layer.bv = create_tensor(tn(LLM_TENSOR_ATTN_V,   "bias", i),   {n_embd_gqa}, 0);
                          } else {
-                             layer.wqkv = ml.create_tensor(ctx_split, tn(LLM_TENSOR_ATTN_QKV, "weight", i), {n_embd, n_embd + 2*n_embd_gqa});
-+                            layer.bqkv = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_ATTN_QKV, "bias", i),   {n_embd + 2*n_embd_gqa}, llama_model_loader::TENSOR_NOT_REQUIRED);
+                             layer.wqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "weight", i), {n_embd, n_embd + 2*n_embd_gqa}, 0);
++                            layer.bqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "bias", i),   {n_embd + 2*n_embd_gqa}, llama_model_loader::TENSOR_NOT_REQUIRED);
                          }
  
-                         layer.wo = ml.create_tensor(ctx_split, tn(LLM_TENSOR_ATTN_OUT,      "weight", i), {n_embd, n_embd});
-@@ -7560,12 +7592,16 @@ static bool llm_load_tensors(
-                         layer.attn_out_norm   = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_ATTN_OUT_NORM, "weight", i), {n_embd});
-                         layer.attn_out_norm_b = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_ATTN_OUT_NORM, "bias", i),   {n_embd});
+                         layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT,      "weight", i), {n_embd, n_embd}, 0);
+@@ -7816,12 +7848,16 @@ static bool llm_load_tensors(
+                         layer.attn_out_norm   = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "weight", i), {n_embd}, 0);
+                         layer.attn_out_norm_b = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "bias", i),   {n_embd}, 0);
  
--                        layer.ffn_up   = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_UP,        "weight", i), {n_embd, n_ff});
+-                        layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,        "weight", i), {n_embd, n_ff}, 0);
 +                        if (model.arch == LLM_ARCH_NEW) {
-+                            layer.ffn_up   = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_UP,        "weight", i), {n_embd, 2*n_ff});
++                            layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,        "weight", i), {n_embd, 2*n_ff}, 0);
 +                        } else {
-+                            layer.ffn_up   = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_UP,        "weight", i), {n_embd, n_ff});
++                            layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,        "weight", i), {n_embd, n_ff}, 0);
 +                        }
-                         layer.ffn_down = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_DOWN,      "weight", i), {n_ff, n_embd});
+                         layer.ffn_down = create_tensor(tn(LLM_TENSOR_FFN_DOWN,      "weight", i), {n_ff, n_embd}, 0);
  
 -                        if (model.arch == LLM_ARCH_BERT) {
 +                        if (model.arch == LLM_ARCH_BERT || model.arch == LLM_ARCH_NEW) {
-                             layer.bo         = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_ATTN_OUT, "bias", i), {n_embd});
--                            layer.ffn_up_b   = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_UP,   "bias", i), {n_ff});
-+                            layer.ffn_up_b   = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_UP,   "bias", i), {n_ff}, llama_model_loader::TENSOR_NOT_REQUIRED);
-                             layer.ffn_down_b = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd});
+                             layer.bo         = create_tensor(tn(LLM_TENSOR_ATTN_OUT, "bias", i), {n_embd}, 0);
+-                            layer.ffn_up_b   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "bias", i), {n_ff}, 0);
++                            layer.ffn_up_b   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "bias", i), {n_ff}, llama_model_loader::TENSOR_NOT_REQUIRED);
+                             layer.ffn_down_b = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd}, 0);
                          } else {
-                             layer.ffn_gate = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff});
-@@ -11496,7 +11532,7 @@ struct llm_build_context {
+                             layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
+@@ -11593,7 +11629,7 @@ struct llm_build_context {
          // token types are hardcoded to zero ("Sentence A")
          struct ggml_tensor * type_row0 = ggml_view_1d(ctx0, model.type_embd, n_embd, 0);
          inpL = ggml_add(ctx0, inpL, type_row0);
@@ -445,7 +125,7 @@ index 4cb669bc..cc259c19 100644
              inpL = ggml_add(ctx0, ggml_get_rows(ctx0, model.pos_embd, inp_pos), inpL);
          }
          cb(inpL, "inp_embd", -1);
-@@ -11517,7 +11553,7 @@ struct llm_build_context {
+@@ -11614,7 +11650,7 @@ struct llm_build_context {
              struct ggml_tensor * Vcur;
  
              // self-attention
@@ -454,7 +134,7 @@ index 4cb669bc..cc259c19 100644
                  Qcur = ggml_add(ctx0, llm_build_lora_mm(lctx, ctx0, model.layers[il].wq, cur), model.layers[il].bq);
                  cb(Qcur, "Qcur", il);
  
-@@ -11547,6 +11583,11 @@ struct llm_build_context {
+@@ -11644,6 +11680,11 @@ struct llm_build_context {
                  cur = llm_build_lora_mm(lctx, ctx0, model.layers[il].wqkv, cur);
                  cb(cur, "wqkv", il);
  
@@ -466,7 +146,7 @@ index 4cb669bc..cc259c19 100644
                  Qcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd,     n_tokens, cur->nb[1], 0*sizeof(float)*(n_embd)));
                  Kcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd)));
                  Vcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd + n_embd_gqa)));
-@@ -11632,6 +11673,13 @@ struct llm_build_context {
+@@ -11729,6 +11770,13 @@ struct llm_build_context {
                          model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
                          NULL,
                          LLM_FFN_GELU, LLM_FFN_SEQ, cb, il);
@@ -480,7 +160,7 @@ index 4cb669bc..cc259c19 100644
              } else if (model.arch == LLM_ARCH_JINA_BERT_V2) {
                  cur = llm_build_ffn(ctx0, lctx, cur,
                          model.layers[il].ffn_up,   NULL,                        NULL,
-@@ -16379,6 +16427,7 @@ static struct ggml_cgraph * llama_build_graph(
+@@ -16478,6 +16526,7 @@ static struct ggml_cgraph * llama_build_graph(
                  result = llm.build_refact();
              } break;
          case LLM_ARCH_BERT:
@@ -488,7 +168,7 @@ index 4cb669bc..cc259c19 100644
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
              {
-@@ -19690,6 +19739,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
+@@ -19797,6 +19846,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
          case LLM_ARCH_BERT:
