@@ -1176,7 +1176,7 @@ struct server_context {
                     common_sampler_free(slot.smpl_draft);
                 }
 
-                slot.smpl_draft = common_sampler_clone(slot.smpl);
+                slot.smpl_draft = common_sampler_init(model_draft, slot.sparams);
                 if (slot.smpl_draft == nullptr) {
                     // for now, the only error that may happen here is invalid
                     // grammar
