@@ -2220,6 +2220,10 @@ struct server_context {
 
                                             llama_kv_cache_seq_rm(ctx, slot.id + 1, head_p, head_c);
                                             llama_kv_cache_seq_add(ctx, slot.id + 1, head_c, -1, kv_shift);
+                                            if (ctx_draft != nullptr) {
+                                                llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, head_p, head_c);
+                                                llama_kv_cache_seq_add(ctx_draft, slot.id + 1, head_c, -1, kv_shift);
+                                            }
 
                                             for (size_t i = 0; i < n_match; i++) {
                                                 slot.cache_tokens[head_p + i] = slot.cache_tokens[head_c + i];
