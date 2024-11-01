@@ -344,19 +344,172 @@ index f8ac11e4..a9a1cfb6 100644
      return cann_backend;
  }
 diff --git a/ggml/src/ggml-cann/aclnn_ops.cpp b/ggml/src/ggml-cann/aclnn_ops.cpp
-index a4ec8418..279c7a86 100644
+index a4ec8418..705414dc 100644
 --- a/ggml/src/ggml-cann/aclnn_ops.cpp
 +++ b/ggml/src/ggml-cann/aclnn_ops.cpp
-@@ -2405,7 +2405,7 @@ static void aclnn_repeat_interleave(ggml_backend_cann_context& ctx,
-  */
- static void aclnn_mat_mul(ggml_backend_cann_context& ctx, aclTensor* acl_input,
-                           aclTensor* acl_weight, aclTensor* acl_dst) {
--    int8_t cube_math_type = 1;  // ALLOW_FP32_DOWN_PRECISION, when input is
-+    int8_t cube_math_type = 2;  // ALLOW_FP32_DOWN_PRECISION, when input is
-                                 // fp32, atlas a2 will transpose it to HFLOAT32.
+@@ -32,6 +32,8 @@
+ #include <aclnnop/aclnn_group_norm.h>
+ #include <aclnnop/aclnn_index_fill_tensor.h>
+ #include <aclnnop/aclnn_layer_norm.h>
++#include <aclnnop/aclnn_mm.h>
++#include <aclnnop/aclnn_batch_matmul.h>
+ #include <aclnnop/aclnn_matmul.h>
+ #include <aclnnop/aclnn_max_pool.h>
+ #include <aclnnop/aclnn_permute.h>
+@@ -2425,6 +2427,84 @@ static void aclnn_mat_mul(ggml_backend_cann_context& ctx, aclTensor* acl_input,
+         aclnnMatmul(workspaceAddr, workspaceSize, executor, ctx.stream()));
+ }
  
-     uint64_t workspaceSize = 0;
-@@ -2618,6 +2618,205 @@ static void ggml_cann_mul_mat_quant(ggml_backend_cann_context& ctx,
++/**
++ * @brief Performs matrix multiplication of two 2D tensors.
++ *
++ * This function computes the matrix multiplication of the input tensor
++ * `acl_input` and the weight tensor `acl_weight`, and stores the result in the
++ * destination tensor `acl_dst`.
++ * The operation is defined as:
++ * \f[
++ *     \text {acl_dst}=\text {acl_input@acl_weight}
++ * \f]
++ *
++ * @param ctx The context for the CANN backend operations.
++ * @param acl_input The input tensor for the matrix multiplication.
++ * @param acl_weight The weight tensor for the matrix multiplication.
++ * @param acl_dst The destination tensor where the result of the matrix
++ * multiplication will be stored.
++ */
++static void aclnn_mat_mul_2d(ggml_backend_cann_context& ctx, aclTensor* acl_input, aclTensor* acl_weight, aclTensor* acl_dst) {
++    uint64_t workspaceSize = 0;
++    aclOpExecutor* executor;
++    ACL_CHECK(aclnnMmGetWorkspaceSize(acl_input, acl_weight, acl_dst,  2, &workspaceSize, &executor));
++    ggml_cann_pool_alloc workspace_allocator(ctx.pool(), workspaceSize);
++    void* workspaceAddr = workspace_allocator.get();
++    ACL_CHECK(aclnnMm(workspaceAddr, workspaceSize, executor, ctx.stream()));
++}
++
++/**
++ * @brief Performs matrix multiplication of two 3D tensors.
++ *
++ * This function computes the matrix multiplication of the input tensor
++ * `acl_input` and the weight tensor `acl_weight`, and stores the result in the
++ * destination tensor `acl_dst`.
++ * The operation is defined as:
++ * \f[
++ *     \text {acl_dst}=\text {acl_input@acl_weight}
++ * \f]
++ *
++ * @param ctx The context for the CANN backend operations.
++ * @param acl_input The input tensor for the matrix multiplication.
++ * @param acl_weight The weight tensor for the matrix multiplication.
++ * @param acl_dst The destination tensor where the result of the matrix
++ * multiplication will be stored.
++ */
++static void aclnn_mat_mul_3d(ggml_backend_cann_context& ctx, aclTensor* acl_input, aclTensor* acl_weight, aclTensor* acl_dst) {
++    uint64_t workspaceSize = 0;
++    aclOpExecutor* executor;
++    ACL_CHECK(aclnnBatchMatMulGetWorkspaceSize(acl_input, acl_weight, acl_dst,  2, &workspaceSize, &executor));
++    ggml_cann_pool_alloc workspace_allocator(ctx.pool(), workspaceSize);
++    void* workspaceAddr = workspace_allocator.get();
++    ACL_CHECK(aclnnBatchMatMul(workspaceAddr, workspaceSize, executor, ctx.stream()));
++}
++
++/**
++ * @brief Performs matrix multiplication of two ND tensors.
++ *
++ * This function computes the matrix multiplication of the input tensor
++ * `acl_input` and the weight tensor `acl_weight`, and stores the result in the
++ * destination tensor `acl_dst`.
++ * The operation is defined as:
++ * \f[
++ *     \text {acl_dst}=\text {acl_input@acl_weight}
++ * \f]
++ *
++ * @param ctx The context for the CANN backend operations.
++ * @param acl_input The input tensor for the matrix multiplication.
++ * @param acl_weight The weight tensor for the matrix multiplication.
++ * @param acl_dst The destination tensor where the result of the matrix
++ * multiplication will be stored.
++ */
++static void aclnn_mat_mul_nd(ggml_backend_cann_context& ctx, aclTensor* acl_input, aclTensor* acl_weight, aclTensor* acl_dst) {
++    uint64_t workspaceSize = 0;
++    aclOpExecutor* executor;
++    ACL_CHECK(aclnnMatmulGetWorkspaceSize(acl_input, acl_weight, acl_dst,  2, &workspaceSize, &executor));
++    ggml_cann_pool_alloc workspace_allocator(ctx.pool(), workspaceSize);
++    void* workspaceAddr = workspace_allocator.get();
++    ACL_CHECK(aclnnMatmul(workspaceAddr, workspaceSize, executor, ctx.stream()));
++}
++
+ /**
+  * @brief Performs matrix multiplication with floating-point precision on
+  * tensors using the CANN backend.
+@@ -2466,6 +2546,67 @@ static void ggml_cann_mat_mul_fp(ggml_backend_cann_context& ctx,
+     ACL_CHECK(aclDestroyTensor(acl_dst));
+ }
+ 
++/**
++ * @brief Performs matrix multiplication with floating-point precision on
++ * tensors using the CANN backend.
++ *
++ * This function performs matrix multiplication of the input tensor and the
++ * weight tensor, handling broadcasting and transposing as needed, and stores
++ * the result in the destination tensor `dst`.
++ *
++ * @param ctx The context for the CANN backend operations.
++ * @param dst The destination tensor where the result of the matrix
++ * multiplication will be stored.
++ */
++static void ggml_cann_mat_mul_fp2(ggml_backend_cann_context& ctx,
++                                  ggml_tensor* dst) {
++    ggml_tensor* weight = dst->src[0];  // weight
++    ggml_tensor* input = dst->src[1];   // input
++
++    // when weight ne2 or ne3 is 1, aclnnMatmulGetWorkspaceSize will auto
++    // broadcast, when weight ne2 or ne3 is not 1, weight need repeat.
++    BCAST_MUL_MAT_SHAPE(input, weight, dst);
++
++    int64_t n_dims = bcast_dims;
++    if (bcast_input_ne[3] == bcast_weight_ne[3] && bcast_input_ne[3] == 1) {
++        if (bcast_input_ne[2] == 1 && bcast_weight_ne[2] == 1) {
++            n_dims = 2;
++        } else if (bcast_input_ne[2] == 1) {
++            n_dims = 3;
++        }
++    }
++
++    aclTensor* acl_input_tensor = ggml_cann_create_tensor(input, bcast_input_ne, bcast_input_nb, n_dims);
++    int64_t transpose_ne[] = {
++        bcast_weight_ne[1], bcast_weight_ne[0],
++        bcast_weight_ne[2], bcast_weight_ne[3],
++        bcast_weight_ne[4], bcast_weight_ne[5]
++    };
++    size_t transpose_nb[] = {
++        bcast_weight_nb[1], bcast_weight_nb[0],
++        bcast_weight_nb[2], bcast_weight_nb[3],
++        bcast_weight_nb[4], bcast_weight_nb[5]
++    };
++    aclTensor* acl_weight_tensor = ggml_cann_create_tensor(weight, transpose_ne, transpose_nb, n_dims);
++    aclTensor* acl_dst = ggml_cann_create_tensor(dst, bcast_dst_ne, bcast_dst_nb, n_dims);
++
++    switch (n_dims) {
++    case 2:
++        aclnn_mat_mul_2d(ctx, acl_input_tensor, acl_weight_tensor, acl_dst);
++        break;
++    case 3:
++        aclnn_mat_mul_3d(ctx, acl_input_tensor, acl_weight_tensor, acl_dst);
++        break;
++    default:
++        aclnn_mat_mul_nd(ctx, acl_input_tensor, acl_weight_tensor, acl_dst);
++        break;
++    }
++
++    ACL_CHECK(aclDestroyTensor(acl_weight_tensor));
++    ACL_CHECK(aclDestroyTensor(acl_input_tensor));
++    ACL_CHECK(aclDestroyTensor(acl_dst));
++}
++
+ /**
+  * @brief Performs matrix multiplication with quantized weights and
+  * floating-point inputs using the CANN backend.
+@@ -2618,16 +2759,215 @@ static void ggml_cann_mul_mat_quant(ggml_backend_cann_context& ctx,
      ACL_CHECK(aclDestroyTensor(acl_dst_tensor));
  }
  
@@ -562,7 +715,10 @@ index a4ec8418..279c7a86 100644
  void ggml_cann_mul_mat(ggml_backend_cann_context& ctx, ggml_tensor* dst) {
      const enum ggml_type type = dst->src[0]->type;
      switch (type) {
-@@ -2627,7 +2826,7 @@ void ggml_cann_mul_mat(ggml_backend_cann_context& ctx, ggml_tensor* dst) {
+         case GGML_TYPE_F32:
+         case GGML_TYPE_F16:
+-            ggml_cann_mat_mul_fp(ctx, dst);
++            ggml_cann_mat_mul_fp2(ctx, dst);
              break;
          case GGML_TYPE_Q4_0:
          case GGML_TYPE_Q8_0:
