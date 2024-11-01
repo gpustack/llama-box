@@ -9,9 +9,11 @@ if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif ()
 
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "build shared libraries" FORCE)
+set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "sd: build shared libs" FORCE)
 
 #
 # Options
@@ -46,15 +48,15 @@ set(LLAMA_CURL OFF CACHE BOOL "llama: use libcurl to download model from an URL"
 # change the default for these ggml options
 if (NOT DEFINED GGML_LLAMAFILE)
     set(GGML_LLAMAFILE_DEFAULT ON)
-endif()
+endif ()
 
 if (NOT DEFINED GGML_AMX)
     set(GGML_AMX OFF)
-endif()
+endif ()
 
 if (NOT DEFINED GGML_CUDA_GRAPHS)
     set(GGML_CUDA_GRAPHS_DEFAULT ON)
-endif()
+endif ()
 
 #
 # Compile flags
