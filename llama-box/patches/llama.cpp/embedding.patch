@@ -12,10 +12,10 @@ index 24005548..1caac186 100644
  }
  #endif
 diff --git a/src/llama.cpp b/src/llama.cpp
-index ca0d259b..231bf35d 100644
+index 0991c408..ac789d8b 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -19458,10 +19458,10 @@ struct llama_context * llama_new_context_with_model(
+@@ -19389,10 +19389,10 @@ struct llama_context * llama_new_context_with_model(
      cparams.rope_freq_scale  = params.rope_freq_scale == 0.0f ? hparams.rope_freq_scale_train : params.rope_freq_scale;
  
      // this is necessary due to kv_self.n being padded later during inference
@@ -28,7 +28,7 @@ index ca0d259b..231bf35d 100644
  
      // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
      // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
-@@ -19471,7 +19471,7 @@ struct llama_context * llama_new_context_with_model(
+@@ -19402,7 +19402,7 @@ struct llama_context * llama_new_context_with_model(
          cparams.n_batch = GGML_KQ_MASK_PAD;
      }
  
@@ -37,7 +37,7 @@ index ca0d259b..231bf35d 100644
  
      cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
                                 hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
-@@ -22082,3 +22082,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
+@@ -22016,3 +22016,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
      fputs(text, stderr);
      fflush(stderr);
  }
