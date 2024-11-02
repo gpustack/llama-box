@@ -58,6 +58,22 @@ if (NOT DEFINED GGML_CUDA_GRAPHS)
     set(GGML_CUDA_GRAPHS_DEFAULT ON)
 endif ()
 
+# change the default for these sd options
+if (GGML_CUDA)
+    set(SD_CUDA ON)
+    set(SD_FAST_SOFTMAX ON)
+elseif (GGML_HIPBLAS)
+    set(SD_HIPBLAS ON)
+elseif (GGML_METAL)
+    set(SD_METAL ON)
+elseif (GGML_SYCL)
+    set(SD_SYCL ON)
+elseif (GGML_VULKAN)
+    set(SD_VULKAN ON)
+else ()
+    set(SD_FLASH_ATTN ON)
+endif ()
+
 #
 # Compile flags
 #
@@ -182,4 +198,5 @@ endif ()
 
 add_subdirectory(llama.cpp)
 add_subdirectory(llama.cpp/examples/llava)
+add_subdirectory(stable-diffusion.cpp)
 add_subdirectory(llama-box)

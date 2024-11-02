@@ -58,6 +58,7 @@ add_custom_target(patch
 add_dependencies(patch version build_info)
 add_dependencies(ggml patch)
 add_dependencies(llama patch)
+add_dependencies(stable-diffusion patch)
 
 #
 # llama-box
