@@ -12,11 +12,10 @@
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/common/sampling.h"
-#include "llama.cpp/ggml/include/ggml.h"
-#include "llama.cpp/include/llama.h"
-
 #include "llama.cpp/examples/llava/clip.h"
 #include "llama.cpp/examples/llava/llava.h"
+#include "llama.cpp/ggml/include/ggml.h"
+#include "llama.cpp/include/llama.h"
 
 #include "param.hpp"
 #include "ratelimiter.hpp"
@@ -63,6 +62,7 @@ enum server_task_inf_type {
     SERVER_TASK_INF_TYPE_EMBEDDING,
     SERVER_TASK_INF_TYPE_RERANK,
     SERVER_TASK_INF_TYPE_INFILL,
+    SERVER_TASK_INF_TYPE_IMAGE,
 };
 
 struct server_task {
@@ -118,9 +118,25 @@ struct server_slot {
     // the index relative to completion multi-task request
     size_t index = 0;
 
-    struct slot_params params;
-
     slot_state state = SLOT_STATE_IDLE;
+
+    /* STABLE DIFFUSION */
+
+    bool oaicompat_image = false;
+    bool oaicompat_image_generate = false;
+    bool oaicompat_image_edit = false;
+    struct stablediffusion_sampler_params sdsparams;
+    std::string sd_edit_image;
+    std::string sd_edit_mask;
+    stablediffusion_generated_image *generated_images = nullptr;
+
+    /* LLAMA */
+
+    // input prompt tokens
+    llama_tokens prompt_tokens;
+    json prompt; // original prompt NB(thxCode): for chat vision
+
+    struct slot_params params;
 
     // used to determine the slot that has been used the longest
     int64_t t_last_used = -1;
@@ -136,10 +152,6 @@ struct server_slot {
     // n_prompt_tokens may not be equal to prompt_tokens.size(), because prompt maybe truncated
     int32_t n_prompt_tokens = 0;
     int32_t n_prompt_tokens_processed = 0;
-
-    // input prompt tokens
-    llama_tokens prompt_tokens;
-    json prompt; // original prompt NB(thxCode): for chat vision
 
     size_t last_nl_pos = 0;
 
@@ -196,6 +208,20 @@ struct server_slot {
 
     void reset() {
         SLT_DBG(*this, "%s", "\n");
+
+        /* STABLE DIFFUSION */
+
+        if (oaicompat_image) {
+            sd_edit_image = "";
+            sd_edit_mask = "";
+            if (generated_images != nullptr) {
+                delete[] generated_images;
+                generated_images = nullptr;
+            }
+            return;
+        }
+
+        /* LLAMA */
 
         n_prompt_tokens = 0;
         last_nl_pos = 0;
@@ -637,6 +663,13 @@ struct server_response {
 };
 
 struct server_context {
+    /* STABLE DIFFUSION */
+
+    stablediffusion_context *sd_ctx = nullptr;
+    stablediffusion_params sdparams;
+
+    /* LLAMA */
+
     llama_model *model = nullptr;
     llama_context *ctx = nullptr;
     clip_ctx *ctx_clip = nullptr;
@@ -676,6 +709,11 @@ struct server_context {
     ggml_threadpool *threadpool_batch = nullptr;
 
     ~server_context() {
+        if (sd_ctx != nullptr) {
+            sd_ctx->free();
+            sd_ctx = nullptr;
+        }
+
         // Clear any sampling context
         for (server_slot &slot : slots) {
             if (slot.smpl != nullptr) {
@@ -729,6 +767,23 @@ struct server_context {
     }
 
     bool load_model(const llama_box_params &bparams) {
+        /* STABLE DIFFUSION */
+
+        // load stable diffusion model
+        if (bparams.endpoint_images) {
+            sd_ctx = common_sd_init_from_params(bparams.sdparams);
+            if (sd_ctx == nullptr) {
+                SRV_ERR("failed to load stable diffusion model, '%s'\n", bparams.sdparams.model.c_str());
+                return false;
+            }
+
+            n_tps = bparams.n_tps;
+
+            return true;
+        }
+
+        /* LLAMA */
+
         params = bparams.gparams;
 
         // load multimodal projection model
@@ -922,10 +977,12 @@ struct server_context {
         // the update_slots() logic will always submit a maximum of n_batch or n_parallel
         // tokens note that n_batch can be > n_ctx (e.g. for non-causal
         // attention models such as BERT where the KV cache is not used)
-        const auto n_batch = int32_t(llama_n_batch(ctx));
-        batch = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
-        if (ctx_draft != nullptr) {
-            batch_draft = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
+        if (ctx != nullptr) {
+            const auto n_batch = int32_t(llama_n_batch(ctx));
+            batch = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
+            if (ctx_draft != nullptr) {
+                batch_draft = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
+            }
         }
 
         metrics.init();
@@ -1015,6 +1072,45 @@ struct server_context {
     bool launch_slot_with_task(server_slot &slot, const server_task &task) {
         common_sampler_params sparams = params.sparams;
         const json &data = task.data;
+
+        /* STABLE DIFFUSION */
+
+        if (sd_ctx != nullptr) {
+            slot.oaicompat_image = true;
+            slot.oaicompat_image_generate = json_value(data, "__oaicompat_image_generate", false);
+            slot.oaicompat_image_edit = json_value(data, "__oaicompat_image_edit", false);
+
+            slot.sdsparams.seed = json_value(data, "seed", sparams.seed);
+            slot.sdsparams.width = json_value(data, "width", sdparams.width);
+            slot.sdsparams.height = json_value(data, "height", sdparams.height);
+            slot.sdsparams.batch_count = json_value(data, "batch_count", sdparams.batch_count);
+            slot.sdsparams.min_cfg = json_value(data, "min_cfg", sdparams.min_cfg);
+            slot.sdsparams.cfg_scale = json_value(data, "cfg_scale", sdparams.cfg_scale);
+            slot.sdsparams.guidance = json_value(data, "guidance", sdparams.guidance);
+            slot.sdsparams.style_ratio = json_value(data, "style_ratio", sdparams.style_ratio);
+            slot.sdsparams.clip_skip = json_value(data, "clip_skip", sdparams.clip_skip);
+            slot.sdsparams.sampler = json_value(data, "sampler", sdparams.sampler);
+            slot.sdsparams.sample_steps = json_value(data, "sample_steps", sdparams.sample_steps);
+
+            // get prompt
+            slot.prompt = json_value(data, "prompt", json::object());
+
+            // get image
+            if (slot.oaicompat_image_edit) {
+                slot.sd_edit_image = data.at("image").get<std::string>();
+                if (data.contains("mask")) {
+                    slot.sd_edit_mask = data.at("mask").get<std::string>();
+                }
+            }
+
+            slot.state = SLOT_STATE_STARTED;
+
+            SLT_INF(slot, "%s", "processing task\n");
+
+            return true;
+        }
+
+        /* LLAMA */
 
         slot.oaicompat_completion = json_value(data, "__oaicompat_completion", false);
         slot.oaicompat_completion_chat = json_value(data, "__oaicompat_completion_chat", false);
@@ -1409,38 +1505,62 @@ struct server_context {
             samplers.emplace_back(common_sampler_type_to_str(sampler));
         }
 
-        return json{{"n_ctx", slot.n_ctx},
-                    {"n_predict", slot.n_predict}, // Server configured n_predict
-                    {"model", params.model_alias},
-                    {"seed", slot.sparams.seed},
-                    {"seed_cur", slot.smpl ? common_sampler_get_seed(slot.smpl) : 0},
-                    {"temperature", slot.sparams.temp},
-                    {"dynatemp_range", slot.sparams.dynatemp_range},
-                    {"dynatemp_exponent", slot.sparams.dynatemp_exponent},
-                    {"top_k", slot.sparams.top_k},
-                    {"top_p", slot.sparams.top_p},
-                    {"min_p", slot.sparams.min_p},
-                    {"xtc_probability", slot.sparams.xtc_probability},
-                    {"xtc_threshold", slot.sparams.xtc_threshold},
-                    {"typical_p", slot.sparams.typ_p},
-                    {"repeat_last_n", slot.sparams.penalty_last_n},
-                    {"repeat_penalty", slot.sparams.penalty_repeat},
-                    {"presence_penalty", slot.sparams.penalty_present},
-                    {"frequency_penalty", slot.sparams.penalty_freq},
-                    {"mirostat", slot.sparams.mirostat},
-                    {"mirostat_tau", slot.sparams.mirostat_tau},
-                    {"mirostat_eta", slot.sparams.mirostat_eta},
-                    {"penalize_nl", slot.sparams.penalize_nl},
-                    {"stop", slot.params.antiprompt},
-                    {"max_tokens", slot.params.n_predict}, // User configured n_predict
-                    {"n_keep", slot.params.n_keep},
-                    {"n_discard", slot.params.n_discard},
-                    {"ignore_eos", slot.sparams.ignore_eos},
-                    {"stream", slot.params.stream},
-                    {"n_probs", slot.sparams.n_probs},
-                    {"min_keep", slot.sparams.min_keep},
-                    {"grammar", slot.sparams.grammar},
-                    {"samplers", samplers}};
+        /* STABLE DIFFUSION */
+
+        if (sd_ctx != nullptr) {
+            return json{
+                {"model", params.model_alias},
+                {"seed", slot.sparams.seed},
+                {"seed_cur", slot.sdsparams.seed},
+                {"width", slot.sdsparams.width},
+                {"height", slot.sdsparams.height},
+                {"batch_count", slot.sdsparams.batch_count},
+                {"min_cfg", slot.sdsparams.min_cfg},
+                {"cfg_scale", slot.sdsparams.cfg_scale},
+                {"guidance", slot.sdsparams.guidance},
+                {"style_ratio", slot.sdsparams.style_ratio},
+                {"clip_skip", slot.sdsparams.clip_skip},
+                {"sampler", common_sd_sampler_type_to_str(slot.sdsparams.sampler)},
+                {"sample_steps", slot.sdsparams.sample_steps},
+            };
+        }
+
+        /* LLAMA */
+
+        return json{
+            {"n_ctx", slot.n_ctx},
+            {"n_predict", slot.n_predict}, // Server configured n_predict
+            {"model", params.model_alias},
+            {"seed", slot.sparams.seed},
+            {"seed_cur", slot.smpl ? common_sampler_get_seed(slot.smpl) : 0},
+            {"temperature", slot.sparams.temp},
+            {"dynatemp_range", slot.sparams.dynatemp_range},
+            {"dynatemp_exponent", slot.sparams.dynatemp_exponent},
+            {"top_k", slot.sparams.top_k},
+            {"top_p", slot.sparams.top_p},
+            {"min_p", slot.sparams.min_p},
+            {"xtc_probability", slot.sparams.xtc_probability},
+            {"xtc_threshold", slot.sparams.xtc_threshold},
+            {"typical_p", slot.sparams.typ_p},
+            {"repeat_last_n", slot.sparams.penalty_last_n},
+            {"repeat_penalty", slot.sparams.penalty_repeat},
+            {"presence_penalty", slot.sparams.penalty_present},
+            {"frequency_penalty", slot.sparams.penalty_freq},
+            {"mirostat", slot.sparams.mirostat},
+            {"mirostat_tau", slot.sparams.mirostat_tau},
+            {"mirostat_eta", slot.sparams.mirostat_eta},
+            {"penalize_nl", slot.sparams.penalize_nl},
+            {"stop", slot.params.antiprompt},
+            {"max_tokens", slot.params.n_predict}, // User configured n_predict
+            {"n_keep", slot.params.n_keep},
+            {"n_discard", slot.params.n_discard},
+            {"ignore_eos", slot.sparams.ignore_eos},
+            {"stream", slot.params.stream},
+            {"n_probs", slot.sparams.n_probs},
+            {"min_keep", slot.sparams.min_keep},
+            {"grammar", slot.sparams.grammar},
+            {"samplers", samplers},
+        };
     }
 
     void send_error(const server_task &task, const std::string &error, const enum error_type type = ERROR_TYPE_SERVER) {
@@ -1610,6 +1730,27 @@ struct server_context {
         queue_results.send(res);
     }
 
+    void send_image(const server_slot &slot) {
+        server_task_result res;
+        res.id = slot.id_task;
+        res.error = false;
+        res.stop = true;
+
+        json images = json::array();
+        for (int i = 0; i < slot.sdsparams.batch_count; ++i) {
+            stablediffusion_generated_image img = slot.generated_images[i];
+            std::string img_b64 = base64_encode(img.data, img.size);
+            images.push_back(json{{"b64_json", img_b64}});
+        }
+
+        res.data = json{
+            {"index", slot.index},
+            {"images", images},
+        };
+
+        queue_results.send(res);
+    }
+
     //
     // Functions to create new task(s) and receive result(s)
     //
@@ -1626,6 +1767,18 @@ struct server_context {
             task.prompt_tokens = std::move(prompt_tokens);
             tasks.push_back(std::move(task));
         };
+
+        /* STABLE DIFFUSION */
+
+        bool image = json_value(data, "__oaicompat_image", false);
+        if (image) {
+            llama_tokens empty_tokens;
+            create_task(data, empty_tokens, tps);
+
+            return tasks;
+        }
+
+        /* LLAMA */
 
         bool chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false);
         if (!chat_vision) {
@@ -1816,32 +1969,48 @@ struct server_context {
             res.id = task.id;
             res.stop = true;
             res.error = false;
-            res.data = {
-                {"idle", n_idle_slots},
-                {"processing", n_processing_slots},
-                {"deferred", queue_tasks.queue_tasks_deferred.size()},
-                {"t_start", metrics.t_start},
 
-                {"n_prompt_tokens_processed_total", metrics.n_prompt_tokens_processed_total},
-                {"t_tokens_generation_total", metrics.t_tokens_generation_total},
-                {"n_tokens_predicted_total", metrics.n_tokens_predicted_total},
-                {"t_prompt_processing_total", metrics.t_prompt_processing_total},
-                {"n_tokens_drafted_total", metrics.n_tokens_drafted_total},
-                {"n_tokens_drafted_accepted_total", metrics.n_tokens_drafted_accepted_total},
+            if (sd_ctx != nullptr) {
+                /* STABLE DIFFUSION */
 
-                {"n_prompt_tokens_processed", metrics.n_prompt_tokens_processed},
-                {"t_prompt_processing", metrics.t_prompt_processing},
-                {"n_tokens_predicted", metrics.n_tokens_predicted},
-                {"t_tokens_generation", metrics.t_tokens_generation},
+                res.data = {
+                    {"idle", n_idle_slots},
+                    {"processing", n_processing_slots},
+                    {"deferred", queue_tasks.queue_tasks_deferred.size()},
+                    {"t_start", metrics.t_start},
 
-                {"n_decode_total", metrics.n_decode_total},
-                {"n_busy_slots_total", metrics.n_busy_slots_total},
+                    {"slots", slots_data},
+                };
+            } else {
+                /* LLAMA */
 
-                {"kv_cache_tokens_count", llama_get_kv_cache_token_count(ctx)},
-                {"kv_cache_used_cells", llama_get_kv_cache_used_cells(ctx)},
+                res.data = {
+                    {"idle", n_idle_slots},
+                    {"processing", n_processing_slots},
+                    {"deferred", queue_tasks.queue_tasks_deferred.size()},
+                    {"t_start", metrics.t_start},
 
-                {"slots", slots_data},
-            };
+                    {"n_prompt_tokens_processed_total", metrics.n_prompt_tokens_processed_total},
+                    {"t_tokens_generation_total", metrics.t_tokens_generation_total},
+                    {"n_tokens_predicted_total", metrics.n_tokens_predicted_total},
+                    {"t_prompt_processing_total", metrics.t_prompt_processing_total},
+                    {"n_tokens_drafted_total", metrics.n_tokens_drafted_total},
+                    {"n_tokens_drafted_accepted_total", metrics.n_tokens_drafted_accepted_total},
+
+                    {"n_prompt_tokens_processed", metrics.n_prompt_tokens_processed},
+                    {"t_prompt_processing", metrics.t_prompt_processing},
+                    {"n_tokens_predicted", metrics.n_tokens_predicted},
+                    {"t_tokens_generation", metrics.t_tokens_generation},
+
+                    {"n_decode_total", metrics.n_decode_total},
+                    {"n_busy_slots_total", metrics.n_busy_slots_total},
+
+                    {"kv_cache_tokens_count", llama_get_kv_cache_token_count(ctx)},
+                    {"kv_cache_used_cells", llama_get_kv_cache_used_cells(ctx)},
+
+                    {"slots", slots_data},
+                };
+            }
 
             if (json_value(task.data, "reset_bucket", false)) {
                 metrics.reset_bucket();
@@ -1985,15 +2154,20 @@ struct server_context {
                 }
             }
 
-            if (all_idle && !cache_prompt) {
-                llama_kv_cache_clear(ctx);
-                if (ctx_draft != nullptr) {
-                    llama_kv_cache_clear(ctx_draft);
+            if (all_idle) {
+                if (!cache_prompt) {
+                    if (ctx != nullptr) {
+                        llama_kv_cache_clear(ctx);
+                    }
+                    if (ctx_draft != nullptr) {
+                        llama_kv_cache_clear(ctx_draft);
+                    }
                 }
                 return;
             }
         }
 
+        // trigger next iteration
         {
             server_task task;
             task.type = SERVER_TASK_TYPE_NEXT_RESPONSE;
@@ -2001,6 +2175,35 @@ struct server_context {
 
             queue_tasks.post(task);
         }
+
+        /* STABLE DIFFUSION */
+
+        if (sd_ctx != nullptr) {
+            for (server_slot &slot : slots) {
+                if (slot.state != SLOT_STATE_STARTED) {
+                    continue;
+                }
+
+                slot.state = SLOT_STATE_GENERATING;
+                if (slot.oaicompat_image_generate) {
+                    slot.generated_images = sd_ctx->generate(nullptr, slot.prompt.get<std::string>().c_str(), slot.sdsparams);
+                } else {
+                    // TODO
+                }
+
+                if (slot.generated_images == nullptr) {
+                    slot.release();
+                    send_error(slot, "failed to generate image", ERROR_TYPE_SERVER);
+                    continue;
+                }
+
+                send_image(slot);
+            }
+
+            return;
+        }
+
+        /* LLAMA */
 
         // apply context-shift if needed
         // TODO: simplify and improve
@@ -2643,10 +2846,45 @@ struct server_context {
     }
 
     json model_meta() const {
+        /* STABLE DIFFUSION */
+
+        if (sd_ctx != nullptr) {
+            return json{
+                {"schedule", common_sd_schedule_to_str(sdparams.schedule)},
+            };
+        }
+
+        /* LLAMA */
+
         return json{
             {"vocab_type", llama_vocab_type(model)}, {"n_vocab", llama_n_vocab(model)},         {"n_ctx_train", llama_n_ctx_train(model)},
             {"n_embd", llama_n_embd(model)},         {"n_params", llama_model_n_params(model)}, {"size", llama_model_size(model)},
         };
+    }
+
+    //
+    // Functions to distinguish
+    //
+
+    bool support_completion() const {
+        return ctx != nullptr;
+    }
+
+    bool support_completion_only() const {
+        // llama_supports_embedding_only is a patch.
+        return ctx != nullptr && !llama_supports_embedding_only(ctx);
+    }
+
+    bool support_embedding() const {
+        return ctx != nullptr;
+    }
+
+    bool support_embedding_only() const {
+        return ctx != nullptr && llama_supports_embedding_only(ctx);
+    }
+
+    bool support_image() const {
+        return sd_ctx != nullptr;
     }
 };
 
@@ -2682,6 +2920,13 @@ int main(int argc, char **argv) {
         [](ggml_log_level level, const char *text, void * /*user_data*/) {
             if (LOG_DEFAULT_LLAMA <= common_log_verbosity_thold) {
                 common_log_add(common_log_main(), level, "%s", text);
+            }
+        },
+        nullptr);
+    sd_log_set(
+        [](sd_log_level_t level, const char *text, void * /*user_data*/) {
+            if (LOG_DEFAULT_LLAMA <= common_log_verbosity_thold) {
+                common_log_add(common_log_main(), common_sd_log_level_to_ggml_log_level(level), "%s", text);
             }
         },
         nullptr);
@@ -2905,6 +3150,12 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_tokenize = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_completion()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do infill from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
         const json request = json::parse(req.body);
 
         if (!request.contains("content")) {
@@ -2944,6 +3195,12 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_detokenize = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_completion()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do infill from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
         const json request = json::parse(req.body);
 
         if (!request.contains("tokens")) {
@@ -3095,6 +3352,12 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_lora_adapters = [&ctx_server, &res_ok](const httplib::Request &, httplib::Response &res) {
+        if (!ctx_server.support_completion()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do infill from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
         json result = json::array();
         for (size_t i = 0; i < ctx_server.lora_adapters.size(); ++i) {
             auto &la = ctx_server.lora_adapters[i];
@@ -3109,6 +3372,12 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_lora_adapters_apply = [&ctx_server, &res_ok](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_completion()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do infill from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
         const std::vector<json> request = json::parse(req.body);
         auto max_idx = int32_t(ctx_server.lora_adapters.size());
 
@@ -3153,10 +3422,9 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_infill = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
-        // llama_supports_embedding_only is a patch.
-        if (llama_supports_embedding_only(ctx_server.ctx)) {
+        if (!ctx_server.support_completion_only()) {
             res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to sample from this model", "text/plain; charset=utf-8");
+            res.set_content("You are not allowed to do infill from this model", "text/plain; charset=utf-8");
             return;
         }
 
@@ -3297,10 +3565,9 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_completions = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
-        // llama_supports_embedding_only is a patch.
-        if (llama_supports_embedding_only(ctx_server.ctx)) {
+        if (!ctx_server.support_completion_only()) {
             res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to sample from this model", "text/plain; charset=utf-8");
+            res.set_content("You are not allowed to do completion from this model", "text/plain; charset=utf-8");
             return;
         }
 
@@ -3335,7 +3602,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completion_request(ctx_server.model, request, std::string());
+            request = oaicompat_completions_request(ctx_server.params, request, ctx_server.model, std::string());
         }
 
         // post tasks
@@ -3357,7 +3624,7 @@ int main(int argc, char **argv) {
                     if (results.size() == 1) {
                         completions_json = results[0].data;
                         if (oaicompat) {
-                            completions_json = oaicompat_completion_response(request, completions_json, completion_id);
+                            completions_json = oaicompat_completions_response(request, completions_json, completion_id);
                         }
                         pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
                     } else {
@@ -3365,7 +3632,7 @@ int main(int argc, char **argv) {
                         for (const auto &result : results) {
                             auto tmp = result.data;
                             if (oaicompat) {
-                                tmp = oaicompat_completion_response(request, tmp, completion_id);
+                                tmp = oaicompat_completions_response(request, tmp, completion_id);
                             }
                             completions_json.push_back(tmp);
                         }
@@ -3417,10 +3684,9 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_chat_completions = [&ctx_server, &params, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
-        // llama_supports_embedding_only is a patch.
-        if (llama_supports_embedding_only(ctx_server.ctx)) {
+        if (!ctx_server.support_completion_only()) {
             res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to sample from this model", "text/plain; charset=utf-8");
+            res.set_content("You are not allowed to do completion from this model", "text/plain; charset=utf-8");
             return;
         }
 
@@ -3453,7 +3719,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completion_request(ctx_server.model, request, params.chat_template);
+        request = oaicompat_completions_request(ctx_server.params, request, ctx_server.model, params.chat_template);
 
         // post the task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_COMPLETION, tps);
@@ -3472,12 +3738,12 @@ int main(int argc, char **argv) {
                     json completions_json;
                     std::string pps;
                     if (results.size() == 1) {
-                        completions_json = oaicompat_completion_response(request, results[0].data, completion_id);
+                        completions_json = oaicompat_completions_response(request, results[0].data, completion_id);
                         pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
                     } else {
                         completions_json = json::array();
                         for (const auto &result : results) {
-                            auto tmp = oaicompat_completion_response(request, result.data, completion_id);
+                            auto tmp = oaicompat_completions_response(request, result.data, completion_id);
                             completions_json.push_back(tmp);
                         }
                         pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
@@ -3499,14 +3765,14 @@ int main(int argc, char **argv) {
                 [&](const server_task_result &result) -> bool {
                     if (first) {
                         first = false;
-                        json completions_json = oaicompat_completion_response(request, result.data, completion_id, true, true);
+                        json completions_json = oaicompat_completions_response(request, result.data, completion_id, true, true);
                         if (!server_sent_event(sink, "data", completions_json)) {
                             sink.done();
                             return false;
                         }
                     }
 
-                    json completions_json = oaicompat_completion_response(request, result.data, completion_id, true);
+                    json completions_json = oaicompat_completions_response(request, result.data, completion_id, true);
                     if (!server_sent_event(sink, "data", completions_json)) {
                         sink.done();
                         return false;
@@ -3538,12 +3804,18 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_embeddings = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_embedding()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do embedding from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
         json request = json::parse(req.body);
         if (!request.contains("input")) {
             res_error(res, format_error_response("\"input\" must be provided", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_embedding_request(ctx_server.params, request);
+        request = oaicompat_embeddings_request(ctx_server.params, request);
 
         // post tasks
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_EMBEDDING);
@@ -3556,7 +3828,7 @@ int main(int argc, char **argv) {
         ctx_server.receive_cmpl_results(
             task_ids,
             [&](std::vector<server_task_result> &results) {
-                const json embeddings_json = oaicompat_embedding_response(request, results[0].data);
+                const json embeddings_json = oaicompat_embeddings_response(request, results[0].data);
                 res_ok(res, embeddings_json);
             },
             [&](const json &error_data) { res_error(res, error_data); });
@@ -3565,6 +3837,12 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_rerank = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_embedding_only()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do reranking from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
         json request = json::parse(req.body);
         if (!request.contains("query")) {
             res_error(res, format_error_response("\"query\" must be provided", ERROR_TYPE_INVALID_REQUEST));
@@ -3609,6 +3887,91 @@ int main(int argc, char **argv) {
             [&](const json &error_data) { res_error(res, error_data); });
     };
 
+    const auto handle_images = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_image()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do completion from this model", "text/plain; charset=utf-8");
+            return;
+        }
+
+        int tps = 0;
+        {
+            const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
+            if (!tps_s.empty()) {
+                try {
+                    tps = std::stoi(tps_s);
+                } catch (const std::exception &) {
+                    tps = ctx_server.n_tps;
+                }
+            }
+            if (tps > ctx_server.n_tps) {
+                // if the request exceeds the maximum tokens per second, return
+                // 410 Gone
+                if (ctx_server.n_tps > 0) {
+                    res.status = httplib::StatusCode::Gone_410;
+                    res.set_content("This request exceeds the maximum tokens per second", "text/plain; charset=utf-8");
+                    return;
+                }
+                // if the server is not limited by tokens per second, set tps to
+                // 0
+                tps = 0;
+            }
+        }
+
+        bool generations = req.path == "/v1/images/generations";
+        json request;
+        if (generations) {
+            request = json::parse(req.body);
+            if (!request.contains("prompt")) {
+                res_error(res, format_error_response("\"prompt\" must be provided", ERROR_TYPE_INVALID_REQUEST));
+                return;
+            }
+            request = oaicompat_images_generations_request(ctx_server.sdparams, request);
+        } else {
+            if (!req.is_multipart_form_data()) {
+                res_error(res, format_error_response("Request must be multipart/form-data", ERROR_TYPE_INVALID_REQUEST));
+                return;
+            }
+            if (!req.has_file("image")) {
+                res_error(res, format_error_response("\"image\" must be provided", ERROR_TYPE_INVALID_REQUEST));
+                return;
+            }
+            if (!req.has_file("prompt")) {
+                res_error(res, format_error_response("\"prompt\" must be provided", ERROR_TYPE_INVALID_REQUEST));
+                return;
+            }
+            // clang-format off
+            request = json{
+                {"image", req.get_file_value("image").content},
+                {"prompt", req.get_file_value("prompt").content},
+                {"mask", req.get_file_value("mask").content},
+                {"model", req.get_file_value("model").content},
+                {"n", req.get_file_value("n").content},
+                {"size", req.get_file_value("size").content},
+            };
+            // clang-format on
+            request = oaicompat_images_edits_request(ctx_server.sdparams, request);
+        }
+
+        // post tasks
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_IMAGE);
+        ctx_server.queue_results.add_waiting_tasks(tasks);
+        ctx_server.queue_tasks.post(tasks);
+
+        std::unordered_set<int> task_ids = server_task::get_list_id(tasks);
+
+        // process non-streaming requests
+        ctx_server.receive_cmpl_results(
+            task_ids,
+            [&](std::vector<server_task_result> &results) {
+                const json images_json = oaicompat_images_response(request, results[0].data);
+                res_ok(res, images_json);
+            },
+            [&](const json &error_data) { res_error(res, error_data); });
+
+        ctx_server.cancel_tasks(task_ids);
+    };
+
     //
     // Router
     //
@@ -3646,6 +4009,10 @@ int main(int argc, char **argv) {
     }
     if (params.reranking) {
         svr.Post("/v1/rerank", handle_rerank);
+    }
+    if (bparams.endpoint_images) {
+        svr.Post("/v1/images/generations", handle_images);
+        svr.Post("/v1/images/edits", handle_images);
     }
 
     //

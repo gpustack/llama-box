@@ -1,4 +1,4 @@
-set(VENDOR_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp)
+set(VENDOR_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../stable-diffusion.cpp)
 
 # Look for git
 find_package(Git)

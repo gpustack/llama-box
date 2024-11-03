@@ -51,7 +51,7 @@ chat_completion() {
     if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
       DATA="$(cat "${PROMPT:1}")"
     else
-      DATA="{\"messages\": [$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]}"
+      DATA="{\"messages\":[$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]}"
     fi
     DATA="$(echo -n "${DATA}" | jq \
       --argjson frequency_penalty "${FREQUENCY_PENALTY}" \

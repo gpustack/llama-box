@@ -18,12 +18,13 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 
 ## Features
 
-- Compatible with [OpenAI Completion API](https://beta.openai.com/docs/api-reference/completions).
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
-- Compatible with [OpenAI Embedding API](https://platform.openai.com/docs/api-reference/embeddings).
+- Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
+- Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images).
+- Compatible with [(Legacy) OpenAI Completions API](https://beta.openai.com/docs/api-reference/completions).
 - Compatible with [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank),
-  see our [Hugging Face Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
+  see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
 - Support speculative decoding: draft model or n-gram lookup.
 - Support RPC server mode, which can serve as a remote inference backend.
 
@@ -37,7 +38,7 @@ LLaMA Box supports the following platforms.
 | **NVIDIA CUDA 12.4**         | `linux/amd64`<br/> `windows/amd64`                     | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`, see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                         |
 | **AMD ROCm/HIP 6.1**         | `linux/amd64`<br/> `windows/amd64`                     | LLVM target matches `gfx906 (linux only)`, `gfx908 (linux only)`, `gfx90a (linux only)`, `gfx942 (linux only)`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see <br/>https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html, <br/> https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.1.2/reference/system-requirements.html. |
 | **Intel oneAPI 2024.2**      | `linux/amd64`<br/> `windows/amd64`                     | Support [Intel oneAPI](https://en.wikipedia.org/wiki/OneAPI_(compute_acceleration)), see <br/>https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                                                                                                                                                           |
-| **Huawei Ascend CANN 8.0**   | `linux/amd64`<br/> `linux/arm64`                       | `Ascend 310p`, `Ascend 910` or `Ascend 910b`, see <br/>https://www.hiascend.com/document/detail/en/CANNCommunityEdition/600alphaX/softwareinstall/instg/atlasdeploy_03_0015.html.                                                                                                                                                                                                          |
+| **Huawei Ascend CANN 8.0**   | `linux/amd64`<br/> `linux/arm64`                       | `Ascend 910b`, see <br/>https://www.hiascend.com/document/detail/en/CANNCommunityEdition/600alphaX/softwareinstall/instg/atlasdeploy_03_0015.html.                                                                                                                                                                                                                                         |
 | **Moore Threads MUSA rc3.1** | `linux/amd64`<br/>                                     | `MTT S4000`, `MTT S80`, see <br/>https://en.mthreads.com.                                                                                                                                                                                                                                                                                                                                  |
 | **Apple Metal 3**            | `darwin/amd64`<br/> `darwin/arm64`                     | Support [Apple Metal](https://developer.apple.com/metal/), see <br/>https://support.apple.com/en-sg/102894.                                                                                                                                                                                                                                                                                |
 | _AVX2_                       | `darwin/amd64`<br/> `linux/amd64`<br/> `windows/amd64` | CPUs support AVX2, see <br/>https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2.                                                                                                                                                                                                                                                                         |
@@ -76,17 +77,8 @@ LLaMA Box supports the following platforms.
     $ ./llama-box/tools/chat.sh "Introduce Beijing in 50 words."
     ```
 
-- Legacy completion via [GLM-4-9B-Chat](https://huggingface.co/THUDM/glm-4-9b-chat) model. Use GGUF files
-  from [second-state/glm-4-9b-chat-GGUF](https://huggingface.co/second-state/glm-4-9b-chat-GGUF/tree/main?show_file_info=glm-4-9b-chat-Q5_K_M.gguf).
-
-    ```shell
-    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/second-state/glm-4-9b-chat-GGUF/glm-4-9b-chat-Q5_K_M.gguf
-
-    $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "glm4", "prompt": "<|system|>You are a helpful assistant.<|user|>Tell me a joke.<|assistant|>"}'
-    ```
-
-- Vision explanation via [LLaVA-Phi-3-Mini](https://huggingface.co/xtuner/llava-phi-3-mini-hf) model. Use GGUF files
+- Chat completion with vision explanation via [LLaVA-Phi-3-Mini](https://huggingface.co/xtuner/llava-phi-3-mini-hf)
+  model. Use GGUF files
   from [xtuner/llava-phi-3-mini-gguf](https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main?show_file_info=llava-phi-3-mini-f16.gguf).
 
     ```shell
@@ -100,6 +92,20 @@ LLaMA Box supports the following platforms.
 
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh @/tmp/data.json
+    ```
+
+- Image generation via [Stable Diffusion 3 Medium](https://huggingface.co/stabilityai/stable-diffusion-3-medium) model.
+  Use GGUF files
+  from [second-state/stable-diffusion-3-medium-GGUF](https://huggingface.co/second-state/stable-diffusion-3-medium-GGUF/tree/main?show_file_info=sd3-medium-f16.gguf).
+
+    ```shell
+    $ # Provide 1 session(allowing 1 parallel chat user).
+    $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/second-state/stable-diffusion-3-medium-GGUF/sd3-medium-f16.gguf --images
+    
+    $ curl http://localhost:8080/v1/images -H "Content-Type: application/json" -d '{"model": "sd3-medium", "prompt": "A cat in a forest"}'
+    
+    $ # or use the image_generate.sh tool
+    $ ./llama-box/tools/image_generate.sh "A cat in a forest"
     ```
 
 - Draft model speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
@@ -144,7 +150,6 @@ LLaMA Box supports the following platforms.
     
     $ curl http://localhost:8080/v1/rerank -H "Content-Type: application/json" -d '{"model":"jina-reranker-v1-tiny-en","query":"Organic skincare products for sensitive skin","top_n":3,"documents":["Eco-friendly kitchenware for modern homes","Biodegradable cleaning supplies for eco-conscious consumers","Organic cotton baby clothes for sensitive skin","Natural organic skincare range for sensitive skin","Tech gadgets for smart homes: 2024 edition","Sustainable gardening tools and compost solutions","Sensitive skin-friendly facial cleansers and toners","Organic food wraps and storage solutions","All-natural pet food for dogs with allergies","oga mats made from recycled materials"]}'
     ```
-
 
 - RPC server mode.
 
@@ -215,6 +220,7 @@ server:
          --metrics                enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 enable infill endpoint (default: disabled)
          --embeddings             enable embedding endpoint (default: disabled)
+         --images                 enable image endpoint (default: disabled)
          --rerank                 enable reranking endpoint (default: disabled)
          --slots                  enable slots monitoring endpoint (default: disabled)
          --rpc SERVERS            comma separated list of RPC servers
@@ -262,7 +268,7 @@ server/completion:
                                   use strict CPU placement (default: same as --cpu-strict)
          --prio-batch N           set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   use polling to wait for work (default: same as --poll
-  -c,    --ctx-size N             size of the prompt context (default: 0, 0 = loaded from model)
+  -c,    --ctx-size N             size of the prompt context (default: 4096, 0 = loaded from model)
          --no-context-shift       disables context shift on infinite text generation (default: disabled)
   -n,    --predict N              number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
   -b,    --batch-size N           logical maximum batch size (default: 2048)
@@ -354,6 +360,15 @@ server/completion/speculative:
   -lcd,  --lookup-cache-dynamic FILE
                                   path to dynamic lookup cache to use for lookup decoding (updated by generation)
          --pooling                pooling type for embeddings, use model default if unspecified
+
+server/images:
+
+         --image-height           image height, in pixel space (default: 1024)
+         --image-width            image width, in pixel space (default: 1024)
+         --image-sampler          sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: euler_a)
+         --image-sample-steps     number of sample steps (default: 20)
+         --image-schedule         denoiser sigma schedule, select from default;discrete;karras;exponential;ays;gits (default: default)
+         --image-lora-dir         lora model directory path
 
 rpc-server:
 
@@ -465,10 +480,6 @@ The available endpoints for the LLaMA Box server mode are:
 - **GET** `/v1/models`: (OpenAI-compatible) Returns the list of available models,
   see https://platform.openai.com/docs/api-reference/models/list.
 
-- **POST** `/v1/completions`: (OpenAI-compatible) Returns the completion of the given prompt,
-  see https://platform.openai.com/docs/api-reference/completions/create.
-    + This is only work to `Text-To-Text` models.
-
 - **POST** `/v1/chat/completions` (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/chat/create.
     + This is only work to `Text-To-Text` or `Image-To-Text` models.
@@ -483,6 +494,15 @@ The available endpoints for the LLaMA Box server mode are:
     + This is only work to `Text-To-Text` or `Embedding` models.
     + This endpoint is available if the `--embeddings` or `--rerank` flag is enabled.
 
+- **POST** `/v1/completions`: (*LEGACY* OpenAI-compatible) Returns the completion of the given prompt,
+  see https://platform.openai.com/docs/api-reference/completions/create.
+    + This is only work to `Text-To-Text` models.
+
+- **POST** `/v1/images/generations`: (OpenAI-compatible) Returns a generated image from the given prompt,
+  see https://platform.openai.com/docs/api-reference/images/generations/create.
+    + This is only work to `Text-To-Image` models.
+    + This endpoint is available if the `--images` flag is enabled.
+
 - **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.
     + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
     + This endpoint is only available if the `--rerank` flag is provided.
@@ -491,36 +511,43 @@ The available endpoints for the LLaMA Box server mode are:
 
 ## Tools
 
-It was so hard to find a Chat UI that was directly compatible with OpenAI, that mean, no installation required (I can
-live
-with `docker run`), no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple
-RESTful API.
+It was so hard to find a Chat UI that was directly compatible with OpenAI,
+that mean, no installation required (I can live with `docker run`),
+no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple RESTful API.
 
 So we are inspired by
 the [llama.cpp/chat.sh](https://github.com/ggerganov/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
 and adjust it to interact with LLaMA Box.
 
-All you need is a Bash shell and curl.
+All you need is a Bash shell, curl and jq.
 
-- **completion.sh**: A simple script to interact with the `/completion` endpoint.
 - **chat.sh**: A simple script to interact with the `/v1/chat/completions` endpoint.
+- **image_generate.sh**: Script to interact with the `/v1/images/generations` endpoint.
+- **completion.sh**: A simple script to interact with the `/completion` endpoint.
 
-Both `completion.sh` and `chat.sh` are used for talking with the LLaMA Box,
-but `completion.sh` embeds a fixed pattern to format the given prompt format,
-while `chat.sh` can leverage the chat template from the model's metadata or user defined.
+> [!NOTE]
+> Both `completion.sh` and `chat.sh` are used for talking with the LLaMA Box,
+> but `completion.sh` embeds a fixed pattern to format the given prompt format,
+> while `chat.sh` can leverage the chat template from the model's metadata or user defined.
 
 ```shell
+$ # one-shot chat
+$ MAX_TOKENS=4096 ./llama-box/tools/chat.sh "Tell me a joke"
+
+$ # interactive chat
+$ MAX_TOKENS=4096 ./llama-box/tools/chat.sh
+
+$ # one-shot image generation
+$ ./llama-box/tools/image_generate.sh "A lovely cat"
+
+$ # interactive image generation
+$ ./llama-box/tools/image_generate.sh
+
 $ # one-shot completion
 $ N_PREDICT=4096 TOP_K=1 ./llama-box/tools/completion.sh "// Quick-sort implementation in C (4 spaces indentation + detailed comments) and sample usage:\n\n#include"
 
 $ # interactive completion
 $ N_PREDICT=4096 ./llama-box/tools/completion.sh
-
-$ # one-shot chat
-$ MAX_TOKENS=4096 ./llama-box/tools/chat.sh "Tell me a joke."
-
-$ # interactive chat
-$ MAX_TOKENS=4096 ./llama-box/tools/chat.sh
 ```
 
 ## License

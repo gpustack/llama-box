@@ -14,6 +14,8 @@
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
 #include "llama.cpp/examples/server/httplib.h"
 
+#include "stablediffusion.hpp"
+
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
 
 #define SLT_INF(slot, fmt, ...) LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
@@ -382,6 +384,30 @@ static inline std::vector<uint8_t> base64_decode(const std::string &encoded_stri
     return ret;
 }
 
+static inline const std::string base64_encode(const unsigned char *input, size_t length) {
+    std::string output;
+    int val = 0, valb = -6;
+
+    for (size_t i = 0; i < length; ++i) {
+        val = (val << 8) + input[i];
+        valb += 8;
+        while (valb >= 0) {
+            output.push_back(base64_chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+
+    if (valb > -6) {
+        output.push_back(base64_chars[((val << 8) >> valb) & 0x3F]);
+    }
+
+    while (output.size() % 4) {
+        output.push_back('=');
+    }
+
+    return output;
+}
+
 //
 // random string / id
 //
@@ -623,7 +649,8 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completion_request(const struct llama_model *model, const json &body, const std::string &chat_template) {
+static json oaicompat_completions_request(const struct common_params &params, const json &body, const struct llama_model *model,
+                                          const std::string &chat_template) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -647,7 +674,7 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     llama_params["__oaicompat_completion_chat_vision"] = false;
 
     // Handle default field
-    llama_params["model"] = json_value(body, "model", std::string(DEFAULT_OAICOMPAT_MODEL));
+    llama_params["model"] = json_value(body, "model", params.model_alias);
     llama_params["frequency_penalty"] = json_value(body, "frequency_penalty", 0.0f);
     llama_params["temperature"] = json_value(body, "temperature", 1.0f);
     llama_params["top_p"] = json_value(body, "top_p", 1.0f);
@@ -767,8 +794,8 @@ static json oaicompat_completion_request(const struct llama_model *model, const 
     return llama_params;
 }
 
-static json oaicompat_completion_response(const json &request, const json result, const std::string &completion_id, bool streaming = false,
-                                          bool first = false) {
+static json oaicompat_completions_response(const json &request, const json &result, const std::string &completion_id, bool streaming = false,
+                                           bool first = false) {
     bool stopped_word = json_value(result, "stopped_word", false);
     bool stopped_eos = json_value(result, "stopped_eos", false);
     bool stopped_limit = json_value(result, "stopped_limit", false);
@@ -796,28 +823,56 @@ static json oaicompat_completion_response(const json &request, const json result
         if (streaming) {
             res["object"] = "chat.completion.chunk";
             if (!finish && first) {
-                choice = json{{"finish_reason", nullptr}, {"index", 0}, {"delta", json{{"role", "assistant"}}}};
+                choice = json{
+                    {"finish_reason", nullptr},
+                    {"index", 0},
+                    {"delta", json{{"role", "assistant"}}},
+                };
             } else if (!finish) {
-                choice = json{{"finish_reason", nullptr}, {"index", 0}, {"delta", json{{"content", content}}}};
+                choice = json{
+                    {"finish_reason", nullptr},
+                    {"index", 0},
+                    {"delta", json{{"content", content}}},
+                };
             } else {
                 // finished
-                choice = json{{"finish_reason", finish_reason}, {"index", 0}, {"delta", json::object()}};
+                choice = json{
+                    {"finish_reason", finish_reason},
+                    {"index", 0},
+                    {"delta", json::object()},
+                };
             }
         } else {
             res["object"] = "chat.completion";
             if (!finish) {
-                choice = json{{"finish_reason", nullptr}, {"index", 0}, {"message", json{{"content", content}, {"role", "assistant"}}}};
+                choice = json{
+                    {"finish_reason", nullptr},
+                    {"index", 0},
+                    {"message", json{{"content", content}, {"role", "assistant"}}},
+                };
             } else {
-                choice = json{{"finish_reason", finish_reason}, {"index", 0}, {"message", json{{"content", content}, {"role", "assistant"}}}};
+                choice = json{
+                    {"finish_reason", finish_reason},
+                    {"index", 0},
+                    {"message", json{{"content", content}, {"role", "assistant"}}},
+                };
             }
         }
     } else {
         // completion
         res["object"] = "text_completion";
         if (!finish) {
-            choice = json{{"finish_reason", nullptr}, {"index", 0}, {"text", content}};
+            choice = json{
+                {"finish_reason", nullptr},
+                {"index", 0},
+                {"text", content},
+            };
         } else {
-            choice = json{{"finish_reason", finish_reason}, {"index", 0}, {"text", content}};
+            choice = json{
+                {"finish_reason", finish_reason},
+                {"index", 0},
+                {"text", content},
+            };
         }
     }
     bool logprobs = result.contains("completion_probabilities");
@@ -840,9 +895,10 @@ static json oaicompat_completion_response(const json &request, const json result
         double ttft = json_value(ts, "prompt_ms", 0.0);
         double tpot = json_value(ts, "predicted_per_token_ms", 0.0);
         double tps = json_value(ts, "predicted_per_second", 0.0);
-        json usage =
-            json{{"completion_tokens", completion_tokens}, {"prompt_tokens", prompt_tokens},   {"total_tokens", completion_tokens + prompt_tokens},
-                 {"time_to_first_token_ms", ttft},         {"time_per_output_token_ms", tpot}, {"tokens_per_second", tps}};
+        json usage = json{
+            {"completion_tokens", completion_tokens}, {"prompt_tokens", prompt_tokens},   {"total_tokens", completion_tokens + prompt_tokens},
+            {"time_to_first_token_ms", ttft},         {"time_per_output_token_ms", tpot}, {"tokens_per_second", tps},
+        };
         if (ts.contains("drafted_n")) {
             usage["draft_tokens"] = ts.at("drafted_n");
             usage["draft_tokens_acceptance"] = ts.at("drafted_accepted_p");
@@ -855,7 +911,7 @@ static json oaicompat_completion_response(const json &request, const json result
     return res;
 }
 
-static json oaicompat_embedding_request(const struct common_params &params, const json &body) {
+static json oaicompat_embeddings_request(const struct common_params &params, const json &body) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -887,16 +943,166 @@ static json oaicompat_embedding_request(const struct common_params &params, cons
     return llama_params;
 }
 
-static json oaicompat_embedding_response(const json &request, const json &result) {
+static json oaicompat_embeddings_response(const json &request, const json &result) {
     json data = json::array();
-    data.push_back(json{{"embedding", json_value(result, "embedding", json::array())}, {"index", 0}, {"object", "embedding"}});
+    data.push_back(json{
+        {"embedding", json_value(result, "embedding", json::array())},
+        {"index", 0},
+        {"object", "embedding"},
+    });
 
     int num_prompt_tokens = json_value(result, "tokens_evaluated", 0);
-    json res = json{{"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-                    {"object", "list"},
-                    {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
-                    {"data", data}};
+    json res = json{
+        {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
+        {"object", "list"},
+        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
+        {"data", data},
+    };
 
+    return res;
+}
+
+static json oaicompat_images_generations_request(const struct stablediffusion_params &params, const json &body) {
+    static std::vector<std::string> images_size = {"256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"};
+
+    // Print the request for debugging
+    {
+        json body_cp = body;
+        if (common_log_verbosity_thold < 2) {
+            body_cp["prompt"] = "...";
+        }
+        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+    }
+
+    json llama_params;
+
+    // Annotations for OAI compatibility
+    llama_params["__oaicompat"] = true;
+    llama_params["__oaicompat_image"] = true;
+    llama_params["__oaicompat_image_generate"] = true;
+
+    // Handle "model" field
+    llama_params["model"] = json_value(body, "model", params.model_alias);
+
+    // Handle "prompt" field
+    llama_params["prompt"] = body.at("prompt");
+
+    // Handle "n" field
+    llama_params["batch_count"] = json_value(body, "n", 1);
+
+    // Handle "quality" field
+    std::string quality = json_value(body, "quality", std::string("standard"));
+    if (quality != "hd" && quality != "standard") {
+        throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+    }
+
+    // Handle "size" field
+    std::string size = json_value(body, "size", std::string("1024x1024"));
+    if (std::find(images_size.begin(), images_size.end(), size) == images_size.end()) {
+        throw std::runtime_error("Illegal param: size must be one of '256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'");
+    }
+    if (size == "256x256") {
+        llama_params["width"] = 256;
+        llama_params["height"] = 256;
+    } else if (size == "512x512") {
+        llama_params["width"] = 512;
+        llama_params["height"] = 512;
+    } else if (size == "1792x1024") {
+        llama_params["width"] = 1792;
+        llama_params["height"] = 1024;
+    } else if (size == "1024x1792") {
+        llama_params["width"] = 1024;
+        llama_params["height"] = 1792;
+    } else {
+        llama_params["width"] = 1024;
+        llama_params["height"] = 1024;
+    }
+
+    // Handle "response_format" field
+    std::string response_format = json_value(body, "response_format", std::string("b64_json"));
+    if (response_format != "b64_json") {
+        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
+    }
+
+    return llama_params;
+}
+
+static json oaicompat_images_edits_request(const struct stablediffusion_params &params, const json &body) {
+    static std::vector<std::string> images_size = {"256x256", "512x512", "1024x1024"};
+
+    // Print the request for debugging
+    {
+        json body_cp = body;
+        if (common_log_verbosity_thold < 2) {
+            body_cp["prompt"] = "...";
+        }
+        body_cp["image"] = "...";
+        if (body_cp.contains("mask")) {
+            body_cp["mask"] = "...";
+        }
+        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+    }
+
+    json llama_params;
+
+    // Annotations for OAI compatibility
+    llama_params["__oaicompat"] = true;
+    llama_params["__oaicompat_image"] = true;
+    llama_params["__oaicompat_image_edit"] = true;
+
+    // Handle "model" field
+    llama_params["model"] = json_value(body, "model", params.model_alias);
+
+    // Handle "image" field
+    llama_params["prompt"] = body.at("image");
+
+    // Handle "mask" field
+    if (body.contains("mask")) {
+        llama_params["mask"] = body.at("mask");
+    }
+
+    // Handle "prompt" field
+    llama_params["prompt"] = body.at("prompt");
+
+    // Handle "n" field
+    llama_params["batch_count"] = json_value(body, "n", 1);
+
+    // Handle "quality" field
+    std::string quality = json_value(body, "quality", std::string("standard"));
+    if (quality != "hd" && quality != "standard") {
+        throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+    }
+
+    // Handle "size" field
+    std::string size = json_value(body, "size", std::string("1024x1024"));
+    if (std::find(images_size.begin(), images_size.end(), size) == images_size.end()) {
+        throw std::runtime_error("Illegal param: size must be one of '256x256', '512x512', '1024x1024'");
+    }
+    if (size == "256x256") {
+        llama_params["width"] = 256;
+        llama_params["height"] = 256;
+    } else if (size == "512x512") {
+        llama_params["width"] = 512;
+        llama_params["height"] = 512;
+    } else {
+        llama_params["width"] = 1024;
+        llama_params["height"] = 1024;
+    }
+
+    // Handle "response_format" field
+    std::string response_format = json_value(body, "response_format", std::string("b64_json"));
+    if (response_format != "b64_json") {
+        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
+    }
+
+    return llama_params;
+}
+
+static json oaicompat_images_response(const json &request, const json &result) {
+    json res = json{
+        {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
+        {"data", json_value(result, "images", json::array())},
+    };
     return res;
 }
 
@@ -1019,9 +1225,11 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         }
     }
 
-    json res = json{{"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-                    {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
-                    {"results", data}};
+    json res = json{
+        {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
+        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
+        {"results", data},
+    };
 
     return res;
 }

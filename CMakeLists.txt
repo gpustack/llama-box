@@ -49,14 +49,13 @@ set(LLAMA_CURL OFF CACHE BOOL "llama: use libcurl to download model from an URL"
 if (NOT DEFINED GGML_LLAMAFILE)
     set(GGML_LLAMAFILE_DEFAULT ON)
 endif ()
-
 if (NOT DEFINED GGML_AMX)
     set(GGML_AMX OFF)
 endif ()
-
 if (NOT DEFINED GGML_CUDA_GRAPHS)
     set(GGML_CUDA_GRAPHS_DEFAULT ON)
 endif ()
+add_definitions(-DGGML_MAX_NAME=128)
 
 # change the default for these sd options
 if (GGML_CUDA)
@@ -70,6 +69,8 @@ elseif (GGML_SYCL)
     set(SD_SYCL ON)
 elseif (GGML_VULKAN)
     set(SD_VULKAN ON)
+elseif (GGML_CANN)
+    set(SD_CANN ON)
 else ()
     set(SD_FLASH_ATTN ON)
 endif ()

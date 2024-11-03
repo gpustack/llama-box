@@ -1,0 +1,43 @@
+diff --git a/util.cpp b/util.cpp
+index 5de5ce2..8dbcea7 100644
+--- a/util.cpp
++++ b/util.cpp
+@@ -362,12 +362,12 @@ void* sd_log_cb_data         = NULL;
+ 
+ #define LOG_BUFFER_SIZE 1024
+ 
+-void log_printf(sd_log_level_t level, const char* file, int line, const char* format, ...) {
++void log_printf(sd_log_level_t level, const char* func, const char* format, ...) {
+     va_list args;
+     va_start(args, format);
+ 
+     static char log_buffer[LOG_BUFFER_SIZE + 1];
+-    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s:%-4d - ", sd_basename(file).c_str(), line);
++    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s: ", func);
+ 
+     if (written >= 0 && written < LOG_BUFFER_SIZE) {
+         vsnprintf(log_buffer + written, LOG_BUFFER_SIZE - written, format, args);
+diff --git a/util.h b/util.h
+index 9b1e673..a12a4fc 100644
+--- a/util.h
++++ b/util.h
+@@ -48,14 +48,14 @@ std::string path_join(const std::string& p1, const std::string& p2);
+ 
+ void pretty_progress(int step, int steps, float time);
+ 
+-void log_printf(sd_log_level_t level, const char* file, int line, const char* format, ...);
++void log_printf(sd_log_level_t level, const char* func, const char* format, ...);
+ 
+ std::string trim(const std::string& s);
+ 
+ std::vector<std::pair<std::string, float>> parse_prompt_attention(const std::string& text);
+ 
+-#define LOG_DEBUG(format, ...) log_printf(SD_LOG_DEBUG, __FILE__, __LINE__, format, ##__VA_ARGS__)
+-#define LOG_INFO(format, ...) log_printf(SD_LOG_INFO, __FILE__, __LINE__, format, ##__VA_ARGS__)
+-#define LOG_WARN(format, ...) log_printf(SD_LOG_WARN, __FILE__, __LINE__, format, ##__VA_ARGS__)
+-#define LOG_ERROR(format, ...) log_printf(SD_LOG_ERROR, __FILE__, __LINE__, format, ##__VA_ARGS__)
++#define LOG_DEBUG(format, ...) log_printf(SD_LOG_DEBUG, __func__, format, ##__VA_ARGS__)
++#define LOG_INFO(format, ...) log_printf(SD_LOG_INFO, __func__, format, ##__VA_ARGS__)
++#define LOG_WARN(format, ...) log_printf(SD_LOG_WARN, __func__, format, ##__VA_ARGS__)
++#define LOG_ERROR(format, ...) log_printf(SD_LOG_ERROR, __func__, format, ##__VA_ARGS__)
+ #endif  // __UTIL_H__

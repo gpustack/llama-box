@@ -10,6 +10,7 @@
 #include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
 #include "rpcserver.hpp"
+#include "stablediffusion.hpp"
 
 // version
 extern const char *LLAMA_BOX_GIT_TREE_STATE;
@@ -21,9 +22,11 @@ using json = nlohmann::json;
 struct llama_box_params {
     common_params gparams;
     rpcserver_params rparams;
+    stablediffusion_params sdparams;
 
     bool cache_prompt = false;
     bool endpoint_infill = false;
+    bool endpoint_images = false;
     int32_t conn_idle = 60;       // connection idle in seconds
     int32_t conn_keepalive = 15;  // connection keep-alive in seconds
     int32_t n_tps = 0;            // maximum number of tokens per seconds
@@ -82,6 +85,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     const auto &params = bparams.gparams;
     const auto &rparams = bparams.rparams;
     const auto &sparams = params.sparams;
+    const auto &sdparams = bparams.sdparams;
 
     std::string default_sampler_type_chars;
     std::string default_sampler_type_names;
@@ -90,6 +94,17 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
         default_sampler_type_names += common_sampler_type_to_str(sampler) + ";";
     }
     default_sampler_type_names.pop_back();
+
+    std::string sd_sampler_type_names;
+    for (int m = 0; m < N_SAMPLE_METHODS; m++) {
+        sd_sampler_type_names += common_sd_sampler_type_to_str(sample_method_t(m)) + ";";
+    }
+    sd_sampler_type_names.pop_back();
+    std::string sd_scheduler_names;
+    for (int d = 0; d < N_SCHEDULES; d++) {
+        sd_scheduler_names += common_sd_schedule_to_str(schedule_t(d)) + ";";
+    }
+    sd_scheduler_names.pop_back();
 
     std::string default_dry_sequence_breaker_names;
     for (const auto &breaker : sparams.dry_sequence_breakers) {
@@ -120,6 +135,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                            "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                            "       --infill",                               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
     opts.push_back({ "server",                            "       --embeddings",                           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
+    opts.push_back({ "server",                            "       --images",                               "enable image endpoint (default: %s)", bparams.endpoint_images ? "enabled" : "disabled" });
     opts.push_back({ "server",                            "       --rerank",                               "enable reranking endpoint (default: %s)", params.reranking ? "enabled" : "disabled" });
     opts.push_back({ "server",                            "       --slots",                                "enable slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
     if (llama_supports_rpc()) {
@@ -243,7 +259,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                 "       --spm-infill",                           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                  "-sp,   --special",                             "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
     // server // completion //
-    // server // speculative //
+    // server // completion // speculative //
     opts.push_back({ "server/completion/speculative" });
     opts.push_back({ "server/completion/speculative",      "       --draft N",                              "number of tokens to draft for speculative decoding (default: %d)", params.n_draft });
     opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "draft model for speculative decoding (default: unused)" });
@@ -253,10 +269,19 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", bparams.lookup_ngram_min });
     opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "path to static lookup cache to use for lookup decoding (not updated by generation)" });
     opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
-    // server // speculative //
+    // server // completion // speculative //
     // server // embedding //
     opts.push_back({ "server/embedding",                   "       --pooling",                              "pooling type for embeddings, use model default if unspecified" });
     // server // embedding //
+    // server // images //
+    opts.push_back({ "server/images" });
+    opts.push_back({ "server/images",                      "       --image-height",                         "image height, in pixel space (default: %d)", sdparams.height});
+    opts.push_back({ "server/images",                      "       --image-width",                          "image width, in pixel space (default: %d)", sdparams.width});
+    opts.push_back({ "server/images",                      "       --image-sampler",                        "sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), common_sd_sampler_type_to_str(sdparams.sampler).c_str() });
+    opts.push_back({ "server/images",                      "       --image-sample-steps",                   "number of sample steps (default: %d)", sdparams.sample_steps });
+    opts.push_back({ "server/images",                      "       --image-schedule",                       "denoiser sigma schedule, select from %s (default: %s)", sd_scheduler_names.c_str(), common_sd_schedule_to_str(sdparams.schedule).c_str() });
+    opts.push_back({ "server/images",                      "       --image-lora-dir",                       "lora model directory path" });
+    // server // images //
     // server //
     // rpc-server //
     opts.push_back({ "rpc-server" });
@@ -454,6 +479,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             if (!strcmp(flag, "--embedding") || !strcmp(flag, "--embeddings")) {
                 bparams.gparams.embedding = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--images")) {
+                bparams.endpoint_images = true;
                 continue;
             }
 
@@ -1476,6 +1506,62 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            // server // image //
+
+            if (!strcmp(flag, "--image-height")) {
+                if (i == argc) {
+                    missing("--image-height");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.height = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-width")) {
+                if (i == argc) {
+                    missing("--image-width");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.width = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-sampler")) {
+                if (i == argc) {
+                    missing("--image-sampler");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.sampler = common_sd_str_to_sampler_type(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-sample-steps")) {
+                if (i == argc) {
+                    missing("--image-sample-steps");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.sample_steps = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-schedule")) {
+                if (i == argc) {
+                    missing("--image-schedule");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.schedule = common_sd_str_to_schedule(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-lora-dir")) {
+                if (i == argc) {
+                    missing("--image-lora-dir");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.lora_dir = std::string(arg);
+                continue;
+            }
+
             // server //
 
             // rpc-server //
@@ -1573,6 +1659,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     if (!bparams.gparams.kv_overrides.empty()) {
         bparams.gparams.kv_overrides.emplace_back();
         bparams.gparams.kv_overrides.back().key[0] = 0;
+    }
+
+    if (bparams.endpoint_images) {
+        bparams.sdparams.model = bparams.gparams.model;
+        bparams.sdparams.model_alias = bparams.gparams.model_alias;
+        bparams.sdparams.n_threads = bparams.gparams.cpuparams.n_threads;
+        bparams.gparams.enable_chat_template = false;
     }
 
     return true;
