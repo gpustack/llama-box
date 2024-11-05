@@ -24,7 +24,7 @@ index c993e7c..76cdf99 100644
      message("-- Use HIPBLAS as backend stable-diffusion")
      set(GGML_HIPBLAS ON)
 diff --git a/ggml_extend.hpp b/ggml_extend.hpp
-index e50137d..d235898 100644
+index e50137d..725226f 100644
 --- a/ggml_extend.hpp
 +++ b/ggml_extend.hpp
 @@ -23,6 +23,7 @@
@@ -35,14 +35,7 @@ index e50137d..d235898 100644
  
  #ifdef SD_USE_CUBLAS
  #include "ggml-cuda.h"
-@@ -30,12 +31,17 @@
- 
- #ifdef SD_USE_METAL
- #include "ggml-metal.h"
-+#include "../llama.cpp/ggml/src/ggml-impl.h"
- #endif
- 
- #ifdef SD_USE_VULKAN
+@@ -36,6 +37,10 @@
  #include "ggml-vulkan.h"
  #endif
  
@@ -53,7 +46,7 @@ index e50137d..d235898 100644
  #ifdef SD_USE_SYCL
  #include "ggml-sycl.h"
  #endif
-@@ -49,13 +55,6 @@
+@@ -49,13 +54,6 @@
  #define __STATIC_INLINE__ static inline
  #endif
  
@@ -67,7 +60,33 @@ index e50137d..d235898 100644
  __STATIC_INLINE__ void ggml_tensor_set_f32_randn(struct ggml_tensor* tensor, std::shared_ptr<RNG> rng) {
      uint32_t n                        = (uint32_t)ggml_nelements(tensor);
      std::vector<float> random_numbers = rng->randn(n);
-@@ -675,7 +674,7 @@ __STATIC_INLINE__ struct ggml_tensor* ggml_nn_attention(struct ggml_context* ctx
+@@ -98,25 +96,6 @@ __STATIC_INLINE__ ggml_fp16_t ggml_tensor_get_f16(const ggml_tensor* tensor, int
+     return *(ggml_fp16_t*)((char*)(tensor->data) + i * tensor->nb[3] + j * tensor->nb[2] + k * tensor->nb[1] + l * tensor->nb[0]);
+ }
+ 
+-static struct ggml_tensor* get_tensor_from_graph(struct ggml_cgraph* gf, const char* name) {
+-    struct ggml_tensor* res = NULL;
+-    for (int i = 0; i < gf->n_nodes; i++) {
+-        // printf("%d, %s \n", i, gf->nodes[i]->name);
+-        if (strcmp(ggml_get_name(gf->nodes[i]), name) == 0) {
+-            res = gf->nodes[i];
+-            break;
+-        }
+-    }
+-    for (int i = 0; i < gf->n_leafs; i++) {
+-        // printf("%d, %s \n", i, gf->leafs[i]->name);
+-        if (strcmp(ggml_get_name(gf->leafs[i]), name) == 0) {
+-            res = gf->leafs[i];
+-            break;
+-        }
+-    }
+-    return res;
+-}
+-
+ __STATIC_INLINE__ void print_ggml_tensor(struct ggml_tensor* tensor, bool shape_only = false, const char* mark = "") {
+     printf("%s (%s): shape(%zu, %zu, %zu, %zu)\n", mark, ggml_type_name(tensor->type), tensor->ne[0], tensor->ne[1], tensor->ne[2], tensor->ne[3]);
+     fflush(stdout);
+@@ -675,7 +654,7 @@ __STATIC_INLINE__ struct ggml_tensor* ggml_nn_attention(struct ggml_context* ctx
                                                          struct ggml_tensor* k,
                                                          struct ggml_tensor* v,
                                                          bool mask = false) {
@@ -76,7 +95,7 @@ index e50137d..d235898 100644
      struct ggml_tensor* kqv = ggml_flash_attn(ctx, q, k, v, false);  // [N * n_head, n_token, d_head]
  #else
      float d_head = (float)q->ne[0];
-@@ -1107,11 +1106,6 @@ public:
+@@ -1107,18 +1086,13 @@ public:
              ggml_backend_cpu_set_n_threads(backend, n_threads);
          }
  
@@ -88,6 +107,14 @@ index e50137d..d235898 100644
          ggml_backend_graph_compute(backend, gf);
  
  #ifdef GGML_PERF
+         ggml_graph_print(gf);
+ #endif
+         if (output != NULL) {
+-            auto result = gf->nodes[gf->n_nodes - 1];
++            auto result = ggml_graph_node(gf, ggml_graph_n_nodes(gf) -1);
+             if (*output == NULL && output_ctx != NULL) {
+                 *output = ggml_dup_tensor(output_ctx, result);
+             }
 diff --git a/model.cpp b/model.cpp
 index 26451cd..2077529 100644
 --- a/model.cpp
