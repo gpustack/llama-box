@@ -1,8 +1,8 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 14e02c8d..c57ab68f 100644
+index aae49c96..e6060d82 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -23,6 +23,10 @@
+@@ -24,6 +24,10 @@
  #include "ggml-vulkan.h"
  #endif
  
@@ -13,7 +13,7 @@ index 14e02c8d..c57ab68f 100644
  #define STB_IMAGE_IMPLEMENTATION
  #include "stb_image.h"
  
-@@ -1161,6 +1165,11 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1162,6 +1166,11 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
      LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
  #endif
  
