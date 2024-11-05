@@ -1941,6 +1941,7 @@ struct server_context {
                 json slot_data = get_formated_generation(slot);
                 slot_data["id"] = slot.id;
                 slot_data["id_task"] = slot.id_task;
+                slot_data["is_processing"] = slot.is_processing();
                 slot_data["state"] = slot.state;
                 slot_data["next_token"] = {
                     // clang-format off
@@ -1955,10 +1956,10 @@ struct server_context {
                     // clang-format on
                 };
 
-                if (slot_data["state"] == SLOT_STATE_IDLE) {
-                    n_idle_slots++;
-                } else {
+                if (slot.is_processing()) {
                     n_processing_slots++;
+                } else {
+                    n_idle_slots++;
                 }
 
                 slots_data.push_back(slot_data);
