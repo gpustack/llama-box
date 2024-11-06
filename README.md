@@ -21,7 +21,7 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
-- Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images).
+- **Experimental** Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images).
 - Compatible with [(Legacy) OpenAI Completions API](https://beta.openai.com/docs/api-reference/completions).
 - Compatible with [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank),
   see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
@@ -363,12 +363,39 @@ server/completion/speculative:
 
 server/images:
 
-         --image-height           image height, in pixel space (default: 1024)
-         --image-width            image width, in pixel space (default: 1024)
-         --image-sampler          sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: euler_a)
-         --image-sample-steps     number of sample steps (default: 20)
-         --image-schedule         denoiser sigma schedule, select from default;discrete;karras;exponential;ays;gits (default: default)
-         --image-lora-dir         lora model directory path
+         --image-height N         image height, in pixel space (default: 1024)
+         --image-width N          image width, in pixel space (default: 1024)
+         --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
+         --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
+         --image-sampler TYPE     standard sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: euler_a)
+         --image-cfg-scale N      for standard sampler, the scale of classifier-free guidance in the output phase (default: 7.000000, 1.0 = disabled)
+         --image-hd-sampler TYPE  high definition sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: dpm++2m)
+         --image-hd-cfg-scale N   for high definition sampler, the scale of classifier-free guidance in the output phase (default: 0.000000, 0.0 = reuse --cfg-scale, 1.0 = disabled)
+         --image-vd-sampler TYPE  vivid sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: dpm++2s_a)
+         --image-vd-cfg-scale N   for vivid sampler, the scale of classifier-free guidance in the output phase (default: 0.000000, 0.0 = reuse --cfg-scale, 1.0 = disabled)
+         --image-nt-sampler TYPE  natural sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: heun)
+         --image-nt-cfg-scale N   for natural sampler, the scale of classifier-free guidance in the output phase (default: 0.000000, 0.0 = reuse --cfg-scale, 1.0 = disabled)
+         --image-sample-steps N   number of sample steps, automatically +10 when requesting high definition result (default: 20)
+         --image-schedule TYPE    denoiser sigma schedule, select from default;discrete;karras;exponential;ays;gits (default: default)
+         --image-diffusion-model PATH
+                                  path to the standalone diffusion model, or use --model included
+         --image-clip-l PATH      path to the CLIP Large (clip-l) text encoder, or use --model included
+         --image-clip-g PATH      path to the CLIP Generic (clip-g) text encoder, or use --model included
+         --image-t5xxl PATH       path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
+         --image-vae PATH         path to Variational AutoEncoder (vae), or use --model included
+         --image-vae-tiling       indicate to process vae in tiles to reduce memory usage (default: disabled)
+         --image-taesd PATH       path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
+         --image-lora-model-dir PATH
+                                  path to LoRA model directory
+         --image-upscale-model PATH
+                                  path to the upscale model, or use --model included
+         --image-upscale-repeats N
+                                  how many times to run upscaler (default: 1)
+         --image-control-net-model PATH
+                                  path to the control net model, or use --model included
+         --image-control-strength N
+                                  how strength to apply the control net (default: 0.900000)
+         --image-control-canny    indicate to apply canny preprocessor (default: disabled)
 
 rpc-server:
 

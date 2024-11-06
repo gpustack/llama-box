@@ -275,12 +275,33 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // embedding //
     // server // images //
     opts.push_back({ "server/images" });
-    opts.push_back({ "server/images",                      "       --image-height",                         "image height, in pixel space (default: %d)", sdparams.height});
-    opts.push_back({ "server/images",                      "       --image-width",                          "image width, in pixel space (default: %d)", sdparams.width});
-    opts.push_back({ "server/images",                      "       --image-sampler",                        "sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), common_sd_sampler_type_to_str(sdparams.sampler).c_str() });
-    opts.push_back({ "server/images",                      "       --image-sample-steps",                   "number of sample steps (default: %d)", sdparams.sample_steps });
-    opts.push_back({ "server/images",                      "       --image-schedule",                       "denoiser sigma schedule, select from %s (default: %s)", sd_scheduler_names.c_str(), common_sd_schedule_to_str(sdparams.schedule).c_str() });
-    opts.push_back({ "server/images",                      "       --image-lora-dir",                       "lora model directory path" });
+    opts.push_back({ "server/images",                      "       --image-height N",                       "image height, in pixel space (default: %d)", sdparams.height});
+    opts.push_back({ "server/images",                      "       --image-width N",                        "image width, in pixel space (default: %d)", sdparams.width});
+    opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
+    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
+    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "standard sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), common_sd_sampler_type_to_str(sdparams.sampler).c_str() });
+    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "for standard sampler, the scale of classifier-free guidance in the output phase (default: %f, 1.0 = disabled)", sdparams.cfg_scale });
+    opts.push_back({ "server/images",                      "       --image-hd-sampler TYPE",                "high definition sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), common_sd_sampler_type_to_str(sdparams.hd_sampler).c_str() });
+    opts.push_back({ "server/images",                      "       --image-hd-cfg-scale N",                 "for high definition sampler, the scale of classifier-free guidance in the output phase (default: %f, 0.0 = reuse --cfg-scale, 1.0 = disabled)", sdparams.hd_cfg_scale });
+    opts.push_back({ "server/images",                      "       --image-vd-sampler TYPE",                "vivid sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), common_sd_sampler_type_to_str(sdparams.vd_sampler).c_str() });
+    opts.push_back({ "server/images",                      "       --image-vd-cfg-scale N",                 "for vivid sampler, the scale of classifier-free guidance in the output phase (default: %f, 0.0 = reuse --cfg-scale, 1.0 = disabled)", sdparams.vd_cfg_scale });
+    opts.push_back({ "server/images",                      "       --image-nt-sampler TYPE",                "natural sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), common_sd_sampler_type_to_str(sdparams.nt_sampler).c_str() });
+    opts.push_back({ "server/images",                      "       --image-nt-cfg-scale N",                 "for natural sampler, the scale of classifier-free guidance in the output phase (default: %f, 0.0 = reuse --cfg-scale, 1.0 = disabled)", sdparams.nt_cfg_scale });
+    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically +10 when requesting high definition result (default: %d)", sdparams.sample_steps });
+    opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, select from %s (default: %s)", sd_scheduler_names.c_str(), common_sd_schedule_to_str(sdparams.schedule).c_str() });
+    opts.push_back({ "server/images",                      "       --image-diffusion-model PATH",           "path to the standalone diffusion model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-clip-l PATH",                    "path to the CLIP Large (clip-l) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-clip-g PATH",                    "path to the CLIP Generic (clip-g) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-t5xxl PATH",                     "path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-vae PATH",                       "path to Variational AutoEncoder (vae), or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae in tiles to reduce memory usage (default: %s)", sdparams.vae_tiling ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-taesd PATH",                     "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-lora-model-dir PATH",            "path to LoRA model directory" });
+    opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sdparams.upscale_repeats });
+    opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sdparams.control_strength });
+    opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sdparams.control_canny ? "enabled" : "disabled" });
     // server // images //
     // server //
     // rpc-server //
@@ -1526,6 +1547,30 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--image-guidance")) {
+                if (i == argc) {
+                    missing("--image-guidance");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.guidance = std::stof(std::string(arg));
+                if (bparams.sdparams.guidance < 0.0f) {
+                    invalid("--image-guidance");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-strength")) {
+                if (i == argc) {
+                    missing("--image-strength");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.strength = std::stof(std::string(arg));
+                if (bparams.sdparams.strength < 0.0f || bparams.sdparams.strength > 1.0f) {
+                    invalid("--image-strength");
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--image-sampler")) {
                 if (i == argc) {
                     missing("--image-sampler");
@@ -1535,12 +1580,90 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--image-cfg-scale")) {
+                if (i == argc) {
+                    missing("--image-cfg-scale");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.cfg_scale = std::stof(std::string(arg));
+                if (bparams.sdparams.cfg_scale < 1.0f) {
+                    invalid("--image-cfg-scale");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-hd-sampler")) {
+                if (i == argc) {
+                    missing("--image-hd-sampler");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.hd_sampler = common_sd_str_to_sampler_type(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-hd-cfg-scale")) {
+                if (i == argc) {
+                    missing("--image-hd-cfg-scale");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.hd_cfg_scale = std::stof(std::string(arg));
+                if (bparams.sdparams.hd_cfg_scale < 1.0f) {
+                    invalid("--image-hd-cfg-scale");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-vd-sampler")) {
+                if (i == argc) {
+                    missing("--image-vd-sampler");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.vd_sampler = common_sd_str_to_sampler_type(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-vd-cfg-scale")) {
+                if (i == argc) {
+                    missing("--image-vd-cfg-scale");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.vd_cfg_scale = std::stof(std::string(arg));
+                if (bparams.sdparams.vd_cfg_scale < 1.0f) {
+                    invalid("--image-vd-cfg-scale");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-nt-sampler")) {
+                if (i == argc) {
+                    missing("--image-nt-sampler");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.nt_sampler = common_sd_str_to_sampler_type(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-nt-cfg-scale")) {
+                if (i == argc) {
+                    missing("--image-nt-cfg-scale");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.nt_cfg_scale = std::stof(std::string(arg));
+                if (bparams.sdparams.nt_cfg_scale < 1.0f) {
+                    invalid("--image-nt-cfg-scale");
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--image-sample-steps")) {
                 if (i == argc) {
                     missing("--image-sample-steps");
                 }
                 char *arg = argv[i++];
                 bparams.sdparams.sample_steps = std::stoi(std::string(arg));
+                if (bparams.sdparams.sample_steps < 1) {
+                    invalid("--image-sample-steps");
+                }
                 continue;
             }
 
@@ -1553,12 +1676,118 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--image-lora-dir")) {
+            if (!strcmp(flag, "--image-diffusion-model")) {
                 if (i == argc) {
-                    missing("--image-lora-dir");
+                    missing("--image-diffusion-model");
                 }
                 char *arg = argv[i++];
-                bparams.sdparams.lora_dir = std::string(arg);
+                bparams.sdparams.diffusion_model = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-clip-l")) {
+                if (i == argc) {
+                    missing("--image-clip-l");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.clip_l = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-clip-g")) {
+                if (i == argc) {
+                    missing("--image-clip-g");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.clip_g = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-t5xxl")) {
+                if (i == argc) {
+                    missing("--image-t5xxl");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.t5xxl = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-vae")) {
+                if (i == argc) {
+                    missing("--image-vae");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.vae = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-vae-tiling")) {
+                bparams.sdparams.vae_tiling = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-taesd")) {
+                if (i == argc) {
+                    missing("--image-taesd");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.taesd = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-lora-model-dir")) {
+                if (i == argc) {
+                    missing("--image-lora-model-dir");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.lora_model_dir = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-upscale-model")) {
+                if (i == argc) {
+                    missing("--image-upscale-model");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.upscale_model = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-upscale-repeats")) {
+                if (i == argc) {
+                    missing("--image-upscale-repeats");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.upscale_repeats = std::stoi(std::string(arg));
+                if (bparams.sdparams.upscale_repeats < 1) {
+                    invalid("--image-upscale-repeats");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-control-net-model")) {
+                if (i == argc) {
+                    missing("--image-control-net-model");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.control_net_model = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-control-strength")) {
+                if (i == argc) {
+                    missing("--image-control-strength");
+                }
+                char *arg = argv[i++];
+                bparams.sdparams.control_strength = std::stof(std::string(arg));
+                if (bparams.sdparams.control_strength < 0.0f || bparams.sdparams.control_strength > 1.0f) {
+                    invalid("--image-control-strength");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-control-canny")) {
+                bparams.sdparams.control_canny = true;
                 continue;
             }
 
@@ -1662,10 +1891,19 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     }
 
     if (bparams.endpoint_images) {
+        bparams.gparams.enable_chat_template = false;
         bparams.sdparams.model = bparams.gparams.model;
         bparams.sdparams.model_alias = bparams.gparams.model_alias;
         bparams.sdparams.n_threads = bparams.gparams.cpuparams.n_threads;
-        bparams.gparams.enable_chat_template = false;
+        if (bparams.sdparams.hd_cfg_scale <= 1.0f) {
+            bparams.sdparams.hd_cfg_scale = bparams.sdparams.cfg_scale;
+        }
+        if (bparams.sdparams.vd_cfg_scale <= 1.0f) {
+            bparams.sdparams.vd_cfg_scale = bparams.sdparams.cfg_scale;
+        }
+        if (bparams.sdparams.nt_cfg_scale <= 1.0f) {
+            bparams.sdparams.nt_cfg_scale = bparams.sdparams.cfg_scale;
+        }
     }
 
     return true;

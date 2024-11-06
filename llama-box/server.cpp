@@ -663,6 +663,8 @@ struct server_response {
 };
 
 struct server_context {
+    common_params params;
+
     /* STABLE DIFFUSION */
 
     stablediffusion_context *sd_ctx = nullptr;
@@ -674,8 +676,6 @@ struct server_context {
     llama_context *ctx = nullptr;
     clip_ctx *ctx_clip = nullptr;
     std::vector<common_lora_adapter_container> lora_adapters;
-
-    common_params params;
 
     llama_batch batch = {};
 
@@ -767,6 +767,8 @@ struct server_context {
     }
 
     bool load_model(const llama_box_params &bparams) {
+        params = bparams.gparams;
+
         /* STABLE DIFFUSION */
 
         // load stable diffusion model
@@ -783,8 +785,6 @@ struct server_context {
         }
 
         /* LLAMA */
-
-        params = bparams.gparams;
 
         // load multimodal projection model
         if (!params.mmproj.empty()) {
@@ -1081,15 +1081,11 @@ struct server_context {
             slot.oaicompat_image_edit = json_value(data, "__oaicompat_image_edit", false);
 
             slot.sdsparams.seed = json_value(data, "seed", sparams.seed);
-            slot.sdsparams.width = json_value(data, "width", sdparams.width);
+            slot.sdsparams.batch_count = json_value(data, "batch_count", 1);
             slot.sdsparams.height = json_value(data, "height", sdparams.height);
-            slot.sdsparams.batch_count = json_value(data, "batch_count", sdparams.batch_count);
-            slot.sdsparams.min_cfg = json_value(data, "min_cfg", sdparams.min_cfg);
-            slot.sdsparams.cfg_scale = json_value(data, "cfg_scale", sdparams.cfg_scale);
-            slot.sdsparams.guidance = json_value(data, "guidance", sdparams.guidance);
-            slot.sdsparams.style_ratio = json_value(data, "style_ratio", sdparams.style_ratio);
-            slot.sdsparams.clip_skip = json_value(data, "clip_skip", sdparams.clip_skip);
+            slot.sdsparams.width = json_value(data, "width", sdparams.width);
             slot.sdsparams.sampler = json_value(data, "sampler", sdparams.sampler);
+            slot.sdsparams.cfg_scale = json_value(data, "cfg_scale", sdparams.cfg_scale);
             slot.sdsparams.sample_steps = json_value(data, "sample_steps", sdparams.sample_steps);
 
             // get prompt
@@ -1512,16 +1508,27 @@ struct server_context {
                 {"model", params.model_alias},
                 {"seed", slot.sparams.seed},
                 {"seed_cur", slot.sdsparams.seed},
-                {"width", slot.sdsparams.width},
                 {"height", slot.sdsparams.height},
+                {"width", slot.sdsparams.width},
                 {"batch_count", slot.sdsparams.batch_count},
-                {"min_cfg", slot.sdsparams.min_cfg},
-                {"cfg_scale", slot.sdsparams.cfg_scale},
-                {"guidance", slot.sdsparams.guidance},
-                {"style_ratio", slot.sdsparams.style_ratio},
-                {"clip_skip", slot.sdsparams.clip_skip},
+                {"guidance", sdparams.guidance},
                 {"sampler", common_sd_sampler_type_to_str(slot.sdsparams.sampler)},
+                {"cfg_scale", slot.sdsparams.cfg_scale},
                 {"sample_steps", slot.sdsparams.sample_steps},
+                {"schedule", common_sd_schedule_to_str(sdparams.schedule)},
+                {"diffusion_model", sdparams.diffusion_model},
+                {"clip_l", sdparams.clip_l},
+                {"clip_g", sdparams.clip_g},
+                {"t5xxl", sdparams.t5xxl},
+                {"vae", sdparams.vae},
+                {"vae_tiling", sdparams.vae_tiling},
+                {"taesd", sdparams.taesd},
+                {"lora_model_dir", sdparams.lora_model_dir},
+                {"upscale_model", sdparams.upscale_model},
+                {"upscale_repeats", sdparams.upscale_repeats},
+                {"control_net_model", sdparams.control_net_model},
+                {"control_strength", sdparams.control_strength},
+                {"control_canny", sdparams.control_canny},
             };
         }
 

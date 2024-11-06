@@ -1023,10 +1023,31 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     // Handle "n" field
     llama_params["batch_count"] = json_value(body, "n", 1);
 
-    // Handle "quality" field
+    // Handle "sampler" field
     std::string quality = json_value(body, "quality", std::string("standard"));
     if (quality != "hd" && quality != "standard") {
         throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+    }
+    if (quality == "hd") {
+        llama_params["sample_steps"] = params.sample_steps + 10;
+        llama_params["sampler"] = params.hd_sampler;
+        llama_params["cfg_scale"] = params.hd_cfg_scale;
+    } else {
+        llama_params["sampler"] = params.sampler;
+        llama_params["cfg_scale"] = params.cfg_scale;
+    }
+    if (body.contains("style")) {
+        std::string style = json_value(body, "style", std::string("vivid"));
+        if (style != "vivid" && style != "natural") {
+            throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
+        }
+        if (style == "vivid") {
+            llama_params["sampler"] = params.vd_sampler;
+            llama_params["cfg_scale"] = params.vd_cfg_scale;
+        } else {
+            llama_params["sampler"] = params.nt_sampler;
+            llama_params["cfg_scale"] = params.nt_cfg_scale;
+        }
     }
 
     // Handle "size" field
@@ -1100,10 +1121,15 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     // Handle "n" field
     llama_params["batch_count"] = json_value(body, "n", 1);
 
-    // Handle "quality" field
+    // Handle "sampler" field
     std::string quality = json_value(body, "quality", std::string("standard"));
     if (quality != "hd" && quality != "standard") {
         throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+    }
+    if (quality == "hd") {
+        llama_params["sampler"] = params.hd_sampler;
+    } else {
+        llama_params["sampler"] = params.sampler;
     }
 
     // Handle "size" field
