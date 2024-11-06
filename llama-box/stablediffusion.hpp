@@ -190,6 +190,20 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
 
     // TODO upscaler
 
+    std::string img_params_str = "";
+    img_params_str += "Steps: " + std::to_string(sparams.sample_steps) + ", ";
+    img_params_str += "CFG Scale: " + std::to_string(sparams.cfg_scale) + ", ";
+    img_params_str += "Guidance: " + std::to_string(sparams.guidance) + ", ";
+    img_params_str += "Seed: " + std::to_string(sparams.seed) + ", ";
+    img_params_str += "Size: " + std::to_string(sparams.width) + "x" + std::to_string(sparams.height) + ", ";
+    img_params_str += "Model: " + params.model_alias + ", ";
+    img_params_str += "Sampler: " + std::string(sample_method_str[sparams.sampler]);
+    if (params.schedule == KARRAS) {
+        img_params_str += " karras";
+    }
+    img_params_str += ", ";
+    img_params_str += "Generator: llama-box";
+
     auto *pngs = new stablediffusion_generated_image[sparams.batch_count];
     for (int i = 0; i < sparams.batch_count; i++) {
         if (imgs[i].data == nullptr) {
@@ -198,7 +212,7 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
         }
         int size = 0;
         unsigned char *data = stbi_write_png_to_mem((const unsigned char *)imgs[i].data, 0, (int)imgs[i].width, (int)imgs[i].height,
-                                                    (int)imgs[i].channel, &size, nullptr);
+                                                    (int)imgs[i].channel, &size, img_params_str.c_str());
         if (data == nullptr || size <= 0) {
             delete[] pngs;
             return nullptr;
