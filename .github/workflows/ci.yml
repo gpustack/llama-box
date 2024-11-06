@@ -80,8 +80,8 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=off \
-            -DGGML_NATIVE=on \
-            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
+            -DGGML_NATIVE=off \
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX2=on' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -143,7 +143,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=on -DGGML_METAL_EMBED_LIBRARY=on \
-            -DGGML_NATIVE=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -289,7 +289,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=off \
-            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} \
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX2=on' || '' }} \
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on -DGGML_AVX512_BF16=on' || '' }} \
             ${{ matrix.instruction == 'neon' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.instruction == 'neon' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
@@ -403,7 +403,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            -DGGML_NATIVE=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
@@ -533,7 +533,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-            -DGGML_NATIVE=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_CUDA_F16=on \
@@ -646,7 +646,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
-            -DGGML_NATIVE=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -769,7 +769,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
-            -DGGML_NATIVE=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
@@ -878,7 +878,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
-            -DGGML_NATIVE=on \
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -953,7 +953,7 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64-msvc.cmake', github.workspace) || '' }} `
             -DGGML_NATIVE=off `
-            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX2=on' || '' }} `
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX2=on' || '' }} `
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on -DGGML_AVX512_BF16=on' || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
@@ -1046,7 +1046,7 @@ jobs:
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=on' || '-DGGML_NATIVE=off' }} `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
             -DGGML_OPENMP=off `
@@ -1137,7 +1137,7 @@ jobs:
           Write-Host "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
-            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=on' || '-DGGML_NATIVE=off' }} `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
             -DGGML_CUDA_F16=on `
