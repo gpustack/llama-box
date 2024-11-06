@@ -390,6 +390,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (!strcmp(flag, "--version")) {
+                fprintf(stderr, "%s\n", llama_print_system_info());
                 fprintf(stderr, "version: %s (%s)\n", LLAMA_BOX_GIT_VERSION, LLAMA_BOX_GIT_COMMIT);
                 fprintf(stderr, "llama.cpp version: %d (%s)\n", LLAMA_BUILD_NUMBER, LLAMA_COMMIT);
                 fprintf(stderr, "built with %s for %s\n", LLAMA_COMPILER, LLAMA_BUILD_TARGET);

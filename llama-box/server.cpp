@@ -779,6 +779,7 @@ struct server_context {
                 return false;
             }
 
+            sdparams = bparams.sdparams;
             n_tps = bparams.n_tps;
 
             return true;

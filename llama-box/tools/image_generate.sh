@@ -25,6 +25,7 @@ N="${N:-"1"}"
 QUALITY="${QUALITY:-"standard"}"
 RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
+STYLE="${STYLE:-"null"}"
 
 image_generate() {
     PROMPT="$(trim_trailing "$1")"
@@ -38,11 +39,13 @@ image_generate() {
       --argjson quality "\"${QUALITY}\"" \
       --argjson response_format "\"${RESPONSE_FORMAT}\"" \
       --argjson size "\"${SIZE}\"" \
+      --argjson style "\"${STYLE}\"" \
       '{
         n: $n,
         quality: $quality,
         response_format: $response_format,
-        size: $size
+        size: $size,
+        style: $style
       } * .')"
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
@@ -92,6 +95,7 @@ echo "N                 : ${N}"
 echo "QUALITY           : ${QUALITY}"
 echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
+echo "STYLE             : ${STYLE}"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then

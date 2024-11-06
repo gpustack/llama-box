@@ -1025,7 +1025,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
 
     // Handle "sampler" field
     std::string quality = json_value(body, "quality", std::string("standard"));
-    if (quality != "hd" && quality != "standard") {
+    if (quality != "null" && quality != "hd" && quality != "standard") {
         throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
     }
     if (quality == "hd") {
@@ -1038,15 +1038,17 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     }
     if (body.contains("style")) {
         std::string style = json_value(body, "style", std::string("vivid"));
-        if (style != "vivid" && style != "natural") {
-            throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
-        }
-        if (style == "vivid") {
-            llama_params["sampler"] = params.vd_sampler;
-            llama_params["cfg_scale"] = params.vd_cfg_scale;
-        } else {
-            llama_params["sampler"] = params.nt_sampler;
-            llama_params["cfg_scale"] = params.nt_cfg_scale;
+        if (style != "null") {
+            if (style != "vivid" && style != "natural") {
+                throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
+            }
+            if (style == "vivid") {
+                llama_params["sampler"] = params.vd_sampler;
+                llama_params["cfg_scale"] = params.vd_cfg_scale;
+            } else {
+                llama_params["sampler"] = params.nt_sampler;
+                llama_params["cfg_scale"] = params.nt_cfg_scale;
+            }
         }
     }
 
