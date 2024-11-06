@@ -1588,7 +1588,9 @@ struct server_context {
         res.id = slot.id_task;
         res.error = false;
         res.stop = false;
-        res.data = json{{"content", tkn.text_to_send}, {"stop", false}, {"id_slot", slot.id}, {"multimodal", false}};
+        res.data = json{
+            {"content", tkn.text_to_send}, {"id_slot", slot.id}, {"index", slot.index}, {"stop", false}, {"model", params.model_alias},
+        };
 
         if (slot.sparams.n_probs > 0) {
             const llama_tokens to_send_toks = common_tokenize(ctx, tkn.text_to_send, false);
@@ -1613,22 +1615,24 @@ struct server_context {
         res.id = slot.id_task;
         res.error = false;
         res.stop = true;
-        res.data = json{{"content", !slot.params.stream ? slot.generated_text : ""},
-                        {"id_slot", slot.id},
-                        {"stop", true},
-                        {"model", params.model_alias},
-                        {"tokens_predicted", slot.n_decoded},
-                        {"tokens_evaluated", slot.n_prompt_tokens},
-                        {"tokens_cached", slot.n_past},
-                        {"generation_settings", get_formated_generation(slot)},
-                        {"has_new_line", slot.has_new_line},
-                        {"truncated", slot.truncated},
-                        {"stopped_eos", slot.stopped_eos},
-                        {"stopped_word", slot.stopped_word},
-                        {"stopped_limit", slot.stopped_limit},
-                        {"stopping_word", slot.stopping_word},
-                        {"timings", slot.get_formated_timings()},
-                        {"index", slot.index}};
+        res.data = json{
+            {"content", !slot.params.stream ? slot.generated_text : ""},
+            {"id_slot", slot.id},
+            {"index", slot.index},
+            {"stop", true},
+            {"model", params.model_alias},
+            {"tokens_predicted", slot.n_decoded},
+            {"tokens_evaluated", slot.n_prompt_tokens},
+            {"tokens_cached", slot.n_past},
+            {"generation_settings", get_formated_generation(slot)},
+            {"has_new_line", slot.has_new_line},
+            {"truncated", slot.truncated},
+            {"stopped_eos", slot.stopped_eos},
+            {"stopped_word", slot.stopped_word},
+            {"stopped_limit", slot.stopped_limit},
+            {"stopping_word", slot.stopping_word},
+            {"timings", slot.get_formated_timings()},
+        };
 
         if (slot.sparams.n_probs > 0) {
             std::vector<completion_token_output> probs;
@@ -3618,25 +3622,31 @@ int main(int argc, char **argv) {
             ctx_server.receive_cmpl_results(
                 task_ids,
                 [&](std::vector<server_task_result> &results) {
-                    json completions_json;
-                    std::string pps;
-                    if (results.size() == 1) {
-                        completions_json = results[0].data;
-                        if (oaicompat) {
-                            completions_json = oaicompat_completions_response(request, completions_json, completion_id);
-                        }
-                        pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
-                    } else {
-                        completions_json = json::array();
-                        for (const auto &result : results) {
-                            auto tmp = result.data;
-                            if (oaicompat) {
-                                tmp = oaicompat_completions_response(request, tmp, completion_id);
+                    if (!oaicompat) {
+                        json completions_json;
+                        std::string pps;
+                        if (results.size() == 1) {
+                            completions_json = results[0].data;
+                            pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
+                        } else {
+                            completions_json = json::array();
+                            for (const auto &result : results) {
+                                completions_json.push_back(result.data);
                             }
-                            completions_json.push_back(tmp);
+                            pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
                         }
-                        pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
+                        res.set_header("X-Response-Tokens-Per-Second", pps);
+                        res_ok(res, completions_json);
+                        return;
                     }
+
+                    json responses = json::array();
+                    for (const server_task_result &ret : results) {
+                        responses.push_back(ret.data);
+                    }
+
+                    const json completions_json = oaicompat_completions_response(request, responses, completion_id);
+                    std::string pps = std::to_string(json_value(completions_json.at("usage"), "tokens_per_second", double(tps)));
                     res.set_header("X-Response-Tokens-Per-Second", pps);
                     res_ok(res, completions_json);
                 },
@@ -3652,6 +3662,9 @@ int main(int argc, char **argv) {
                 task_ids,
                 [&](const server_task_result &result) -> bool {
                     json completions_json = result.data;
+                    if (oaicompat) {
+                        completions_json = oaicompat_completions_response(request, json::array({result.data}), completion_id, true);
+                    }
                     if (!server_sent_event(sink, "data", completions_json)) {
                         sink.done();
                         return false;
@@ -3734,19 +3747,13 @@ int main(int argc, char **argv) {
             ctx_server.receive_cmpl_results(
                 task_ids,
                 [&](std::vector<server_task_result> &results) {
-                    json completions_json;
-                    std::string pps;
-                    if (results.size() == 1) {
-                        completions_json = oaicompat_completions_response(request, results[0].data, completion_id);
-                        pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
-                    } else {
-                        completions_json = json::array();
-                        for (const auto &result : results) {
-                            auto tmp = oaicompat_completions_response(request, result.data, completion_id);
-                            completions_json.push_back(tmp);
-                        }
-                        pps = std::to_string(json_value(results[0].data.at("timings"), "predicted_per_second", double(tps)));
+                    json responses = json::array();
+                    for (const server_task_result &ret : results) {
+                        responses.push_back(ret.data);
                     }
+
+                    const json completions_json = oaicompat_completions_response(request, responses, completion_id);
+                    std::string pps = std::to_string(json_value(completions_json.at("usage"), "tokens_per_second", double(tps)));
                     res.set_header("X-Response-Tokens-Per-Second", pps);
                     res_ok(res, completions_json);
                 },
@@ -3764,14 +3771,14 @@ int main(int argc, char **argv) {
                 [&](const server_task_result &result) -> bool {
                     if (first) {
                         first = false;
-                        json completions_json = oaicompat_completions_response(request, result.data, completion_id, true, true);
+                        json completions_json = oaicompat_completions_response(request, json::array(), completion_id, true, true);
                         if (!server_sent_event(sink, "data", completions_json)) {
                             sink.done();
                             return false;
                         }
                     }
 
-                    json completions_json = oaicompat_completions_response(request, result.data, completion_id, true);
+                    json completions_json = oaicompat_completions_response(request, json::array({result.data}), completion_id, true);
                     if (!server_sent_event(sink, "data", completions_json)) {
                         sink.done();
                         return false;

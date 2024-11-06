@@ -747,14 +747,17 @@ static json oaicompat_completions_request(const struct common_params &params, co
     }
 
     // Handle "logprobs" field
-    if (json_value(body, "logprobs", false)) {
-        if (chat) {
-            llama_params["n_probs"] = std::min(json_value(body, "top_logprobs", 2), 20);
-        } else {
-            llama_params["n_probs"] = std::min(json_value(body, "logprobs", 2), 5);
+    if (chat) {
+        if (!body.contains("logprobs") && body.contains("top_logprobs")) {
+            throw std::runtime_error(R"(Illegal param: "top_logprobs" requires "logprobs" to be set)");
         }
-    } else if (!body.contains("logprobs") && body.contains("top_logprobs")) {
-        throw std::runtime_error(R"(Illegal param: "top_logprobs" requires "logprobs" to be set)");
+        if (json_value(body, "logprobs", false)) {
+            llama_params["n_probs"] = std::min(json_value(body, "top_logprobs", 1), 20);
+        }
+    } else {
+        if (body.contains("logprobs")) {
+            llama_params["n_probs"] = std::min(json_value(body, "logprobs", 1), 5);
+        }
     }
 
     // Params supported by OAI but unsupported by llama.cpp
@@ -796,19 +799,6 @@ static json oaicompat_completions_request(const struct common_params &params, co
 
 static json oaicompat_completions_response(const json &request, const json &result, const std::string &completion_id, bool streaming = false,
                                            bool first = false) {
-    bool stopped_word = json_value(result, "stopped_word", false);
-    bool stopped_eos = json_value(result, "stopped_eos", false);
-    bool stopped_limit = json_value(result, "stopped_limit", false);
-    std::string content = json_value(result, "content", std::string(""));
-
-    std::string finish_reason;
-    if (stopped_word || stopped_eos) {
-        finish_reason = "stop";
-    }
-    if (stopped_limit) {
-        finish_reason = "length";
-    }
-
     json res = json{
         {"id", completion_id},
         {"created", std::time(nullptr)},
@@ -816,92 +806,131 @@ static json oaicompat_completions_response(const json &request, const json &resu
     };
 
     bool chat = json_value(request, "__oaicompat_completion_chat", false);
-    bool finish = !finish_reason.empty();
-    json choice;
-    if (chat) {
-        // chat completion
-        if (streaming) {
-            res["object"] = "chat.completion.chunk";
-            if (!finish && first) {
-                choice = json{
-                    {"finish_reason", nullptr},
-                    {"index", 0},
-                    {"delta", json{{"role", "assistant"}}},
-                };
-            } else if (!finish) {
-                choice = json{
-                    {"finish_reason", nullptr},
-                    {"index", 0},
-                    {"delta", json{{"content", content}}},
-                };
+    int completion_tokens = 0;
+    int prompt_tokens = 0;
+    int drafted_tokens = 0;
+    double draft_tokens_acceptance = 0.0;
+    double ttft = 0.0;
+    double tpot = 0.0;
+    double tps = 0.0;
+
+    // Construct choices field
+    json choices = json::array();
+    if (first && streaming && chat) {
+        res["object"] = "chat.completion.chunk";
+        choices.push_back(json{
+            {"finish_reason", nullptr},
+            {"index", 0},
+            {"delta", json{{"role", "assistant"}}},
+        });
+    }
+    bool finish = false;
+    for (const json &ret : result) {
+        bool stopped_word = json_value(ret, "stopped_word", false);
+        bool stopped_eos = json_value(ret, "stopped_eos", false);
+        bool stopped_limit = json_value(ret, "stopped_limit", false);
+        std::string finish_reason;
+        if (stopped_word || stopped_eos) {
+            finish_reason = "stop";
+        }
+        if (stopped_limit) {
+            finish_reason = "length";
+        }
+        finish = !finish_reason.empty();
+        std::string content = json_value(ret, "content", std::string(""));
+        int index = json_value(ret, "index", 0);
+
+        json choice;
+        if (chat) {
+            if (streaming) {
+                res["object"] = "chat.completion.chunk";
+                if (!finish) {
+                    choice = json{
+                        {"finish_reason", nullptr},
+                        {"index", index},
+                        {"delta", json{{"content", content}}},
+                    };
+                } else {
+                    // finished
+                    choice = json{
+                        {"finish_reason", finish_reason},
+                        {"index", index},
+                        {"delta", json::object()},
+                    };
+                }
             } else {
-                // finished
-                choice = json{
-                    {"finish_reason", finish_reason},
-                    {"index", 0},
-                    {"delta", json::object()},
-                };
+                res["object"] = "chat.completion";
+                if (!finish) {
+                    choice = json{
+                        {"finish_reason", nullptr},
+                        {"index", index},
+                        {"message", json{{"content", content}, {"role", "assistant"}}},
+                    };
+                } else {
+                    choice = json{
+                        {"finish_reason", finish_reason},
+                        {"index", index},
+                        {"message", json{{"content", content}, {"role", "assistant"}}},
+                    };
+                }
             }
         } else {
-            res["object"] = "chat.completion";
+            res["object"] = "text_completion";
             if (!finish) {
                 choice = json{
                     {"finish_reason", nullptr},
-                    {"index", 0},
-                    {"message", json{{"content", content}, {"role", "assistant"}}},
+                    {"index", index},
+                    {"text", content},
                 };
             } else {
                 choice = json{
                     {"finish_reason", finish_reason},
-                    {"index", 0},
-                    {"message", json{{"content", content}, {"role", "assistant"}}},
+                    {"index", index},
+                    {"text", content},
                 };
             }
         }
-    } else {
-        // completion
-        res["object"] = "text_completion";
-        if (!finish) {
-            choice = json{
-                {"finish_reason", nullptr},
-                {"index", 0},
-                {"text", content},
-            };
+
+        bool logprobs = ret.contains("completion_probabilities");
+        if (!logprobs) {
+            choice["logprobs"] = nullptr;
         } else {
-            choice = json{
-                {"finish_reason", finish_reason},
-                {"index", 0},
-                {"text", content},
-            };
+            choice["logprobs"] = ret.at("completion_probabilities");
+        }
+
+        choices.push_back(choice);
+
+        completion_tokens += json_value(ret, "tokens_predicted", 0);
+        prompt_tokens += json_value(ret, "tokens_evaluated", 0);
+        json ts = json_value(ret, "timings", json::object());
+        ttft += json_value(ts, "prompt_ms", 0.0);
+        tpot += json_value(ts, "predicted_per_token_ms", 0.0);
+        tps += json_value(ts, "predicted_per_second", 0.0);
+        if (ts.contains("drafted_n")) {
+            drafted_tokens += json_value(ts, "drafted_n", 0);
+            draft_tokens_acceptance += json_value(ts, "drafted_accepted_p", 0.0);
         }
     }
-    bool logprobs = result.contains("completion_probabilities");
-    if (!logprobs) {
-        choice["logprobs"] = nullptr;
-    } else {
-        choice["logprobs"] = result.at("completion_probabilities");
-    }
-    res["choices"] = json::array({choice});
+    res["choices"] = choices;
 
-    // Add usage information
+    // Add usage field
     bool include_usage = false;
     if (request.contains("stream_options")) {
         include_usage = json_value(request.at("stream_options"), "include_usage", false);
     }
-    if (!streaming || (include_usage && !finish_reason.empty())) {
-        int completion_tokens = json_value(result, "tokens_predicted", 0);
-        int prompt_tokens = json_value(result, "tokens_evaluated", 0);
-        json ts = json_value(result, "timings", json::object());
-        double ttft = json_value(ts, "prompt_ms", 0.0);
-        double tpot = json_value(ts, "predicted_per_token_ms", 0.0);
-        double tps = json_value(ts, "predicted_per_second", 0.0);
+    if (!streaming || (include_usage && finish)) {
+        const size_t result_size = result.size();
+        ttft = ttft / result_size;
+        tpot = tpot / result_size;
+        tps = tps / result_size;
         json usage = json{
             {"completion_tokens", completion_tokens}, {"prompt_tokens", prompt_tokens},   {"total_tokens", completion_tokens + prompt_tokens},
             {"time_to_first_token_ms", ttft},         {"time_per_output_token_ms", tpot}, {"tokens_per_second", tps},
         };
-        if (ts.contains("drafted_n")) {
-            usage["draft_tokens"] = ts.at("drafted_n");
-            usage["draft_tokens_acceptance"] = ts.at("drafted_accepted_p");
+        if (drafted_tokens > 0) {
+            draft_tokens_acceptance = draft_tokens_acceptance / result_size;
+            usage["draft_tokens"] = drafted_tokens;
+            usage["draft_tokens_acceptance"] = draft_tokens_acceptance;
         }
         res["usage"] = usage;
     } else if (include_usage) {
