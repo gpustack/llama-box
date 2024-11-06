@@ -1975,9 +1975,7 @@ struct server_context {
                 /* STABLE DIFFUSION */
 
                 res.data = {
-                    {"idle", n_idle_slots},
-                    {"processing", n_processing_slots},
-                    {"deferred", queue_tasks.queue_tasks_deferred.size()},
+                    {"idle", n_idle_slots},       {"processing", n_processing_slots}, {"deferred", queue_tasks.queue_tasks_deferred.size()},
                     {"t_start", metrics.t_start},
 
                     {"slots", slots_data},
@@ -3829,7 +3827,12 @@ int main(int argc, char **argv) {
         ctx_server.receive_cmpl_results(
             task_ids,
             [&](std::vector<server_task_result> &results) {
-                const json embeddings_json = oaicompat_embeddings_response(request, results[0].data);
+                json responses = json::array();
+                for (const server_task_result &ret : results) {
+                    responses.push_back(ret.data);
+                }
+
+                const json embeddings_json = oaicompat_embeddings_response(request, responses);
                 res_ok(res, embeddings_json);
             },
             [&](const json &error_data) { res_error(res, error_data); });
@@ -3965,7 +3968,12 @@ int main(int argc, char **argv) {
         ctx_server.receive_cmpl_results(
             task_ids,
             [&](std::vector<server_task_result> &results) {
-                const json images_json = oaicompat_images_response(request, results[0].data);
+                json responses = json::array();
+                for (const server_task_result &ret : results) {
+                    responses.push_back(ret.data);
+                }
+
+                const json images_json = oaicompat_images_response(request, responses);
                 res_ok(res, images_json);
             },
             [&](const json &error_data) { res_error(res, error_data); });

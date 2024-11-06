@@ -944,19 +944,23 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
 }
 
 static json oaicompat_embeddings_response(const json &request, const json &result) {
+    int num_prompt_tokens = 0;
     json data = json::array();
-    data.push_back(json{
-        {"embedding", json_value(result, "embedding", json::array())},
-        {"index", 0},
-        {"object", "embedding"},
-    });
+    for (const auto &ret : result) {
+        num_prompt_tokens += ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
+        data.push_back(json{
+            {"embedding", ret.at("embedding")},
+            {"index", ret.at("index")},
+            {"object", "embedding"},
+        });
+    }
 
-    int num_prompt_tokens = json_value(result, "tokens_evaluated", 0);
     json res = json{
+        {"created", std::time(nullptr)},
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
         {"object", "list"},
-        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
         {"data", data},
+        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
     };
 
     return res;
@@ -1099,9 +1103,18 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
 }
 
 static json oaicompat_images_response(const json &request, const json &result) {
+    json data = json::array();
+    for (const auto &ret : result) {
+        for (const auto &img : ret.at("images")) {
+            data.push_back(img);
+        }
+    }
+
     json res = json{
+        {"created", std::time(nullptr)},
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-        {"data", json_value(result, "images", json::array())},
+        {"object", "list"},
+        {"data", data},
     };
     return res;
 }
@@ -1227,8 +1240,8 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
 
     json res = json{
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
-        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
         {"results", data},
+        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
     };
 
     return res;
