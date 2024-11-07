@@ -71,12 +71,12 @@ struct stablediffusion_params {
     float guidance = 3.5f;
     float strength = 0.75f;
     sample_method_t sampler = EULER_A;
-    float cfg_scale = 7.0f;
-    sample_method_t hd_sampler = DPMPP2M;
+    float cfg_scale = 9.0f;
+    sample_method_t hd_sampler = HEUN;
     float hd_cfg_scale = 0.0f;
-    sample_method_t vd_sampler = DPMPP2S_A;
+    sample_method_t vd_sampler = DPMPP2Mv2;
     float vd_cfg_scale = 0.0f;
-    sample_method_t nt_sampler = HEUN;
+    sample_method_t nt_sampler = DPMPP2M;
     float nt_cfg_scale = 0.0f;
     int sample_steps = 20;
     schedule_t schedule = DEFAULT;
@@ -106,7 +106,7 @@ struct stablediffusion_sampler_params {
     int height = 1024;
     int width = 1024;
     sample_method_t sampler = EULER_A;
-    float cfg_scale = 7.0f;
+    float cfg_scale = 9.0f;
     int sample_steps = 20;
 };
 
@@ -142,7 +142,7 @@ void stablediffusion_context::free() {
 
 stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt,
                                                                    const stablediffusion_sampler_params sparams) {
-    std::string negative_prompt;
+    std::string negative_prompt = "low quality";
     int clip_skip = -1;
     sd_image_t *control_image = nullptr;
     std::string input_id_images_path;

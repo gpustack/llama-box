@@ -26,6 +26,9 @@ QUALITY="${QUALITY:-"standard"}"
 RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
 STYLE="${STYLE:-"null"}"
+SAMPLER="${SAMPLER:-"null"}"
+CFG_SCALE="${CFG_SCALE:-"9"}"
+SAMPLE_STEPS="${SAMPLE_STEPS:-"20"}"
 
 image_generate() {
     PROMPT="$(trim_trailing "$1")"
@@ -34,19 +37,49 @@ image_generate() {
     else
       DATA="{\"prompt\":\"${PROMPT}\"}"
     fi
-    DATA="$(echo -n "${DATA}" | jq \
-      --argjson n "${N}" \
-      --argjson quality "\"${QUALITY}\"" \
-      --argjson response_format "\"${RESPONSE_FORMAT}\"" \
-      --argjson size "\"${SIZE}\"" \
-      --argjson style "\"${STYLE}\"" \
-      '{
-        n: $n,
-        quality: $quality,
-        response_format: $response_format,
-        size: $size,
-        style: $style
-      } * .')"
+    if [[ "${SAMPLER}" != "null" ]]; then
+      DATA="$(echo -n "${DATA}" | jq \
+                --argjson n "${N}" \
+                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
+                --argjson size "\"${SIZE}\"" \
+                --argjson sampler "\"${SAMPLER}\"" \
+                --argjson cfg_scale "${CFG_SCALE}" \
+                --argjson sample_steps "${SAMPLE_STEPS}" \
+                '{
+                  n: $n,
+                  response_format: $response_format,
+                  size: $size,
+                  sampler: $sampler,
+                  cfg_scale: $cfg_scale,
+                  sample_steps: $sample_steps
+                } * .')"
+    elif [[ "${STYLE}" != "null" ]]; then
+      DATA="$(echo -n "${DATA}" | jq \
+                --argjson n "${N}" \
+                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
+                --argjson size "\"${SIZE}\"" \
+                --argjson quality "\"${QUALITY}\"" \
+                --argjson style "\"${STYLE}\"" \
+                '{
+                  n: $n,
+                  response_format: $response_format,
+                  size: $size,
+                  quality: $quality,
+                  style: $style
+                } * .')"
+    else
+      DATA="$(echo -n "${DATA}" | jq \
+                --argjson n "${N}" \
+                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
+                --argjson size "\"${SIZE}\"" \
+                --argjson quality "\"${QUALITY}\"" \
+                '{
+                  n: $n,
+                  response_format: $response_format,
+                  size: $size,
+                  quality: $quality
+                } * .')"
+    fi
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
     START_TIME=$(date +%s)
@@ -92,10 +125,13 @@ echo "====================================================="
 echo "LOG_FILE          : ${LOG_FILE}"
 echo "API_URL           : ${API_URL}"
 echo "N                 : ${N}"
-echo "QUALITY           : ${QUALITY}"
 echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
+echo "QUALITY           : ${QUALITY}"
 echo "STYLE             : ${STYLE}"
+echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL"
+echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
+echo "SAMPLE_STEPS      : ${SAMPLE_STEPS} // AVAILABLE FOR SAMPLER"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then

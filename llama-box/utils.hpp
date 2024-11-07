@@ -1023,22 +1023,22 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     // Handle "n" field
     llama_params["batch_count"] = json_value(body, "n", 1);
 
-    // Handle "sampler" field
-    std::string quality = json_value(body, "quality", std::string("standard"));
-    if (quality != "null" && quality != "hd" && quality != "standard") {
-        throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
-    }
-    if (quality == "hd") {
-        llama_params["sample_steps"] = params.sample_steps + 10;
-        llama_params["sampler"] = params.hd_sampler;
-        llama_params["cfg_scale"] = params.hd_cfg_scale;
-    } else {
-        llama_params["sampler"] = params.sampler;
-        llama_params["cfg_scale"] = params.cfg_scale;
-    }
-    if (body.contains("style")) {
-        std::string style = json_value(body, "style", std::string("vivid"));
-        if (style != "null") {
+    // Handle "sampler" and "cfg_scale" fields
+    if (!body.contains("sampler")) {
+        std::string quality = json_value(body, "quality", std::string("standard"));
+        if (quality != "null" && quality != "hd" && quality != "standard") {
+            throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+        }
+        if (quality == "hd") {
+            llama_params["sample_steps"] = params.sample_steps + 10;
+            llama_params["sampler"] = params.hd_sampler;
+            llama_params["cfg_scale"] = params.hd_cfg_scale;
+        } else {
+            llama_params["sampler"] = params.sampler;
+            llama_params["cfg_scale"] = params.cfg_scale;
+        }
+        if (body.contains("style")) {
+            std::string style = json_value(body, "style", std::string("vivid"));
             if (style != "vivid" && style != "natural") {
                 throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
             }
@@ -1050,6 +1050,11 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                 llama_params["cfg_scale"] = params.nt_cfg_scale;
             }
         }
+    } else {
+        std::string sampler_str = json_value(body, "sampler", std::string("euler_a"));
+        llama_params["sampler"] = common_sd_str_to_sampler_type(sampler_str.c_str());
+        llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
+        llama_params["sample_steps"] = json_value(body, "sample_steps", params.sample_steps);
     }
 
     // Handle "size" field
@@ -1123,15 +1128,24 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     // Handle "n" field
     llama_params["batch_count"] = json_value(body, "n", 1);
 
-    // Handle "sampler" field
-    std::string quality = json_value(body, "quality", std::string("standard"));
-    if (quality != "hd" && quality != "standard") {
-        throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
-    }
-    if (quality == "hd") {
-        llama_params["sampler"] = params.hd_sampler;
+    // Handle "sampler" and "cfg_scale" fields
+    if (!body.contains("sampler") && !body.contains("cfg_scale")) {
+        std::string quality = json_value(body, "quality", std::string("standard"));
+        if (quality != "null" && quality != "hd" && quality != "standard") {
+            throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+        }
+        if (quality == "hd") {
+            llama_params["sample_steps"] = params.sample_steps + 10;
+            llama_params["sampler"] = params.hd_sampler;
+            llama_params["cfg_scale"] = params.hd_cfg_scale;
+        } else {
+            llama_params["sampler"] = params.sampler;
+            llama_params["cfg_scale"] = params.cfg_scale;
+        }
     } else {
-        llama_params["sampler"] = params.sampler;
+        std::string sampler_str = json_value(body, "sampler", std::string("default"));
+        llama_params["sampler"] = common_sd_str_to_sampler_type(sampler_str.c_str());
+        llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
     }
 
     // Handle "size" field
