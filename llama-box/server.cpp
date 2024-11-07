@@ -450,7 +450,7 @@ struct server_queue {
     std::condition_variable condition_tasks;
 
     // callback functions
-    std::function<void(server_task &)> callback_new_task;
+    std::function<void(server_task)> callback_new_task;
     std::function<void(void)> callback_update_slots;
 
     // Add a new task to the end of the queue
@@ -503,7 +503,7 @@ struct server_queue {
     }
 
     // Register function to process a new task
-    void on_new_task(std::function<void(server_task &)> callback) {
+    void on_new_task(std::function<void(server_task)> callback) {
         callback_new_task = std::move(callback);
     }
 
@@ -555,7 +555,7 @@ struct server_queue {
                 lock.unlock();
 
                 QUE_DBG("processing task, id = %d\n", task.id);
-                callback_new_task(task);
+                callback_new_task(std::move(task));
             }
 
             // all tasks in the current loop is processed, slots data is now
@@ -836,13 +836,10 @@ struct server_context {
             }
         }
 
-        // reserve one extra sequence (seq_id == 0) for extra features
-        params.n_parallel += 1;
         common_init_result ir = common_init_from_params(params);
         model = ir.model;
         ctx = ir.context;
         lora_adapters = ir.lora_adapters;
-        params.n_parallel -= 1; // but be sneaky about it
         if (model == nullptr) {
             SRV_ERR("failed to load model, '%s'\n", params.model.c_str());
             return false;
@@ -1670,7 +1667,7 @@ struct server_context {
         std::vector<float> embd_res(n_embd, 0.0f);
 
         for (int i = 0; i < batch_view.n_tokens; ++i) {
-            if (!batch_view.logits[i] || batch_view.seq_id[i][0] != slot.id + 1) {
+            if (!batch_view.logits[i] || batch_view.seq_id[i][0] != slot.id) {
                 continue;
             }
 
@@ -1712,7 +1709,7 @@ struct server_context {
         res.stop = true;
 
         for (int i = 0; i < batch.n_tokens; ++i) {
-            if (!batch.logits[i] || batch.seq_id[i][0] != slot.id + 1) {
+            if (!batch.logits[i] || batch.seq_id[i][0] != slot.id) {
                 continue;
             }
 
@@ -1897,7 +1894,7 @@ struct server_context {
     // Functions to process the task
     //
 
-    void process_single_task(const server_task &task) {
+    void process_single_task(server_task task) {
         switch (task.type) {
         case SERVER_TASK_TYPE_INFERENCE: {
             const int id_slot = json_value(task.data, "id_slot", -1);
@@ -2048,7 +2045,7 @@ struct server_context {
             std::string filename = task.data.at("filename");
             std::string filepath = task.data.at("filepath");
 
-            const size_t nwrite = llama_state_seq_save_file(ctx, filepath.c_str(), slot->id + 1, slot->cache_tokens.data(), token_count);
+            const size_t nwrite = llama_state_seq_save_file(ctx, filepath.c_str(), slot->id, slot->cache_tokens.data(), token_count);
 
             const int64_t t_end = ggml_time_us();
             const double t_save_ms = double(t_end - t_start) / 1000.0;
@@ -2086,7 +2083,7 @@ struct server_context {
             slot->cache_tokens.resize(slot->n_ctx);
             size_t token_count = 0;
             size_t nread =
-                llama_state_seq_load_file(ctx, filepath.c_str(), slot->id + 1, slot->cache_tokens.data(), slot->cache_tokens.size(), &token_count);
+                llama_state_seq_load_file(ctx, filepath.c_str(), slot->id, slot->cache_tokens.data(), slot->cache_tokens.size(), &token_count);
             if (nread == 0) {
                 slot->cache_tokens.resize(0);
                 send_error(task,
@@ -2128,9 +2125,9 @@ struct server_context {
 
             // Erase token cache
             const size_t n_erased = slot->cache_tokens.size();
-            llama_kv_cache_seq_rm(ctx, slot->id + 1, -1, -1);
+            llama_kv_cache_seq_rm(ctx, slot->id, -1, -1);
             if (ctx_draft != nullptr) {
-                llama_kv_cache_seq_rm(ctx_draft, slot->id + 1, -1, -1);
+                llama_kv_cache_seq_rm(ctx_draft, slot->id, -1, -1);
             }
             slot->cache_tokens.clear();
 
@@ -2236,11 +2233,11 @@ struct server_context {
 
                 SLT_WRN(slot, "slot context shift, n_keep = %d, n_left = %d, n_discard = %d\n", n_keep, n_left, n_discard);
 
-                llama_kv_cache_seq_rm(ctx, slot.id + 1, n_keep, n_keep + n_discard);
-                llama_kv_cache_seq_add(ctx, slot.id + 1, n_keep + n_discard, slot.n_past, -n_discard);
+                llama_kv_cache_seq_rm(ctx, slot.id, n_keep, n_keep + n_discard);
+                llama_kv_cache_seq_add(ctx, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
                 if (ctx_draft != nullptr) {
-                    llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, n_keep, n_keep + n_discard);
-                    llama_kv_cache_seq_add(ctx_draft, slot.id + 1, n_keep + n_discard, slot.n_past, -n_discard);
+                    llama_kv_cache_seq_rm(ctx_draft, slot.id, n_keep, n_keep + n_discard);
+                    llama_kv_cache_seq_add(ctx_draft, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
                 }
 
                 if (slot.params.cache_prompt) {
@@ -2278,10 +2275,10 @@ struct server_context {
             int32_t slot_npast = slot.n_past;
             slot_npast += slot.n_drafted_accepted;
 
-            common_batch_add(batch, slot.sampled[slot.sampled.size() - 1], slot_npast, {slot.id + 1}, true);
+            common_batch_add(batch, slot.sampled[slot.sampled.size() - 1], slot_npast, {slot.id}, true);
             if (!slot.sampled_draft.empty()) {
                 for (const llama_token &tok : slot.sampled_draft) {
-                    common_batch_add(batch, tok, slot_npast + 1, {slot.id + 1}, true);
+                    common_batch_add(batch, tok, slot_npast + 1, {slot.id}, true);
                     slot_npast += 1;
                 }
             }
@@ -2423,11 +2420,11 @@ struct server_context {
 
                                             const int64_t kv_shift = (int64_t)head_p - (int64_t)head_c;
 
-                                            llama_kv_cache_seq_rm(ctx, slot.id + 1, head_p, head_c);
-                                            llama_kv_cache_seq_add(ctx, slot.id + 1, head_c, -1, kv_shift);
+                                            llama_kv_cache_seq_rm(ctx, slot.id, head_p, head_c);
+                                            llama_kv_cache_seq_add(ctx, slot.id, head_c, -1, kv_shift);
                                             if (ctx_draft != nullptr) {
-                                                llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, head_p, head_c);
-                                                llama_kv_cache_seq_add(ctx_draft, slot.id + 1, head_c, -1, kv_shift);
+                                                llama_kv_cache_seq_rm(ctx_draft, slot.id, head_p, head_c);
+                                                llama_kv_cache_seq_add(ctx_draft, slot.id, head_c, -1, kv_shift);
                                             }
 
                                             for (size_t i = 0; i < n_match; i++) {
@@ -2483,17 +2480,17 @@ struct server_context {
 
                     // keep only the common part
                     int32_t slot_npast = slot.n_past;
-                    if (!llama_kv_cache_seq_rm(ctx, slot.id + 1, slot_npast, -1)) {
+                    if (!llama_kv_cache_seq_rm(ctx, slot.id, slot_npast, -1)) {
                         // could not partially delete (likely using a on-Transformer model)
-                        llama_kv_cache_seq_rm(ctx, slot.id + 1, -1, -1);
+                        llama_kv_cache_seq_rm(ctx, slot.id, -1, -1);
                         // there is no common part left
                         slot.n_past = 0;
                     }
                     if (ctx_draft != nullptr) {
-                        if (!llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, slot_npast, -1)) {
-                            llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, -1, -1);
+                        if (!llama_kv_cache_seq_rm(ctx_draft, slot.id, slot_npast, -1)) {
+                            llama_kv_cache_seq_rm(ctx_draft, slot.id, -1, -1);
                             if (slot_npast != 0) {
-                                llama_kv_cache_seq_cp(ctx_draft, 0, slot.id + 1, -1, -1);
+                                llama_kv_cache_seq_cp(ctx_draft, 0, slot.id, -1, -1);
                             }
                         }
                     }
@@ -2505,9 +2502,9 @@ struct server_context {
 
                     // add prompt tokens for processing in the current batch
                     while (slot.n_past < slot.n_prompt_tokens && batch.n_tokens < n_batch) {
-                        common_batch_add(batch, prompt_tokens[slot.n_past], slot.n_past, {slot.id + 1}, false);
+                        common_batch_add(batch, prompt_tokens[slot.n_past], slot.n_past, {slot.id}, false);
                         if (ctx_draft != nullptr) {
-                            common_batch_add(batch_draft, prompt_tokens[slot.n_past], slot.n_past, {slot.id + 1}, false);
+                            common_batch_add(batch_draft, prompt_tokens[slot.n_past], slot.n_past, {slot.id}, false);
                         }
 
                         if (slot.params.cache_prompt) {
@@ -2693,13 +2690,13 @@ struct server_context {
 
                 if (ctx_draft != nullptr) {
                     llama_pos pos = slot.n_past + slot.n_drafted_accepted;
-                    llama_kv_cache_seq_rm(ctx, slot.id + 1, pos, -1);
-                    llama_kv_cache_seq_rm(ctx_draft, slot.id + 1, pos, -1);
+                    llama_kv_cache_seq_rm(ctx, slot.id, pos, -1);
+                    llama_kv_cache_seq_rm(ctx_draft, slot.id, pos, -1);
 
                     slot.sampled_draft.clear();
 
                     common_batch_clear(batch_draft);
-                    common_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos, {slot.id + 1}, true);
+                    common_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos, {slot.id}, true);
                     if (llama_decode(ctx_draft, batch_draft)) {
                         slot.release();
                         send_error(slot, "Failed to draft decode", ERROR_TYPE_SERVER);
@@ -2715,7 +2712,7 @@ struct server_context {
                             break;
                         }
                         common_batch_clear(batch_draft);
-                        common_batch_add(batch_draft, tok, pos + 1 + j, {slot.id + 1}, true);
+                        common_batch_add(batch_draft, tok, pos + 1 + j, {slot.id}, true);
                         if (llama_decode(ctx_draft, batch_draft)) {
                             break;
                         }
@@ -2723,7 +2720,7 @@ struct server_context {
                     }
                 } else if (lookup_ngram_min > 0) {
                     llama_pos pos = slot.n_past + slot.n_drafted_accepted;
-                    llama_kv_cache_seq_rm(ctx, slot.id + 1, pos, -1);
+                    llama_kv_cache_seq_rm(ctx, slot.id, pos, -1);
 
                     slot.sampled_draft.clear();
 
@@ -2761,7 +2758,7 @@ struct server_context {
                 llama_tokens tokens = tokenize_mixed(ctx, jp.at("text"), false, true);
                 const auto sz_j = int32_t(tokens.size());
                 for (int32_t j = 0; j < sz_j; ++j) {
-                    common_batch_add(batch, tokens[j], slot.n_past, {slot.id + 1}, false);
+                    common_batch_add(batch, tokens[j], slot.n_past, {slot.id}, false);
                     slot.n_past += 1;
                     slot.n_prompt_tokens += 1;
                     slot.n_prompt_tokens_processed += 1;
@@ -2847,7 +2844,7 @@ struct server_context {
         llama_tokens tokens = common_tokenize(ctx, suffix, false, true);
         const auto sz_j = int32_t(tokens.size());
         for (int32_t j = 0; j < sz_j; ++j) {
-            common_batch_add(batch, tokens[j], slot.n_past, {slot.id + 1}, false);
+            common_batch_add(batch, tokens[j], slot.n_past, {slot.id}, false);
             slot.n_past += 1;
             slot.n_prompt_tokens += 1;
             slot.n_prompt_tokens_processed += 1;
