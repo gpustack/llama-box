@@ -201,6 +201,7 @@ general:
 
   -h,    --help, --usage          print usage and exit
          --version                show version and build info
+         --system-info            show system info
   -v,    --verbose, --log-verbose 
                                   set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V

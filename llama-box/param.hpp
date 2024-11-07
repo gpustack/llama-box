@@ -13,9 +13,15 @@
 #include "stablediffusion.hpp"
 
 // version
-extern const char *LLAMA_BOX_GIT_TREE_STATE;
-extern const char *LLAMA_BOX_GIT_VERSION;
-extern const char *LLAMA_BOX_GIT_COMMIT;
+extern const char *LLAMA_BOX_COMMIT;
+extern int LLAMA_BOX_BUILD_NUMBER;
+extern const char *LLAMA_BOX_BUILD_VERSION;
+extern const char *LLAMA_BOX_BUILD_COMPILER;
+extern const char *LLAMA_BOX_BUILD_TARGET;
+extern const char *LLAMA_CPP_COMMIT;
+extern int LLAMA_CPP_BUILD_NUMBER;
+extern const char *STABLE_DIFFUSION_CPP_COMMIT;
+extern int STABLE_DIFFUSION_CPP_BUILD_NUMBER;
 
 using json = nlohmann::json;
 
@@ -118,6 +124,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "general" });
     opts.push_back({ "general",                           "-h,    --help, --usage",                        "print usage and exit" });
     opts.push_back({ "general",                           "       --version",                              "show version and build info" });
+    opts.push_back({ "general",                           "       --system-info",                          "show system info" });
     opts.push_back({ "general",                           "-v,    --verbose, --log-verbose",               "set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
     opts.push_back({ "general",                           "-lv,   --verbosity, --log-verbosity V",         "set the verbosity threshold, messages with a higher verbosity will be ignored" });
     opts.push_back({ "general",                           "       --log-colors",                           "enable colored logging" });
@@ -390,10 +397,17 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (!strcmp(flag, "--version")) {
+                fprintf(stderr, "version  : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
+                fprintf(stderr, "compiler : %s\n", LLAMA_BOX_BUILD_COMPILER);
+                fprintf(stderr, "target   : %s\n", LLAMA_BOX_BUILD_TARGET);
+                fprintf(stderr, "vendor   : \n");
+                fprintf(stderr, "- llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_BOX_BUILD_NUMBER);
+                fprintf(stderr, "- stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
+                exit(0);
+            }
+
+            if (!strcmp(flag, "--system-info")) {
                 fprintf(stderr, "%s\n", llama_print_system_info());
-                fprintf(stderr, "version: %s (%s)\n", LLAMA_BOX_GIT_VERSION, LLAMA_BOX_GIT_COMMIT);
-                fprintf(stderr, "llama.cpp version: %d (%s)\n", LLAMA_BUILD_NUMBER, LLAMA_COMMIT);
-                fprintf(stderr, "built with %s for %s\n", LLAMA_COMPILER, LLAMA_BUILD_TARGET);
                 exit(0);
             }
 
