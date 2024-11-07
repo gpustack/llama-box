@@ -1,5 +1,5 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 0cdf0c07..35f146af 100644
+index 6719edb3..6d87bba0 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -21808,6 +21808,26 @@ static int32_t llama_chat_apply_template_internal(
