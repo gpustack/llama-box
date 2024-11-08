@@ -236,7 +236,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string stacked_id_embed_dir_c_str;
     bool vae_decode_only = true;
     bool free_params_immediately = false;
-    sd_type_t wtype = SD_TYPE_F32;
+    sd_type_t wtype = SD_TYPE_COUNT;
     rng_type_t rng_type = CUDA_RNG;
     bool keep_clip_on_cpu = false;
     bool keep_control_net_cpu = false;

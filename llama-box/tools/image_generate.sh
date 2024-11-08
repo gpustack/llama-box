@@ -22,6 +22,7 @@ trim_trailing() {
 }
 
 N="${N:-"1"}"
+SEED="${SEED:-"null"}"
 QUALITY="${QUALITY:-"standard"}"
 RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
@@ -40,6 +41,7 @@ image_generate() {
     if [[ "${SAMPLER}" != "null" ]]; then
       DATA="$(echo -n "${DATA}" | jq \
                 --argjson n "${N}" \
+                --argjson seed "${SEED}" \
                 --argjson response_format "\"${RESPONSE_FORMAT}\"" \
                 --argjson size "\"${SIZE}\"" \
                 --argjson sampler "\"${SAMPLER}\"" \
@@ -47,6 +49,7 @@ image_generate() {
                 --argjson sample_steps "${SAMPLE_STEPS}" \
                 '{
                   n: $n,
+                  seed: $seed,
                   response_format: $response_format,
                   size: $size,
                   sampler: $sampler,
@@ -56,12 +59,14 @@ image_generate() {
     elif [[ "${STYLE}" != "null" ]]; then
       DATA="$(echo -n "${DATA}" | jq \
                 --argjson n "${N}" \
+                --argjson seed "${SEED}" \
                 --argjson response_format "\"${RESPONSE_FORMAT}\"" \
                 --argjson size "\"${SIZE}\"" \
                 --argjson quality "\"${QUALITY}\"" \
                 --argjson style "\"${STYLE}\"" \
                 '{
                   n: $n,
+                  seed: $seed,
                   response_format: $response_format,
                   size: $size,
                   quality: $quality,
@@ -70,11 +75,13 @@ image_generate() {
     else
       DATA="$(echo -n "${DATA}" | jq \
                 --argjson n "${N}" \
+                --argjson seed "${SEED}" \
                 --argjson response_format "\"${RESPONSE_FORMAT}\"" \
                 --argjson size "\"${SIZE}\"" \
                 --argjson quality "\"${QUALITY}\"" \
                 '{
                   n: $n,
+                  seed: $seed,
                   response_format: $response_format,
                   size: $size,
                   quality: $quality
@@ -129,7 +136,7 @@ echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY}"
 echo "STYLE             : ${STYLE}"
-echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL"
+echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
 echo "SAMPLE_STEPS      : ${SAMPLE_STEPS} // AVAILABLE FOR SAMPLER"
 printf "=====================================================\n\n"
