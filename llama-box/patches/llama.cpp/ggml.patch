@@ -12,10 +12,10 @@ index b8d3f678..7d893f0b 100644
  
  #ifdef __cplusplus
 diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
-index f13adee3..0cae68f7 100644
+index 04ec5117..314bf6f7 100644
 --- a/ggml/src/ggml-metal.m
 +++ b/ggml/src/ggml-metal.m
-@@ -2577,7 +2577,6 @@ static void ggml_metal_encode_node(
+@@ -2604,7 +2604,6 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_GROUP_NORM:
              {
@@ -23,7 +23,7 @@ index f13adee3..0cae68f7 100644
                  GGML_ASSERT(ggml_is_contiguous(src0));
  
                  float eps;
-@@ -4028,6 +4027,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
+@@ -4076,6 +4075,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
      }
  }
  

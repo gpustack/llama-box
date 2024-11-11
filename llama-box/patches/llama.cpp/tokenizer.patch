@@ -1,8 +1,8 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 6719edb3..501d2065 100644
+index 4d89c522..88792937 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -6194,16 +6194,7 @@ static void llm_load_vocab(
+@@ -6197,16 +6197,7 @@ static void llm_load_vocab(
          if (vocab.type == LLAMA_VOCAB_TYPE_BPE) {
              vocab.tokenizer_add_space_prefix = false;
              vocab.tokenizer_clean_spaces = true;
@@ -20,7 +20,7 @@ index 6719edb3..501d2065 100644
                  vocab.type_pre = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
              } else if (
                      tokenizer_pre == "llama3"   ||
-@@ -6305,7 +6296,8 @@ static void llm_load_vocab(
+@@ -6308,7 +6299,8 @@ static void llm_load_vocab(
                  vocab.tokenizer_add_bos = true;
                  vocab.tokenizer_clean_spaces = false;
              } else {
