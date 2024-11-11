@@ -94,18 +94,18 @@ LLaMA Box supports the following platforms.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
 
-- Image generation via [Stable Diffusion 3 Medium](https://huggingface.co/stabilityai/stable-diffusion-3-medium) model.
+- Image generation via [Stable Diffusion 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium) model.
   Use GGUF files
-  from [second-state/stable-diffusion-3-medium-GGUF](https://huggingface.co/second-state/stable-diffusion-3-medium-GGUF/tree/main?show_file_info=sd3-medium-f16.gguf).
+  from [gpustack/stable-diffusion-v3-5-medium-GGUF](https://huggingface.co/gpustack/stable-diffusion-v3-5-medium-GGUF/tree/main?show_file_info=stable-diffusion-v3-5-medium-FP16.gguf).
 
     ```shell
     $ # Provide 1 session(allowing 1 parallel chat user).
-    $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/second-state/stable-diffusion-3-medium-GGUF/sd3-medium-f16.gguf --images
+    $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/stable-diffusion-v3.5-medium-GGUF/stable-diffusion-v3-5-medium-FP16.gguf --images
     
-    $ curl http://localhost:8080/v1/images -H "Content-Type: application/json" -d '{"model": "sd3-medium", "prompt": "A cat in a forest"}'
+    $ curl http://localhost:8080/v1/images/generations -H "Content-Type: application/json" -d '{"model": "sd3-medium", "prompt": "A lovely cat"}'
     
     $ # or use the image_generate.sh tool
-    $ ./llama-box/tools/image_generate.sh "A cat in a forest"
+    $ ./llama-box/tools/image_generate.sh "A lovely cat"
     ```
 
 - Draft model speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
@@ -218,6 +218,8 @@ server:
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
   -a,    --alias NAME             model name alias (default: unknown)
+  -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
+  -mg,   --main-gpu N             the GPU to use for the model (default: 0)
          --metrics                enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 enable infill endpoint (default: disabled)
          --embeddings             enable embedding endpoint (default: disabled)
@@ -228,14 +230,12 @@ server:
 
 server/completion:
 
-  -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
   -ngl,  --gpu-layers N           number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
                                     - layer (default): split layers and KV across GPUs
-                                    - row: split rows across GPUs
+                                    - row: split rows across GPUs, store intermediate results and KV in --main-gpu
   -ts,   --tensor-split SPLIT     fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1
-  -mg,   --main-gpu N             the GPU to use for the model (with split-mode = none), or for intermediate results and KV (with split-mode = row) (default: 0)
          --override-kv KEY=TYPE:VALUE
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
@@ -324,7 +324,7 @@ server/completion:
          --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting, implicit --cache-prompt if value (default: 0)
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
-  -dt,   --defrag-thold N         KV cache defragmentation threshold (default: -1.0, < 0 - disabled)
+  -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
   -np,   --parallel N             number of parallel sequences to decode (default: 1)
   -cb,   --cont-batching          enable continuous batching (a.k.a dynamic batching) (default: enabled)
   -nocb, --no-cont-batching       disable continuous batching
@@ -369,29 +369,37 @@ server/images:
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
          --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
          --image-sampler TYPE     standard sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: euler_a)
-         --image-cfg-scale N      for standard sampler, the scale of classifier-free guidance in the output phase (default: 7.000000, 1.0 = disabled)
-         --image-hd-sampler TYPE  high definition sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: dpm++2m)
+         --image-cfg-scale N      for standard sampler, the scale of classifier-free guidance in the output phase (default: 9.000000, 1.0 = disabled)
+         --image-hd-sampler TYPE  high definition sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: heun)
          --image-hd-cfg-scale N   for high definition sampler, the scale of classifier-free guidance in the output phase (default: 0.000000, 0.0 = reuse --cfg-scale, 1.0 = disabled)
-         --image-vd-sampler TYPE  vivid sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: dpm++2s_a)
+         --image-vd-sampler TYPE  vivid sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: dpm++2mv2)
          --image-vd-cfg-scale N   for vivid sampler, the scale of classifier-free guidance in the output phase (default: 0.000000, 0.0 = reuse --cfg-scale, 1.0 = disabled)
-         --image-nt-sampler TYPE  natural sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: heun)
+         --image-nt-sampler TYPE  natural sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm (default: dpm++2m)
          --image-nt-cfg-scale N   for natural sampler, the scale of classifier-free guidance in the output phase (default: 0.000000, 0.0 = reuse --cfg-scale, 1.0 = disabled)
          --image-sample-steps N   number of sample steps, automatically +10 when requesting high definition result (default: 20)
          --image-schedule TYPE    denoiser sigma schedule, select from default;discrete;karras;exponential;ays;gits (default: default)
-         --image-diffusion-model PATH
-                                  path to the standalone diffusion model, or use --model included
-         --image-clip-l PATH      path to the CLIP Large (clip-l) text encoder, or use --model included
-         --image-clip-g PATH      path to the CLIP Generic (clip-g) text encoder, or use --model included
-         --image-t5xxl PATH       path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
-         --image-vae PATH         path to Variational AutoEncoder (vae), or use --model included
+         --image-no-text-encoder-model-offload
+                                  disable text-encoder(clip-l/clip-g/t5xxl) model offload
+         --image-clip-l-model PATH
+                                  path to the CLIP Large (clip-l) text encoder, or use --model included
+         --image-clip-g-model PATH
+                                  path to the CLIP Generic (clip-g) text encoder, or use --model included
+         --image-t5xxl-model PATH 
+                                  path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
+         --image-no-vae-model-offload
+                                  disable vae(taesd) model offload
+         --image-vae-model PATH   path to Variational AutoEncoder (vae), or use --model included
          --image-vae-tiling       indicate to process vae in tiles to reduce memory usage (default: disabled)
-         --image-taesd PATH       path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
+         --image-taesd-model PATH 
+                                  path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
          --image-lora-model-dir PATH
                                   path to LoRA model directory
          --image-upscale-model PATH
                                   path to the upscale model, or use --model included
          --image-upscale-repeats N
                                   how many times to run upscaler (default: 1)
+         --image-no-control-net-model-offload
+                                  disable control-net model offload
          --image-control-net-model PATH
                                   path to the control net model, or use --model included
          --image-control-strength N

@@ -1,8 +1,8 @@
 diff --git a/util.cpp b/util.cpp
-index 5de5ce2..8dbcea7 100644
+index f9b4d2b..ccc46c5 100644
 --- a/util.cpp
 +++ b/util.cpp
-@@ -362,12 +362,12 @@ void* sd_log_cb_data         = NULL;
+@@ -374,12 +374,12 @@ void* sd_log_cb_data         = NULL;
  
  #define LOG_BUFFER_SIZE 1024
  
@@ -12,16 +12,16 @@ index 5de5ce2..8dbcea7 100644
      va_start(args, format);
  
      static char log_buffer[LOG_BUFFER_SIZE + 1];
--    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s:%-4d - ", sd_basename(file).c_str(), line);
+-    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s:%-4d - ", path_basename(file).c_str(), line);
 +    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s: ", func);
  
      if (written >= 0 && written < LOG_BUFFER_SIZE) {
          vsnprintf(log_buffer + written, LOG_BUFFER_SIZE - written, format, args);
 diff --git a/util.h b/util.h
-index 9b1e673..a12a4fc 100644
+index a0d1008..ea6b7a2 100644
 --- a/util.h
 +++ b/util.h
-@@ -48,14 +48,14 @@ std::string path_join(const std::string& p1, const std::string& p2);
+@@ -52,14 +52,14 @@ std::string path_basename(const std::string& path);
  
  void pretty_progress(int step, int steps, float time);
  

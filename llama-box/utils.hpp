@@ -1052,7 +1052,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         }
     } else {
         std::string sampler_str = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"] = common_sd_str_to_sampler_type(sampler_str.c_str());
+        llama_params["sampler"] = sd_argument_to_sample_method(sampler_str.c_str());
         llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
         llama_params["sample_steps"] = json_value(body, "sample_steps", params.sample_steps);
     }
@@ -1144,7 +1144,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         }
     } else {
         std::string sampler_str = json_value(body, "sampler", std::string("default"));
-        llama_params["sampler"] = common_sd_str_to_sampler_type(sampler_str.c_str());
+        llama_params["sampler"] = sd_argument_to_sample_method(sampler_str.c_str());
         llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
     }
 

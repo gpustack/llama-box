@@ -3,4 +3,5 @@
 	url = https://github.com/ggerganov/llama.cpp
 [submodule "stable-diffusion.cpp"]
 	path = stable-diffusion.cpp
-	url = https://github.com/leejet/stable-diffusion.cpp
+	url = https://github.com/thxcode/stable-diffusion.cpp
+	branch = main

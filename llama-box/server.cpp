@@ -1510,17 +1510,16 @@ struct server_context {
                 {"width", slot.sdsparams.width},
                 {"batch_count", slot.sdsparams.batch_count},
                 {"guidance", sdparams.guidance},
-                {"sampler", common_sd_sampler_type_to_str(slot.sdsparams.sampler)},
+                {"sampler", sd_sample_method_to_argument(slot.sdsparams.sampler)},
                 {"cfg_scale", slot.sdsparams.cfg_scale},
                 {"sample_steps", slot.sdsparams.sample_steps},
-                {"schedule", common_sd_schedule_to_str(sdparams.schedule)},
-                {"diffusion_model", sdparams.diffusion_model},
-                {"clip_l", sdparams.clip_l},
-                {"clip_g", sdparams.clip_g},
-                {"t5xxl", sdparams.t5xxl},
-                {"vae", sdparams.vae},
+                {"schedule", sd_schedule_to_argument(sdparams.schedule)},
+                {"clip_l", sdparams.clip_l_model},
+                {"clip_g", sdparams.clip_g_model},
+                {"t5xxl", sdparams.t5xxl_model},
+                {"vae", sdparams.vae_model},
                 {"vae_tiling", sdparams.vae_tiling},
-                {"taesd", sdparams.taesd},
+                {"taesd", sdparams.taesd_model},
                 {"lora_model_dir", sdparams.lora_model_dir},
                 {"upscale_model", sdparams.upscale_model},
                 {"upscale_repeats", sdparams.upscale_repeats},
@@ -2858,7 +2857,7 @@ struct server_context {
 
         if (sd_ctx != nullptr) {
             return json{
-                {"schedule", common_sd_schedule_to_str(sdparams.schedule)},
+                {"schedule", sd_schedule_to_argument(sdparams.schedule)},
             };
         }
 
@@ -2934,7 +2933,7 @@ int main(int argc, char **argv) {
     sd_log_set(
         [](sd_log_level_t level, const char *text, void * /*user_data*/) {
             if (LOG_DEFAULT_LLAMA <= common_log_verbosity_thold) {
-                common_log_add(common_log_main(), common_sd_log_level_to_ggml_log_level(level), "%s", text);
+                common_log_add(common_log_main(), sd_log_level_to_ggml_log_level(level), "%s", text);
             }
         },
         nullptr);

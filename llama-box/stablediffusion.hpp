@@ -12,59 +12,6 @@
 
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
-// Names of the sampler method, same order as enum sample_method in stable-diffusion.h
-const char *sample_method_str[] = {
-    "euler_a", "euler", "heun", "dpm2", "dpm++2s_a", "dpm++2m", "dpm++2mv2", "ipndm", "ipndm_v", "lcm",
-};
-
-sample_method_t common_sd_str_to_sampler_type(const char *sample_method) {
-    for (int m = 0; m < N_SAMPLE_METHODS; m++) {
-        if (!strcmp(sample_method, sample_method_str[m])) {
-            return (sample_method_t)m;
-        }
-    }
-    return EULER_A;
-}
-
-std::string common_sd_sampler_type_to_str(sample_method_t sample_method) {
-    return std::string(sample_method_str[sample_method]);
-}
-
-// Names of the sigma schedule overrides, same order as sample_schedule in stable-diffusion.h
-const char *schedule_str[] = {
-    "default", "discrete", "karras", "exponential", "ays", "gits",
-};
-
-schedule_t common_sd_str_to_schedule(const char *schedule) {
-    for (int d = 0; d < N_SCHEDULES; d++) {
-        if (!strcmp(schedule, schedule_str[d])) {
-            return (schedule_t)d;
-        }
-    }
-    return DEFAULT;
-}
-
-std::string common_sd_schedule_to_str(schedule_t schedule) {
-    return std::string(schedule_str[schedule]);
-}
-
-ggml_log_level common_sd_log_level_to_ggml_log_level(sd_log_level_t src) {
-    switch (src) {
-    case SD_LOG_DEBUG:
-        return GGML_LOG_LEVEL_DEBUG;
-    case SD_LOG_INFO:
-        return GGML_LOG_LEVEL_INFO;
-    case SD_LOG_WARN:
-        return GGML_LOG_LEVEL_WARN;
-    case SD_LOG_ERROR:
-        return GGML_LOG_LEVEL_ERROR;
-    }
-}
-
-void sd_log_set(sd_log_cb_t sd_log_cb, void *data) {
-    sd_set_log_callback(sd_log_cb, data);
-}
-
 struct stablediffusion_params {
     int height = 1024;
     int width = 1024;
@@ -80,16 +27,18 @@ struct stablediffusion_params {
     float nt_cfg_scale = 0.0f;
     int sample_steps = 20;
     schedule_t schedule = DEFAULT;
-    std::string diffusion_model;
-    std::string clip_l;
-    std::string clip_g;
-    std::string t5xxl;
-    std::string vae;
+    bool text_encoder_model_offload = true;
+    std::string clip_l_model;
+    std::string clip_g_model;
+    std::string t5xxl_model;
+    bool vae_model_offload = true;
+    std::string vae_model;
     bool vae_tiling;
-    std::string taesd;
+    std::string taesd_model;
     std::string lora_model_dir;
     std::string upscale_model;
     int upscale_repeats = 1;
+    bool control_model_offload = true;
     std::string control_net_model;
     float control_strength = 0.9f;
     bool control_canny = false;
@@ -98,6 +47,7 @@ struct stablediffusion_params {
     std::string model;
     std::string model_alias;
     int n_threads;
+    int main_gpu;
 };
 
 struct stablediffusion_sampler_params {
@@ -133,11 +83,11 @@ class stablediffusion_context {
 };
 
 stablediffusion_context::~stablediffusion_context() {
-    free_sd_ctx(sd_ctx);
+    sd_ctx_free(sd_ctx);
 }
 
 void stablediffusion_context::free() {
-    free_sd_ctx(sd_ctx);
+    sd_ctx_free(sd_ctx);
 }
 
 stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt,
@@ -198,7 +148,7 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
 
     // TODO upscaler
 
-    std::string img_params_str = "Sampler: " + std::string(sample_method_str[sparams.sampler]);
+    std::string img_params_str = "Sampler: " + std::string(sample_methods_argument_str[sparams.sampler]);
     if (params.schedule == KARRAS) {
         img_params_str += " karras";
     }
@@ -232,39 +182,36 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
 }
 
 stablediffusion_context *common_sd_init_from_params(stablediffusion_params params) {
-    std::string embed_dir_c_str;
-    std::string stacked_id_embed_dir_c_str;
+    std::string diffusion_model;
+    std::string embed_dir;
+    std::string stacked_id_embed_dir;
     bool vae_decode_only = true;
     bool free_params_immediately = false;
-    sd_type_t wtype = SD_TYPE_COUNT;
-    rng_type_t rng_type = CUDA_RNG;
-    bool keep_clip_on_cpu = false;
-    bool keep_control_net_cpu = false;
-    bool keep_vae_on_cpu = false;
 
     // clang-format off
     sd_ctx_t* sd_ctx = new_sd_ctx(
         params.model.c_str(),
-        params.clip_l.c_str(),
-        params.clip_g.c_str(),
-        params.t5xxl.c_str(),
-        params.diffusion_model.c_str(),
-        params.vae.c_str(),
-        params.taesd.c_str(),
+        params.clip_l_model.c_str(),
+        params.clip_g_model.c_str(),
+        params.t5xxl_model.c_str(),
+        diffusion_model.c_str(),
+        params.vae_model.c_str(),
+        params.taesd_model.c_str(),
         params.control_net_model.c_str(),
         params.lora_model_dir.c_str(),
-        embed_dir_c_str.c_str(),
-        stacked_id_embed_dir_c_str.c_str(),
+        embed_dir.c_str(),
+        stacked_id_embed_dir.c_str(),
         vae_decode_only,
         params.vae_tiling,
         free_params_immediately,
         params.n_threads,
-        wtype,
-        rng_type,
+        GGML_TYPE_COUNT,
+        CUDA_RNG,
         params.schedule,
-        keep_clip_on_cpu,
-        keep_control_net_cpu,
-        keep_vae_on_cpu);
+        !params.text_encoder_model_offload,
+        !params.control_model_offload,
+        !params.vae_model_offload,
+        params.main_gpu);
     if (sd_ctx == nullptr) {
         return nullptr;
     }
