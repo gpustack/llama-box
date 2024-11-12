@@ -30,13 +30,13 @@ struct llama_box_params {
     rpcserver_params rparams;
     stablediffusion_params sdparams;
 
-    bool cache_prompt = false;
-    bool endpoint_infill = false;
-    bool endpoint_images = false;
-    int32_t conn_idle = 60;       // connection idle in seconds
-    int32_t conn_keepalive = 15;  // connection keep-alive in seconds
-    int32_t n_tps = 0;            // maximum number of tokens per seconds
-    int32_t lookup_ngram_min = 0; // minimum n-gram size for lookup cache
+    bool cache_prompt        = false;
+    bool endpoint_infill     = false;
+    bool endpoint_images     = false;
+    int32_t conn_idle        = 60; // connection idle in seconds
+    int32_t conn_keepalive   = 15; // connection keep-alive in seconds
+    int32_t n_tps            = 0;  // maximum number of tokens per seconds
+    int32_t lookup_ngram_min = 0;  // minimum n-gram size for lookup cache
 };
 
 static int unknown(const char *flag) {
@@ -88,9 +88,9 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
         std::string grp;
     };
 
-    const auto &params = bparams.gparams;
-    const auto &rparams = bparams.rparams;
-    const auto &sparams = params.sparams;
+    const auto &params   = bparams.gparams;
+    const auto &rparams  = bparams.rparams;
+    const auto &sparams  = params.sparams;
     const auto &sdparams = bparams.sdparams;
 
     std::string default_sampler_type_chars;
@@ -348,12 +348,12 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
         }
 
         const auto desc = o.desc;
-        size_t start = 0;
-        size_t end = desc.find('\n');
+        size_t start    = 0;
+        size_t end      = desc.find('\n');
         while (end != std::string::npos) {
             printf("%s\n%34s", desc.substr(start, end - start).c_str(), "");
             start = end + 1;
-            end = desc.find('\n', start);
+            end   = desc.find('\n', start);
         }
 
         printf("%s\n", desc.substr(start).c_str());
@@ -368,19 +368,19 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
 template <typename T>
 static typename std::enable_if<std::is_same<T, std::string>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
-    target = value ? std::string(value) : target;
+    target      = value ? std::string(value) : target;
 }
 
 template <typename T>
 static typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
-    target = value ? std::stoi(value) : target;
+    target      = value ? std::stoi(value) : target;
 }
 
 template <typename T>
 static typename std::enable_if<std::is_floating_point<T>::value, void>::type get_env(std::string name, T &target) {
     char *value = std::getenv(name.c_str());
-    target = value ? std::stof(value) : target;
+    target      = value ? std::stof(value) : target;
 }
 
 template <typename T>
@@ -433,7 +433,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--log-verbosity");
                 }
-                char *arg = argv[i++];
+                char *arg                 = argv[i++];
                 bparams.gparams.verbosity = std::stoi(std::string(arg));
                 common_log_set_verbosity_thold(bparams.gparams.verbosity);
                 continue;
@@ -452,7 +452,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--host");
                 }
-                char *arg = argv[i++];
+                char *arg                = argv[i++];
                 bparams.gparams.hostname = std::string(arg);
                 continue;
             }
@@ -461,7 +461,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--port");
                 }
-                char *arg = argv[i++];
+                char *arg            = argv[i++];
                 bparams.gparams.port = std::stoi(std::string(arg));
                 if (bparams.gparams.port <= 0 || bparams.gparams.port > 65535) {
                     invalid("--port");
@@ -473,8 +473,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--timeout");
                 }
-                char *arg = argv[i++];
-                bparams.gparams.timeout_read = std::stoi(std::string(arg));
+                char *arg                     = argv[i++];
+                bparams.gparams.timeout_read  = std::stoi(std::string(arg));
                 bparams.gparams.timeout_write = bparams.gparams.timeout_read;
                 continue;
             }
@@ -483,7 +483,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--threads-http");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.gparams.n_threads_http = std::stoi(std::string(arg));
                 continue;
             }
@@ -492,7 +492,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--conn-idle");
                 }
-                char *arg = argv[i++];
+                char *arg         = argv[i++];
                 bparams.conn_idle = std::stoi(std::string(arg));
                 continue;
             }
@@ -501,7 +501,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--conn-keepalive");
                 }
-                char *arg = argv[i++];
+                char *arg              = argv[i++];
                 bparams.conn_keepalive = std::stoi(std::string(arg));
                 continue;
             }
@@ -510,7 +510,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--model");
                 }
-                char *arg = argv[i++];
+                char *arg             = argv[i++];
                 bparams.gparams.model = std::string(arg);
                 continue;
             }
@@ -519,7 +519,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--alias");
                 }
-                char *arg = argv[i++];
+                char *arg                   = argv[i++];
                 bparams.gparams.model_alias = std::string(arg);
                 continue;
             }
@@ -528,7 +528,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--seed");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.gparams.sparams.seed = std::stoul(std::string(arg));
                 continue;
             }
@@ -538,7 +538,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--main-gpu");
                     }
-                    char *arg = argv[i++];
+                    char *arg                = argv[i++];
                     bparams.gparams.main_gpu = std::stoi(std::string(arg));
                     if (bparams.gparams.main_gpu < 0 || bparams.gparams.main_gpu >= int32_t(llama_max_devices())) {
                         invalid("--main-gpu");
@@ -582,7 +582,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--rpc");
                     }
-                    char *arg = argv[i++];
+                    char *arg                   = argv[i++];
                     bparams.gparams.rpc_servers = arg;
                     continue;
                 }
@@ -595,7 +595,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--gpu-layers");
                     }
-                    char *arg = argv[i++];
+                    char *arg                    = argv[i++];
                     bparams.gparams.n_gpu_layers = std::stoi(arg);
                     continue;
                 }
@@ -680,7 +680,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--chat-template");
                 }
                 bparams.gparams.enable_chat_template = true;
-                bparams.gparams.chat_template = t;
+                bparams.gparams.chat_template        = t;
                 continue;
             }
 
@@ -699,7 +699,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--chat-template-file");
                 }
                 bparams.gparams.enable_chat_template = true;
-                bparams.gparams.chat_template = t;
+                bparams.gparams.chat_template        = t;
                 continue;
             }
 
@@ -707,7 +707,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--slot-prompt-similarity");
                 }
-                char *arg = argv[i++];
+                char *arg                              = argv[i++];
                 bparams.gparams.slot_prompt_similarity = std::stof(std::string(arg));
                 continue;
             }
@@ -716,7 +716,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--tokens-per-second");
                 }
-                char *arg = argv[i++];
+                char *arg     = argv[i++];
                 bparams.n_tps = std::stoi(std::string(arg));
                 continue;
             }
@@ -725,7 +725,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--threads");
                 }
-                char *arg = argv[i++];
+                char *arg                           = argv[i++];
                 bparams.gparams.cpuparams.n_threads = std::stoi(std::string(arg));
                 if (bparams.gparams.cpuparams.n_threads <= 0) {
                     bparams.gparams.cpuparams.n_threads = cpu_get_num_math();
@@ -737,7 +737,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-mask");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.cpuparams.mask_valid = true;
                 if (!parse_cpu_mask(arg, bparams.gparams.cpuparams.cpumask)) {
                     invalid("--cpu-mask");
@@ -749,7 +749,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-range");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.cpuparams.mask_valid = true;
                 if (!parse_cpu_range(arg, bparams.gparams.cpuparams.cpumask)) {
                     invalid("--cpu-range");
@@ -761,7 +761,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--prio");
                 }
-                char *arg = argv[i++];
+                char *arg                          = argv[i++];
                 bparams.gparams.cpuparams.priority = (enum ggml_sched_priority)std::stoi(std::string(arg));
                 continue;
             }
@@ -770,7 +770,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-strict");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.cpuparams.strict_cpu = std::stoul(std::string(arg));
                 continue;
             }
@@ -779,7 +779,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--poll");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.gparams.cpuparams.poll = std::stoul(std::string(arg));
                 continue;
             }
@@ -788,7 +788,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--threads-batch");
                 }
-                char *arg = argv[i++];
+                char *arg                                 = argv[i++];
                 bparams.gparams.cpuparams_batch.n_threads = std::stoi(std::string(arg));
                 if (bparams.gparams.cpuparams_batch.n_threads <= 0) {
                     bparams.gparams.cpuparams_batch.n_threads = cpu_get_num_math();
@@ -800,7 +800,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-mask-batch");
                 }
-                char *arg = argv[i++];
+                char *arg                                  = argv[i++];
                 bparams.gparams.cpuparams_batch.mask_valid = true;
                 if (!parse_cpu_mask(arg, bparams.gparams.cpuparams_batch.cpumask)) {
                     invalid("--cpu-mask-batch");
@@ -812,7 +812,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-range-batch");
                 }
-                char *arg = argv[i++];
+                char *arg                                  = argv[i++];
                 bparams.gparams.cpuparams_batch.mask_valid = true;
                 if (!parse_cpu_range(arg, bparams.gparams.cpuparams_batch.cpumask)) {
                     invalid("--cpu-range-batch");
@@ -824,7 +824,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--prio-batch");
                 }
-                char *arg = argv[i++];
+                char *arg                                = argv[i++];
                 bparams.gparams.cpuparams_batch.priority = (enum ggml_sched_priority)std::stoul(std::string(arg));
                 continue;
             }
@@ -833,7 +833,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-strict-batch");
                 }
-                char *arg = argv[i++];
+                char *arg                                  = argv[i++];
                 bparams.gparams.cpuparams_batch.strict_cpu = std::stoul(std::string(arg));
                 continue;
             }
@@ -842,7 +842,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--poll-batch");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.cpuparams_batch.poll = std::stoul(std::string(arg));
                 continue;
             }
@@ -851,7 +851,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--ctx-size");
                 }
-                char *arg = argv[i++];
+                char *arg             = argv[i++];
                 bparams.gparams.n_ctx = std::stoi(std::string(arg));
                 continue;
             }
@@ -865,7 +865,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--predict");
                 }
-                char *arg = argv[i++];
+                char *arg                 = argv[i++];
                 bparams.gparams.n_predict = std::stoi(std::string(arg));
                 continue;
             }
@@ -874,7 +874,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--batch-size");
                 }
-                char *arg = argv[i++];
+                char *arg               = argv[i++];
                 bparams.gparams.n_batch = std::stoi(std::string(arg));
                 continue;
             }
@@ -883,7 +883,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--ubatch-size");
                 }
-                char *arg = argv[i++];
+                char *arg                = argv[i++];
                 bparams.gparams.n_ubatch = std::stoi(std::string(arg));
                 continue;
             }
@@ -892,7 +892,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--keep");
                 }
-                char *arg = argv[i++];
+                char *arg              = argv[i++];
                 bparams.gparams.n_keep = std::stoi(std::string(arg));
                 continue;
             }
@@ -916,8 +916,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--samplers");
                 }
-                char *arg = argv[i++];
-                const auto sampler_names = string_split<std::string>(arg, ';');
+                char *arg                        = argv[i++];
+                const auto sampler_names         = string_split<std::string>(arg, ';');
                 bparams.gparams.sparams.samplers = common_sampler_types_from_names(sampler_names, true);
                 continue;
             }
@@ -926,7 +926,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--sampling-seq");
                 }
-                char *arg = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.gparams.sparams.samplers = common_sampler_types_from_chars(arg);
                 continue;
             }
@@ -940,7 +940,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--temp");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.gparams.sparams.temp = std::stof(std::string(arg));
                 bparams.gparams.sparams.temp = std::max(bparams.gparams.sparams.temp, 0.0f);
                 continue;
@@ -950,7 +950,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--top-k");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.gparams.sparams.top_k = std::stoi(std::string(arg));
                 continue;
             }
@@ -959,7 +959,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--top-p");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.gparams.sparams.top_p = std::stof(std::string(arg));
                 continue;
             }
@@ -968,7 +968,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--min-p");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.gparams.sparams.min_p = std::stof(std::string(arg));
                 continue;
             }
@@ -977,7 +977,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--xtc-probability");
                 }
-                char *arg = argv[i++];
+                char *arg                               = argv[i++];
                 bparams.gparams.sparams.xtc_probability = std::stof(std::string(arg));
                 continue;
             }
@@ -986,7 +986,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--xtc-threshold");
                 }
-                char *arg = argv[i++];
+                char *arg                             = argv[i++];
                 bparams.gparams.sparams.xtc_threshold = std::stof(std::string(arg));
                 continue;
             }
@@ -995,7 +995,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--typical");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.gparams.sparams.typ_p = std::stof(std::string(arg));
                 continue;
             }
@@ -1004,9 +1004,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--repeat-last-n");
                 }
-                char *arg = argv[i++];
+                char *arg                              = argv[i++];
                 bparams.gparams.sparams.penalty_last_n = std::stoi(std::string(arg));
-                bparams.gparams.sparams.n_prev = std::max(bparams.gparams.sparams.n_prev, bparams.gparams.sparams.penalty_last_n);
+                bparams.gparams.sparams.n_prev         = std::max(bparams.gparams.sparams.n_prev, bparams.gparams.sparams.penalty_last_n);
                 continue;
             }
 
@@ -1014,7 +1014,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--repeat-penalty");
                 }
-                char *arg = argv[i++];
+                char *arg                              = argv[i++];
                 bparams.gparams.sparams.penalty_repeat = std::stof(std::string(arg));
                 continue;
             }
@@ -1023,7 +1023,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--presence-penalty");
                 }
-                char *arg = argv[i++];
+                char *arg                               = argv[i++];
                 bparams.gparams.sparams.penalty_present = std::stof(std::string(arg));
                 continue;
             }
@@ -1032,7 +1032,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--frequency-penalty");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.sparams.penalty_freq = std::stof(std::string(arg));
                 continue;
             }
@@ -1041,7 +1041,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-multiplier");
                 }
-                char *arg = argv[i++];
+                char *arg                              = argv[i++];
                 bparams.gparams.sparams.dry_multiplier = std::stof(std::string(arg));
                 continue;
             }
@@ -1050,7 +1050,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-base");
                 }
-                char *arg = argv[i++];
+                char *arg            = argv[i++];
                 float potential_base = std::stof(std::string(arg));
                 if (potential_base >= 1.0f) {
                     bparams.gparams.sparams.dry_multiplier = std::stof(std::string(arg));
@@ -1062,7 +1062,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-allowed-length");
                 }
-                char *arg = argv[i++];
+                char *arg                                  = argv[i++];
                 bparams.gparams.sparams.dry_allowed_length = std::stoi(std::string(arg));
                 continue;
             }
@@ -1071,7 +1071,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-penalty-last-n");
                 }
-                char *arg = argv[i++];
+                char *arg                                  = argv[i++];
                 bparams.gparams.sparams.dry_penalty_last_n = std::stoi(std::string(arg));
                 continue;
             }
@@ -1100,7 +1100,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dynatemp-range");
                 }
-                char *arg = argv[i++];
+                char *arg                              = argv[i++];
                 bparams.gparams.sparams.dynatemp_range = std::stof(std::string(arg));
                 continue;
             }
@@ -1109,7 +1109,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dynatemp-exp");
                 }
-                char *arg = argv[i++];
+                char *arg                                 = argv[i++];
                 bparams.gparams.sparams.dynatemp_exponent = std::stof(std::string(arg));
                 continue;
             }
@@ -1118,7 +1118,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mirostat");
                 }
-                char *arg = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.gparams.sparams.mirostat = std::stoi(std::string(arg));
                 continue;
             }
@@ -1127,7 +1127,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mirostat-lr");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.sparams.mirostat_eta = std::stof(std::string(arg));
                 continue;
             }
@@ -1136,7 +1136,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mirostat-ent");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.sparams.mirostat_tau = std::stof(std::string(arg));
                 continue;
             }
@@ -1163,7 +1163,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--grammar");
                 }
-                char *arg = argv[i++];
+                char *arg                       = argv[i++];
                 bparams.gparams.sparams.grammar = std::string(arg);
                 continue;
             }
@@ -1186,7 +1186,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--json-schema");
                 }
-                char *arg = argv[i++];
+                char *arg                       = argv[i++];
                 bparams.gparams.sparams.grammar = json_schema_to_grammar(json::parse(std::string(arg)));
                 continue;
             }
@@ -1213,7 +1213,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rope-scale");
                 }
-                char *arg = argv[i++];
+                char *arg                       = argv[i++];
                 bparams.gparams.rope_freq_scale = 1.0f / std::stof(std::string(arg));
                 continue;
             }
@@ -1222,7 +1222,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rope-freq-base");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.gparams.rope_freq_base = std::stof(std::string(arg));
                 continue;
             }
@@ -1231,7 +1231,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rope-freq-scale");
                 }
-                char *arg = argv[i++];
+                char *arg                       = argv[i++];
                 bparams.gparams.rope_freq_scale = std::stof(std::string(arg));
                 continue;
             }
@@ -1240,7 +1240,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-orig-ctx");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.gparams.yarn_orig_ctx = std::stoi(std::string(arg));
                 continue;
             }
@@ -1249,7 +1249,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-ext-factor");
                 }
-                char *arg = argv[i++];
+                char *arg                       = argv[i++];
                 bparams.gparams.yarn_ext_factor = std::stof(std::string(arg));
                 continue;
             }
@@ -1258,7 +1258,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-attn-factor");
                 }
-                char *arg = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.gparams.yarn_attn_factor = std::stof(std::string(arg));
                 continue;
             }
@@ -1267,7 +1267,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-beta-fast");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.gparams.yarn_beta_fast = std::stof(std::string(arg));
                 continue;
             }
@@ -1276,7 +1276,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-beta-slow");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.gparams.yarn_beta_slow = std::stof(std::string(arg));
                 continue;
             }
@@ -1295,7 +1295,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cache-reuse");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.gparams.n_cache_reuse = std::stoi(std::string(arg));
                 if (bparams.gparams.n_cache_reuse > 0) {
                     bparams.cache_prompt = true;
@@ -1307,7 +1307,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cache-type-k");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.gparams.cache_type_k = std::string(arg);
                 continue;
             }
@@ -1316,7 +1316,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cache-type-v");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.gparams.cache_type_v = std::string(arg);
                 continue;
             }
@@ -1325,7 +1325,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--defrag-thold");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.gparams.defrag_thold = std::stof(std::string(arg));
                 continue;
             }
@@ -1334,7 +1334,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--parallel");
                 }
-                char *arg = argv[i++];
+                char *arg                  = argv[i++];
                 bparams.gparams.n_parallel = std::stoi(std::string(arg));
                 continue;
             }
@@ -1353,7 +1353,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mmproj");
                 }
-                char *arg = argv[i++];
+                char *arg              = argv[i++];
                 bparams.gparams.mmproj = std::string(arg);
                 continue;
             }
@@ -1453,9 +1453,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     invalid("--control-vector-layer-range");
                 }
-                char *e = argv[i++];
+                char *e                                    = argv[i++];
                 bparams.gparams.control_vector_layer_start = std::stoi(std::string(s));
-                bparams.gparams.control_vector_layer_end = std::stoi(std::string(e));
+                bparams.gparams.control_vector_layer_end   = std::stoi(std::string(e));
                 continue;
             }
 
@@ -1480,7 +1480,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--draft");
                 }
-                char *arg = argv[i++];
+                char *arg               = argv[i++];
                 bparams.gparams.n_draft = std::stoi(std::string(arg));
                 continue;
             }
@@ -1489,7 +1489,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--model-draft");
                 }
-                char *arg = argv[i++];
+                char *arg                   = argv[i++];
                 bparams.gparams.model_draft = std::string(arg);
                 continue;
             }
@@ -1499,7 +1499,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--gpu-layers-draft");
                     }
-                    char *arg = argv[i++];
+                    char *arg                          = argv[i++];
                     bparams.gparams.n_gpu_layers_draft = std::stoi(arg);
                     continue;
                 }
@@ -1509,7 +1509,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--lookup-ngram-min");
                 }
-                char *arg = argv[i++];
+                char *arg                = argv[i++];
                 bparams.lookup_ngram_min = std::stoi(std::string(arg));
                 continue;
             }
@@ -1518,7 +1518,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--lookup-cache-static");
                 }
-                char *arg = argv[i++];
+                char *arg                           = argv[i++];
                 bparams.gparams.lookup_cache_static = std::string(arg);
                 continue;
             }
@@ -1527,7 +1527,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--lookup-cache-dynamic");
                 }
-                char *arg = argv[i++];
+                char *arg                            = argv[i++];
                 bparams.gparams.lookup_cache_dynamic = std::string(arg);
                 continue;
             }
@@ -1562,7 +1562,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-height");
                 }
-                char *arg = argv[i++];
+                char *arg               = argv[i++];
                 bparams.sdparams.height = std::stoi(std::string(arg));
                 continue;
             }
@@ -1571,7 +1571,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-width");
                 }
-                char *arg = argv[i++];
+                char *arg              = argv[i++];
                 bparams.sdparams.width = std::stoi(std::string(arg));
                 continue;
             }
@@ -1580,7 +1580,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-guidance");
                 }
-                char *arg = argv[i++];
+                char *arg                 = argv[i++];
                 bparams.sdparams.guidance = std::stof(std::string(arg));
                 if (bparams.sdparams.guidance < 0.0f) {
                     invalid("--image-guidance");
@@ -1592,7 +1592,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-strength");
                 }
-                char *arg = argv[i++];
+                char *arg                 = argv[i++];
                 bparams.sdparams.strength = std::stof(std::string(arg));
                 if (bparams.sdparams.strength < 0.0f || bparams.sdparams.strength > 1.0f) {
                     invalid("--image-strength");
@@ -1604,7 +1604,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-sampler");
                 }
-                char *arg = argv[i++];
+                char *arg                = argv[i++];
                 bparams.sdparams.sampler = sd_argument_to_sample_method(arg);
                 continue;
             }
@@ -1613,7 +1613,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-cfg-scale");
                 }
-                char *arg = argv[i++];
+                char *arg                  = argv[i++];
                 bparams.sdparams.cfg_scale = std::stof(std::string(arg));
                 if (bparams.sdparams.cfg_scale < 1.0f) {
                     invalid("--image-cfg-scale");
@@ -1625,7 +1625,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-hd-sampler");
                 }
-                char *arg = argv[i++];
+                char *arg                   = argv[i++];
                 bparams.sdparams.hd_sampler = sd_argument_to_sample_method(arg);
                 continue;
             }
@@ -1634,7 +1634,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-hd-cfg-scale");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.sdparams.hd_cfg_scale = std::stof(std::string(arg));
                 if (bparams.sdparams.hd_cfg_scale < 1.0f) {
                     invalid("--image-hd-cfg-scale");
@@ -1646,7 +1646,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-vd-sampler");
                 }
-                char *arg = argv[i++];
+                char *arg                   = argv[i++];
                 bparams.sdparams.vd_sampler = sd_argument_to_sample_method(arg);
                 continue;
             }
@@ -1655,7 +1655,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-vd-cfg-scale");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.sdparams.vd_cfg_scale = std::stof(std::string(arg));
                 if (bparams.sdparams.vd_cfg_scale < 1.0f) {
                     invalid("--image-vd-cfg-scale");
@@ -1667,7 +1667,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-nt-sampler");
                 }
-                char *arg = argv[i++];
+                char *arg                   = argv[i++];
                 bparams.sdparams.nt_sampler = sd_argument_to_sample_method(arg);
                 continue;
             }
@@ -1676,7 +1676,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-nt-cfg-scale");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.sdparams.nt_cfg_scale = std::stof(std::string(arg));
                 if (bparams.sdparams.nt_cfg_scale < 1.0f) {
                     invalid("--image-nt-cfg-scale");
@@ -1688,7 +1688,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-sample-steps");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.sdparams.sample_steps = std::stoi(std::string(arg));
                 if (bparams.sdparams.sample_steps < 1) {
                     invalid("--image-sample-steps");
@@ -1700,7 +1700,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-schedule");
                 }
-                char *arg = argv[i++];
+                char *arg                 = argv[i++];
                 bparams.sdparams.schedule = sd_argument_to_schedule(arg);
                 continue;
             }
@@ -1716,7 +1716,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-clip-l-model");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.sdparams.clip_l_model = std::string(arg);
                 continue;
             }
@@ -1725,7 +1725,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-clip-g-model");
                 }
-                char *arg = argv[i++];
+                char *arg                     = argv[i++];
                 bparams.sdparams.clip_g_model = std::string(arg);
                 continue;
             }
@@ -1734,7 +1734,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-t5xxl-model");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.sdparams.t5xxl_model = std::string(arg);
                 continue;
             }
@@ -1750,7 +1750,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-vae-model");
                 }
-                char *arg = argv[i++];
+                char *arg                  = argv[i++];
                 bparams.sdparams.vae_model = std::string(arg);
                 continue;
             }
@@ -1764,7 +1764,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-taesd-model");
                 }
-                char *arg = argv[i++];
+                char *arg                    = argv[i++];
                 bparams.sdparams.taesd_model = std::string(arg);
                 continue;
             }
@@ -1773,7 +1773,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-lora-model-dir");
                 }
-                char *arg = argv[i++];
+                char *arg                       = argv[i++];
                 bparams.sdparams.lora_model_dir = std::string(arg);
                 continue;
             }
@@ -1782,7 +1782,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-upscale-model");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.sdparams.upscale_model = std::string(arg);
                 continue;
             }
@@ -1791,7 +1791,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-upscale-repeats");
                 }
-                char *arg = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.sdparams.upscale_repeats = std::stoi(std::string(arg));
                 if (bparams.sdparams.upscale_repeats < 1) {
                     invalid("--image-upscale-repeats");
@@ -1810,7 +1810,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-control-net-model");
                 }
-                char *arg = argv[i++];
+                char *arg                          = argv[i++];
                 bparams.sdparams.control_net_model = std::string(arg);
                 continue;
             }
@@ -1819,7 +1819,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-control-strength");
                 }
-                char *arg = argv[i++];
+                char *arg                         = argv[i++];
                 bparams.sdparams.control_strength = std::stof(std::string(arg));
                 if (bparams.sdparams.control_strength < 0.0f || bparams.sdparams.control_strength > 1.0f) {
                     invalid("--image-control-strength");
@@ -1840,7 +1840,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rpc-server-host");
                 }
-                char *arg = argv[i++];
+                char *arg                = argv[i++];
                 bparams.rparams.hostname = std::string(arg);
                 continue;
             }
@@ -1849,7 +1849,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rpc-server-port");
                 }
-                char *arg = argv[i++];
+                char *arg            = argv[i++];
                 bparams.rparams.port = std::stoi(std::string(arg));
                 if (bparams.rparams.port < 0 || bparams.rparams.port > 65535) {
                     invalid("--rpc-server-port");
@@ -1862,7 +1862,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--rpc-server-main-gpu");
                     }
-                    char *arg = argv[i++];
+                    char *arg                = argv[i++];
                     bparams.rparams.main_gpu = std::stoi(std::string(arg));
                     if (bparams.rparams.main_gpu >= int32_t(llama_max_devices())) {
                         invalid("--rpc-server-main-gpu");
@@ -1875,7 +1875,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rpc-server-reserve-memory");
                 }
-                char *arg = argv[i++];
+                char *arg                      = argv[i++];
                 bparams.rparams.reserve_memory = std::stoul(std::string(arg)) << 20;
                 continue;
             }
@@ -1933,8 +1933,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
     if (bparams.endpoint_images) {
         bparams.gparams.enable_chat_template = false;
-        bparams.sdparams.model = bparams.gparams.model;
-        bparams.sdparams.model_alias = bparams.gparams.model_alias;
+        bparams.sdparams.model               = bparams.gparams.model;
+        bparams.sdparams.model_alias         = bparams.gparams.model_alias;
         if (bparams.sdparams.hd_cfg_scale <= 1.0f) {
             bparams.sdparams.hd_cfg_scale = bparams.sdparams.cfg_scale;
         }
@@ -1945,7 +1945,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             bparams.sdparams.nt_cfg_scale = bparams.sdparams.cfg_scale;
         }
         bparams.sdparams.n_threads = bparams.gparams.cpuparams.n_threads;
-        bparams.sdparams.main_gpu = bparams.gparams.main_gpu;
+        bparams.sdparams.main_gpu  = bparams.gparams.main_gpu;
     }
 
     return true;

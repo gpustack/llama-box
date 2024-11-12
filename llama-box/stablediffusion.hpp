@@ -13,20 +13,20 @@
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 struct stablediffusion_params {
-    int height = 1024;
-    int width = 1024;
-    float guidance = 3.5f;
-    float strength = 0.75f;
-    sample_method_t sampler = EULER_A;
-    float cfg_scale = 9.0f;
-    sample_method_t hd_sampler = HEUN;
-    float hd_cfg_scale = 0.0f;
-    sample_method_t vd_sampler = DPMPP2Mv2;
-    float vd_cfg_scale = 0.0f;
-    sample_method_t nt_sampler = DPMPP2M;
-    float nt_cfg_scale = 0.0f;
-    int sample_steps = 20;
-    schedule_t schedule = DEFAULT;
+    int height                      = 1024;
+    int width                       = 1024;
+    float guidance                  = 3.5f;
+    float strength                  = 0.75f;
+    sample_method_t sampler         = EULER_A;
+    float cfg_scale                 = 9.0f;
+    sample_method_t hd_sampler      = HEUN;
+    float hd_cfg_scale              = 0.0f;
+    sample_method_t vd_sampler      = DPMPP2Mv2;
+    float vd_cfg_scale              = 0.0f;
+    sample_method_t nt_sampler      = DPMPP2M;
+    float nt_cfg_scale              = 0.0f;
+    int sample_steps                = 20;
+    schedule_t schedule             = DEFAULT;
     bool text_encoder_model_offload = true;
     std::string clip_l_model;
     std::string clip_g_model;
@@ -37,11 +37,11 @@ struct stablediffusion_params {
     std::string taesd_model;
     std::string lora_model_dir;
     std::string upscale_model;
-    int upscale_repeats = 1;
+    int upscale_repeats        = 1;
     bool control_model_offload = true;
     std::string control_net_model;
     float control_strength = 0.9f;
-    bool control_canny = false;
+    bool control_canny     = false;
 
     // inherited from common_params
     std::string model;
@@ -51,13 +51,13 @@ struct stablediffusion_params {
 };
 
 struct stablediffusion_sampler_params {
-    uint32_t seed = LLAMA_DEFAULT_SEED;
-    int batch_count = 1;
-    int height = 1024;
-    int width = 1024;
+    uint32_t seed           = LLAMA_DEFAULT_SEED;
+    int batch_count         = 1;
+    int height              = 1024;
+    int width               = 1024;
     sample_method_t sampler = EULER_A;
-    float cfg_scale = 9.0f;
-    int sample_steps = 20;
+    float cfg_scale         = 9.0f;
+    int sample_steps        = 20;
 };
 
 struct stablediffusion_generated_image {
@@ -75,7 +75,7 @@ class stablediffusion_context {
 
     void free();
 
-    stablediffusion_generated_image *generate(sd_image_t *init_img, const char *prompt, const stablediffusion_sampler_params sparams);
+    stablediffusion_generated_image *generate(sd_image_t *init_img, const char *prompt, stablediffusion_sampler_params sparams);
 
   private:
     sd_ctx_t *sd_ctx = nullptr;
@@ -90,13 +90,12 @@ void stablediffusion_context::free() {
     sd_ctx_free(sd_ctx);
 }
 
-stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt,
-                                                                   const stablediffusion_sampler_params sparams) {
-    std::string negative_prompt = "low quality";
-    int clip_skip = -1;
-    sd_image_t *control_image = nullptr;
+stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt, stablediffusion_sampler_params sparams) {
+    std::string negative_prompt = "";
+    int clip_skip               = -1;
+    sd_image_t *control_image   = nullptr;
     std::string input_id_images_path;
-    float style_ratio = 20.f;
+    float style_ratio    = 20.f;
     bool normalize_input = false;
 
     sd_image_t *imgs = nullptr;
@@ -167,9 +166,15 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
             delete[] pngs;
             return nullptr;
         }
-        int size = 0;
-        unsigned char *data = stbi_write_png_to_mem((const unsigned char *)imgs[i].data, 0, (int)imgs[i].width, (int)imgs[i].height,
-                                                    (int)imgs[i].channel, &size, img_params_str.c_str());
+        int size            = 0;
+        unsigned char *data = stbi_write_png_to_mem(
+            (const unsigned char *)imgs[i].data,
+            0,
+            (int)imgs[i].width,
+            (int)imgs[i].height,
+            (int)imgs[i].channel,
+            &size,
+            img_params_str.c_str());
         if (data == nullptr || size <= 0) {
             delete[] pngs;
             return nullptr;
@@ -185,7 +190,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string diffusion_model;
     std::string embed_dir;
     std::string stacked_id_embed_dir;
-    bool vae_decode_only = true;
+    bool vae_decode_only         = false;
     bool free_params_immediately = false;
 
     // clang-format off

@@ -33,7 +33,7 @@
 #define QUE_ERR(fmt, ...) LOG_ERR("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define QUE_DBG(fmt, ...) LOG_DBG("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 
-using json = nlohmann::json;
+using json         = nlohmann::json;
 using llama_tokens = std::vector<llama_token>;
 
 // https://community.openai.com/t/openai-chat-list-of-error-codes-and-types/357791/11
@@ -113,7 +113,7 @@ static llama_tokens tokenize_mixed(const llama_context *ctx, const json &json_pr
                 std::string s = jp.get<std::string>();
                 llama_tokens p;
                 if (first) {
-                    p = common_tokenize(ctx, s, add_special, parse_special);
+                    p     = common_tokenize(ctx, s, add_special, parse_special);
                     first = false;
                 } else {
                     p = common_tokenize(ctx, s, false, parse_special);
@@ -213,7 +213,7 @@ static llama_tokens format_infill(const llama_context *ctx, const json &input_pr
     llama_tokens extra_tokens;
     extra_tokens.reserve(n_ctx);
 
-    auto model = llama_get_model(ctx);
+    auto model         = llama_get_model(ctx);
     auto tokens_prefix = tokenize_mixed(ctx, input_prefix, false, false);
     auto tokens_suffix = tokenize_mixed(ctx, input_suffix, false, false);
 
@@ -226,7 +226,7 @@ static llama_tokens format_infill(const llama_context *ctx, const json &input_pr
     }
     for (const auto &chunk : input_extra) {
         // { "text": string, "filename": string }
-        const std::string text = json_value(chunk, "text", std::string());
+        const std::string text     = json_value(chunk, "text", std::string());
         const std::string filename = json_value(chunk, "filename", std::string("tmp"));
 
         if (llama_token_fim_sep(model) != LLAMA_TOKEN_NULL) {
@@ -236,8 +236,8 @@ static llama_tokens format_infill(const llama_context *ctx, const json &input_pr
             extra_tokens.insert(extra_tokens.end(), k_fim_file.begin(), k_fim_file.end());
         } else {
             // chunk separator in binary form to avoid confusing the AI
-            static const char k_chunk_prefix_str[] = {0x0a, 0x0a, 0x2d, 0x2d, 0x2d, 0x20, 0x73, 0x6e, 0x69, 0x70,
-                                                      0x70, 0x65, 0x74, 0x20, 0x2d, 0x2d, 0x2d, 0x0a, 0x0a, 0x00};
+            static const char k_chunk_prefix_str[]  = {0x0a, 0x0a, 0x2d, 0x2d, 0x2d, 0x20, 0x73, 0x6e, 0x69, 0x70,
+                                                       0x70, 0x65, 0x74, 0x20, 0x2d, 0x2d, 0x2d, 0x0a, 0x0a, 0x00};
             static const auto k_chunk_prefix_tokens = common_tokenize(ctx, k_chunk_prefix_str, false, false);
 
             extra_tokens.insert(extra_tokens.end(), k_chunk_prefix_tokens.begin(), k_chunk_prefix_tokens.end());
@@ -332,8 +332,8 @@ static inline bool is_base64(uint8_t c) {
 }
 
 static inline std::vector<uint8_t> base64_decode(const std::string &encoded_string) {
-    int i = 0;
-    int j = 0;
+    int i   = 0;
+    int j   = 0;
     int in_ = 0;
 
     int in_len = encoded_string.size();
@@ -558,12 +558,12 @@ static json probs_vector_to_json(const llama_context *ctx, const std::vector<com
                 const auto sz_toks = int32_t(prob.toks.size());
                 for (int32_t i = 0; i < sz_toks; i++) {
                     const std::string token = tokens_to_output_formatted_string(ctx, prob.toks[i]);
-                    float token_logprob = 1.0f;
+                    float token_logprob     = 1.0f;
                     std::vector<unsigned char> token_bytes(token.begin(), token.end());
                     json token_top_logprobs = json::array();
                     for (const auto &p : prob.probss[i]) {
                         const std::string p_token = tokens_to_output_formatted_string(ctx, p.tok);
-                        float p_token_logprob = p.prob;
+                        float p_token_logprob     = p.prob;
                         std::vector<unsigned char> p_token_bytes(p_token.begin(), p_token.end());
                         token_top_logprobs.push_back(json{
                             {"token", p_token},
@@ -587,18 +587,18 @@ static json probs_vector_to_json(const llama_context *ctx, const std::vector<com
             return json{{"content", content}};
         } else {
             json token_logprobs = json::array();
-            json tokens = json::array();
-            json top_logprobs = json::array();
+            json tokens         = json::array();
+            json top_logprobs   = json::array();
 
             for (const auto &prob : probs) {
                 const auto sz_toks = int32_t(prob.toks.size());
                 for (int32_t i = 0; i < sz_toks; i++) {
                     const std::string token = tokens_to_output_formatted_string(ctx, prob.toks[i]);
-                    float token_logprob = 1.0f;
+                    float token_logprob     = 1.0f;
                     json token_top_logprobs;
                     for (const auto &p : prob.probss[i]) {
-                        const std::string p_token = tokens_to_output_formatted_string(ctx, p.tok);
-                        float p_token_logprob = p.prob;
+                        const std::string p_token   = tokens_to_output_formatted_string(ctx, p.tok);
+                        float p_token_logprob       = p.prob;
                         token_top_logprobs[p_token] = p_token_logprob;
                         if (p.tok == prob.toks[i]) {
                             token_logprob = p_token_logprob;
@@ -668,16 +668,16 @@ static json oaicompat_completions_request(const struct common_params &params, co
     json llama_params;
 
     // Annotations for OAI compatibility
-    llama_params["__oaicompat"] = true;
-    llama_params["__oaicompat_completion"] = true;
-    llama_params["__oaicompat_completion_chat"] = chat;
+    llama_params["__oaicompat"]                        = true;
+    llama_params["__oaicompat_completion"]             = true;
+    llama_params["__oaicompat_completion_chat"]        = chat;
     llama_params["__oaicompat_completion_chat_vision"] = false;
 
     // Handle default field
-    llama_params["model"] = json_value(body, "model", params.model_alias);
+    llama_params["model"]             = json_value(body, "model", params.model_alias);
     llama_params["frequency_penalty"] = json_value(body, "frequency_penalty", 0.0f);
-    llama_params["temperature"] = json_value(body, "temperature", 1.0f);
-    llama_params["top_p"] = json_value(body, "top_p", 1.0f);
+    llama_params["temperature"]       = json_value(body, "temperature", 1.0f);
+    llama_params["top_p"]             = json_value(body, "top_p", 1.0f);
 
     // Handle "max_tokens" field
     llama_params["n_predict"] = json_value(body, "max_tokens", -1);
@@ -685,7 +685,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     // Apply chat template to the list of messages
     if (chat) {
         const json messages = body.at("messages");
-        bool chat_vision = false;
+        bool chat_vision    = false;
         for (const json &msg : messages) {
             if (!msg.contains("content") || !msg.at("content").is_array()) {
                 continue;
@@ -728,12 +728,12 @@ static json oaicompat_completions_request(const struct common_params &params, co
 
     // Handle "response_format" field
     if (body.contains("response_format")) {
-        json response_format = json_value(body, "response_format", json::object());
+        json response_format      = json_value(body, "response_format", json::object());
         std::string response_type = json_value(response_format, "type", std::string());
         if (response_type == "json_object") {
             llama_params["json_schema"] = json_value(response_format, "schema", json::object());
         } else if (response_type == "json_schema") {
-            json json_schema = json_value(response_format, "json_schema", json::object());
+            json json_schema            = json_value(response_format, "json_schema", json::object());
             llama_params["json_schema"] = json_value(json_schema, "schema", json::object());
         } else if (!response_type.empty() && response_type != "text") {
             throw std::runtime_error(R"(Illegal param: "response_format" must be one of "text" or "json_object", but got: )" + response_type);
@@ -805,14 +805,14 @@ static json oaicompat_completions_response(const json &request, const json &resu
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
     };
 
-    bool chat = json_value(request, "__oaicompat_completion_chat", false);
-    int completion_tokens = 0;
-    int prompt_tokens = 0;
-    int drafted_tokens = 0;
+    bool chat                      = json_value(request, "__oaicompat_completion_chat", false);
+    int completion_tokens          = 0;
+    int prompt_tokens              = 0;
+    int drafted_tokens             = 0;
     double draft_tokens_acceptance = 0.0;
-    double ttft = 0.0;
-    double tpot = 0.0;
-    double tps = 0.0;
+    double ttft                    = 0.0;
+    double tpot                    = 0.0;
+    double tps                     = 0.0;
 
     // Construct choices field
     json choices = json::array();
@@ -826,8 +826,8 @@ static json oaicompat_completions_response(const json &request, const json &resu
     }
     bool finish = false;
     for (const json &ret : result) {
-        bool stopped_word = json_value(ret, "stopped_word", false);
-        bool stopped_eos = json_value(ret, "stopped_eos", false);
+        bool stopped_word  = json_value(ret, "stopped_word", false);
+        bool stopped_eos   = json_value(ret, "stopped_eos", false);
         bool stopped_limit = json_value(ret, "stopped_limit", false);
         std::string finish_reason;
         if (stopped_word || stopped_eos) {
@@ -836,9 +836,9 @@ static json oaicompat_completions_response(const json &request, const json &resu
         if (stopped_limit) {
             finish_reason = "length";
         }
-        finish = !finish_reason.empty();
+        finish              = !finish_reason.empty();
         std::string content = json_value(ret, "content", std::string(""));
-        int index = json_value(ret, "index", 0);
+        int index           = json_value(ret, "index", 0);
 
         json choice;
         if (chat) {
@@ -920,16 +920,20 @@ static json oaicompat_completions_response(const json &request, const json &resu
     }
     if (!streaming || (include_usage && finish)) {
         const size_t result_size = result.size();
-        ttft = ttft / result_size;
-        tpot = tpot / result_size;
-        tps = tps / result_size;
-        json usage = json{
-            {"completion_tokens", completion_tokens}, {"prompt_tokens", prompt_tokens},   {"total_tokens", completion_tokens + prompt_tokens},
-            {"time_to_first_token_ms", ttft},         {"time_per_output_token_ms", tpot}, {"tokens_per_second", tps},
+        ttft                     = ttft / result_size;
+        tpot                     = tpot / result_size;
+        tps                      = tps / result_size;
+        json usage               = json{
+                          {"completion_tokens", completion_tokens},
+                          {"prompt_tokens", prompt_tokens},
+                          {"total_tokens", completion_tokens + prompt_tokens},
+                          {"time_to_first_token_ms", ttft},
+                          {"time_per_output_token_ms", tpot},
+                          {"tokens_per_second", tps},
         };
         if (drafted_tokens > 0) {
-            draft_tokens_acceptance = draft_tokens_acceptance / result_size;
-            usage["draft_tokens"] = drafted_tokens;
+            draft_tokens_acceptance          = draft_tokens_acceptance / result_size;
+            usage["draft_tokens"]            = drafted_tokens;
             usage["draft_tokens_acceptance"] = draft_tokens_acceptance;
         }
         res["usage"] = usage;
@@ -957,7 +961,7 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
     json llama_params;
 
     // Annotations for OAI compatibility
-    llama_params["__oaicompat"] = true;
+    llama_params["__oaicompat"]           = true;
     llama_params["__oaicompat_embedding"] = true;
 
     // Handle "model" field
@@ -974,7 +978,7 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
 
 static json oaicompat_embeddings_response(const json &request, const json &result) {
     int num_prompt_tokens = 0;
-    json data = json::array();
+    json data             = json::array();
     for (const auto &ret : result) {
         num_prompt_tokens += ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
         data.push_back(json{
@@ -1010,8 +1014,8 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     json llama_params;
 
     // Annotations for OAI compatibility
-    llama_params["__oaicompat"] = true;
-    llama_params["__oaicompat_image"] = true;
+    llama_params["__oaicompat"]                = true;
+    llama_params["__oaicompat_image"]          = true;
     llama_params["__oaicompat_image_generate"] = true;
 
     // Handle "model" field
@@ -1031,10 +1035,10 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         }
         if (quality == "hd") {
             llama_params["sample_steps"] = params.sample_steps + 10;
-            llama_params["sampler"] = params.hd_sampler;
-            llama_params["cfg_scale"] = params.hd_cfg_scale;
+            llama_params["sampler"]      = params.hd_sampler;
+            llama_params["cfg_scale"]    = params.hd_cfg_scale;
         } else {
-            llama_params["sampler"] = params.sampler;
+            llama_params["sampler"]   = params.sampler;
             llama_params["cfg_scale"] = params.cfg_scale;
         }
         if (body.contains("style")) {
@@ -1043,17 +1047,17 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                 throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
             }
             if (style == "vivid") {
-                llama_params["sampler"] = params.vd_sampler;
+                llama_params["sampler"]   = params.vd_sampler;
                 llama_params["cfg_scale"] = params.vd_cfg_scale;
             } else {
-                llama_params["sampler"] = params.nt_sampler;
+                llama_params["sampler"]   = params.nt_sampler;
                 llama_params["cfg_scale"] = params.nt_cfg_scale;
             }
         }
     } else {
-        std::string sampler_str = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"] = sd_argument_to_sample_method(sampler_str.c_str());
-        llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
+        std::string sampler_str      = json_value(body, "sampler", std::string("euler_a"));
+        llama_params["sampler"]      = sd_argument_to_sample_method(sampler_str.c_str());
+        llama_params["cfg_scale"]    = json_value(body, "cfg_scale", params.sample_steps);
         llama_params["sample_steps"] = json_value(body, "sample_steps", params.sample_steps);
     }
 
@@ -1063,19 +1067,19 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         throw std::runtime_error("Illegal param: size must be one of '256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'");
     }
     if (size == "256x256") {
-        llama_params["width"] = 256;
+        llama_params["width"]  = 256;
         llama_params["height"] = 256;
     } else if (size == "512x512") {
-        llama_params["width"] = 512;
+        llama_params["width"]  = 512;
         llama_params["height"] = 512;
     } else if (size == "1792x1024") {
-        llama_params["width"] = 1792;
+        llama_params["width"]  = 1792;
         llama_params["height"] = 1024;
     } else if (size == "1024x1792") {
-        llama_params["width"] = 1024;
+        llama_params["width"]  = 1024;
         llama_params["height"] = 1792;
     } else {
-        llama_params["width"] = 1024;
+        llama_params["width"]  = 1024;
         llama_params["height"] = 1024;
     }
 
@@ -1107,15 +1111,15 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     json llama_params;
 
     // Annotations for OAI compatibility
-    llama_params["__oaicompat"] = true;
-    llama_params["__oaicompat_image"] = true;
+    llama_params["__oaicompat"]            = true;
+    llama_params["__oaicompat_image"]      = true;
     llama_params["__oaicompat_image_edit"] = true;
 
     // Handle "model" field
     llama_params["model"] = json_value(body, "model", params.model_alias);
 
     // Handle "image" field
-    llama_params["prompt"] = body.at("image");
+    llama_params["image"] = body.at("image");
 
     // Handle "mask" field
     if (body.contains("mask")) {
@@ -1136,15 +1140,15 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         }
         if (quality == "hd") {
             llama_params["sample_steps"] = params.sample_steps + 10;
-            llama_params["sampler"] = params.hd_sampler;
-            llama_params["cfg_scale"] = params.hd_cfg_scale;
+            llama_params["sampler"]      = params.hd_sampler;
+            llama_params["cfg_scale"]    = params.hd_cfg_scale;
         } else {
-            llama_params["sampler"] = params.sampler;
+            llama_params["sampler"]   = params.sampler;
             llama_params["cfg_scale"] = params.cfg_scale;
         }
     } else {
-        std::string sampler_str = json_value(body, "sampler", std::string("default"));
-        llama_params["sampler"] = sd_argument_to_sample_method(sampler_str.c_str());
+        std::string sampler_str   = json_value(body, "sampler", std::string("default"));
+        llama_params["sampler"]   = sd_argument_to_sample_method(sampler_str.c_str());
         llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
     }
 
@@ -1154,13 +1158,13 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         throw std::runtime_error("Illegal param: size must be one of '256x256', '512x512', '1024x1024'");
     }
     if (size == "256x256") {
-        llama_params["width"] = 256;
+        llama_params["width"]  = 256;
         llama_params["height"] = 256;
     } else if (size == "512x512") {
-        llama_params["width"] = 512;
+        llama_params["width"]  = 512;
         llama_params["height"] = 512;
     } else {
-        llama_params["width"] = 1024;
+        llama_params["width"]  = 1024;
         llama_params["height"] = 1024;
     }
 
@@ -1208,7 +1212,7 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     json llama_params;
 
     // Annotations for OAI compatibility
-    llama_params["__oaicompat"] = true;
+    llama_params["__oaicompat"]        = true;
     llama_params["__oaicompat_rerank"] = true;
 
     // Handle "model" field
@@ -1230,7 +1234,7 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
 
     // Handle "top_n" field
     size_t documents_size = body.at("documents").size();
-    size_t top_n = json_value(body, "top_n", documents_size);
+    size_t top_n          = json_value(body, "top_n", documents_size);
     if (top_n > documents_size) {
         top_n = documents_size;
     } else if (top_n <= 0) {
@@ -1239,7 +1243,7 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     llama_params["top_n"] = top_n;
 
     // Handle "return_documents" field
-    bool return_documents = json_value(body, "return_documents", true);
+    bool return_documents            = json_value(body, "return_documents", true);
     llama_params["return_documents"] = return_documents;
     if (return_documents) {
         llama_params["__oaicompat_rerank_documents"] = body.at("documents");
@@ -1267,34 +1271,34 @@ static void jinaicompat_rerank_response_sort(json &result, int32_t low, int32_t 
         }
     }
     result[low] = result[i];
-    result[i] = base;
+    result[i]   = base;
     jinaicompat_rerank_response_sort(result, low, i - 1);
     jinaicompat_rerank_response_sort(result, i + 1, high);
 }
 
 static json jinaicompat_rerank_response(const json &request, json &result) {
     json documents;
-    int32_t top_n = request.at("top_n");
+    int32_t top_n         = request.at("top_n");
     bool return_documents = request.at("return_documents");
     if (return_documents) {
         documents = request.at("__oaicompat_rerank_documents");
     }
 
     int num_prompt_tokens = 0;
-    json data = json::array();
+    json data             = json::array();
 
     int32_t start = 0;
-    auto end = int32_t(result.size() - 1);
+    auto end      = int32_t(result.size() - 1);
     jinaicompat_rerank_response_sort(result, start, end);
     for (int32_t i = 0; i <= end; i++) {
         const json &ret = result[i];
         num_prompt_tokens += json_value(ret, "tokens_evaluated", 0);
         if (i < top_n) {
             const int32_t idx = json_value(ret, "index", 0);
-            const double scr = json_value(ret, "score", 0.0);
-            json item = json{
-                {"index", idx},
-                {"relevance_score", scr},
+            const double scr  = json_value(ret, "score", 0.0);
+            json item         = json{
+                        {"index", idx},
+                        {"relevance_score", scr},
             };
             if (return_documents) {
                 if (documents[idx].is_string()) {
@@ -1319,7 +1323,7 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
 }
 
 static bool is_valid_utf8(const std::string &str) {
-    const auto *bytes = reinterpret_cast<const unsigned char *>(str.data());
+    const auto *bytes        = reinterpret_cast<const unsigned char *>(str.data());
     const unsigned char *end = bytes + str.length();
 
     while (bytes < end) {
@@ -1354,34 +1358,34 @@ static json format_error_response(const std::string &message, const enum error_t
     std::string type_str;
     int code = 500;
     switch (type) {
-    case ERROR_TYPE_INVALID_REQUEST:
-        type_str = "invalid_request_error";
-        code = 400;
-        break;
-    case ERROR_TYPE_AUTHENTICATION:
-        type_str = "authentication_error";
-        code = 401;
-        break;
-    case ERROR_TYPE_NOT_FOUND:
-        type_str = "not_found_error";
-        code = 404;
-        break;
-    case ERROR_TYPE_SERVER:
-        type_str = "server_error";
-        code = 500;
-        break;
-    case ERROR_TYPE_PERMISSION:
-        type_str = "permission_error";
-        code = 403;
-        break;
-    case ERROR_TYPE_NOT_SUPPORTED:
-        type_str = "not_supported_error";
-        code = 501;
-        break;
-    case ERROR_TYPE_UNAVAILABLE:
-        type_str = "unavailable_error";
-        code = 503;
-        break;
+        case ERROR_TYPE_INVALID_REQUEST:
+            type_str = "invalid_request_error";
+            code     = 400;
+            break;
+        case ERROR_TYPE_AUTHENTICATION:
+            type_str = "authentication_error";
+            code     = 401;
+            break;
+        case ERROR_TYPE_NOT_FOUND:
+            type_str = "not_found_error";
+            code     = 404;
+            break;
+        case ERROR_TYPE_SERVER:
+            type_str = "server_error";
+            code     = 500;
+            break;
+        case ERROR_TYPE_PERMISSION:
+            type_str = "permission_error";
+            code     = 403;
+            break;
+        case ERROR_TYPE_NOT_SUPPORTED:
+            type_str = "not_supported_error";
+            code     = 501;
+            break;
+        case ERROR_TYPE_UNAVAILABLE:
+            type_str = "unavailable_error";
+            code     = 503;
+            break;
     }
     return json{
         {"code", code},
