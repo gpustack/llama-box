@@ -1000,8 +1000,6 @@ static json oaicompat_embeddings_response(const json &request, const json &resul
 }
 
 static json oaicompat_images_generations_request(const struct stablediffusion_params &params, const json &body) {
-    static std::vector<std::string> images_size = {"256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"};
-
     // Print the request for debugging
     {
         json body_cp = body;
@@ -1034,12 +1032,13 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
         if (quality == "hd") {
-            llama_params["sample_steps"] = params.sample_steps + 10;
             llama_params["sampler"]      = params.hd_sampler;
+            llama_params["sample_steps"] = params.hd_sample_steps;
             llama_params["cfg_scale"]    = params.hd_cfg_scale;
         } else {
-            llama_params["sampler"]   = params.sampler;
-            llama_params["cfg_scale"] = params.cfg_scale;
+            llama_params["sampler"]      = params.sampler;
+            llama_params["sample_steps"] = params.sample_steps;
+            llama_params["cfg_scale"]    = params.cfg_scale;
         }
         if (body.contains("style")) {
             std::string style = json_value(body, "style", std::string("vivid"));
@@ -1047,11 +1046,13 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                 throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
             }
             if (style == "vivid") {
-                llama_params["sampler"]   = params.vd_sampler;
-                llama_params["cfg_scale"] = params.vd_cfg_scale;
+                llama_params["sampler"]      = params.vd_sampler;
+                llama_params["sample_steps"] = params.vd_sample_steps;
+                llama_params["cfg_scale"]    = params.vd_cfg_scale;
             } else {
-                llama_params["sampler"]   = params.nt_sampler;
-                llama_params["cfg_scale"] = params.nt_cfg_scale;
+                llama_params["sampler"]      = params.nt_sampler;
+                llama_params["sample_steps"] = params.nt_sample_steps;
+                llama_params["cfg_scale"]    = params.nt_cfg_scale;
             }
         }
     } else {
@@ -1062,25 +1063,14 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     }
 
     // Handle "size" field
-    std::string size = json_value(body, "size", std::string("1024x1024"));
-    if (std::find(images_size.begin(), images_size.end(), size) == images_size.end()) {
-        throw std::runtime_error("Illegal param: size must be one of '256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'");
-    }
-    if (size == "256x256") {
-        llama_params["width"]  = 256;
-        llama_params["height"] = 256;
-    } else if (size == "512x512") {
-        llama_params["width"]  = 512;
-        llama_params["height"] = 512;
-    } else if (size == "1792x1024") {
-        llama_params["width"]  = 1792;
-        llama_params["height"] = 1024;
-    } else if (size == "1024x1792") {
-        llama_params["width"]  = 1024;
-        llama_params["height"] = 1792;
-    } else {
-        llama_params["width"]  = 1024;
-        llama_params["height"] = 1024;
+    std::string size = json_value(body, "size", std::string("512x512"));
+    {
+        auto pos = size.find('x');
+        if (pos == std::string::npos) {
+            throw std::runtime_error("Illegal param: size must be in the format 'widthxheight'");
+        }
+        llama_params["width"]  = std::stoi(size.substr(0, pos));
+        llama_params["height"] = std::stoi(size.substr(pos + 1));
     }
 
     // Handle "response_format" field
@@ -1093,8 +1083,6 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
 }
 
 static json oaicompat_images_edits_request(const struct stablediffusion_params &params, const json &body) {
-    static std::vector<std::string> images_size = {"256x256", "512x512", "1024x1024"};
-
     // Print the request for debugging
     {
         json body_cp = body;
@@ -1139,12 +1127,13 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
         if (quality == "hd") {
-            llama_params["sample_steps"] = params.sample_steps + 10;
             llama_params["sampler"]      = params.hd_sampler;
+            llama_params["sample_steps"] = params.hd_sample_steps;
             llama_params["cfg_scale"]    = params.hd_cfg_scale;
         } else {
-            llama_params["sampler"]   = params.sampler;
-            llama_params["cfg_scale"] = params.cfg_scale;
+            llama_params["sampler"]      = params.sampler;
+            llama_params["sample_steps"] = params.sample_steps;
+            llama_params["cfg_scale"]    = params.cfg_scale;
         }
     } else {
         std::string sampler_str   = json_value(body, "sampler", std::string("default"));
@@ -1153,19 +1142,14 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     }
 
     // Handle "size" field
-    std::string size = json_value(body, "size", std::string("1024x1024"));
-    if (std::find(images_size.begin(), images_size.end(), size) == images_size.end()) {
-        throw std::runtime_error("Illegal param: size must be one of '256x256', '512x512', '1024x1024'");
-    }
-    if (size == "256x256") {
-        llama_params["width"]  = 256;
-        llama_params["height"] = 256;
-    } else if (size == "512x512") {
-        llama_params["width"]  = 512;
-        llama_params["height"] = 512;
-    } else {
-        llama_params["width"]  = 1024;
-        llama_params["height"] = 1024;
+    std::string size = json_value(body, "size", std::string("512x512"));
+    {
+        auto pos = size.find('x');
+        if (pos == std::string::npos) {
+            throw std::runtime_error("Illegal param: size must be in the format 'widthxheight'");
+        }
+        llama_params["width"]  = std::stoi(size.substr(0, pos));
+        llama_params["height"] = std::stoi(size.substr(pos + 1));
     }
 
     // Handle "response_format" field

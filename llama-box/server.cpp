@@ -766,7 +766,7 @@ struct server_context {
         }
     }
 
-    bool load_model(const llama_box_params &bparams) {
+    bool load_model(llama_box_params &bparams) {
         params = bparams.gparams;
 
         /* STABLE DIFFUSION */
@@ -779,8 +779,49 @@ struct server_context {
                 return false;
             }
 
+            if (bparams.sdparams.sampler == N_SAMPLE_METHODS) {
+                bparams.sdparams.sampler = sd_ctx->get_default_sample_method();
+            }
+            if (bparams.sdparams.hd_sampler == N_SAMPLE_METHODS) {
+                bparams.sdparams.hd_sampler = bparams.sdparams.sampler;
+            }
+            if (bparams.sdparams.vd_sampler == N_SAMPLE_METHODS) {
+                bparams.sdparams.vd_sampler = bparams.sdparams.sampler;
+            }
+            if (bparams.sdparams.nt_sampler == N_SAMPLE_METHODS) {
+                bparams.sdparams.nt_sampler = bparams.sdparams.sampler;
+            }
+
+            if (bparams.sdparams.hd_sample_steps <= 0) {
+                bparams.sdparams.hd_sample_steps = bparams.sdparams.sample_steps + 10;
+            }
+            if (bparams.sdparams.vd_sample_steps <= 0) {
+                bparams.sdparams.vd_sample_steps = bparams.sdparams.sample_steps + 10;
+            }
+            if (bparams.sdparams.nt_sample_steps <= 0) {
+                bparams.sdparams.nt_sample_steps = bparams.sdparams.sample_steps + 10;
+            }
+
+            if (bparams.sdparams.cfg_scale <= 1.0f) {
+                bparams.sdparams.cfg_scale = sd_ctx->get_default_cfg_scale();
+            }
+            if (bparams.sdparams.hd_cfg_scale <= 1.0f) {
+                bparams.sdparams.hd_cfg_scale = bparams.sdparams.cfg_scale;
+            }
+            if (bparams.sdparams.vd_cfg_scale <= 1.0f) {
+                bparams.sdparams.vd_cfg_scale = bparams.sdparams.cfg_scale;
+            }
+            if (bparams.sdparams.nt_cfg_scale <= 1.0f) {
+                bparams.sdparams.nt_cfg_scale = bparams.sdparams.cfg_scale;
+            }
+
             sdparams = bparams.sdparams;
             n_tps    = bparams.n_tps;
+
+            SRV_INF("standard sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.sampler), sdparams.sample_steps, sdparams.cfg_scale);
+            SRV_INF("high definition sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.hd_sampler), sdparams.hd_sample_steps, sdparams.hd_cfg_scale);
+            SRV_INF("vivid sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.vd_sampler), sdparams.vd_sample_steps, sdparams.vd_cfg_scale);
+            SRV_INF("natural sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.nt_sampler), sdparams.nt_sample_steps, sdparams.nt_cfg_scale);
 
             return true;
         }
@@ -2949,7 +2990,7 @@ int main(int argc, char **argv) {
         nullptr);
     sd_progress_set(
         [](int step, int steps, float time, void * /*user_data*/) {
-            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "%i/%i - %.4f/it", step, steps, time);
+            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "%i/%i - %.4f/it\n", step, steps, time);
         },
         nullptr);
 

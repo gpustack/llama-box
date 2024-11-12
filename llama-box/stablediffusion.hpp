@@ -13,19 +13,22 @@
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 struct stablediffusion_params {
-    int height                      = 1024;
-    int width                       = 1024;
+    int height                      = 512;
+    int width                       = 512;
     float guidance                  = 3.5f;
     float strength                  = 0.75f;
-    sample_method_t sampler         = EULER_A;
-    float cfg_scale                 = 9.0f;
-    sample_method_t hd_sampler      = HEUN;
-    float hd_cfg_scale              = 0.0f;
-    sample_method_t vd_sampler      = DPMPP2Mv2;
-    float vd_cfg_scale              = 0.0f;
-    sample_method_t nt_sampler      = DPMPP2M;
-    float nt_cfg_scale              = 0.0f;
-    int sample_steps                = 20;
+    sample_method_t sampler         = N_SAMPLE_METHODS;
+    int sample_steps                = 10;
+    float cfg_scale                 = 1.0f;
+    sample_method_t hd_sampler      = N_SAMPLE_METHODS;
+    float hd_cfg_scale              = 1.0f;
+    int hd_sample_steps             = 0;
+    sample_method_t vd_sampler      = N_SAMPLE_METHODS;
+    float vd_cfg_scale              = 1.0f;
+    int vd_sample_steps             = 0;
+    sample_method_t nt_sampler      = N_SAMPLE_METHODS;
+    float nt_cfg_scale              = 1.0f;
+    int nt_sample_steps             = 0;
     schedule_t schedule             = DEFAULT;
     bool text_encoder_model_offload = true;
     std::string clip_l_model;
@@ -74,7 +77,8 @@ class stablediffusion_context {
     ~stablediffusion_context();
 
     void free();
-
+    sample_method_t get_default_sample_method();
+    float get_default_cfg_scale();
     stablediffusion_generated_image *generate(sd_image_t *init_img, const char *prompt, stablediffusion_sampler_params sparams);
 
   private:
@@ -88,6 +92,14 @@ stablediffusion_context::~stablediffusion_context() {
 
 void stablediffusion_context::free() {
     sd_ctx_free(sd_ctx);
+}
+
+sample_method_t stablediffusion_context::get_default_sample_method() {
+    return sd_get_default_sample_method(sd_ctx);
+}
+
+float stablediffusion_context::get_default_cfg_scale() {
+    return sd_get_default_cfg_scale(sd_ctx);
 }
 
 stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt, stablediffusion_sampler_params sparams) {

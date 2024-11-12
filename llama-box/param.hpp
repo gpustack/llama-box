@@ -290,15 +290,18 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-width N",                        "image width, in pixel space (default: %d)", sdparams.width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
     opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
-    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "standard sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), sd_sample_method_to_argument(sdparams.sampler) });
-    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "for standard sampler, the scale of classifier-free guidance in the output phase (default: %f, 1.0 = disabled)", sdparams.cfg_scale });
-    opts.push_back({ "server/images",                      "       --image-hd-sampler TYPE",                "high definition sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), sd_sample_method_to_argument(sdparams.hd_sampler) });
-    opts.push_back({ "server/images",                      "       --image-hd-cfg-scale N",                 "for high definition sampler, the scale of classifier-free guidance in the output phase (default: %f, 0.0 = reuse --cfg-scale, 1.0 = disabled)", sdparams.hd_cfg_scale });
-    opts.push_back({ "server/images",                      "       --image-vd-sampler TYPE",                "vivid sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), sd_sample_method_to_argument(sdparams.vd_sampler) });
-    opts.push_back({ "server/images",                      "       --image-vd-cfg-scale N",                 "for vivid sampler, the scale of classifier-free guidance in the output phase (default: %f, 0.0 = reuse --cfg-scale, 1.0 = disabled)", sdparams.vd_cfg_scale });
-    opts.push_back({ "server/images",                      "       --image-nt-sampler TYPE",                "natural sampler that will be used for generation, select from %s (default: %s)", sd_sampler_type_names.c_str(), sd_sample_method_to_argument(sdparams.nt_sampler) });
-    opts.push_back({ "server/images",                      "       --image-nt-cfg-scale N",                 "for natural sampler, the scale of classifier-free guidance in the output phase (default: %f, 0.0 = reuse --cfg-scale, 1.0 = disabled)", sdparams.nt_cfg_scale });
-    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically +10 when requesting high definition result (default: %d)", sdparams.sample_steps });
+    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "standard sampler that will be used for generation, select from %s", sd_sampler_type_names.c_str() });
+    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of standard sample steps (default: %d)", sdparams.sample_steps });
+    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "for standard sampler, the scale of classifier-free guidance in the output phase (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-hd-sampler TYPE",                "high definition sampler that will be used for generation, inherit from --image-sampler if no specified" });
+    opts.push_back({ "server/images",                      "       --image-hd-sample-steps N",              "number of high definition sample steps, automatically +10 from --image-sample-steps if no specified" });
+    opts.push_back({ "server/images",                      "       --image-hd-cfg-scale N",                 "for high definition sampler, the scale of classifier-free guidance in the output phase, inherit from --image-cfg-scale (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-vd-sampler TYPE",                "vivid sampler that will be used for generation, inherit from --image-sampler if no specified"});
+    opts.push_back({ "server/images",                      "       --image-vd-sample-steps N",              "number of vivid sample steps, automatically +10 from --image-sample-steps if no specified" });
+    opts.push_back({ "server/images",                      "       --image-vd-cfg-scale N",                 "for vivid sampler, the scale of classifier-free guidance in the output phase, inherit from --image-cfg-scale (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-nt-sampler TYPE",                "natural sampler that will be used for generation, inherit from --image-sampler if no specified" });
+    opts.push_back({ "server/images",                      "       --image-nt-sample-steps N",              "number of natural sample steps, automatically +10 from --image-sample-steps if no specified" });
+    opts.push_back({ "server/images",                      "       --image-nt-cfg-scale N",                 "for natural sampler, the scale of classifier-free guidance in the output phase, inherit from --image-cfg-scale (1.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, select from %s (default: %s)", sd_scheduler_names.c_str(), sd_schedule_to_argument(sdparams.schedule) });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
@@ -310,7 +313,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
         opts.push_back({ "server/images",                  "       --image-no-vae-model-offload",           "disable vae(taesd) model offload" });
     }
     opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae in tiles to reduce memory usage (default: %s)", sdparams.vae_tiling ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sdparams.vae_tiling ? "enabled" : "disabled" });
     opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
     opts.push_back({ "server/images",                      "       --image-lora-model-dir PATH",            "path to LoRA model directory" });
     opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
@@ -1609,6 +1612,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--image-sample-steps")) {
+                if (i == argc) {
+                    missing("--image-sample-steps");
+                }
+                char *arg                     = argv[i++];
+                bparams.sdparams.sample_steps = std::stoi(std::string(arg));
+                if (bparams.sdparams.sample_steps < 1) {
+                    invalid("--image-sample-steps");
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--image-cfg-scale")) {
                 if (i == argc) {
                     missing("--image-cfg-scale");
@@ -1627,6 +1642,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg                   = argv[i++];
                 bparams.sdparams.hd_sampler = sd_argument_to_sample_method(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-hd-sample-steps")) {
+                if (i == argc) {
+                    missing("--image-hd-sample-steps");
+                }
+                char *arg                     = argv[i++];
+                bparams.sdparams.hd_sample_steps = std::stoi(std::string(arg));
+                if (bparams.sdparams.hd_sample_steps < 1) {
+                    invalid("--image-hd-sample-steps");
+                }
                 continue;
             }
 
@@ -1651,6 +1678,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--image-vd-sample-steps")) {
+                if (i == argc) {
+                    missing("--image-vd-sample-steps");
+                }
+                char *arg                     = argv[i++];
+                bparams.sdparams.vd_sample_steps = std::stoi(std::string(arg));
+                if (bparams.sdparams.vd_sample_steps < 1) {
+                    invalid("--image-vd-sample-steps");
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--image-vd-cfg-scale")) {
                 if (i == argc) {
                     missing("--image-vd-cfg-scale");
@@ -1672,6 +1711,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--image-nt-sample-steps")) {
+                if (i == argc) {
+                    missing("--image-nt-sample-steps");
+                }
+                char *arg                     = argv[i++];
+                bparams.sdparams.nt_sample_steps = std::stoi(std::string(arg));
+                if (bparams.sdparams.nt_sample_steps < 1) {
+                    invalid("--image-nt-sample-steps");
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--image-nt-cfg-scale")) {
                 if (i == argc) {
                     missing("--image-nt-cfg-scale");
@@ -1680,18 +1731,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 bparams.sdparams.nt_cfg_scale = std::stof(std::string(arg));
                 if (bparams.sdparams.nt_cfg_scale < 1.0f) {
                     invalid("--image-nt-cfg-scale");
-                }
-                continue;
-            }
-
-            if (!strcmp(flag, "--image-sample-steps")) {
-                if (i == argc) {
-                    missing("--image-sample-steps");
-                }
-                char *arg                     = argv[i++];
-                bparams.sdparams.sample_steps = std::stoi(std::string(arg));
-                if (bparams.sdparams.sample_steps < 1) {
-                    invalid("--image-sample-steps");
                 }
                 continue;
             }
@@ -1935,15 +1974,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
         bparams.gparams.enable_chat_template = false;
         bparams.sdparams.model               = bparams.gparams.model;
         bparams.sdparams.model_alias         = bparams.gparams.model_alias;
-        if (bparams.sdparams.hd_cfg_scale <= 1.0f) {
-            bparams.sdparams.hd_cfg_scale = bparams.sdparams.cfg_scale;
-        }
-        if (bparams.sdparams.vd_cfg_scale <= 1.0f) {
-            bparams.sdparams.vd_cfg_scale = bparams.sdparams.cfg_scale;
-        }
-        if (bparams.sdparams.nt_cfg_scale <= 1.0f) {
-            bparams.sdparams.nt_cfg_scale = bparams.sdparams.cfg_scale;
-        }
         bparams.sdparams.n_threads = bparams.gparams.cpuparams.n_threads;
         bparams.sdparams.main_gpu  = bparams.gparams.main_gpu;
     }
