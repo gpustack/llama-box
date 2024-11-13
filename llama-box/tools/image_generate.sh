@@ -30,6 +30,7 @@ STYLE="${STYLE:-"null"}"
 SAMPLER="${SAMPLER:-"null"}"
 CFG_SCALE="${CFG_SCALE:-"9"}"
 SAMPLE_STEPS="${SAMPLE_STEPS:-"20"}"
+NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
 image_generate() {
     PROMPT="$(trim_trailing "$1")"
@@ -47,6 +48,7 @@ image_generate() {
                 --argjson sampler "\"${SAMPLER}\"" \
                 --argjson cfg_scale "${CFG_SCALE}" \
                 --argjson sample_steps "${SAMPLE_STEPS}" \
+                --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
                 '{
                   n: $n,
                   seed: $seed,
@@ -54,7 +56,8 @@ image_generate() {
                   size: $size,
                   sampler: $sampler,
                   cfg_scale: $cfg_scale,
-                  sample_steps: $sample_steps
+                  sample_steps: $sample_steps,
+                  negative_prompt: $negative_prompt
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
       DATA="$(echo -n "${DATA}" | jq \
@@ -140,6 +143,7 @@ echo "STYLE             : ${STYLE}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
 echo "SAMPLE_STEPS      : ${SAMPLE_STEPS} // AVAILABLE FOR SAMPLER"
+echo "NEGATIVE_PROMPT   : ${NEGATIVE_PROMPT} // AVAILABLE FOR SAMPLER"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then

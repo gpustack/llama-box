@@ -1031,14 +1031,12 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
+        llama_params["sampler"]      = params.sampler;
+        llama_params["sample_steps"] = params.sample_steps;
+        llama_params["cfg_scale"]    = params.cfg_scale;
         if (quality == "hd") {
-            llama_params["sampler"]      = params.hd_sampler;
-            llama_params["sample_steps"] = params.hd_sample_steps;
-            llama_params["cfg_scale"]    = params.hd_cfg_scale;
-        } else {
-            llama_params["sampler"]      = params.sampler;
-            llama_params["sample_steps"] = params.sample_steps;
-            llama_params["cfg_scale"]    = params.cfg_scale;
+            llama_params["sample_steps"]    = params.sample_steps + 10;
+            llama_params["negative_prompt"] = "low quality";
         }
         if (body.contains("style")) {
             std::string style = json_value(body, "style", std::string("vivid"));
@@ -1046,20 +1044,25 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                 throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
             }
             if (style == "vivid") {
-                llama_params["sampler"]      = params.vd_sampler;
-                llama_params["sample_steps"] = params.vd_sample_steps;
-                llama_params["cfg_scale"]    = params.vd_cfg_scale;
+                if (llama_params.contains("negative_prompt")) {
+                    llama_params["negative_prompt"] += " and not vivid";
+                } else {
+                    llama_params["negative_prompt"] = "not vivid";
+                }
             } else {
-                llama_params["sampler"]      = params.nt_sampler;
-                llama_params["sample_steps"] = params.nt_sample_steps;
-                llama_params["cfg_scale"]    = params.nt_cfg_scale;
+                if (llama_params.contains("negative_prompt")) {
+                    llama_params["negative_prompt"] += " and unnatural";
+                } else {
+                    llama_params["negative_prompt"] = "unnatural";
+                }
             }
         }
     } else {
-        std::string sampler_str      = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"]      = sd_argument_to_sample_method(sampler_str.c_str());
-        llama_params["cfg_scale"]    = json_value(body, "cfg_scale", params.sample_steps);
-        llama_params["sample_steps"] = json_value(body, "sample_steps", params.sample_steps);
+        std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
+        llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
+        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.sample_steps);
+        llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
+        llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
     }
 
     // Handle "size" field
@@ -1126,19 +1129,19 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
+        llama_params["sampler"]      = params.sampler;
+        llama_params["sample_steps"] = params.sample_steps;
+        llama_params["cfg_scale"]    = params.cfg_scale;
         if (quality == "hd") {
-            llama_params["sampler"]      = params.hd_sampler;
-            llama_params["sample_steps"] = params.hd_sample_steps;
-            llama_params["cfg_scale"]    = params.hd_cfg_scale;
-        } else {
-            llama_params["sampler"]      = params.sampler;
-            llama_params["sample_steps"] = params.sample_steps;
-            llama_params["cfg_scale"]    = params.cfg_scale;
+            llama_params["sample_steps"]    = params.sample_steps + 10;
+            llama_params["negative_prompt"] = "low quality";
         }
     } else {
-        std::string sampler_str   = json_value(body, "sampler", std::string("default"));
-        llama_params["sampler"]   = sd_argument_to_sample_method(sampler_str.c_str());
-        llama_params["cfg_scale"] = json_value(body, "cfg_scale", params.sample_steps);
+        std::string sampler_str         = json_value(body, "sampler", std::string("default"));
+        llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
+        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.sample_steps);
+        llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
+        llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
     }
 
     // Handle "size" field

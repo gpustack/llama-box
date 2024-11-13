@@ -779,52 +779,22 @@ struct server_context {
                 return false;
             }
 
-            if (bparams.sdparams.sampler == N_SAMPLE_METHODS) {
+            if (bparams.sdparams.sampler >= N_SAMPLE_METHODS) {
                 bparams.sdparams.sampler = sd_ctx->get_default_sample_method();
-            }
-            if (bparams.sdparams.hd_sampler == N_SAMPLE_METHODS) {
-                bparams.sdparams.hd_sampler = bparams.sdparams.sampler;
-            }
-            if (bparams.sdparams.vd_sampler == N_SAMPLE_METHODS) {
-                bparams.sdparams.vd_sampler = bparams.sdparams.sampler;
-            }
-            if (bparams.sdparams.nt_sampler == N_SAMPLE_METHODS) {
-                bparams.sdparams.nt_sampler = bparams.sdparams.sampler;
             }
 
             if (bparams.sdparams.sample_steps <= 0) {
                 bparams.sdparams.sample_steps = sd_ctx->get_default_sample_steps();
             }
-            if (bparams.sdparams.hd_sample_steps <= 0) {
-                bparams.sdparams.hd_sample_steps = bparams.sdparams.sample_steps + 10;
-            }
-            if (bparams.sdparams.vd_sample_steps <= 0) {
-                bparams.sdparams.vd_sample_steps = bparams.sdparams.sample_steps + 10;
-            }
-            if (bparams.sdparams.nt_sample_steps <= 0) {
-                bparams.sdparams.nt_sample_steps = bparams.sdparams.sample_steps + 10;
-            }
 
-            if (bparams.sdparams.cfg_scale <= 1.0f) {
+            if (bparams.sdparams.cfg_scale <= 0.0f) {
                 bparams.sdparams.cfg_scale = sd_ctx->get_default_cfg_scale();
-            }
-            if (bparams.sdparams.hd_cfg_scale <= 1.0f) {
-                bparams.sdparams.hd_cfg_scale = bparams.sdparams.cfg_scale;
-            }
-            if (bparams.sdparams.vd_cfg_scale <= 1.0f) {
-                bparams.sdparams.vd_cfg_scale = bparams.sdparams.cfg_scale;
-            }
-            if (bparams.sdparams.nt_cfg_scale <= 1.0f) {
-                bparams.sdparams.nt_cfg_scale = bparams.sdparams.cfg_scale;
             }
 
             sdparams = bparams.sdparams;
             n_tps    = bparams.n_tps;
 
-            SRV_INF("standard sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.sampler), sdparams.sample_steps, sdparams.cfg_scale);
-            SRV_INF("high definition sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.hd_sampler), sdparams.hd_sample_steps, sdparams.hd_cfg_scale);
-            SRV_INF("vivid sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.vd_sampler), sdparams.vd_sample_steps, sdparams.vd_cfg_scale);
-            SRV_INF("natural sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.nt_sampler), sdparams.nt_sample_steps, sdparams.nt_cfg_scale);
+            SRV_INF("sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.sampler), sdparams.sample_steps, sdparams.cfg_scale);
 
             return true;
         }
@@ -1122,13 +1092,14 @@ struct server_context {
             slot.oaicompat_image_generate = json_value(data, "__oaicompat_image_generate", false);
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
 
-            slot.sdsparams.seed         = json_value(data, "seed", sparams.seed);
-            slot.sdsparams.batch_count  = json_value(data, "batch_count", 1);
-            slot.sdsparams.height       = json_value(data, "height", sdparams.height);
-            slot.sdsparams.width        = json_value(data, "width", sdparams.width);
-            slot.sdsparams.sampler      = json_value(data, "sampler", sdparams.sampler);
-            slot.sdsparams.cfg_scale    = json_value(data, "cfg_scale", sdparams.cfg_scale);
-            slot.sdsparams.sample_steps = json_value(data, "sample_steps", sdparams.sample_steps);
+            slot.sdsparams.seed            = json_value(data, "seed", sparams.seed);
+            slot.sdsparams.batch_count     = json_value(data, "batch_count", 1);
+            slot.sdsparams.height          = json_value(data, "height", sdparams.height);
+            slot.sdsparams.width           = json_value(data, "width", sdparams.width);
+            slot.sdsparams.sampler         = json_value(data, "sampler", sdparams.sampler);
+            slot.sdsparams.cfg_scale       = json_value(data, "cfg_scale", sdparams.cfg_scale);
+            slot.sdsparams.sample_steps    = json_value(data, "sample_steps", sdparams.sample_steps);
+            slot.sdsparams.negative_prompt = json_value(data, "negative_prompt", std::string(""));
 
             // get prompt
             slot.prompt = json_value(data, "prompt", json::object());

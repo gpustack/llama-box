@@ -19,16 +19,7 @@ struct stablediffusion_params {
     float strength                  = 0.75f;
     sample_method_t sampler         = N_SAMPLE_METHODS;
     int sample_steps                = 0;
-    float cfg_scale                 = 1.0f;
-    sample_method_t hd_sampler      = N_SAMPLE_METHODS;
-    float hd_cfg_scale              = 1.0f;
-    int hd_sample_steps             = 0;
-    sample_method_t vd_sampler      = N_SAMPLE_METHODS;
-    float vd_cfg_scale              = 1.0f;
-    int vd_sample_steps             = 0;
-    sample_method_t nt_sampler      = N_SAMPLE_METHODS;
-    float nt_cfg_scale              = 1.0f;
-    int nt_sample_steps             = 0;
+    float cfg_scale                 = 0.0f;
     schedule_t schedule             = DEFAULT;
     bool text_encoder_model_offload = true;
     std::string clip_l_model;
@@ -54,13 +45,14 @@ struct stablediffusion_params {
 };
 
 struct stablediffusion_sampler_params {
-    uint32_t seed           = LLAMA_DEFAULT_SEED;
-    int batch_count         = 1;
-    int height              = 1024;
-    int width               = 1024;
-    sample_method_t sampler = EULER_A;
-    float cfg_scale         = 9.0f;
-    int sample_steps        = 20;
+    uint32_t seed               = LLAMA_DEFAULT_SEED;
+    int batch_count             = 1;
+    int height                  = 1024;
+    int width                   = 1024;
+    sample_method_t sampler     = EULER_A;
+    float cfg_scale             = 9.0f;
+    int sample_steps            = 20;
+    std::string negative_prompt = "";
 };
 
 struct stablediffusion_generated_image {
@@ -108,7 +100,6 @@ float stablediffusion_context::get_default_cfg_scale() {
 }
 
 stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt, stablediffusion_sampler_params sparams) {
-    std::string negative_prompt = "";
     int clip_skip               = -1;
     sd_image_t *control_image   = nullptr;
     std::string input_id_images_path;
@@ -122,7 +113,7 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
                 sd_ctx,
                 *img,
                 prompt,
-                negative_prompt.c_str(),
+                sparams.negative_prompt.c_str(),
                 clip_skip,
                 sparams.cfg_scale,
                 params.guidance,
@@ -144,7 +135,7 @@ stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *i
         imgs = txt2img(
                 sd_ctx,
                 prompt,
-                negative_prompt.c_str(),
+                sparams.negative_prompt.c_str(),
                 clip_skip,
                 sparams.cfg_scale,
                 params.guidance,
