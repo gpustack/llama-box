@@ -200,7 +200,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                 "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                 "-e,    --escape",                               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
     opts.push_back({ "server/completion",                 "       --no-escape",                            "do not process escape sequences" });
-    opts.push_back({ "server/completion",                 "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by \';\' (default: %s)", default_sampler_type_names.c_str() });
+    opts.push_back({ "server/completion",                 "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
     opts.push_back({ "server/completion",                 "       --sampling-seq SEQUENCE",                "simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
     opts.push_back({ "server/completion",                 "       --penalize-nl",                          "penalize newline tokens (default: %s)", sparams.penalize_nl ? "true" : "false" });
     opts.push_back({ "server/completion",                 "       --temp T",                               "temperature (default: %.1f)", (double)sparams.temp });
@@ -290,8 +290,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-width N",                        "image width, in pixel space (default: %d)", sdparams.width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
     opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
-    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "standard sampler that will be used for generation, select from %s", sd_sampler_type_names.c_str() });
-    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of standard sample steps (default: %d)", sdparams.sample_steps });
+    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "standard sampler that will be used for generation, automatically retrieve the default value according to the --model, select from %s", sd_sampler_type_names.c_str() });
+    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of standard sample steps, automatically retrieve the default value according to the --model" });
     opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "for standard sampler, the scale of classifier-free guidance in the output phase (1.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-hd-sampler TYPE",                "high definition sampler that will be used for generation, inherit from --image-sampler if no specified" });
     opts.push_back({ "server/images",                      "       --image-hd-sample-steps N",              "number of high definition sample steps, automatically +10 from --image-sample-steps if no specified" });
@@ -1649,7 +1649,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-hd-sample-steps");
                 }
-                char *arg                     = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.sdparams.hd_sample_steps = std::stoi(std::string(arg));
                 if (bparams.sdparams.hd_sample_steps < 1) {
                     invalid("--image-hd-sample-steps");
@@ -1682,7 +1682,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-vd-sample-steps");
                 }
-                char *arg                     = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.sdparams.vd_sample_steps = std::stoi(std::string(arg));
                 if (bparams.sdparams.vd_sample_steps < 1) {
                     invalid("--image-vd-sample-steps");
@@ -1715,7 +1715,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-nt-sample-steps");
                 }
-                char *arg                     = argv[i++];
+                char *arg                        = argv[i++];
                 bparams.sdparams.nt_sample_steps = std::stoi(std::string(arg));
                 if (bparams.sdparams.nt_sample_steps < 1) {
                     invalid("--image-nt-sample-steps");
@@ -1974,8 +1974,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
         bparams.gparams.enable_chat_template = false;
         bparams.sdparams.model               = bparams.gparams.model;
         bparams.sdparams.model_alias         = bparams.gparams.model_alias;
-        bparams.sdparams.n_threads = bparams.gparams.cpuparams.n_threads;
-        bparams.sdparams.main_gpu  = bparams.gparams.main_gpu;
+        bparams.sdparams.n_threads           = bparams.gparams.cpuparams.n_threads;
+        bparams.sdparams.main_gpu            = bparams.gparams.main_gpu;
     }
 
     return true;

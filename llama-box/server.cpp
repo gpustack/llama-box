@@ -792,6 +792,9 @@ struct server_context {
                 bparams.sdparams.nt_sampler = bparams.sdparams.sampler;
             }
 
+            if (bparams.sdparams.sample_steps <= 0) {
+                bparams.sdparams.sample_steps = sd_ctx->get_default_sample_steps();
+            }
             if (bparams.sdparams.hd_sample_steps <= 0) {
                 bparams.sdparams.hd_sample_steps = bparams.sdparams.sample_steps + 10;
             }

@@ -18,7 +18,7 @@ struct stablediffusion_params {
     float guidance                  = 3.5f;
     float strength                  = 0.75f;
     sample_method_t sampler         = N_SAMPLE_METHODS;
-    int sample_steps                = 10;
+    int sample_steps                = 0;
     float cfg_scale                 = 1.0f;
     sample_method_t hd_sampler      = N_SAMPLE_METHODS;
     float hd_cfg_scale              = 1.0f;
@@ -78,6 +78,7 @@ class stablediffusion_context {
 
     void free();
     sample_method_t get_default_sample_method();
+    int get_default_sample_steps();
     float get_default_cfg_scale();
     stablediffusion_generated_image *generate(sd_image_t *init_img, const char *prompt, stablediffusion_sampler_params sparams);
 
@@ -96,6 +97,10 @@ void stablediffusion_context::free() {
 
 sample_method_t stablediffusion_context::get_default_sample_method() {
     return sd_get_default_sample_method(sd_ctx);
+}
+
+int stablediffusion_context::get_default_sample_steps() {
+    return sd_get_default_sample_steps(sd_ctx);
 }
 
 float stablediffusion_context::get_default_cfg_scale() {
