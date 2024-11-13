@@ -59,8 +59,7 @@ add_definitions(-DGGML_MAX_NAME=128)
 
 # change the default for these sd options
 if (GGML_CUDA)
-    set(SD_CUDA ON)
-    set(SD_FAST_SOFTMAX ON)
+    set(SD_CUBLAS ON)
 elseif (GGML_HIPBLAS)
     set(SD_HIPBLAS ON)
 elseif (GGML_METAL)
