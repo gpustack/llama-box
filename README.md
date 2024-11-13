@@ -368,8 +368,8 @@ server/images:
          --image-width N          image width, in pixel space (default: 512)
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
          --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
-         --image-sampler TYPE     standard sampler that will be used for generation, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
-         --image-sample-steps N   number of standard sample steps (default: 10)
+         --image-sampler TYPE     standard sampler that will be used for generation, automatically retrieve the default value according to the --model, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+         --image-sample-steps N   number of standard sample steps, automatically retrieve the default value according to the --model
          --image-cfg-scale N      for standard sampler, the scale of classifier-free guidance in the output phase (1.0 = disabled)
          --image-hd-sampler TYPE  high definition sampler that will be used for generation, inherit from --image-sampler if no specified
          --image-hd-sample-steps N
