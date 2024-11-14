@@ -165,12 +165,16 @@ image_edit() {
         TIME=$(date +%s)
         echo -n "${IMAGE}" | base64 -d 2>/dev/null > "/tmp/image_generate_${TIME}.png"
         if [[ -f "/tmp/image_generate_${TIME}.png" ]]; then
-          if command -v feh > /dev/null; then
-              feh "/tmp/image_generate_${TIME}.png"
-          elif command -v open > /dev/null; then
-              open "/tmp/image_generate_${TIME}.png"
+          if [[ "$(uname -s)" == "Darwin" ]]; then
+            if command -v feh > /dev/null; then
+                feh "/tmp/image_generate_${TIME}.png"
+            elif command -v open > /dev/null; then
+                open "/tmp/image_generate_${TIME}.png"
+            else
+                echo "Generated image: /tmp/image_generate_${TIME}.png"
+            fi
           else
-              echo "Generated image: /tmp/image_generate_${TIME}.png"
+            echo "Generated image: /tmp/image_generate_${TIME}.png"
           fi
         else
             echo "Failed to generate image" && break

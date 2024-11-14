@@ -22,26 +22,26 @@ struct stablediffusion_params {
     float cfg_scale                 = 0.0f;
     schedule_t schedule             = DEFAULT;
     bool text_encoder_model_offload = true;
-    std::string clip_l_model;
-    std::string clip_g_model;
-    std::string t5xxl_model;
-    bool vae_model_offload = true;
-    std::string vae_model;
-    bool vae_tiling;
-    std::string taesd_model;
-    std::string lora_model_dir;
-    std::string upscale_model;
-    int upscale_repeats        = 1;
-    bool control_model_offload = true;
-    std::string control_net_model;
-    float control_strength = 0.9f;
-    bool control_canny     = false;
+    std::string clip_l_model        = "";
+    std::string clip_g_model        = "";
+    std::string t5xxl_model         = "";
+    bool vae_model_offload          = true;
+    std::string vae_model           = "";
+    bool vae_tiling                 = false;
+    std::string taesd_model         = "";
+    std::string lora_model_dir      = "";
+    std::string upscale_model       = "";
+    int upscale_repeats             = 1;
+    bool control_model_offload      = true;
+    std::string control_net_model   = "";
+    float control_strength          = 0.9f;
+    bool control_canny              = false;
 
     // inherited from common_params
-    std::string model;
-    std::string model_alias;
-    int n_threads;
-    int main_gpu;
+    std::string model       = "";
+    std::string model_alias = "";
+    int n_threads           = 1;
+    int main_gpu            = 0;
 };
 
 struct stablediffusion_sampler_params {

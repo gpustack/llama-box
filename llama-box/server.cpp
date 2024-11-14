@@ -798,7 +798,7 @@ struct server_context {
             sdparams = bparams.sdparams;
             n_tps    = bparams.n_tps;
 
-            SRV_INF("sampler: %s, steps: %d, cfg scale: %.2f, \n", sd_sample_method_to_argument(sdparams.sampler), sdparams.sample_steps, sdparams.cfg_scale);
+            SRV_INF("sampler: %s, steps: %d, cfg scale: %.2f\n", sd_sample_method_to_argument(sdparams.sampler), sdparams.sample_steps, sdparams.cfg_scale);
 
             return true;
         }

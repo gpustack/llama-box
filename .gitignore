@@ -33,3 +33,4 @@ bin/
 out/
 tmp/
 cmake-build-make-*/
+cmake-build-debug-make-*/

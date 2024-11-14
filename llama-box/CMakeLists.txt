@@ -63,6 +63,7 @@ add_dependencies(stable-diffusion ggml patch)
 #
 # llama-box
 #
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 set(TARGET llama-box)
 include_directories(${CMAKE_SOURCE_DIR})
 if (GGML_SYCL)
