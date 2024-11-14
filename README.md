@@ -21,7 +21,8 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
-- **Experimental** Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images).
+- Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
+  see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
 - Compatible with [(Legacy) OpenAI Completions API](https://beta.openai.com/docs/api-reference/completions).
 - Compatible with [Jina Rerank API](https://api.jina.ai/redoc#tag/rerank),
   see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
@@ -94,7 +95,8 @@ LLaMA Box supports the following platforms.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
 
-- Image generation via [Stable Diffusion 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium) model.
+- Image generation via [Stable Diffusion 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
+  model.
   Use GGUF files
   from [gpustack/stable-diffusion-v3-5-medium-GGUF](https://huggingface.co/gpustack/stable-diffusion-v3-5-medium-GGUF/tree/main?show_file_info=stable-diffusion-v3-5-medium-FP16.gguf).
 
@@ -535,8 +537,8 @@ The available endpoints for the LLaMA Box server mode are:
 
 - **POST** `/v1/images/edits`: (OpenAI-compatible) Returns an edited image from the given prompt and initial image,
   see https://platform.openai.com/docs/api-reference/images/edits/create.
-  + This is only work to `Image-To-Image` models.
-  + This endpoint is available if the `--images` flag is enabled.
+    + This is only work to `Image-To-Image` models.
+    + This endpoint is available if the `--images` flag is enabled.
 
 - **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.
     + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
