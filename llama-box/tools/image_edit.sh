@@ -25,6 +25,8 @@ N="${N:-"1"}"
 RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
+IMAGE="${IMAGE:-""}"
+MASK="${MASK:-""}"
 SAMPLER="${SAMPLER:-"null"}"
 SEED="${SEED:-"null"}"
 CFG_SCALE="${CFG_SCALE:-"9"}"
@@ -33,20 +35,18 @@ NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
 image_edit() {
     PROMPT="$(trim_trailing "$1")"
-    IMAGE="${2}"
     if [[ "${IMAGE:0:1}" == "@" ]]; then
         IMAGE="${IMAGE:1}"
     fi
     if [[ ! -f "${IMAGE}" ]]; then
-        echo "Image not found: ${IMAGE}" && return
-    fi
-    MASK="${3:-}"
-    if [[ "${MASK:0:1}" == "@" ]]; then
-        MASK="${MASK:1}"
+        echo "Image not found: ${IMAGE}" && exit 1
     fi
     if [[ -n "${MASK}" ]]; then
+      if [[ "${MASK:0:1}" == "@" ]]; then
+              MASK="${MASK:1}"
+          fi
       if [[ ! -f "${MASK}" ]]; then
-          echo "Mask not found: ${MASK}" && return
+          echo "Mask not found: ${MASK}" && exit 1
       fi
     fi
     DATA="{\"prompt\":\"${PROMPT}\"}"
@@ -95,6 +95,41 @@ image_edit() {
 
     START_TIME=$(date +%s)
     if [[ "${SAMPLER}" != "null" ]]; then
+      if [[ -n "${MASK}" ]]; then
+        ANSWER="$(curl \
+          --silent \
+          --no-buffer \
+          --request POST \
+          --url "${API_URL}/v1/images/edits" \
+          --form "prompt=${PROMPT}" \
+          --form "n=${N}" \
+          --form "response_format=${RESPONSE_FORMAT}" \
+          --form "size=${SIZE}" \
+          --form "sampler=${SAMPLER}" \
+          --form "seed=${SEED}" \
+          --form "cfg_scale=${CFG_SCALE}" \
+          --form "sample_steps=${SAMPLE_STEPS}" \
+          --form "negative_prompt=${NEGATIVE_PROMPT}" \
+          --form "image=@${IMAGE}" \
+          --form "mask=@${MASK}")"
+      else
+        ANSWER="$(curl \
+          --silent \
+          --no-buffer \
+          --request POST \
+          --url "${API_URL}/v1/images/edits" \
+          --form "prompt=${PROMPT}" \
+          --form "n=${N}" \
+          --form "response_format=${RESPONSE_FORMAT}" \
+          --form "size=${SIZE}" \
+          --form "sampler=${SAMPLER}" \
+          --form "seed=${SEED}" \
+          --form "cfg_scale=${CFG_SCALE}" \
+          --form "sample_steps=${SAMPLE_STEPS}" \
+          --form "negative_prompt=${NEGATIVE_PROMPT}" \
+          --form "image=@${IMAGE}")"
+      fi
+    elif [[ -n "${MASK}" ]]; then
       ANSWER="$(curl \
         --silent \
         --no-buffer \
@@ -104,11 +139,7 @@ image_edit() {
         --form "n=${N}" \
         --form "response_format=${RESPONSE_FORMAT}" \
         --form "size=${SIZE}" \
-        --form "sampler=${SAMPLER}" \
-        --form "seed=${SEED}" \
-        --form "cfg_scale=${CFG_SCALE}" \
-        --form "sample_steps=${SAMPLE_STEPS}" \
-        --form "negative_prompt=${NEGATIVE_PROMPT}" \
+        --form "quality=${QUALITY}" \
         --form "image=@${IMAGE}" \
         --form "mask=@${MASK}")"
     else
@@ -122,8 +153,7 @@ image_edit() {
         --form "response_format=${RESPONSE_FORMAT}" \
         --form "size=${SIZE}" \
         --form "quality=${QUALITY}" \
-        --form "image=@${IMAGE}" \
-        --form "mask=@${MASK}")"
+        --form "image=@${IMAGE}")"
     fi
     echo "A: ${ANSWER}" >> "${LOG_FILE}"
 
@@ -163,6 +193,8 @@ echo "N                 : ${N}"
 echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY}"
+echo "IMAGE             : ${IMAGE}"
+echo "MASK              : ${MASK}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"
 echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
@@ -177,5 +209,12 @@ if [[ ! -f "${LOG_FILE}" ]]; then
     touch "${LOG_FILE}"
 fi
 
-echo "> ${*}"
-image_edit "${*}"
+if [[ "${#@}" -ge 1 ]]; then
+    echo "> ${*}"
+    image_edit "${*}"
+else
+    while true; do
+        read -r -e -p "> " QUESTION
+        image_edit "${QUESTION}"
+    done
+fi

@@ -1115,7 +1115,7 @@ struct server_context {
                 int h                       = 0;
                 uint8_t *control_img_buffer = nullptr;
                 if (!sdparams.control_net_model.empty() && data.contains("mask")) {
-                    auto control_img = data.at("mask").get<std::string>();
+                    auto control_img   = data.at("mask").get<std::string>();
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
                     if (control_img_buffer == nullptr) {
                         send_error(task, "failed to load mask", ERROR_TYPE_SERVER);
@@ -1151,7 +1151,7 @@ struct server_context {
                         control_img_buffer = resized_mask_buffer;
                     }
                 }
-                auto init_img = data.at("image").get<std::string>();
+                auto init_img            = data.at("image").get<std::string>();
                 uint8_t *init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &w, &h, &c, 3);
                 if (init_img_buffer == nullptr) {
                     if (control_img_buffer != nullptr) {
@@ -2302,7 +2302,7 @@ struct server_context {
                     continue;
                 }
 
-                slot.state = SLOT_STATE_GENERATING;
+                slot.state            = SLOT_STATE_GENERATING;
                 slot.generated_images = sd_ctx->generate(slot.prompt.get<std::string>().c_str(), slot.sdsparams);
                 if (slot.generated_images == nullptr) {
                     slot.release();
@@ -3052,7 +3052,7 @@ int main(int argc, char **argv) {
             if (step <= 0) {
                 return;
             }
-            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "%3i/%3i - %4.4f/it\n", step, steps, time);
+            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "generate_image: sampling %03i/%03i - %.2fs/it\n", step, steps, time);
         },
         nullptr);
 
@@ -4069,22 +4069,31 @@ int main(int argc, char **argv) {
                 res_error(res, format_error_response("Request must be multipart/form-data", ERROR_TYPE_INVALID_REQUEST));
                 return;
             }
+            request = json{};
             if (!req.has_file("image")) {
                 res_error(res, format_error_response("\"image\" must be provided", ERROR_TYPE_INVALID_REQUEST));
                 return;
+            } else {
+                request["image"] = req.get_file_value("image").content;
             }
             if (!req.has_file("prompt")) {
                 res_error(res, format_error_response("\"prompt\" must be provided", ERROR_TYPE_INVALID_REQUEST));
                 return;
+            } else {
+                request["prompt"] = req.get_file_value("prompt").content;
             }
-            request = json{
-                {"image", req.get_file_value("image").content},
-                {"prompt", req.get_file_value("prompt").content},
-                {"mask", req.get_file_value("mask").content},
-                {"model", req.get_file_value("model").content},
-                {"n", req.get_file_value("n").content},
-                {"size", req.get_file_value("size").content},
-            };
+            if (req.has_file("mask")) {
+                request["mask"] = req.get_file_value("mask").content;
+            }
+            if (req.has_file("model")) {
+                request["model"] = req.get_file_value("model").content;
+            }
+            if (req.has_file("size")) {
+                request["size"] = req.get_file_value("size").content;
+            }
+            if (req.has_file("n")) {
+                request["n"] = std::stoi(req.get_file_value("n").content);
+            }
             if (req.has_file("sampler")) {
                 request["sampler"] = req.get_file_value("sampler").content;
                 if (req.has_file("cfg_scale")) {
