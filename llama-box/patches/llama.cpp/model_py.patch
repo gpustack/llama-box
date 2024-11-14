@@ -194,10 +194,10 @@ index 39afa5ef..7c158891 100755
  @Model.register("GemmaForCausalLM")
  class GemmaModel(Model):
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 7ab08b03..a6b04470 100644
+index bc2b649d..69194af0 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
-@@ -208,6 +208,7 @@ class MODEL_ARCH(IntEnum):
+@@ -220,6 +220,7 @@ class MODEL_ARCH(IntEnum):
      REFACT       = auto()
      BERT         = auto()
      NOMIC_BERT   = auto()
@@ -205,7 +205,7 @@ index 7ab08b03..a6b04470 100644
      JINA_BERT_V2 = auto()
      BLOOM        = auto()
      STABLELM     = auto()
-@@ -369,6 +370,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -381,6 +382,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.REFACT:         "refact",
      MODEL_ARCH.BERT:           "bert",
      MODEL_ARCH.NOMIC_BERT:     "nomic-bert",
@@ -213,7 +213,7 @@ index 7ab08b03..a6b04470 100644
      MODEL_ARCH.JINA_BERT_V2:   "jina-bert-v2",
      MODEL_ARCH.BLOOM:          "bloom",
      MODEL_ARCH.STABLELM:       "stablelm",
-@@ -620,6 +622,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -632,6 +634,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.ATTN_Q,
          MODEL_TENSOR.ATTN_K,
          MODEL_TENSOR.ATTN_V,
@@ -221,7 +221,7 @@ index 7ab08b03..a6b04470 100644
          MODEL_TENSOR.ATTN_OUT,
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
-@@ -641,6 +644,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -653,6 +656,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_UP,
          MODEL_TENSOR.LAYER_OUT_NORM,
      ],
