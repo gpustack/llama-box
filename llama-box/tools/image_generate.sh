@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 #
 # MIT license
 # Copyright (c) 2024 llama-box authors
@@ -96,17 +98,17 @@ image_generate() {
       --url "${API_URL}/v1/images/generations" \
       --header "Content-Type: application/json" \
       --data-raw "${DATA}")"
-    echo "A: ${ANSWER}" >> "${LOG_FILE}"
+    printf "%s" "A: ${ANSWER}" >> "${LOG_FILE}"
 
-    CONTENT="$(echo "${ANSWER}" | jq -r '.data')"
+    CONTENT="$(echo "${ANSWER}" | jq -c -r '.data')"
     if [[ "${CONTENT}" == "null" ]]; then
         CONTENT="[]"
     fi
-    while IFS= read -r IMAGE; do
+    printf "%s" "${CONTENT}" > /tmp/image_generate_result.json
+    for i in $(seq 0 $(("${N}" - 1))); do
         TIME=$(date +%s)
-        echo -n "${IMAGE}" | base64 -d 2>/dev/null > "/tmp/image_generate_${TIME}.png"
-        if [[ -f "/tmp/image_generate_${TIME}.png" ]]; then
-          if [[ "$(uname -s)" == "Darwin" ]]; then
+        jq -c -r ".[${i}] | .b64_json" /tmp/image_generate_result.json | base64 -d 2>/dev/null > "/tmp/image_generate_${TIME}.png"
+        if [[ "$(uname -s)" == "Darwin" ]]; then
             if command -v feh > /dev/null; then
                 feh "/tmp/image_generate_${TIME}.png"
             elif command -v open > /dev/null; then
@@ -114,14 +116,11 @@ image_generate() {
             else
                 echo "Generated image: /tmp/image_generate_${TIME}.png"
             fi
-          else
-            echo "Generated image: /tmp/image_generate_${TIME}.png"
-          fi
         else
-            echo "Failed to generate image" && break
+            echo "Generated image: /tmp/image_generate_${TIME}.png"
         fi
         sleep 1
-    done < <(echo "${CONTENT}" | jq -r '.[] | .b64_json')
+    done
 
     printf "\n------------------------"
     ELAPSED=$(($(date +%s) - START_TIME))

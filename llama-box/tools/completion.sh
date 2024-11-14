@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 #
 # MIT license
 # Copyright (c) 2024 llama-box authors
