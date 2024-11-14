@@ -13,8 +13,8 @@
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 struct stablediffusion_params {
-    int height                      = 512;
-    int width                       = 512;
+    int max_height                  = 1024;
+    int max_width                   = 1024;
     float guidance                  = 3.5f;
     float strength                  = 0.75f;
     sample_method_t sampler         = N_SAMPLE_METHODS;
@@ -47,12 +47,14 @@ struct stablediffusion_params {
 struct stablediffusion_sampler_params {
     uint32_t seed               = LLAMA_DEFAULT_SEED;
     int batch_count             = 1;
-    int height                  = 1024;
-    int width                   = 1024;
+    int height                  = 512;
+    int width                   = 512;
     sample_method_t sampler     = EULER_A;
     float cfg_scale             = 9.0f;
     int sample_steps            = 20;
     std::string negative_prompt = "";
+    uint8_t *init_img_buffer    = nullptr;
+    uint8_t *control_img_buffer = nullptr;
 };
 
 struct stablediffusion_generated_image {
@@ -72,7 +74,7 @@ class stablediffusion_context {
     sample_method_t get_default_sample_method();
     int get_default_sample_steps();
     float get_default_cfg_scale();
-    stablediffusion_generated_image *generate(sd_image_t *init_img, const char *prompt, stablediffusion_sampler_params sparams);
+    stablediffusion_generated_image *generate(const char *prompt, stablediffusion_sampler_params sparams);
 
   private:
     sd_ctx_t *sd_ctx = nullptr;
@@ -99,58 +101,58 @@ float stablediffusion_context::get_default_cfg_scale() {
     return sd_get_default_cfg_scale(sd_ctx);
 }
 
-stablediffusion_generated_image *stablediffusion_context::generate(sd_image_t *img, const char *prompt, stablediffusion_sampler_params sparams) {
-    int clip_skip               = -1;
-    sd_image_t *control_image   = nullptr;
+stablediffusion_generated_image *stablediffusion_context::generate(const char *prompt, stablediffusion_sampler_params sparams) {
+    int clip_skip           = -1;
+    sd_image_t *control_img = nullptr;
     std::string input_id_images_path;
     float style_ratio    = 20.f;
     bool normalize_input = false;
 
     sd_image_t *imgs = nullptr;
-    if (img != nullptr) {
-        // clang-format off
+    if (sparams.init_img_buffer != nullptr) {
+        sd_image_t init_img = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.init_img_buffer};
+        if (sparams.control_img_buffer != nullptr) {
+            control_img = new sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.control_img_buffer};
+        }
         imgs = img2img(
-                sd_ctx,
-                *img,
-                prompt,
-                sparams.negative_prompt.c_str(),
-                clip_skip,
-                sparams.cfg_scale,
-                params.guidance,
-                sparams.width,
-                sparams.height,
-                sparams.sampler,
-                sparams.sample_steps,
-                params.strength,
-                sparams.seed,
-                sparams.batch_count,
-                control_image,
-                params.control_strength,
-                style_ratio,
-                normalize_input,
-                input_id_images_path.c_str());
-        // clang-format on
+            sd_ctx,
+            init_img,
+            prompt,
+            sparams.negative_prompt.c_str(),
+            clip_skip,
+            sparams.cfg_scale,
+            params.guidance,
+            sparams.width,
+            sparams.height,
+            sparams.sampler,
+            sparams.sample_steps,
+            params.strength,
+            sparams.seed,
+            sparams.batch_count,
+            control_img,
+            params.control_strength,
+            style_ratio,
+            normalize_input,
+            input_id_images_path.c_str());
     } else {
-        // clang-format off
         imgs = txt2img(
-                sd_ctx,
-                prompt,
-                sparams.negative_prompt.c_str(),
-                clip_skip,
-                sparams.cfg_scale,
-                params.guidance,
-                sparams.width,
-                sparams.height,
-                sparams.sampler,
-                sparams.sample_steps,
-                sparams.seed,
-                sparams.batch_count,
-                control_image,
-                params.control_strength,
-                style_ratio,
-                normalize_input,
-                input_id_images_path.c_str());
-        // clang-format on
+            sd_ctx,
+            prompt,
+            sparams.negative_prompt.c_str(),
+            clip_skip,
+            sparams.cfg_scale,
+            params.guidance,
+            sparams.width,
+            sparams.height,
+            sparams.sampler,
+            sparams.sample_steps,
+            sparams.seed,
+            sparams.batch_count,
+            control_img,
+            params.control_strength,
+            style_ratio,
+            normalize_input,
+            input_id_images_path.c_str());
     }
 
     // TODO upscaler
@@ -198,11 +200,12 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string diffusion_model;
     std::string embed_dir;
     std::string stacked_id_embed_dir;
+    ggml_type wtype              = GGML_TYPE_COUNT;
+    rng_type_t rng_type          = CUDA_RNG;
     bool vae_decode_only         = false;
     bool free_params_immediately = false;
 
-    // clang-format off
-    sd_ctx_t* sd_ctx = new_sd_ctx(
+    sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
         params.clip_l_model.c_str(),
         params.clip_g_model.c_str(),
@@ -218,8 +221,8 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         params.vae_tiling,
         free_params_immediately,
         params.n_threads,
-        GGML_TYPE_COUNT,
-        CUDA_RNG,
+        wtype,
+        rng_type,
         params.schedule,
         !params.text_encoder_model_offload,
         !params.control_model_offload,
@@ -228,7 +231,6 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     if (sd_ctx == nullptr) {
         return nullptr;
     }
-    // clang-format on
 
     return new stablediffusion_context(sd_ctx, params);
 }

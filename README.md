@@ -533,6 +533,11 @@ The available endpoints for the LLaMA Box server mode are:
     + This is only work to `Text-To-Image` models.
     + This endpoint is available if the `--images` flag is enabled.
 
+- **POST** `/v1/images/edits`: (OpenAI-compatible) Returns an edited image from the given prompt and initial image,
+  see https://platform.openai.com/docs/api-reference/images/edits/create.
+  + This is only work to `Image-To-Image` models.
+  + This endpoint is available if the `--images` flag is enabled.
+
 - **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.
     + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
     + This endpoint is only available if the `--rerank` flag is provided.

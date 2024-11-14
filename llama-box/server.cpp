@@ -126,8 +126,6 @@ struct server_slot {
     bool oaicompat_image_generate = false;
     bool oaicompat_image_edit     = false;
     struct stablediffusion_sampler_params sdsparams;
-    std::string sd_edit_image;
-    std::string sd_edit_mask;
     stablediffusion_generated_image *generated_images = nullptr;
 
     /* LLAMA */
@@ -212,8 +210,14 @@ struct server_slot {
         /* STABLE DIFFUSION */
 
         if (oaicompat_image) {
-            sd_edit_image = "";
-            sd_edit_mask  = "";
+            if (sdsparams.init_img_buffer != nullptr) {
+                stbi_image_free(sdsparams.init_img_buffer);
+                sdsparams.init_img_buffer = nullptr;
+            }
+            if (sdsparams.control_img_buffer != nullptr) {
+                stbi_image_free(sdsparams.control_img_buffer);
+                sdsparams.control_img_buffer = nullptr;
+            }
             if (generated_images != nullptr) {
                 delete[] generated_images;
                 generated_images = nullptr;
@@ -1094,8 +1098,8 @@ struct server_context {
 
             slot.sdsparams.seed            = json_value(data, "seed", sparams.seed);
             slot.sdsparams.batch_count     = json_value(data, "batch_count", 1);
-            slot.sdsparams.height          = json_value(data, "height", sdparams.height);
-            slot.sdsparams.width           = json_value(data, "width", sdparams.width);
+            slot.sdsparams.height          = json_value(data, "height", 512);
+            slot.sdsparams.width           = json_value(data, "width", 512);
             slot.sdsparams.sampler         = json_value(data, "sampler", sdparams.sampler);
             slot.sdsparams.cfg_scale       = json_value(data, "cfg_scale", sdparams.cfg_scale);
             slot.sdsparams.sample_steps    = json_value(data, "sample_steps", sdparams.sample_steps);
@@ -1106,10 +1110,96 @@ struct server_context {
 
             // get image
             if (slot.oaicompat_image_edit) {
-                slot.sd_edit_image = data.at("image").get<std::string>();
-                if (data.contains("mask")) {
-                    slot.sd_edit_mask = data.at("mask").get<std::string>();
+                int c                       = 0;
+                int w                       = 0;
+                int h                       = 0;
+                uint8_t *control_img_buffer = nullptr;
+                if (!sdparams.control_net_model.empty() && data.contains("mask")) {
+                    auto control_img = data.at("mask").get<std::string>();
+                    control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
+                    if (control_img_buffer == nullptr) {
+                        send_error(task, "failed to load mask", ERROR_TYPE_SERVER);
+                        return false;
+                    }
+                    if (c < 3) {
+                        stbi_image_free(control_img_buffer);
+                        send_error(task, "mask must be at least 3 channels", ERROR_TYPE_SERVER);
+                        return false;
+                    }
+                    if (w <= 0 || h <= 0) {
+                        stbi_image_free(control_img_buffer);
+                        send_error(task, "mask width and height cannot be zero", ERROR_TYPE_SERVER);
+                        return false;
+                    }
+                    if (w != slot.sdsparams.width || h != slot.sdsparams.height) {
+                        LOG_INF("image dimensions do not match, resizing image\n");
+                        int rw                    = slot.sdsparams.width;
+                        int rh                    = slot.sdsparams.height;
+                        auto *resized_mask_buffer = (uint8_t *)malloc(rw * rh * 3);
+                        if (resized_mask_buffer == nullptr) {
+                            stbi_image_free(control_img_buffer);
+                            send_error(task, "failed to create resized image", ERROR_TYPE_SERVER);
+                            return false;
+                        }
+                        stbir_resize(control_img_buffer, w, h, 0,
+                                     resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
+                                     3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
+                                     STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
+                                     STBIR_FILTER_BOX, STBIR_FILTER_BOX,
+                                     STBIR_COLORSPACE_SRGB, nullptr);
+                        stbi_image_free(control_img_buffer);
+                        control_img_buffer = resized_mask_buffer;
+                    }
                 }
+                auto init_img = data.at("image").get<std::string>();
+                uint8_t *init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &w, &h, &c, 3);
+                if (init_img_buffer == nullptr) {
+                    if (control_img_buffer != nullptr) {
+                        stbi_image_free(control_img_buffer);
+                    }
+                    send_error(task, "failed to load image", ERROR_TYPE_SERVER);
+                    return false;
+                }
+                if (c < 3) {
+                    if (control_img_buffer != nullptr) {
+                        stbi_image_free(control_img_buffer);
+                    }
+                    stbi_image_free(init_img_buffer);
+                    send_error(task, "image must be at least 3 channels", ERROR_TYPE_SERVER);
+                    return false;
+                }
+                if (w <= 0 || h <= 0) {
+                    if (control_img_buffer != nullptr) {
+                        stbi_image_free(control_img_buffer);
+                    }
+                    stbi_image_free(init_img_buffer);
+                    send_error(task, "image width and height cannot be zero", ERROR_TYPE_SERVER);
+                    return false;
+                }
+                if (w != slot.sdsparams.width || h != slot.sdsparams.height) {
+                    LOG_INF("image dimensions do not match, resizing image\n");
+                    int rw                     = slot.sdsparams.width;
+                    int rh                     = slot.sdsparams.height;
+                    auto *resized_image_buffer = (uint8_t *)malloc(rw * rh * 3);
+                    if (resized_image_buffer == nullptr) {
+                        if (control_img_buffer != nullptr) {
+                            stbi_image_free(control_img_buffer);
+                        }
+                        stbi_image_free(init_img_buffer);
+                        send_error(task, "failed to create resized image", ERROR_TYPE_SERVER);
+                        return false;
+                    }
+                    stbir_resize(init_img_buffer, w, h, 0,
+                                 resized_image_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
+                                 3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
+                                 STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
+                                 STBIR_FILTER_BOX, STBIR_FILTER_BOX,
+                                 STBIR_COLORSPACE_SRGB, nullptr);
+                    stbi_image_free(init_img_buffer);
+                    init_img_buffer = resized_image_buffer;
+                }
+                slot.sdsparams.control_img_buffer = control_img_buffer;
+                slot.sdsparams.init_img_buffer    = init_img_buffer;
             }
 
             slot.state = SLOT_STATE_STARTED;
@@ -2213,12 +2303,7 @@ struct server_context {
                 }
 
                 slot.state = SLOT_STATE_GENERATING;
-                if (slot.oaicompat_image_generate) {
-                    slot.generated_images = sd_ctx->generate(nullptr, slot.prompt.get<std::string>().c_str(), slot.sdsparams);
-                } else {
-                    // TODO
-                }
-
+                slot.generated_images = sd_ctx->generate(slot.prompt.get<std::string>().c_str(), slot.sdsparams);
                 if (slot.generated_images == nullptr) {
                     slot.release();
                     send_error(slot, "failed to generate image", ERROR_TYPE_SERVER);
@@ -2964,7 +3049,10 @@ int main(int argc, char **argv) {
         nullptr);
     sd_progress_set(
         [](int step, int steps, float time, void * /*user_data*/) {
-            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "%i/%i - %.4f/it\n", step, steps, time);
+            if (step <= 0) {
+                return;
+            }
+            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "%3i/%3i - %4.4f/it\n", step, steps, time);
         },
         nullptr);
 
@@ -3989,7 +4077,6 @@ int main(int argc, char **argv) {
                 res_error(res, format_error_response("\"prompt\" must be provided", ERROR_TYPE_INVALID_REQUEST));
                 return;
             }
-            // clang-format off
             request = json{
                 {"image", req.get_file_value("image").content},
                 {"prompt", req.get_file_value("prompt").content},
@@ -3998,7 +4085,18 @@ int main(int argc, char **argv) {
                 {"n", req.get_file_value("n").content},
                 {"size", req.get_file_value("size").content},
             };
-            // clang-format on
+            if (req.has_file("sampler")) {
+                request["sampler"] = req.get_file_value("sampler").content;
+                if (req.has_file("cfg_scale")) {
+                    request["cfg_scale"] = std::stof(req.get_file_value("cfg_scale").content);
+                }
+                if (req.has_file("sample_steps")) {
+                    request["sample_steps"] = std::stoi(req.get_file_value("sample_steps").content);
+                }
+                if (req.has_file("negative_sampler")) {
+                    request["negative_sampler"] = req.get_file_value("negative_sampler").content;
+                }
+            }
             request = oaicompat_images_edits_request(ctx_server.sdparams, request);
         }
 

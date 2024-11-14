@@ -25,20 +25,31 @@ N="${N:-"1"}"
 RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
-STYLE="${STYLE:-"null"}"
 SAMPLER="${SAMPLER:-"null"}"
 SEED="${SEED:-"null"}"
 CFG_SCALE="${CFG_SCALE:-"9"}"
 SAMPLE_STEPS="${SAMPLE_STEPS:-"20"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
-image_generate() {
+image_edit() {
     PROMPT="$(trim_trailing "$1")"
-    if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
-      DATA="$(cat "${PROMPT:1}")"
-    else
-      DATA="{\"prompt\":\"${PROMPT}\"}"
+    IMAGE="${2}"
+    if [[ "${IMAGE:0:1}" == "@" ]]; then
+        IMAGE="${IMAGE:1}"
     fi
+    if [[ ! -f "${IMAGE}" ]]; then
+        echo "Image not found: ${IMAGE}" && return
+    fi
+    MASK="${3:-}"
+    if [[ "${MASK:0:1}" == "@" ]]; then
+        MASK="${MASK:1}"
+    fi
+    if [[ -n "${MASK}" ]]; then
+      if [[ ! -f "${MASK}" ]]; then
+          echo "Mask not found: ${MASK}" && return
+      fi
+    fi
+    DATA="{\"prompt\":\"${PROMPT}\"}"
     if [[ "${SAMPLER}" != "null" ]]; then
       DATA="$(echo -n "${DATA}" | jq \
                 --argjson n "${N}" \
@@ -49,6 +60,8 @@ image_generate() {
                 --argjson cfg_scale "${CFG_SCALE}" \
                 --argjson sample_steps "${SAMPLE_STEPS}" \
                 --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
+                --argjson image "\"${IMAGE}\"" \
+                --argjson mask "\"${MASK}\"" \
                 '{
                   n: $n,
                   response_format: $response_format,
@@ -57,21 +70,9 @@ image_generate() {
                   seed: $seed,
                   cfg_scale: $cfg_scale,
                   sample_steps: $sample_steps,
-                  negative_prompt: $negative_prompt
-                } * .')"
-    elif [[ "${STYLE}" != "null" ]]; then
-      DATA="$(echo -n "${DATA}" | jq \
-                --argjson n "${N}" \
-                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
-                --argjson size "\"${SIZE}\"" \
-                --argjson quality "\"${QUALITY}\"" \
-                --argjson style "\"${STYLE}\"" \
-                '{
-                  n: $n,
-                  response_format: $response_format,
-                  size: $size,
-                  quality: $quality,
-                  style: $style
+                  negative_prompt: $negative_prompt,
+                  image: $image,
+                  mask: $mask
                 } * .')"
     else
       DATA="$(echo -n "${DATA}" | jq \
@@ -79,23 +80,51 @@ image_generate() {
                 --argjson response_format "\"${RESPONSE_FORMAT}\"" \
                 --argjson size "\"${SIZE}\"" \
                 --argjson quality "\"${QUALITY}\"" \
+                --argjson image "\"${IMAGE}\"" \
+                --argjson mask "\"${MASK}\"" \
                 '{
                   n: $n,
                   response_format: $response_format,
                   size: $size,
-                  quality: $quality
+                  quality: $quality,
+                  image: $image,
+                  mask: $mask
                 } * .')"
     fi
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
     START_TIME=$(date +%s)
-    ANSWER="$(curl \
-      --silent \
-      --no-buffer \
-      --request POST \
-      --url "${API_URL}/v1/images/generations" \
-      --header "Content-Type: application/json" \
-      --data-raw "${DATA}")"
+    if [[ "${SAMPLER}" != "null" ]]; then
+      ANSWER="$(curl \
+        --silent \
+        --no-buffer \
+        --request POST \
+        --url "${API_URL}/v1/images/edits" \
+        --form "prompt=${PROMPT}" \
+        --form "n=${N}" \
+        --form "response_format=${RESPONSE_FORMAT}" \
+        --form "size=${SIZE}" \
+        --form "sampler=${SAMPLER}" \
+        --form "seed=${SEED}" \
+        --form "cfg_scale=${CFG_SCALE}" \
+        --form "sample_steps=${SAMPLE_STEPS}" \
+        --form "negative_prompt=${NEGATIVE_PROMPT}" \
+        --form "image=@${IMAGE}" \
+        --form "mask=@${MASK}")"
+    else
+      ANSWER="$(curl \
+        --silent \
+        --no-buffer \
+        --request POST \
+        --url "${API_URL}/v1/images/edits" \
+        --form "prompt=${PROMPT}" \
+        --form "n=${N}" \
+        --form "response_format=${RESPONSE_FORMAT}" \
+        --form "size=${SIZE}" \
+        --form "quality=${QUALITY}" \
+        --form "image=@${IMAGE}" \
+        --form "mask=@${MASK}")"
+    fi
     echo "A: ${ANSWER}" >> "${LOG_FILE}"
 
     CONTENT="$(echo "${ANSWER}" | jq -r '.data')"
@@ -134,7 +163,6 @@ echo "N                 : ${N}"
 echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY}"
-echo "STYLE             : ${STYLE}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"
 echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
@@ -149,12 +177,5 @@ if [[ ! -f "${LOG_FILE}" ]]; then
     touch "${LOG_FILE}"
 fi
 
-if [[ "${#@}" -ge 1 ]]; then
-    echo "> ${*}"
-    image_generate "${*}"
-else
-    while true; do
-        read -r -e -p "> " QUESTION
-        image_generate "${QUESTION}"
-    done
-fi
+echo "> ${*}"
+image_edit "${*}"

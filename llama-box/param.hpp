@@ -286,8 +286,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // embedding //
     // server // images //
     opts.push_back({ "server/images" });
-    opts.push_back({ "server/images",                      "       --image-height N",                       "image height, in pixel space (default: %d)", sdparams.height});
-    opts.push_back({ "server/images",                      "       --image-width N",                        "image width, in pixel space (default: %d)", sdparams.width});
+    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 (default: %d)", sdparams.max_height});
+    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 (default: %d)", sdparams.max_width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
     opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
     opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, select from %s", sd_sampler_type_names.c_str() });
@@ -1552,21 +1552,27 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             // server // image //
 
-            if (!strcmp(flag, "--image-height")) {
+            if (!strcmp(flag, "--image-max-height")) {
                 if (i == argc) {
-                    missing("--image-height");
+                    missing("--image-max-height");
                 }
-                char *arg               = argv[i++];
-                bparams.sdparams.height = std::stoi(std::string(arg));
+                char *arg                   = argv[i++];
+                bparams.sdparams.max_height = std::stoi(std::string(arg));
+                if (bparams.sdparams.max_height < 256) {
+                    invalid("--image-max-height");
+                }
                 continue;
             }
 
-            if (!strcmp(flag, "--image-width")) {
+            if (!strcmp(flag, "--image-max-width")) {
                 if (i == argc) {
-                    missing("--image-width");
+                    missing("--image-max-width");
                 }
-                char *arg              = argv[i++];
-                bparams.sdparams.width = std::stoi(std::string(arg));
+                char *arg                  = argv[i++];
+                bparams.sdparams.max_width = std::stoi(std::string(arg));
+                if (bparams.sdparams.max_width < 256) {
+                    invalid("--image-max-width");
+                }
                 continue;
             }
 

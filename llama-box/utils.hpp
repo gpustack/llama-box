@@ -1072,8 +1072,19 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (pos == std::string::npos) {
             throw std::runtime_error("Illegal param: size must be in the format 'widthxheight'");
         }
-        llama_params["width"]  = std::stoi(size.substr(0, pos));
-        llama_params["height"] = std::stoi(size.substr(pos + 1));
+        auto width  = std::stoi(size.substr(0, pos));
+        auto height = std::stoi(size.substr(pos + 1));
+        if (width < 256 || height < 256) {
+            throw std::runtime_error("Illegal param: width and height must be at least 256");
+        }
+        if (width > params.max_width) {
+            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.max_width));
+        }
+        if (height > params.max_height) {
+            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.max_height));
+        }
+        llama_params["width"]  = width;
+        llama_params["height"] = height;
     }
 
     // Handle "response_format" field
@@ -1151,8 +1162,19 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         if (pos == std::string::npos) {
             throw std::runtime_error("Illegal param: size must be in the format 'widthxheight'");
         }
-        llama_params["width"]  = std::stoi(size.substr(0, pos));
-        llama_params["height"] = std::stoi(size.substr(pos + 1));
+        auto width  = std::stoi(size.substr(0, pos));
+        auto height = std::stoi(size.substr(pos + 1));
+        if (width < 256 || height < 256) {
+            throw std::runtime_error("Illegal param: width and height must be at least 256");
+        }
+        if (width > params.max_width) {
+            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.max_width));
+        }
+        if (height > params.max_height) {
+            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.max_height));
+        }
+        llama_params["width"]  = width;
+        llama_params["height"] = height;
     }
 
     // Handle "response_format" field
