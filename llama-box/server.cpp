@@ -1118,17 +1118,17 @@ struct server_context {
                     auto control_img   = data.at("mask").get<std::string>();
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
                     if (control_img_buffer == nullptr) {
-                        send_error(task, "failed to load mask", ERROR_TYPE_SERVER);
+                        send_error(task, "failed to load mask", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (c < 3) {
                         stbi_image_free(control_img_buffer);
-                        send_error(task, "mask must be at least 3 channels", ERROR_TYPE_SERVER);
+                        send_error(task, "mask must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (w <= 0 || h <= 0) {
                         stbi_image_free(control_img_buffer);
-                        send_error(task, "mask width and height cannot be zero", ERROR_TYPE_SERVER);
+                        send_error(task, "mask width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (w != slot.sdsparams.width || h != slot.sdsparams.height) {
@@ -1138,7 +1138,7 @@ struct server_context {
                         auto *resized_mask_buffer = (uint8_t *)malloc(rw * rh * 3);
                         if (resized_mask_buffer == nullptr) {
                             stbi_image_free(control_img_buffer);
-                            send_error(task, "failed to create resized image", ERROR_TYPE_SERVER);
+                            send_error(task, "failed to create resized image", ERROR_TYPE_INVALID_REQUEST);
                             return false;
                         }
                         stbir_resize(control_img_buffer, w, h, 0,
@@ -1157,7 +1157,7 @@ struct server_context {
                     if (control_img_buffer != nullptr) {
                         stbi_image_free(control_img_buffer);
                     }
-                    send_error(task, "failed to load image", ERROR_TYPE_SERVER);
+                    send_error(task, "failed to load image", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
                 if (c < 3) {
@@ -1165,7 +1165,7 @@ struct server_context {
                         stbi_image_free(control_img_buffer);
                     }
                     stbi_image_free(init_img_buffer);
-                    send_error(task, "image must be at least 3 channels", ERROR_TYPE_SERVER);
+                    send_error(task, "image must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
                 if (w <= 0 || h <= 0) {
@@ -1173,7 +1173,7 @@ struct server_context {
                         stbi_image_free(control_img_buffer);
                     }
                     stbi_image_free(init_img_buffer);
-                    send_error(task, "image width and height cannot be zero", ERROR_TYPE_SERVER);
+                    send_error(task, "image width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
                 if (w != slot.sdsparams.width || h != slot.sdsparams.height) {
@@ -1186,7 +1186,7 @@ struct server_context {
                             stbi_image_free(control_img_buffer);
                         }
                         stbi_image_free(init_img_buffer);
-                        send_error(task, "failed to create resized image", ERROR_TYPE_SERVER);
+                        send_error(task, "failed to create resized image", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     stbir_resize(init_img_buffer, w, h, 0,

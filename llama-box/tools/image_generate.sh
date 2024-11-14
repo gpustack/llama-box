@@ -102,7 +102,8 @@ image_generate() {
 
     CONTENT="$(echo "${ANSWER}" | jq -c -r '.data')"
     if [[ "${CONTENT}" == "null" ]]; then
-        CONTENT="[]"
+        echo "Error: ${ANSWER}"
+        return
     fi
     printf "%s" "${CONTENT}" > /tmp/image_generate_result.json
     for i in $(seq 0 $(("${N}" - 1))); do
