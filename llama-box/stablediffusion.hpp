@@ -87,8 +87,10 @@ stablediffusion_context::~stablediffusion_context() {
 }
 
 void stablediffusion_context::free() {
-    sd_ctx_free(sd_ctx);
-    sd_ctx = nullptr;
+    if (sd_ctx != nullptr) {
+        sd_ctx_free(sd_ctx);
+        sd_ctx = nullptr;
+    }
     if (upscaler_ctx != nullptr) {
         upscaler_ctx_free(upscaler_ctx);
         upscaler_ctx = nullptr;
@@ -259,7 +261,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
 
     upscaler_ctx_t *upscaler_ctx = nullptr;
     if (!params.upscale_model.empty()) {
-        upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, wtype);
+        upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, wtype, params.main_gpu);
         if (upscaler_ctx == nullptr) {
             LOG_ERR("%s: failed to create upscaler context\n", __func__);
             sd_ctx_free(sd_ctx);
