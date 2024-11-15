@@ -88,6 +88,7 @@ image_generate() {
     fi
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
+    set -e
     START_TIME=$(date +%s)
     ANSWER="$(curl \
       --silent \
@@ -97,6 +98,7 @@ image_generate() {
       --header "Content-Type: application/json" \
       --data-raw "${DATA}")"
     printf "%s" "A: ${ANSWER}" >> "${LOG_FILE}"
+    set +e
 
     CONTENT="$(echo "${ANSWER}" | jq -c -r '.data')"
     if [[ "${CONTENT}" == "null" ]]; then

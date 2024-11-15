@@ -93,6 +93,7 @@ image_edit() {
     fi
     echo "Q: ${DATA}" >> "${LOG_FILE}"
 
+    set -e
     START_TIME=$(date +%s)
     if [[ "${SAMPLER}" != "null" ]]; then
       if [[ -n "${MASK}" ]]; then
@@ -156,6 +157,7 @@ image_edit() {
         --form "image=@${IMAGE}")"
     fi
     printf "%s" "A: ${ANSWER}" >> "${LOG_FILE}"
+    set +e
 
     CONTENT="$(echo "${ANSWER}" | jq -c -r '.data')"
     if [[ "${CONTENT}" == "null" ]]; then

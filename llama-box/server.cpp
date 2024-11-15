@@ -1118,6 +1118,8 @@ struct server_context {
                     auto control_img   = data.at("mask").get<std::string>();
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
                     if (control_img_buffer == nullptr) {
+                        auto reason = stbi_failure_reason();
+                        SLT_ERR(slot, "failed to load mask: %s\n", reason);
                         send_error(task, "failed to load mask", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
@@ -1138,15 +1140,21 @@ struct server_context {
                         auto *resized_mask_buffer = (uint8_t *)malloc(rw * rh * 3);
                         if (resized_mask_buffer == nullptr) {
                             stbi_image_free(control_img_buffer);
-                            send_error(task, "failed to create resized image", ERROR_TYPE_INVALID_REQUEST);
+                            send_error(task, "failed to create resized mask buffer", ERROR_TYPE_INVALID_REQUEST);
                             return false;
                         }
-                        stbir_resize(control_img_buffer, w, h, 0,
+                        if (!stbir_resize(control_img_buffer, w, h, 0,
                                      resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
                                      3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
                                      STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
                                      STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                     STBIR_COLORSPACE_SRGB, nullptr);
+                                     STBIR_COLORSPACE_SRGB, nullptr)) {
+                            auto reason = stbi_failure_reason();
+                            SLT_ERR(slot, "failed to load mask: %s\n", reason);
+                            stbi_image_free(control_img_buffer);
+                            send_error(task, "failed to resize mask", ERROR_TYPE_INVALID_REQUEST);
+                            return false;
+                        }
                         stbi_image_free(control_img_buffer);
                         control_img_buffer = resized_mask_buffer;
                     }
@@ -1157,6 +1165,8 @@ struct server_context {
                     if (control_img_buffer != nullptr) {
                         stbi_image_free(control_img_buffer);
                     }
+                    auto reason = stbi_failure_reason();
+                    SLT_ERR(slot, "failed to load image: %s\n", reason);
                     send_error(task, "failed to load image", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
@@ -1186,15 +1196,24 @@ struct server_context {
                             stbi_image_free(control_img_buffer);
                         }
                         stbi_image_free(init_img_buffer);
-                        send_error(task, "failed to create resized image", ERROR_TYPE_INVALID_REQUEST);
+                        send_error(task, "failed to create resized image buffer", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
-                    stbir_resize(init_img_buffer, w, h, 0,
+                    if (!stbir_resize(init_img_buffer, w, h, 0,
                                  resized_image_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
                                  3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
                                  STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
                                  STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                 STBIR_COLORSPACE_SRGB, nullptr);
+                                 STBIR_COLORSPACE_SRGB, nullptr)) {
+                        auto reason = stbi_failure_reason();
+                        SLT_ERR(slot, "failed to resize image: %s\n", reason);
+                        if (control_img_buffer != nullptr) {
+                            stbi_image_free(control_img_buffer);
+                        }
+                        stbi_image_free(init_img_buffer);
+                        send_error(task, "failed to resize image", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
                     stbi_image_free(init_img_buffer);
                     init_img_buffer = resized_image_buffer;
                 }
