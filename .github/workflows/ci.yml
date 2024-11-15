@@ -402,7 +402,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DGGML_HIP=on -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
@@ -1045,7 +1045,7 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
-            -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DGGML_HIP=on -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
