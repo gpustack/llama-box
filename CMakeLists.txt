@@ -3,6 +3,7 @@ project("llama-box" C CXX)
 include(CheckIncludeFileCXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+cmake_policy(SET CMP0077 NEW)
 
 if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -121,10 +122,7 @@ function(get_flags CCID CCVER)
         set(C_FLAGS -Wunreachable-code-break -Wunreachable-code-return)
         set(CXX_FLAGS -Wunreachable-code-break -Wunreachable-code-return -Wmissing-prototypes -Wextra-semi)
 
-        if (
-        (CCID STREQUAL "Clang" AND CCVER VERSION_GREATER_EQUAL 3.8.0) OR
-        (CCID STREQUAL "AppleClang" AND CCVER VERSION_GREATER_EQUAL 7.3.0)
-        )
+        if ((CCID STREQUAL "Clang" AND CCVER VERSION_GREATER_EQUAL 3.8.0) OR (CCID STREQUAL "AppleClang" AND CCVER VERSION_GREATER_EQUAL 7.3.0))
             list(APPEND C_FLAGS -Wdouble-promotion)
         endif ()
     elseif (CCID STREQUAL "GNU")
