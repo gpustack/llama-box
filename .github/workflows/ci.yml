@@ -142,7 +142,7 @@ jobs:
           echo "===== BUILD ====="
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_ACCELERATE=on -DGGML_METAL=on -DGGML_METAL_EMBED_LIBRARY=on \
+            -DGGML_ACCELERATE=on -DGGML_METAL=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
