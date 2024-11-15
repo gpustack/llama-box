@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 #
 # MIT license
 # Copyright (c) 2024 llama-box authors
@@ -106,10 +104,11 @@ image_generate() {
         return
     fi
     printf "%s" "${CONTENT}" > /tmp/image_generate_result.json
-    for i in $(seq 0 $(("${N}" - 1))); do
+    # shellcheck disable=SC2004
+    for i in $(seq 0 $((${N} - 1))); do
         TIME=$(date +%s)
         jq -c -r ".[${i}] | .b64_json" /tmp/image_generate_result.json | base64 -d 2>/dev/null > "/tmp/image_generate_${TIME}.png"
-        if [[ "$(uname -s)" == "Darwin" ]]; then
+        if [[ "$(uname -s)" =~ Darwin ]]; then
             if command -v feh > /dev/null; then
                 feh "/tmp/image_generate_${TIME}.png"
             elif command -v open > /dev/null; then

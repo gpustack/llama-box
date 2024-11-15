@@ -64,8 +64,8 @@ struct stablediffusion_generated_image {
 
 class stablediffusion_context {
   public:
-    stablediffusion_context(sd_ctx_t *sd_ctx, stablediffusion_params params)
-        : sd_ctx(sd_ctx), params(params) {
+    stablediffusion_context(sd_ctx_t *sd_ctx, upscaler_ctx_t *upscaler_ctx, stablediffusion_params params)
+        : sd_ctx(sd_ctx), upscaler_ctx(upscaler_ctx), params(params) {
     }
 
     ~stablediffusion_context();
@@ -77,16 +77,22 @@ class stablediffusion_context {
     stablediffusion_generated_image *generate(const char *prompt, stablediffusion_sampler_params sparams);
 
   private:
-    sd_ctx_t *sd_ctx = nullptr;
+    sd_ctx_t *sd_ctx             = nullptr;
+    upscaler_ctx_t *upscaler_ctx = nullptr;
     stablediffusion_params params;
 };
 
 stablediffusion_context::~stablediffusion_context() {
-    sd_ctx_free(sd_ctx);
+    free();
 }
 
 void stablediffusion_context::free() {
     sd_ctx_free(sd_ctx);
+    sd_ctx = nullptr;
+    if (upscaler_ctx != nullptr) {
+        upscaler_ctx_free(upscaler_ctx);
+        upscaler_ctx = nullptr;
+    }
 }
 
 sample_method_t stablediffusion_context::get_default_sample_method() {
@@ -155,7 +161,25 @@ stablediffusion_generated_image *stablediffusion_context::generate(const char *p
             input_id_images_path.c_str());
     }
 
-    // TODO upscaler
+    int upscale_factor = 4;
+    if (upscaler_ctx != nullptr && params.upscale_repeats > 0) {
+        for (int i = 0; i < sparams.batch_count; i++) {
+            if (imgs[i].data == nullptr) {
+                continue;
+            }
+            sd_image_t img = imgs[i];
+            for (int u = 0; u < params.upscale_repeats; ++u) {
+                sd_image_t upscaled_img= upscale(upscaler_ctx, img, upscale_factor);
+                if (upscaled_img.data == nullptr) {
+                    LOG_WRN("%s: failed to upscale image\n", __func__);
+                    break;
+                }
+                stbi_image_free(img.data);
+                img = upscaled_img;
+            }
+            imgs[i] = img;
+        }
+    }
 
     std::string img_params_str = "Sampler: " + std::string(sample_methods_argument_str[sparams.sampler]);
     if (params.schedule == KARRAS) {
@@ -229,8 +253,19 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         !params.vae_model_offload,
         params.main_gpu);
     if (sd_ctx == nullptr) {
+        LOG_ERR("%s: failed to create stable diffusion context\n", __func__);
         return nullptr;
     }
 
-    return new stablediffusion_context(sd_ctx, params);
+    upscaler_ctx_t *upscaler_ctx = nullptr;
+    if (!params.upscale_model.empty()) {
+        upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, wtype);
+        if (upscaler_ctx == nullptr) {
+            LOG_ERR("%s: failed to create upscaler context\n", __func__);
+            sd_ctx_free(sd_ctx);
+            return nullptr;
+        }
+    }
+
+    return new stablediffusion_context(sd_ctx, upscaler_ctx, params);
 }

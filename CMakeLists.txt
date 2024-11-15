@@ -73,8 +73,6 @@ elseif (GGML_SYCL)
     set(SD_SYCL ON CACHE BOOL "sd: sycl backend" FORCE)
 elseif (GGML_CANN)
     set(SD_CANN ON CACHE BOOL "sd: cann backend" FORCE)
-else ()
-    set(SD_FLASH_ATTN ON CACHE BOOL "sd: use flash attention for x4 less memory usage" FORCE)
 endif ()
 
 #
