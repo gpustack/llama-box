@@ -1630,6 +1630,7 @@ struct server_context {
                 {"model", params.model_alias},
                 {"seed", slot.sparams.seed},
                 {"seed_cur", slot.sdsparams.seed},
+                {"max_batch_count", sdparams.max_batch_count},
                 {"max_height", sdparams.max_height},
                 {"max_width", sdparams.max_width},
                 {"height", slot.sdsparams.height},

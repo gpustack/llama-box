@@ -13,6 +13,7 @@
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 struct stablediffusion_params {
+    int max_batch_count             = 4;
     int max_height                  = 1024;
     int max_width                   = 1024;
     float guidance                  = 3.5f;

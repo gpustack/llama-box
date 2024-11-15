@@ -286,6 +286,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // embedding //
     // server // images //
     opts.push_back({ "server/images" });
+    opts.push_back({ "server/images",                      "       --image-max-batch N",                    "maximum batch count (default: %d)", sdparams.max_batch_count});
     opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 (default: %d)", sdparams.max_height});
     opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 (default: %d)", sdparams.max_width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
@@ -1550,6 +1551,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             // server // image //
+
+            if (!strcmp(flag, "--image-max-batch")) {
+                if (i == argc) {
+                    missing("--image-max-batch");
+                }
+                char *arg                        = argv[i++];
+                bparams.sdparams.max_batch_count = std::stoi(std::string(arg));
+                if (bparams.sdparams.max_batch_count < 1) {
+                    invalid("--image-max-batch");
+                }
+                continue;
+            }
 
             if (!strcmp(flag, "--image-max-height")) {
                 if (i == argc) {

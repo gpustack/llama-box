@@ -1023,7 +1023,13 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     llama_params["prompt"] = body.at("prompt");
 
     // Handle "n" field
-    llama_params["batch_count"] = json_value(body, "n", 1);
+    {
+        auto batch_count = json_value(body, "n", 1);
+        if (batch_count > params.max_batch_count) {
+            throw std::runtime_error("Illegal param: n must be less than or equal to " + std::to_string(params.max_batch_count));
+        }
+        llama_params["batch_count"] = batch_count;
+    }
 
     // Handle "sampler" and "cfg_scale" fields
     if (!body.contains("sampler")) {
@@ -1132,7 +1138,13 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     llama_params["prompt"] = body.at("prompt");
 
     // Handle "n" field
-    llama_params["batch_count"] = json_value(body, "n", 1);
+    {
+        auto batch_count = json_value(body, "n", 1);
+        if (batch_count > params.max_batch_count) {
+            throw std::runtime_error("Illegal param: n must be less than or equal to " + std::to_string(params.max_batch_count));
+        }
+        llama_params["batch_count"] = batch_count;
+    }
 
     // Handle "sampler" and "cfg_scale" fields
     if (!body.contains("sampler") && !body.contains("cfg_scale")) {

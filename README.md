@@ -366,8 +366,9 @@ server/completion/speculative:
 
 server/images:
 
-         --image-height N         image height, in pixel space (default: 512)
-         --image-width N          image width, in pixel space (default: 512)
+         --image-max-batch N      maximum batch count (default: 4)
+         --image-max-height N     image maximum height, in pixel space, must be larger than 256 (default: 1024)
+         --image-max-width N      image maximum width, in pixel space, must be larger than 256 (default: 1024)
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
          --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
          --image-sampler TYPE     sampler that will be used for generation, automatically retrieve the default value according to --model, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
