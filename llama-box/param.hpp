@@ -139,6 +139,9 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                            "       --conn-keepalive N",                     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
     opts.push_back({ "server",                            "-m,    --model FILE",                           "model path (default: %s)", DEFAULT_MODEL_PATH });
     opts.push_back({ "server",                            "-a,    --alias NAME",                           "model name alias (default: %s)", params.model_alias.c_str() });
+    opts.push_back({ "server",                            "       --lora FILE",                            "apply LoRA adapter (implies --no-mmap)" });
+    opts.push_back({ "server",                            "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
+    opts.push_back({ "server",                            "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "server",                            "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", sparams.seed, LLAMA_DEFAULT_SEED });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server",                        "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", params.main_gpu });
@@ -260,9 +263,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                                                            "  - isolate: only spawn threads on CPUs on the node that execution started on\n"
                                                                                                            "  - numactl: use the CPU map provided by numactl\n"
                                                                                                            "if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437" });
-    opts.push_back({ "server/completion",                 "       --lora FILE",                            "apply LoRA adapter (implies --no-mmap)" });
-    opts.push_back({ "server/completion",                 "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
-    opts.push_back({ "server/completion",                 "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                 "       --control-vector FILE",                  "add a control vector" });
     opts.push_back({ "server/completion",                 "       --control-vector-scaled FILE SCALE",     "add a control vector with user defined scaling SCALE" });
     opts.push_back({ "server/completion",                 "       --control-vector-layer-range START END", "layer range to apply the control vector(s) to, start and end inclusive" });
@@ -306,7 +306,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
     opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sdparams.vae_tiling ? "enabled" : "disabled" });
     opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-lora-model-dir PATH",            "path to LoRA model directory" });
     opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sdparams.upscale_repeats });
     if (llama_supports_gpu_offload()) {
@@ -515,6 +514,39 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg                   = argv[i++];
                 bparams.gparams.model_alias = std::string(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--lora")) {
+                if (i == argc) {
+                    missing("--lora");
+                }
+                char *arg = argv[i++];
+                bparams.gparams.lora_adapters.push_back({
+                    std::string(arg),
+                    1.0f,
+                });
+                continue;
+            }
+
+            if (!strcmp(flag, "--lora-scaled")) {
+                if (i == argc) {
+                    missing("--lora-scaled");
+                }
+                char *n = argv[i++];
+                if (i == argc) {
+                    invalid("--lora-scaled");
+                }
+                char *s = argv[i++];
+                bparams.gparams.lora_adapters.push_back({
+                    std::string(n),
+                    std::stof(std::string(s)),
+                });
+                continue;
+            }
+
+            if (!strcmp(flag, "--lora-init-without-apply")) {
+                bparams.gparams.lora_init_without_apply = true;
                 continue;
             }
 
@@ -1384,39 +1416,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--lora")) {
-                if (i == argc) {
-                    missing("--lora");
-                }
-                char *arg = argv[i++];
-                bparams.gparams.lora_adapters.push_back({
-                    std::string(arg),
-                    1.0f,
-                });
-                continue;
-            }
-
-            if (!strcmp(flag, "--lora-scaled")) {
-                if (i == argc) {
-                    missing("--lora-scaled");
-                }
-                char *n = argv[i++];
-                if (i == argc) {
-                    invalid("--lora-scaled");
-                }
-                char *s = argv[i++];
-                bparams.gparams.lora_adapters.push_back({
-                    std::string(n),
-                    std::stof(std::string(s)),
-                });
-                continue;
-            }
-
-            if (!strcmp(flag, "--lora-init-without-apply")) {
-                bparams.gparams.lora_init_without_apply = true;
-                continue;
-            }
-
             if (!strcmp(flag, "--control-vector")) {
                 if (i == argc) {
                     missing("--control-vector");
@@ -1706,15 +1705,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--image-lora-model-dir")) {
-                if (i == argc) {
-                    missing("--image-lora-model-dir");
-                }
-                char *arg                       = argv[i++];
-                bparams.sdparams.lora_model_dir = std::string(arg);
-                continue;
-            }
-
             if (!strcmp(flag, "--image-upscale-model")) {
                 if (i == argc) {
                     missing("--image-upscale-model");
@@ -1869,11 +1859,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     }
 
     if (bparams.endpoint_images) {
-        bparams.gparams.enable_chat_template = false;
-        bparams.sdparams.model               = bparams.gparams.model;
-        bparams.sdparams.model_alias         = bparams.gparams.model_alias;
-        bparams.sdparams.n_threads           = bparams.gparams.cpuparams.n_threads;
-        bparams.sdparams.main_gpu            = bparams.gparams.main_gpu;
+        bparams.gparams.enable_chat_template     = false;
+        bparams.sdparams.model                   = bparams.gparams.model;
+        bparams.sdparams.model_alias             = bparams.gparams.model_alias;
+        bparams.sdparams.n_threads               = bparams.gparams.cpuparams.n_threads;
+        bparams.sdparams.main_gpu                = bparams.gparams.main_gpu;
+        bparams.sdparams.lora_init_without_apply = bparams.gparams.lora_init_without_apply;
+        bparams.sdparams.lora_adapters           = bparams.gparams.lora_adapters;
     }
 
     return true;

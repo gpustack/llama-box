@@ -1144,11 +1144,11 @@ struct server_context {
                             return false;
                         }
                         if (!stbir_resize(control_img_buffer, w, h, 0,
-                                     resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
-                                     3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
-                                     STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
-                                     STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                     STBIR_COLORSPACE_SRGB, nullptr)) {
+                                          resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
+                                          3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
+                                          STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
+                                          STBIR_FILTER_BOX, STBIR_FILTER_BOX,
+                                          STBIR_COLORSPACE_SRGB, nullptr)) {
                             auto reason = stbi_failure_reason();
                             SLT_ERR(slot, "failed to load mask: %s\n", reason);
                             stbi_image_free(control_img_buffer);
@@ -1200,11 +1200,11 @@ struct server_context {
                         return false;
                     }
                     if (!stbir_resize(init_img_buffer, w, h, 0,
-                                 resized_image_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
-                                 3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
-                                 STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
-                                 STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                 STBIR_COLORSPACE_SRGB, nullptr)) {
+                                      resized_image_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
+                                      3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
+                                      STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
+                                      STBIR_FILTER_BOX, STBIR_FILTER_BOX,
+                                      STBIR_COLORSPACE_SRGB, nullptr)) {
                         auto reason = stbi_failure_reason();
                         SLT_ERR(slot, "failed to resize image: %s\n", reason);
                         if (control_img_buffer != nullptr) {
@@ -1646,7 +1646,6 @@ struct server_context {
                 {"vae_model", sdparams.vae_model},
                 {"vae_tiling", sdparams.vae_tiling},
                 {"taesd_model", sdparams.taesd_model},
-                {"lora_model_dir", sdparams.lora_model_dir},
                 {"upscale_model", sdparams.upscale_model},
                 {"upscale_repeats", sdparams.upscale_repeats},
                 {"control_net_model", sdparams.control_net_model},
@@ -2270,7 +2269,15 @@ struct server_context {
                 queue_results.send(result);
             } break;
             case SERVER_TASK_TYPE_SET_LORA: {
-                common_lora_adapters_apply(ctx, lora_adapters);
+                if (sd_ctx != nullptr) {
+                    std::vector<sd_lora_adapter_container_t> sd_lora_adapters;
+                    for (auto &lora_adapter : lora_adapters) {
+                        sd_lora_adapters.push_back({lora_adapter.path.c_str(), lora_adapter.scale});
+                    }
+                    sd_ctx->apply_lora_adpters(sd_lora_adapters);
+                } else {
+                    common_lora_adapters_apply(ctx, lora_adapters);
+                }
 
                 server_task_result result;
                 result.id    = task.id;

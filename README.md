@@ -220,6 +220,11 @@ server:
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
   -a,    --alias NAME             model name alias (default: unknown)
+         --lora FILE              apply LoRA adapter (implies --no-mmap)
+         --lora-scaled FILE SCALE 
+                                  apply LoRA adapter with user defined scaling S (implies --no-mmap)
+         --lora-init-without-apply
+                                  load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
   -mg,   --main-gpu N             the GPU to use for the model (default: 0)
          --metrics                enable prometheus compatible metrics endpoint (default: disabled)
@@ -338,11 +343,6 @@ server/completion:
                                     - isolate: only spawn threads on CPUs on the node that execution started on
                                     - numactl: use the CPU map provided by numactl
                                   if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437
-         --lora FILE              apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE 
-                                  apply LoRA adapter with user defined scaling S (implies --no-mmap)
-         --lora-init-without-apply
-                                  load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
          --control-vector FILE    add a control vector
          --control-vector-scaled FILE SCALE
                                   add a control vector with user defined scaling SCALE
@@ -388,8 +388,6 @@ server/images:
          --image-vae-tiling       indicate to process vae decoder in tiles to reduce memory usage (default: disabled)
          --image-taesd-model PATH 
                                   path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
-         --image-lora-model-dir PATH
-                                  path to LoRA model directory
          --image-upscale-model PATH
                                   path to the upscale model, or use --model included
          --image-upscale-repeats N

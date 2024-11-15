@@ -29,7 +29,6 @@ struct stablediffusion_params {
     std::string vae_model           = "";
     bool vae_tiling                 = false;
     std::string taesd_model         = "";
-    std::string lora_model_dir      = "";
     std::string upscale_model       = "";
     int upscale_repeats             = 1;
     bool control_model_offload      = true;
@@ -38,10 +37,12 @@ struct stablediffusion_params {
     bool control_canny              = false;
 
     // inherited from common_params
-    std::string model       = "";
-    std::string model_alias = "";
-    int n_threads           = 1;
-    int main_gpu            = 0;
+    std::string model            = "";
+    std::string model_alias      = "";
+    int n_threads                = 1;
+    int main_gpu                 = 0;
+    bool lora_init_without_apply = false;
+    std::vector<common_lora_adapter_info> lora_adapters;
 };
 
 struct stablediffusion_sampler_params {
@@ -74,6 +75,7 @@ class stablediffusion_context {
     sample_method_t get_default_sample_method();
     int get_default_sample_steps();
     float get_default_cfg_scale();
+    void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
     stablediffusion_generated_image *generate(const char *prompt, stablediffusion_sampler_params sparams);
 
   private:
@@ -107,6 +109,10 @@ int stablediffusion_context::get_default_sample_steps() {
 
 float stablediffusion_context::get_default_cfg_scale() {
     return sd_get_default_cfg_scale(sd_ctx);
+}
+
+void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters) {
+    sd_lora_adapters_apply(sd_ctx, lora_adapters);
 }
 
 stablediffusion_generated_image *stablediffusion_context::generate(const char *prompt, stablediffusion_sampler_params sparams) {
@@ -171,7 +177,7 @@ stablediffusion_generated_image *stablediffusion_context::generate(const char *p
             }
             sd_image_t img = imgs[i];
             for (int u = 0; u < params.upscale_repeats; ++u) {
-                sd_image_t upscaled_img= upscale(upscaler_ctx, img, upscale_factor);
+                sd_image_t upscaled_img = upscale(upscaler_ctx, img, upscale_factor);
                 if (upscaled_img.data == nullptr) {
                     LOG_WRN("%s: failed to upscale image\n", __func__);
                     break;
@@ -210,13 +216,14 @@ stablediffusion_generated_image *stablediffusion_context::generate(const char *p
 }
 
 stablediffusion_context *common_sd_init_from_params(stablediffusion_params params) {
-    std::string diffusion_model;
-    std::string embed_dir;
-    std::string stacked_id_embed_dir;
-    ggml_type wtype              = GGML_TYPE_COUNT;
-    rng_type_t rng_type          = CUDA_RNG;
-    bool vae_decode_only         = false;
-    bool free_params_immediately = false;
+    std::string diffusion_model      = "";
+    std::string embed_dir            = "";
+    std::string stacked_id_embed_dir = "";
+    std::string lora_model_dir       = "";
+    ggml_type wtype                  = GGML_TYPE_COUNT;
+    rng_type_t rng_type              = CUDA_RNG;
+    bool vae_decode_only             = false;
+    bool free_params_immediately     = false;
 
     sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
@@ -227,7 +234,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         params.vae_model.c_str(),
         params.taesd_model.c_str(),
         params.control_net_model.c_str(),
-        params.lora_model_dir.c_str(),
+        lora_model_dir.c_str(),
         embed_dir.c_str(),
         stacked_id_embed_dir.c_str(),
         vae_decode_only,
@@ -254,6 +261,14 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
             sd_ctx_free(sd_ctx);
             return nullptr;
         }
+    }
+
+    if (!params.lora_init_without_apply && !params.lora_adapters.empty()) {
+        std::vector<sd_lora_adapter_container_t> lora_adapters;
+        for (auto &la : params.lora_adapters) {
+            lora_adapters.push_back({la.path.c_str(), la.scale});
+        }
+        sd_lora_adapters_apply(sd_ctx, lora_adapters);
     }
 
     return new stablediffusion_context(sd_ctx, upscaler_ctx, params);
