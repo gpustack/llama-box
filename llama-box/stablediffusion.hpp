@@ -47,16 +47,20 @@ struct stablediffusion_params {
 };
 
 struct stablediffusion_sampler_params {
-    uint32_t seed               = LLAMA_DEFAULT_SEED;
-    int batch_count             = 1;
+    int64_t seed                = LLAMA_DEFAULT_SEED;
     int height                  = 512;
     int width                   = 512;
     sample_method_t sampler     = EULER_A;
     float cfg_scale             = 9.0f;
     int sample_steps            = 20;
     std::string negative_prompt = "";
+    bool stream                 = false;
     uint8_t *init_img_buffer    = nullptr;
     uint8_t *control_img_buffer = nullptr;
+};
+
+struct stablediffusion_sampling_stream {
+    sd_sampling_stream_t *stream;
 };
 
 struct stablediffusion_generated_image {
@@ -72,12 +76,15 @@ class stablediffusion_context {
 
     ~stablediffusion_context();
 
-    void free();
     sample_method_t get_default_sample_method();
     int get_default_sample_steps();
     float get_default_cfg_scale();
     void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
-    stablediffusion_generated_image *generate(const char *prompt, stablediffusion_sampler_params sparams);
+    stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_sampler_params sparams);
+    bool sample_stream(stablediffusion_sampling_stream *stream);
+    int progress_steps(stablediffusion_sampling_stream *stream);
+    std::pair<int, int> progress_stream(stablediffusion_sampling_stream *stream);
+    stablediffusion_generated_image result_stream(stablediffusion_sampling_stream *stream);
 
   private:
     sd_ctx_t *sd_ctx             = nullptr;
@@ -86,10 +93,6 @@ class stablediffusion_context {
 };
 
 stablediffusion_context::~stablediffusion_context() {
-    free();
-}
-
-void stablediffusion_context::free() {
     if (sd_ctx != nullptr) {
         sd_ctx_free(sd_ctx);
         sd_ctx = nullptr;
@@ -116,20 +119,17 @@ void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_con
     sd_lora_adapters_apply(sd_ctx, lora_adapters);
 }
 
-stablediffusion_generated_image *stablediffusion_context::generate(const char *prompt, stablediffusion_sampler_params sparams) {
+stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const char *prompt, stablediffusion_sampler_params sparams) {
     int clip_skip           = -1;
     sd_image_t *control_img = nullptr;
-    std::string input_id_images_path;
-    float style_ratio    = 20.f;
-    bool normalize_input = false;
 
-    sd_image_t *imgs = nullptr;
+    sd_sampling_stream_t *stream = nullptr;
     if (sparams.init_img_buffer != nullptr) {
         sd_image_t init_img = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.init_img_buffer};
         if (sparams.control_img_buffer != nullptr) {
             control_img = new sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.control_img_buffer};
         }
-        imgs = img2img(
+        stream = img2img_stream(
             sd_ctx,
             init_img,
             prompt,
@@ -143,14 +143,10 @@ stablediffusion_generated_image *stablediffusion_context::generate(const char *p
             sparams.sample_steps,
             params.strength,
             sparams.seed,
-            sparams.batch_count,
             control_img,
-            params.control_strength,
-            style_ratio,
-            normalize_input,
-            input_id_images_path.c_str());
+            params.control_strength);
     } else {
-        imgs = txt2img(
+        stream = txt2img_stream(
             sd_ctx,
             prompt,
             sparams.negative_prompt.c_str(),
@@ -162,58 +158,76 @@ stablediffusion_generated_image *stablediffusion_context::generate(const char *p
             sparams.sampler,
             sparams.sample_steps,
             sparams.seed,
-            sparams.batch_count,
             control_img,
-            params.control_strength,
-            style_ratio,
-            normalize_input,
-            input_id_images_path.c_str());
+            params.control_strength);
+    }
+
+    return new stablediffusion_sampling_stream{
+        .stream = stream,
+    };
+}
+
+bool stablediffusion_context::sample_stream(stablediffusion_sampling_stream *stream) {
+    if (stream == nullptr) {
+        return false;
+    }
+
+    return sd_sampling_stream_sample(sd_ctx, stream->stream);
+}
+
+int stablediffusion_context::progress_steps(stablediffusion_sampling_stream *stream) {
+    if (stream == nullptr) {
+        return 0;
+    }
+
+    return sd_sampling_stream_sampled_steps(stream->stream);
+}
+
+std::pair<int, int> stablediffusion_context::progress_stream(stablediffusion_sampling_stream *stream) {
+    if (stream == nullptr) {
+        return {0, 0};
+    }
+
+    return {sd_sampling_stream_sampled_steps(stream->stream), sd_sampling_stream_steps(stream->stream)};
+}
+
+stablediffusion_generated_image stablediffusion_context::result_stream(stablediffusion_sampling_stream *stream) {
+    if (stream == nullptr) {
+        return stablediffusion_generated_image{0, nullptr};
+    }
+
+    sd_image_t img = sd_samping_stream_get_image(sd_ctx, stream->stream);
+    if (img.data == nullptr) {
+        return stablediffusion_generated_image{0, nullptr};
     }
 
     int upscale_factor = 4;
     if (upscaler_ctx != nullptr && params.upscale_repeats > 0) {
-        for (int i = 0; i < sparams.batch_count; i++) {
-            if (imgs[i].data == nullptr) {
-                continue;
+        for (int u = 0; u < params.upscale_repeats; ++u) {
+            sd_image_t upscaled_img = upscale(upscaler_ctx, img, upscale_factor);
+            if (upscaled_img.data == nullptr) {
+                LOG_WRN("%s: failed to upscale image\n", __func__);
+                break;
             }
-            sd_image_t img = imgs[i];
-            for (int u = 0; u < params.upscale_repeats; ++u) {
-                sd_image_t upscaled_img = upscale(upscaler_ctx, img, upscale_factor);
-                if (upscaled_img.data == nullptr) {
-                    LOG_WRN("%s: failed to upscale image\n", __func__);
-                    break;
-                }
-                stbi_image_free(img.data);
-                img = upscaled_img;
-            }
-            imgs[i] = img;
+            stbi_image_free(img.data);
+            img = upscaled_img;
         }
     }
 
-    auto *pngs = new stablediffusion_generated_image[sparams.batch_count];
-    for (int i = 0; i < sparams.batch_count; i++) {
-        if (imgs[i].data == nullptr) {
-            delete[] pngs;
-            return nullptr;
-        }
-        int size            = 0;
-        unsigned char *data = stbi_write_png_to_mem(
-            (const unsigned char *)imgs[i].data,
-            0,
-            (int)imgs[i].width,
-            (int)imgs[i].height,
-            (int)imgs[i].channel,
-            &size,
-            nullptr);
-        if (data == nullptr || size <= 0) {
-            delete[] pngs;
-            return nullptr;
-        }
-        pngs[i].size = size;
-        pngs[i].data = data;
+    int size            = 0;
+    unsigned char *data = stbi_write_png_to_mem(
+        (stbi_uc *)img.data,
+        0,
+        (int)img.width,
+        (int)img.height,
+        (int)img.channel,
+        &size,
+        "Generated by: llama-box");
+    if (data == nullptr || size <= 0) {
+        return stablediffusion_generated_image{0, nullptr};
     }
 
-    return pngs;
+    return stablediffusion_generated_image{size, data};
 }
 
 stablediffusion_context *common_sd_init_from_params(stablediffusion_params params) {

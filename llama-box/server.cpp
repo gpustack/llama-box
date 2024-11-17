@@ -126,7 +126,17 @@ struct server_slot {
     bool oaicompat_image_generate = false;
     bool oaicompat_image_edit     = false;
     struct stablediffusion_sampler_params sdsparams;
-    stablediffusion_generated_image *generated_images = nullptr;
+    stablediffusion_sampling_stream *sdsstream = nullptr;
+    stablediffusion_generated_image generated_image;
+
+    // state
+    int32_t n_generate_image_steps = 0;
+
+    int64_t t_start_process_image;
+    int64_t t_start_generate_image;
+
+    double t_image_processing; // ms
+    double t_image_generation; // ms
 
     /* LLAMA */
 
@@ -218,9 +228,14 @@ struct server_slot {
                 stbi_image_free(sdsparams.control_img_buffer);
                 sdsparams.control_img_buffer = nullptr;
             }
-            if (generated_images != nullptr) {
-                delete[] generated_images;
-                generated_images = nullptr;
+            if (sdsstream != nullptr) {
+                sd_sampling_stream_free(sdsstream->stream);
+                delete sdsstream;
+                sdsstream = nullptr;
+            }
+            if (generated_image.data != nullptr) {
+                stbi_image_free(generated_image.data);
+                generated_image.data = nullptr;
             }
             return;
         }
@@ -296,6 +311,19 @@ struct server_slot {
 
     void release() {
         if (is_processing()) {
+            /* STABLE DIFFUSION */
+
+            if (oaicompat_image) {
+                SLT_INF(*this, "%s", "stop processing\n");
+
+                t_last_used        = ggml_time_us();
+                t_image_generation = double(ggml_time_us() - t_start_generate_image) / 1e3;
+                state              = SLOT_STATE_IDLE;
+                callback_on_release(id);
+            }
+
+            /* LLAMA */
+
             SLT_INF(*this, "stop processing: n_past = %d, truncated = %d\n", n_past, truncated);
 
             t_last_used        = ggml_time_us();
@@ -306,6 +334,20 @@ struct server_slot {
     }
 
     json get_formated_timings() const {
+        /* STABLE DIFFUSION */
+
+        if (oaicompat_image) {
+            return json{
+                {"processing_ms", t_image_processing},
+                {"generation_n", n_generate_image_steps},
+                {"generation_ms", t_image_generation},
+                {"generation_per_step_ms", t_image_generation / n_generate_image_steps},
+                {"generation_per_second", 1e3 / t_image_generation * n_generate_image_steps},
+            };
+        }
+
+        /* LLAMA */
+
         json ret = json{
             {"prompt_n", n_prompt_tokens_processed},
             {"prompt_ms", t_prompt_processing},
@@ -713,11 +755,6 @@ struct server_context {
     ggml_threadpool *threadpool_batch = nullptr;
 
     ~server_context() {
-        if (sd_ctx != nullptr) {
-            sd_ctx->free();
-            sd_ctx = nullptr;
-        }
-
         // Clear any sampling context
         for (server_slot &slot : slots) {
             if (slot.smpl != nullptr) {
@@ -1097,13 +1134,13 @@ struct server_context {
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
 
             slot.sdsparams.seed            = json_value(data, "seed", sparams.seed);
-            slot.sdsparams.batch_count     = json_value(data, "batch_count", 1);
             slot.sdsparams.height          = json_value(data, "height", 512);
             slot.sdsparams.width           = json_value(data, "width", 512);
             slot.sdsparams.sampler         = json_value(data, "sampler", sdparams.sampler);
             slot.sdsparams.cfg_scale       = json_value(data, "cfg_scale", sdparams.cfg_scale);
             slot.sdsparams.sample_steps    = json_value(data, "sample_steps", sdparams.sample_steps);
             slot.sdsparams.negative_prompt = json_value(data, "negative_prompt", std::string(""));
+            slot.sdsparams.stream          = json_value(data, "stream", false);
 
             // get prompt
             slot.prompt = json_value(data, "prompt", json::object());
@@ -1116,6 +1153,7 @@ struct server_context {
                 uint8_t *control_img_buffer = nullptr;
                 if (!sdparams.control_net_model.empty() && data.contains("mask")) {
                     auto control_img   = data.at("mask").get<std::string>();
+                    SLT_INF(slot, "loading mask: %zu\n", control_img.length());
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
                     if (control_img_buffer == nullptr) {
                         auto reason = stbi_failure_reason();
@@ -1160,6 +1198,7 @@ struct server_context {
                     }
                 }
                 auto init_img            = data.at("image").get<std::string>();
+                SLT_INF(slot, "loading image: %zu\n", init_img.length());
                 uint8_t *init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &w, &h, &c, 3);
                 if (init_img_buffer == nullptr) {
                     if (control_img_buffer != nullptr) {
@@ -1517,7 +1556,7 @@ struct server_context {
 
             slot.add_token(result);
             if (slot.params.stream) {
-                send_partial_response(slot, result);
+                send_partial_completion(slot, result);
             }
         }
 
@@ -1635,7 +1674,6 @@ struct server_context {
                 {"max_width", sdparams.max_width},
                 {"height", slot.sdsparams.height},
                 {"width", slot.sdsparams.width},
-                {"batch_count", slot.sdsparams.batch_count},
                 {"guidance", sdparams.guidance},
                 {"sampler", sd_sample_method_to_argument(slot.sdsparams.sampler)},
                 {"cfg_scale", slot.sdsparams.cfg_scale},
@@ -1713,7 +1751,7 @@ struct server_context {
         queue_results.send(res);
     }
 
-    void send_partial_response(server_slot &slot, completion_token_output tkn) {
+    void send_partial_completion(server_slot &slot, completion_token_output tkn) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
@@ -1744,7 +1782,7 @@ struct server_context {
         queue_results.send(res);
     }
 
-    void send_final_response(const server_slot &slot) {
+    void send_completion(const server_slot &slot) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
@@ -1868,22 +1906,33 @@ struct server_context {
         queue_results.send(res);
     }
 
+    void send_partial_image(const server_slot &slot, const float progress) {
+        server_task_result res;
+        res.id    = slot.id_task;
+        res.error = false;
+        res.stop  = false;
+        res.data  = json{
+             {"index", slot.index},
+             {"progress", progress},
+             {"stop", false},
+             {"model", params.model_alias},
+        };
+
+        queue_results.send(res);
+    }
+
     void send_image(const server_slot &slot) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
         res.stop  = true;
-
-        json images = json::array();
-        for (int i = 0; i < slot.sdsparams.batch_count; ++i) {
-            stablediffusion_generated_image img = slot.generated_images[i];
-            std::string img_b64                 = base64_encode(img.data, img.size);
-            images.push_back(json{{"b64_json", img_b64}});
-        }
-
-        res.data = json{
-            {"index", slot.index},
-            {"images", images},
+        res.data  = json{
+             {"index", slot.index},
+             {"progress", 100.0f},
+             {"stop", true},
+             {"model", params.model_alias},
+             {"b64_json", base64_encode(slot.generated_image.data, slot.generated_image.size)},
+             {"timings", slot.get_formated_timings()},
         };
 
         queue_results.send(res);
@@ -1903,6 +1952,7 @@ struct server_context {
             task.type          = SERVER_TASK_TYPE_INFERENCE;
             task.data          = task_data;
             task.prompt_tokens = std::move(prompt_tokens);
+            task.tps           = tps;
             tasks.push_back(std::move(task));
         };
 
@@ -1911,7 +1961,13 @@ struct server_context {
         bool image = json_value(data, "__oaicompat_image", false);
         if (image) {
             llama_tokens empty_tokens;
-            create_task(data, empty_tokens, tps);
+            int batch_count = json_value(data, "batch_count", 1);
+            SRV_DBG("creating multi-image tasks, batch_count = %d\n", batch_count);
+            for (int i = 0; i < batch_count; i++) {
+                data["index"] = i;
+                data["seed"]  = json_value(data, "seed", int64_t(params.sparams.seed)) + i;
+                create_task(data, empty_tokens, tps);
+            }
 
             return tasks;
         }
@@ -2002,12 +2058,12 @@ struct server_context {
         size_t n_finished = 0;
         while (true) {
             server_task_result result = queue_results.recv(id_tasks);
-            if (!result_handler(result)) {
+            if (result.error) {
+                error_handler(result.data);
                 break;
             }
 
-            if (result.error) {
-                error_handler(result.data);
+            if (!result_handler(result)) {
                 break;
             }
 
@@ -2331,14 +2387,54 @@ struct server_context {
                     continue;
                 }
 
-                slot.state            = SLOT_STATE_GENERATING;
-                slot.generated_images = sd_ctx->generate(slot.prompt.get<std::string>().c_str(), slot.sdsparams);
-                if (slot.generated_images == nullptr) {
+                slot.state                  = SLOT_STATE_PROCESSING_PROMPT;
+                slot.n_generate_image_steps = 0;
+                slot.t_start_process_image  = ggml_time_us();
+                slot.t_start_generate_image = 0;
+
+                SLT_DBG(slot, "%s", "creating image generation stream\n");
+                slot.sdsstream = sd_ctx->generate_stream(slot.prompt.get<std::string>().c_str(), slot.sdsparams);
+                if (slot.sdsstream == nullptr) {
                     slot.release();
-                    send_error(slot, "failed to generate image", ERROR_TYPE_SERVER);
+                    send_error(slot, "failed to create image generation stream", ERROR_TYPE_SERVER);
                     continue;
                 }
 
+                slot.state                  = SLOT_STATE_GENERATING;
+                slot.t_start_generate_image = ggml_time_us();
+                slot.t_image_processing     = double(slot.t_start_generate_image - slot.t_start_process_image) / 1e3;
+                metrics.on_prompt_eval(slot);
+
+                SLT_INF(slot, "created image generation stream, %.2fs\n", slot.t_image_processing / 1e3);
+            }
+
+            for (server_slot &slot : slots) {
+                if (slot.state != SLOT_STATE_GENERATING) {
+                    continue;
+                }
+
+                SLT_DBG(slot, "%s", "sampling image\n");
+                size_t t0     = ggml_time_us();
+                bool goahead  = sd_ctx->sample_stream(slot.sdsstream);
+                size_t t1     = ggml_time_us();
+                auto progress = sd_ctx->progress_stream(slot.sdsstream);
+                SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
+                if (goahead) {
+                    if (slot.sdsparams.stream) {
+                        send_partial_image(slot, float(progress.first) / float(progress.second) * 100);
+                    }
+                    continue;
+                }
+
+                slot.n_generate_image_steps = sd_ctx->progress_steps(slot.sdsstream);
+                slot.generated_image        = sd_ctx->result_stream(slot.sdsstream);
+                if (slot.generated_image.data == nullptr) {
+                    slot.release();
+                    send_error(slot, "failed to get result image from generation stream", ERROR_TYPE_SERVER);
+                    continue;
+                }
+
+                slot.release();
                 send_image(slot);
             }
 
@@ -2455,7 +2551,7 @@ struct server_context {
                             SLT_WRN(slot, "%s", "empty prompt - releasing slot\n");
 
                             slot.release();
-                            send_final_response(slot);
+                            send_completion(slot);
                             continue;
                         }
 
@@ -2869,7 +2965,7 @@ struct server_context {
                 if (!process_token(result, slot)) {
                     // release slot because of stop condition
                     slot.release();
-                    send_final_response(slot);
+                    send_completion(slot);
                     metrics.on_prediction(slot);
                 }
 
@@ -3078,10 +3174,7 @@ int main(int argc, char **argv) {
         nullptr);
     sd_progress_set(
         [](int step, int steps, float time, void * /*user_data*/) {
-            if (step <= 0) {
-                return;
-            }
-            common_log_add(common_log_main(), GGML_LOG_LEVEL_INFO, "generate_image: sampling %03i/%03i - %.2fs/it\n", step, steps, time);
+            // nothing to do
         },
         nullptr);
 
@@ -3818,7 +3911,7 @@ int main(int argc, char **argv) {
                 [&](const server_task_result &result) -> bool {
                     json completions_json = result.data;
                     if (oaicompat) {
-                        completions_json = oaicompat_completions_response(request, json::array({result.data}), completion_id, true);
+                        completions_json = oaicompat_completions_response(request, json::array({completions_json}), completion_id, true);
                     }
                     if (!server_sent_event(sink, "data", completions_json)) {
                         sink.done();
@@ -4121,19 +4214,45 @@ int main(int argc, char **argv) {
                 request["size"] = req.get_file_value("size").content;
             }
             if (req.has_file("n")) {
-                request["n"] = std::stoi(req.get_file_value("n").content);
+                try {
+                    request["n"] = std::stoi(req.get_file_value("n").content);
+                } catch (const std::exception &) {
+                    res_error(res, format_error_response("\"n\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                    return;
+                }
             }
             if (req.has_file("sampler")) {
                 request["sampler"] = req.get_file_value("sampler").content;
                 if (req.has_file("cfg_scale")) {
-                    request["cfg_scale"] = std::stof(req.get_file_value("cfg_scale").content);
+                    try {
+                        request["cfg_scale"] = std::stof(req.get_file_value("cfg_scale").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"cfg_scale\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
                 }
                 if (req.has_file("sample_steps")) {
-                    request["sample_steps"] = std::stoi(req.get_file_value("sample_steps").content);
+                    try {
+                        request["sample_steps"] = std::stoi(req.get_file_value("sample_steps").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"sample_steps\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
                 }
                 if (req.has_file("negative_sampler")) {
                     request["negative_sampler"] = req.get_file_value("negative_sampler").content;
                 }
+                if (req.has_file("seed")) {
+                    try {
+                        request["seed"] = std::stoi(req.get_file_value("seed").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"seed\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
+                }
+            }
+            if (req.has_file("stream")) {
+                request["stream"] = req.get_file_value("stream").content == "true";
             }
             request = oaicompat_images_edits_request(ctx_server.sdparams, request);
         }
@@ -4146,20 +4265,69 @@ int main(int argc, char **argv) {
         std::unordered_set<int> task_ids = server_task::get_list_id(tasks);
 
         // process non-streaming requests
-        ctx_server.receive_cmpl_results(
-            task_ids,
-            [&](std::vector<server_task_result> &results) {
-                json responses = json::array();
-                for (const server_task_result &ret : results) {
-                    responses.push_back(ret.data);
-                }
+        if (!json_value(request, "stream", false)) {
+            std::vector<json> usages;
+            ctx_server.receive_cmpl_results(
+                task_ids,
+                [&](std::vector<server_task_result> &results) {
+                    json responses = json::array();
+                    for (const server_task_result &ret : results) {
+                        responses.push_back(ret.data);
+                        if (ret.stop) {
+                            usages.push_back(ret.data.at("timings"));
+                        }
+                    }
 
-                const json images_json = oaicompat_images_response(request, responses);
-                res_ok(res, images_json);
-            },
-            [&](const json &error_data) { res_error(res, error_data); });
+                    const json images_json = oaicompat_images_response(request, responses, false, usages);
+                    res_ok(res, images_json);
+                },
+                [&](const json &error_data) { res_error(res, error_data); });
 
-        ctx_server.cancel_tasks(task_ids);
+            ctx_server.cancel_tasks(task_ids);
+            return;
+        }
+
+        // process streaming requests
+        const auto on_chunk = [task_ids, &ctx_server, request, tps](size_t, httplib::DataSink &sink) {
+            std::vector<json> usages;
+            std::vector<bool> stops(task_ids.size(), false);
+            ctx_server.receive_cmpl_results_stream(
+                task_ids,
+                [&](const server_task_result &result) -> bool {
+                    if (result.stop) {
+                        usages.push_back(result.data.at("timings"));
+                        stops[json_value(result.data, "index", 0)] = true;
+                    }
+                    if (!std::all_of(stops.begin(), stops.end(), [](bool stop) { return stop; })) {
+                        json images_json = oaicompat_images_response(request, json::array({result.data}), true);
+                        if (!server_sent_event(sink, "data", images_json)) {
+                            sink.done();
+                            return false;
+                        }
+                    } else {
+                        json images_json = oaicompat_images_response(request, json::array({result.data}), true, usages);
+                        if (!server_sent_event(sink, "data", images_json)) {
+                            sink.done();
+                            return false;
+                        }
+                        const std::string done = "data: [DONE] \n\n";
+                        if (!sink.write(done.c_str(), done.size())) {
+                            sink.done();
+                            return false;
+                        }
+                    }
+                    return true;
+                },
+                [&](const json &error_data) {
+                    server_sent_event(sink, "error", error_data);
+                    sink.done();
+                });
+
+            return false;
+        };
+        const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
+
+        res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
 
     //

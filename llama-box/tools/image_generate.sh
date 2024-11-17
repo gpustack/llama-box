@@ -32,24 +32,78 @@ CFG_SCALE="${CFG_SCALE:-"9"}"
 SAMPLE_STEPS="${SAMPLE_STEPS:-"20"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
+parse() {
+    echo "A: ${LINE}" >>"${LOG_FILE}"
+    if [[ ! "${LINE}" = data:* ]]; then
+        if [[ "${LINE}" =~ error:.* ]]; then
+            LINE="${LINE:7}"
+            echo "Error: ${LINE}"
+        fi
+        return 0
+    fi
+    if [[ "${LINE}" =~ data:\ \[DONE\].* ]]; then
+        return 0
+    fi
+    LINE="${LINE:5}"
+    CONTENT="$(echo "${LINE}" | jq -cr '.data')"
+    if [[ "${CONTENT}" == "null" ]]; then
+        echo "Error: ${LINE}"
+        return 1
+    fi
+    RESULT_JSON="/tmp/image_generate_$(date +%s).json"
+    printf "%s" "${LINE}" >"${RESULT_JSON}"
+    printf "%i: %3.2f%%...\r" "$(jq -cr ".data[0] | .index" "${RESULT_JSON}")" "$(jq -cr ".data[0] | .progress" "${RESULT_JSON}")"
+    if [[ "$(jq -cr ".data[0] | .b64_json" "${RESULT_JSON}")" == "null" ]]; then
+        return 0
+    fi
+    printf "\n"
+    set +e
+    RESULT_PNG="/tmp/image_generate_$(date +%s).png"
+    if command -v gbase64 >/dev/null; then
+        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" | gbase64 -d >"${RESULT_PNG}"
+    else
+        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" | base64 -d >"${RESULT_PNG}"
+    fi
+    echo "Generated image: ${RESULT_PNG}"
+    if [[ "$(uname -s)" =~ Darwin ]]; then
+        if command -v feh >/dev/null; then
+            feh "${RESULT_PNG}"
+        elif command -v open >/dev/null; then
+            open "${RESULT_PNG}"
+        fi
+    fi
+    set -e
+    USAGE="$(jq -cr '.usage' "${RESULT_JSON}")"
+    if [[ "${USAGE}" != "null" ]]; then
+        printf "\n------------------------"
+        printf "\n- TTP  : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_to_process_ms')"
+        printf "\n- TPG  : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_per_generation_ms')"
+        printf "\n- GPS  : %10.2f    -" "$(echo "${USAGE}" | jq -cr '.generation_per_second')"
+        ELAPSED=$(($(date +%s) - START_TIME))
+        printf "\n- TC   : %10.2fs   -" "${ELAPSED}"
+        printf "\n------------------------"
+    fi
+    return 0
+}
+
 image_generate() {
     PROMPT="$(trim_trailing "$1")"
     if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
-      DATA="$(cat "${PROMPT:1}")"
+        DATA="$(cat "${PROMPT:1}")"
     else
-      DATA="{\"prompt\":\"${PROMPT}\"}"
+        DATA="{\"prompt\":\"${PROMPT}\"}"
     fi
     if [[ "${SAMPLER}" != "null" ]]; then
-      DATA="$(echo -n "${DATA}" | jq \
-                --argjson n "${N}" \
-                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
-                --argjson size "\"${SIZE}\"" \
-                --argjson sampler "\"${SAMPLER}\"" \
-                --argjson seed "${SEED}" \
-                --argjson cfg_scale "${CFG_SCALE}" \
-                --argjson sample_steps "${SAMPLE_STEPS}" \
-                --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
-                '{
+        DATA="$(echo -n "${DATA}" | jq \
+            --argjson n "${N}" \
+            --argjson response_format "\"${RESPONSE_FORMAT}\"" \
+            --argjson size "\"${SIZE}\"" \
+            --argjson sampler "\"${SAMPLER}\"" \
+            --argjson seed "${SEED}" \
+            --argjson cfg_scale "${CFG_SCALE}" \
+            --argjson sample_steps "${SAMPLE_STEPS}" \
+            --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
+            '{
                   n: $n,
                   response_format: $response_format,
                   size: $size,
@@ -57,78 +111,57 @@ image_generate() {
                   seed: $seed,
                   cfg_scale: $cfg_scale,
                   sample_steps: $sample_steps,
-                  negative_prompt: $negative_prompt
+                  negative_prompt: $negative_prompt,
+                  stream: true
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
-      DATA="$(echo -n "${DATA}" | jq \
-                --argjson n "${N}" \
-                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
-                --argjson size "\"${SIZE}\"" \
-                --argjson quality "\"${QUALITY}\"" \
-                --argjson style "\"${STYLE}\"" \
-                '{
+        DATA="$(echo -n "${DATA}" | jq \
+            --argjson n "${N}" \
+            --argjson response_format "\"${RESPONSE_FORMAT}\"" \
+            --argjson size "\"${SIZE}\"" \
+            --argjson quality "\"${QUALITY}\"" \
+            --argjson style "\"${STYLE}\"" \
+            '{
                   n: $n,
                   response_format: $response_format,
                   size: $size,
                   quality: $quality,
-                  style: $style
+                  style: $style,
+                  stream: true
                 } * .')"
     else
-      DATA="$(echo -n "${DATA}" | jq \
-                --argjson n "${N}" \
-                --argjson response_format "\"${RESPONSE_FORMAT}\"" \
-                --argjson size "\"${SIZE}\"" \
-                --argjson quality "\"${QUALITY}\"" \
-                '{
+        DATA="$(echo -n "${DATA}" | jq \
+            --argjson n "${N}" \
+            --argjson response_format "\"${RESPONSE_FORMAT}\"" \
+            --argjson size "\"${SIZE}\"" \
+            --argjson quality "\"${QUALITY}\"" \
+            '{
                   n: $n,
                   response_format: $response_format,
                   size: $size,
-                  quality: $quality
+                  quality: $quality,
+                  stream: true
                 } * .')"
     fi
-    echo "Q: ${DATA}" >> "${LOG_FILE}"
+    echo "Q: ${DATA}" >>"${LOG_FILE}"
+
+    START_TIME=$(date +%s)
 
     set -e
-    START_TIME=$(date +%s)
-    ANSWER="$(curl \
-      --silent \
-      --no-buffer \
-      --request POST \
-      --url "${API_URL}/v1/images/generations" \
-      --header "Content-Type: application/json" \
-      --data-raw "${DATA}")"
-    printf "%s" "A: ${ANSWER}" >> "${LOG_FILE}"
+    while IFS= read -r LINE; do
+        if ! parse; then
+            break
+        fi
+    done < <(curl \
+        --silent \
+        --no-buffer \
+        --request POST \
+        --url "${API_URL}/v1/images/generations" \
+        --header "Content-Type: application/json" \
+        --data-raw "${DATA}")
     set +e
 
-    CONTENT="$(echo "${ANSWER}" | jq -c -r '.data')"
-    if [[ "${CONTENT}" == "null" ]]; then
-        echo "Error: ${ANSWER}"
-        return
-    fi
-    printf "%s" "${CONTENT}" > /tmp/image_generate_result.json
-    # shellcheck disable=SC2004
-    for i in $(seq 0 $((${N} - 1))); do
-        TIME=$(date +%s)
-        jq -c -r ".[${i}] | .b64_json" /tmp/image_generate_result.json | base64 -d 2>/dev/null > "/tmp/image_generate_${TIME}.png"
-        if [[ "$(uname -s)" =~ Darwin ]]; then
-            if command -v feh > /dev/null; then
-                feh "/tmp/image_generate_${TIME}.png"
-            elif command -v open > /dev/null; then
-                open "/tmp/image_generate_${TIME}.png"
-            else
-                echo "Generated image: /tmp/image_generate_${TIME}.png"
-            fi
-        else
-            echo "Generated image: /tmp/image_generate_${TIME}.png"
-        fi
-        sleep 1
-    done
-
-    printf "\n------------------------"
-    ELAPSED=$(($(date +%s) - START_TIME))
-    printf "\n- TC   : %10.2fs   -" "${ELAPSED}"
-    printf "\n------------------------"
-
+    rm -f /tmp/image_generate_*.json
     printf "\n"
 }
 
@@ -148,7 +181,7 @@ echo "NEGATIVE_PROMPT   : ${NEGATIVE_PROMPT} // AVAILABLE FOR SAMPLER"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then
-    : > "${LOG_FILE}"
+    : >"${LOG_FILE}"
 fi
 if [[ ! -f "${LOG_FILE}" ]]; then
     touch "${LOG_FILE}"

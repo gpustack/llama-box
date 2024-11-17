@@ -386,10 +386,11 @@ static inline std::vector<uint8_t> base64_decode(const std::string &encoded_stri
 
 static inline const std::string base64_encode(const unsigned char *input, size_t length) {
     std::string output;
-    int val = 0, valb = -6;
+    output.reserve(length);
 
+    auto val = 0, valb = -6;
     for (size_t i = 0; i < length; ++i) {
-        val = (val << 8) + input[i];
+        val = (val << 8) + static_cast<uint8_t>(input[i]);
         valb += 8;
         while (valb >= 0) {
             output.push_back(base64_chars[(val >> valb) & 0x3F]);
@@ -1066,9 +1067,12 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     } else {
         std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
         llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
-        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.sample_steps);
+        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.cfg_scale);
         llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
         llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
+        if (body.contains("seed")) {
+            llama_params["seed"] = body.at("seed");
+        }
     }
 
     // Handle "size" field
@@ -1097,6 +1101,20 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     std::string response_format = json_value(body, "response_format", std::string("b64_json"));
     if (response_format != "b64_json") {
         throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
+    }
+
+    // Handle "stream" field
+    if (json_value(body, "stream", false)) {
+        llama_params["stream"] = true;
+        if (!body.contains("stream_options")) {
+            llama_params["stream_options"] = json{{"include_usage", true}};
+        } else if (body.at("stream_options").is_object()) {
+            if (!body.at("stream_options").contains("include_usage")) {
+                llama_params["stream_options"]["include_usage"] = true;
+            }
+        } else {
+            throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+        }
     }
 
     return llama_params;
@@ -1147,7 +1165,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     }
 
     // Handle "sampler" and "cfg_scale" fields
-    if (!body.contains("sampler") && !body.contains("cfg_scale")) {
+    if (!body.contains("sampler")) {
         std::string quality = json_value(body, "quality", std::string("standard"));
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
@@ -1160,11 +1178,14 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
             llama_params["negative_prompt"] = "low quality";
         }
     } else {
-        std::string sampler_str         = json_value(body, "sampler", std::string("default"));
+        std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
         llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
-        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.sample_steps);
+        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.cfg_scale);
         llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
         llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
+        if (body.contains("seed")) {
+            llama_params["seed"] = body.at("seed");
+        }
     }
 
     // Handle "size" field
@@ -1195,15 +1216,39 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
     }
 
+    // Handle "stream" field
+    if (json_value(body, "stream", false)) {
+        llama_params["stream"] = true;
+        if (!body.contains("stream_options")) {
+            llama_params["stream_options"] = json{{"include_usage", true}};
+        } else if (body.at("stream_options").is_object()) {
+            if (!body.at("stream_options").contains("include_usage")) {
+                llama_params["stream_options"]["include_usage"] = true;
+            }
+        } else {
+            throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+        }
+    }
+
     return llama_params;
 }
 
-static json oaicompat_images_response(const json &request, const json &result) {
+static json oaicompat_images_response(const json &request, const json &result, const bool streaming = false, const std::vector<json> &usages = {}) {
     json data = json::array();
-    for (const auto &ret : result) {
-        for (const auto &img : ret.at("images")) {
-            data.push_back(img);
+    for (auto &ret : result) {
+        json item = json{
+            {"progress", ret.at("progress")},
+            {"index", ret.at("index")},
+        };
+        if (streaming) {
+            item["object"] = "image.chunk";
+        } else {
+            item["object"] = "image";
         }
+        if (ret.contains("b64_json")) {
+            item["b64_json"] = ret.at("b64_json");
+        }
+        data.push_back(item);
     }
 
     json res = json{
@@ -1212,6 +1257,34 @@ static json oaicompat_images_response(const json &request, const json &result) {
         {"object", "list"},
         {"data", data},
     };
+
+    // Add usage field
+    bool include_usage = false;
+    if (request.contains("stream_options")) {
+        include_usage = json_value(request.at("stream_options"), "include_usage", false);
+    }
+    if (include_usage && !usages.empty()) {
+        const size_t result_size = usages.size();
+        double ttp               = 0.0;
+        double tpg               = 0.0;
+        double gps               = 0.0;
+        for (const auto &usage : usages) {
+            ttp += json_value(usage, "processing_ms", 0.0);
+            tpg += json_value(usage, "generation_ms", 0.0);
+            gps += json_value(usage, "generation_per_second", 0.0);
+        }
+        ttp          = ttp / result_size;
+        tpg          = tpg / result_size;
+        gps          = gps / result_size;
+        res["usage"] = json{
+            {"time_to_process_ms", ttp},
+            {"time_per_generation_ms", tpg},
+            {"generation_per_second", gps},
+        };
+    } else if (include_usage) {
+        res["usage"] = nullptr;
+    }
+
     return res;
 }
 

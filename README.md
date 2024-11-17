@@ -559,6 +559,7 @@ All you need is a Bash shell, curl and jq.
 
 - **chat.sh**: A simple script to interact with the `/v1/chat/completions` endpoint.
 - **image_generate.sh**: Script to interact with the `/v1/images/generations` endpoint.
+- **image_edit.sh**: Script to interact with the `/v1/images/edits` endpoint.
 - **completion.sh**: A simple script to interact with the `/completion` endpoint.
 
 > [!NOTE]
@@ -578,6 +579,12 @@ $ ./llama-box/tools/image_generate.sh "A lovely cat"
 
 $ # interactive image generation
 $ ./llama-box/tools/image_generate.sh
+
+$ # one-shot image editing
+$ IMAGE=/path/to/image.png ./llama-box/tools/image_edit.sh "A lovely cat"
+
+$ # interactive image editing
+$ IMAGE=/path/to/image.png ./llama-box/tools/image_generate.sh
 
 $ # one-shot completion
 $ N_PREDICT=4096 TOP_K=1 ./llama-box/tools/completion.sh "// Quick-sort implementation in C (4 spaces indentation + detailed comments) and sample usage:\n\n#include"
