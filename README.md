@@ -426,7 +426,7 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_CHAT_TEMPLATE`: equivalent to `--chat-template`
 - `LLAMA_ARG_N_PREDICT`: equivalent to `-n`, `--predict`.
 - `LLAMA_ARG_METRICS`: if set to `1`, it will enable metrics endpoint (equivalent to `--metrics`).
-- `LLAMA_ARG_SLOTS`: if set to `0`, it will **disable** slots endpoint (equivalent to `--no-slots`).
+- `LLAMA_ARG_SLOTS`: if set to `1`, it will enable slots endpoint (equivalent to `--slots`).
 - `LLAMA_ARG_EMBEDDINGS`: if set to `1`, it will enable embeddings endpoint (equivalent to `--embeddings`).
 - `LLAMA_ARG_FLASH_ATTN`: if set to `1`, it will enable flash attention (equivalent to `-fa`, `--flash-attn`).
 - `LLAMA_ARG_CONT_BATCHING`: if set to `0`, it will **disable** continuous batching (equivalent
@@ -449,12 +449,14 @@ Available environment variables (if the corresponding command-line option is not
 The available endpoints for the LLaMA Box server mode are:
 
 - **GET** `/health`: Returns the heath check result of the LLaMA Box.
-    + HTTP status code 503.
-        - Body: `{"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}`
-        - Explanation: the model is still being loaded.
-    + HTTP status code 200.
-        - Body: `{"status": "ok" }`
-        - Explanation: the model is successfully loaded and the server is ready.
+
+    ```
+    RESPONSE: 
+    CASE 1: model is still being loaded
+      {"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}
+    CASE 2: model is successfully loaded and the server is ready
+      {"status": "ok" }
+    ```
 
 - **GET** `/metrics`: Returns the Prometheus compatible metrics of the LLaMA Box.
     + This endpoint is only available if the `--metrics` flag is enabled.
@@ -473,18 +475,44 @@ The available endpoints for the LLaMA Box server mode are:
     + `llamacpp:requests_processing`: (Gauge) Number of request processing.
     + `llamacpp:requests_deferred`: (Gauge) Number of request deferred.
 
+    ```
+    RESPONSE:
+    # HELP llamacpp:prompt_tokens_total Number of prompt tokens processed.
+    ....
+    ```
+
 - **GET** `/props`: Returns current server settings.
+
+    ```
+    RESPONSE:
+    {
+      "chat_template": "...",
+      "default_generation_settings": {...},
+      "total_slots": 4
+    }
+    ```
 
 - **GET** `/slots`: Returns the current slots processing state.
     + If query param `?fail_on_no_slot=1` is set, this endpoint will respond with status code 503 if there is no
       available slots.
-    + This endpoint is only available if the `--no-slots` flag is no provided.
-    + Possible values for `slot[i].state` are:
-        - `0`: slot is available.
-        - `1`: slot is processing.
+    + This endpoint is only available if the `--slots` flag is provided.
+    + `slot[i].state == 0` is idle, otherwise processing.
+
+    ```
+    RESPONSE:
+    [
+      {
+        "id": 0,
+        "id_task": -1,
+        "state": 0,
+        ...
+      },
+      ...
+    ]
+    ```
 
 - **POST** `/slots/:id_slot?action={save|restore|erase}`: Operate specific slot via ID.
-    + This endpoint is only available if the `--no-slots` flag is no provided and `--slot-save-path` is provided.
+    + This endpoint is only available if the `--slots` flag is provided and `--slot-save-path` is provided.
 
 - **POST** `/infill`: Returns the completion of the given prompt.
     + This is only work to `Text-To-Text` models.
@@ -493,17 +521,74 @@ The available endpoints for the LLaMA Box server mode are:
 - **POST** `/tokenize`: Convert text to tokens.
     + This is only work to `Text-To-Text` or `Embedding` models.
 
+    ```
+    REQUEST :
+    {
+      "content": "",
+      "add_special": false,
+      "with_pieces": false
+    }
+    
+    RESPONSE: 
+    CASE 1: without pieces
+      {
+        "tokens": [123, ...]
+      }
+    CASE 2: with pieces
+      {
+        "tokens": [
+          {"id": 123, "piece": "Hello"},
+          ...
+        ]
+      }
+    ```
+
 - **POST** `/detokenize`: Convert tokens to text.
     + This is only work to `Text-To-Text` or `Embedding` models.
+
+    ```
+    REQUEST :
+    {
+      "tokens": [123, ...]
+    }
+    
+    RESPONSE: 
+    {
+      "content": "..."
+    }
+    ```
 
 - **GET** `/lora-adapters`: Returns the current LoRA adapters.
     + This is only work to `Text-To-Text` models.
     + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
 
+    ```
+    RESPONSE: 
+    [
+      {
+        "id": 0, 
+        "path": "...", 
+        "scale": 1.0
+      },
+      ...
+    ]
+    ```
+
 - **POST** `/lora-adapters`: Operate LoRA adapters apply. To disable an LoRA adapter, either remove it from the list
   or set scale to 0.
     + This is only work to `Text-To-Text` models.
     + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
+
+    ```
+    REQUEST :
+    [
+      {
+        "id": 0, 
+        "scale": 0.2
+      },
+      ...
+    ]
+    ```
 
 - **POST** `/completion`: Returns the completion of the given prompt.
     + This is only work to `Text-To-Text` models.
@@ -533,11 +618,47 @@ The available endpoints for the LLaMA Box server mode are:
   see https://platform.openai.com/docs/api-reference/images/generations/create.
     + This is only work to `Text-To-Image` models.
     + This endpoint is available if the `--images` flag is enabled.
+    + This endpoint supports `stream: true` to return the progressing of the generation.
+      ```
+      REQUEST :
+      {
+        "n": 1,
+        "response_format": "b64_json",
+        "size": "512x512",
+        "quality": "standard",
+        "stream": true,
+        "prompt": "A lovely cat"
+      }
+      
+      RESPONSE:
+      data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
+      ...
+      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
+      ...
+      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
+      data: [DONE]
+      ```
 
 - **POST** `/v1/images/edits`: (OpenAI-compatible) Returns an edited image from the given prompt and initial image,
   see https://platform.openai.com/docs/api-reference/images/edits/create.
     + This is only work to `Image-To-Image` models.
     + This endpoint is available if the `--images` flag is enabled.
+    + This endpoint supports `stream: true` to return the progressing of the generation.
+      ```
+      REQUEST :
+      "n"=1&"response_format"="b64_json"&"size"="512x512"&"quality"="standard"&"stream"=true&"prompt"="A lovely cat"&"image"="..."
+      
+      RESPONSE:
+      CASE 1: correct input image
+        data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
+        ...
+        data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
+        ...
+        data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
+        data: [DONE]
+      CASE 2: illegal input image
+        error: {"code": 400, "message": "Invalid image", "type": "invalid_request_error"}
+      ```
 
 - **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.
     + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
