@@ -1247,6 +1247,9 @@ static json oaicompat_images_response(const json &request, const json &result, c
         }
         if (ret.contains("b64_json")) {
             item["b64_json"] = ret.at("b64_json");
+            item["finish_reason"] = "stop";
+        } else {
+            item["finish_reason"] = nullptr;
         }
         data.push_back(item);
     }
