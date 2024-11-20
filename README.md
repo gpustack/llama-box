@@ -559,7 +559,7 @@ The available endpoints for the LLaMA Box server mode are:
     ```
 
 - **GET** `/lora-adapters`: Returns the current LoRA adapters.
-    + This is only work to `Text-To-Text` models.
+    + This is only work to `Text-To-Text`/`Text-To-Image`/`Image-To-Image` models.
     + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
 
     ```
@@ -576,7 +576,7 @@ The available endpoints for the LLaMA Box server mode are:
 
 - **POST** `/lora-adapters`: Operate LoRA adapters apply. To disable an LoRA adapter, either remove it from the list
   or set scale to 0.
-    + This is only work to `Text-To-Text` models.
+    + This is only work to `Text-To-Text`/`Text-To-Image`/`Image-To-Image` models.
     + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
 
     ```
