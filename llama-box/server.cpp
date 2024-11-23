@@ -3156,6 +3156,15 @@ inline void signal_handler(int signal) {
 }
 
 int main(int argc, char **argv) {
+    // print arguments
+    for (int i = 0; i < argc; i++) {
+        printf("%s", argv[i]);
+        if (i < argc - 1) {
+            printf(" ");
+        }
+    }
+    printf("\n");
+
     common_log_set_prefix(common_log_main(), true);
     common_log_set_timestamps(common_log_main(), true);
     llama_log_set(
@@ -3192,8 +3201,8 @@ int main(int argc, char **argv) {
     LOG_INF("compiler: %s\n", LLAMA_BOX_BUILD_COMPILER);
     LOG_INF("target: %s\n", LLAMA_BOX_BUILD_TARGET);
     LOG_INF("vendor: \n");
-    LOG_INF("- llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_BOX_BUILD_NUMBER);
-    LOG_INF("- stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
+    LOG_INF("  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_BOX_BUILD_NUMBER);
+    LOG_INF("  - stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
     LOG_INF("%s\n", common_params_get_system_info(params).c_str());
     LOG_INF("\n");
 
