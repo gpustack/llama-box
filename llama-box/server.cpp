@@ -1152,7 +1152,7 @@ struct server_context {
                 int h                       = 0;
                 uint8_t *control_img_buffer = nullptr;
                 if (!sdparams.control_net_model.empty() && data.contains("mask")) {
-                    auto control_img   = data.at("mask").get<std::string>();
+                    auto control_img = data.at("mask").get<std::string>();
                     SLT_INF(slot, "loading mask: %zu\n", control_img.length());
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
                     if (control_img_buffer == nullptr) {
@@ -1197,7 +1197,7 @@ struct server_context {
                         control_img_buffer = resized_mask_buffer;
                     }
                 }
-                auto init_img            = data.at("image").get<std::string>();
+                auto init_img = data.at("image").get<std::string>();
                 SLT_INF(slot, "loading image: %zu\n", init_img.length());
                 uint8_t *init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &w, &h, &c, 3);
                 if (init_img_buffer == nullptr) {
@@ -3820,6 +3820,9 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("Transfer-Encoding", "identity");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
@@ -3948,6 +3951,9 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("Transfer-Encoding", "identity");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
@@ -4062,6 +4068,9 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("Transfer-Encoding", "identity");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
@@ -4336,6 +4345,9 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("Transfer-Encoding", "identity");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
 
