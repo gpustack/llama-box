@@ -1246,7 +1246,7 @@ static json oaicompat_images_response(const json &request, const json &result, c
             item["object"] = "image";
         }
         if (ret.contains("b64_json")) {
-            item["b64_json"] = ret.at("b64_json");
+            item["b64_json"]      = ret.at("b64_json");
             item["finish_reason"] = "stop";
         } else {
             item["finish_reason"] = nullptr;
@@ -1382,33 +1382,42 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
     }
 
     int num_prompt_tokens = 0;
-    json data             = json::array();
-
-    int32_t start = 0;
-    auto end      = int32_t(result.size() - 1);
+    int32_t start         = 0;
+    auto end              = int32_t(result.size() - 1);
     jinaicompat_rerank_response_sort(result, start, end);
+
+    json data            = json::array();
+    auto *scrs           = new double[end + 1];
+    const double scr_min = json_value(result[end], "score", -1e6);
+    double scr_total     = 0.0;
     for (int32_t i = 0; i <= end; i++) {
         const json &ret = result[i];
         num_prompt_tokens += json_value(ret, "tokens_evaluated", 0);
-        if (i < top_n) {
-            const int32_t idx = json_value(ret, "index", 0);
-            const double scr  = json_value(ret, "score", 0.0);
-            json item         = json{
-                        {"index", idx},
-                        {"relevance_score", scr},
-            };
-            if (return_documents) {
-                if (documents[idx].is_string()) {
-                    item["document"] = json{
-                        {"text", documents[idx]},
-                    };
-                } else {
-                    item["document"] = documents[idx];
-                }
-            }
-            data.push_back(item);
-        }
+        const int32_t idx = json_value(ret, "index", 0);
+        const double scr  = json_value(ret, "score", -1e6);
+        scrs[i]           = scr - scr_min;
+        scr_total += scrs[i];
     }
+    for (int32_t i = 0; i <= end && i < top_n; i++) {
+        const json &ret   = result[i];
+        const int32_t idx = json_value(ret, "index", 0);
+
+        json item = json{
+            {"index", idx},
+            {"relevance_score", scrs[i] / scr_total},
+        };
+        if (return_documents) {
+            if (documents[idx].is_string()) {
+                item["document"] = json{
+                    {"text", documents[idx]},
+                };
+            } else {
+                item["document"] = documents[idx];
+            }
+        }
+        data.push_back(item);
+    }
+    delete[] scrs;
 
     json res = json{
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
