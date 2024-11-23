@@ -968,16 +968,16 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
           } else {
             exit 1
           }
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1156,16 +1156,16 @@ jobs:
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
           } else {
               exit 1
           }
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
