@@ -163,7 +163,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
     }
 
     return new stablediffusion_sampling_stream{
-        .stream = stream,
+        stream,
     };
 }
 
