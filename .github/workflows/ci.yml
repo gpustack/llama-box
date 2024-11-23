@@ -87,6 +87,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             otool --version
             otool -L ${{ github.workspace }}/build/bin/llama-box || true
@@ -149,6 +150,7 @@ jobs:
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
 
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             otool --version
             otool -L ${{ github.workspace }}/build/bin/llama-box || true
@@ -300,6 +302,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -410,6 +413,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -541,6 +545,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -651,6 +656,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -776,6 +782,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -883,6 +890,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
             ldd --version
             ldd ${{ github.workspace }}/build/bin/llama-box || true
@@ -960,15 +968,16 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
             exit 1
           }
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1053,6 +1062,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
@@ -1146,15 +1156,16 @@ jobs:
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
               exit 1
           }
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1225,6 +1236,7 @@ jobs:
           Write-Host "===== BUILD ====="
           & "${{ github.workspace }}\llama-box\scripts\build-windows-oneapi.bat" "${{ github.workspace }}" "${{ matrix.arch }}"
           Write-Host "===== RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
             llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
