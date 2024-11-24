@@ -587,7 +587,7 @@ jobs:
         #     2025.0 ==> 2025.0.0-0, Ubuntu 22.04.
         include:
           - arch: 'amd64'
-            version: '2024.2'
+            version: '2025.0'
             distro_container_image: 'intel/oneapi-basekit:2025.0.0-0-devel-ubuntu22.04'
     runs-on: ubuntu-22.04
     steps:
@@ -775,6 +775,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
+            -DSOC_TYPE=ASCEND_910B \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
