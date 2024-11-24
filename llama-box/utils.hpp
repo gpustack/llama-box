@@ -1346,6 +1346,9 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
         llama_params["__oaicompat_rerank_documents"] = body.at("documents");
     }
 
+    // Handle "normalize" field
+    llama_params["normalize"] = json_value(body, "normalize", true);
+
     return llama_params;
 }
 
@@ -1386,25 +1389,35 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
     auto end              = int32_t(result.size() - 1);
     jinaicompat_rerank_response_sort(result, start, end);
 
-    json data            = json::array();
-    auto *scrs           = new double[end + 1];
-    const double scr_min = json_value(result[end], "score", -1e6);
-    double scr_total     = 0.0;
-    for (int32_t i = 0; i <= end; i++) {
-        const json &ret = result[i];
-        num_prompt_tokens += json_value(ret, "tokens_evaluated", 0);
-        const int32_t idx = json_value(ret, "index", 0);
-        const double scr  = json_value(ret, "score", -1e6);
-        scrs[i]           = scr - scr_min;
-        scr_total += scrs[i];
+    json data      = json::array();
+    double scr_max = json_value(result[start], "score", 1e-6);
+    double scr_min = json_value(result[end], "score", 1e-6);
+    double scr_dst = scr_max - scr_min;
+    double a = 0.01, b = 0.98;
+    if (scr_dst < 1e-6) {
+        scr_dst = scr_min;
+        scr_min = 0.0;
+        if (request.at("prompt")[0].get<std::string>() == documents[start].get<std::string>()) {
+            a = 0;
+            b = 1;
+        }
     }
+    const bool normalize = request.at("normalize").get<bool>();
     for (int32_t i = 0; i <= end && i < top_n; i++) {
-        const json &ret   = result[i];
-        const int32_t idx = json_value(ret, "index", 0);
+        const json &ret = result[i];
 
-        json item = json{
-            {"index", idx},
-            {"relevance_score", scrs[i] / scr_total},
+        double scr = json_value(ret, "score", 1e-6);
+        if (normalize) {
+            scr = a + (scr - scr_min) * b / scr_dst;
+        }
+
+        int32_t tke = json_value(ret, "tokens_evaluated", 0);
+        num_prompt_tokens += tke;
+
+        int32_t idx = json_value(ret, "index", 0);
+        json item   = json{
+              {"index", idx},
+              {"relevance_score", scr},
         };
         if (return_documents) {
             if (documents[idx].is_string()) {
@@ -1417,7 +1430,6 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         }
         data.push_back(item);
     }
-    delete[] scrs;
 
     json res = json{
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
