@@ -3830,7 +3830,6 @@ int main(int argc, char **argv) {
 
         res.set_header("Cache-Control", "no-cache");
         res.set_header("Connection", "keep-alive");
-        res.set_header("Transfer-Encoding", "identity");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
@@ -3961,7 +3960,6 @@ int main(int argc, char **argv) {
 
         res.set_header("Cache-Control", "no-cache");
         res.set_header("Connection", "keep-alive");
-        res.set_header("Transfer-Encoding", "identity");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
@@ -4078,7 +4076,6 @@ int main(int argc, char **argv) {
 
         res.set_header("Cache-Control", "no-cache");
         res.set_header("Connection", "keep-alive");
-        res.set_header("Transfer-Encoding", "identity");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
