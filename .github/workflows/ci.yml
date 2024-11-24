@@ -584,11 +584,11 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
-        #     2024.2 ==> 2024.2.1-0, Ubuntu 20.04.
+        #     2025.0 ==> 2025.0.0-0, Ubuntu 22.04.
         include:
           - arch: 'amd64'
             version: '2024.2'
-            distro_container_image: 'intel/oneapi-basekit:2024.2.1-0-devel-ubuntu20.04'
+            distro_container_image: 'intel/oneapi-basekit:2025.0.0-0-devel-ubuntu22.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -1177,11 +1177,11 @@ jobs:
       fail-fast: false
       matrix:
         # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=online.
-        #     2024.2 ==> 2024.2.1, Windows Server 2022.
+        #     2025.0 ==> 2025.0.0, Windows Server 2022.
         include:
           - arch: 'amd64'
-            version: '2024.2'
-            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/d91caaa0-7306-46ea-a519-79a0423e1903/w_BaseKit_p_2024.2.1.101.exe'
+            version: '2025.0'
+            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b380d914-366b-4b77-a74a-05e3c38b3514/intel-oneapi-base-toolkit-2025.0.0.882.exe'
     runs-on: windows-2022
     steps:
       - name: Checkout

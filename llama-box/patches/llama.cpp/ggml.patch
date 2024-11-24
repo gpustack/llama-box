@@ -1,21 +1,21 @@
 diff --git a/ggml/include/ggml-metal.h b/ggml/include/ggml-metal.h
-index b8d3f678..7d893f0b 100644
+index 669c1f84..a2ad685d 100644
 --- a/ggml/include/ggml-metal.h
 +++ b/ggml/include/ggml-metal.h
-@@ -59,6 +59,8 @@ GGML_API bool ggml_backend_metal_supports_family(ggml_backend_t backend, int fam
- // capture all command buffers committed the next time `ggml_backend_graph_compute` is called
- GGML_API void ggml_backend_metal_capture_next_compute(ggml_backend_t backend);
+@@ -61,6 +61,8 @@ GGML_BACKEND_API void ggml_backend_metal_capture_next_compute(ggml_backend_t bac
+ 
+ GGML_BACKEND_API ggml_backend_reg_t ggml_backend_metal_reg(void);
  
 +GGML_API void ggml_backend_metal_get_device_memory(ggml_backend_t backend, size_t * free_mem, size_t * total_mem);
 +
- GGML_API ggml_backend_reg_t ggml_backend_metal_reg(void);
- 
  #ifdef __cplusplus
-diff --git a/ggml/src/ggml-metal.m b/ggml/src/ggml-metal.m
-index 04ec5117..314bf6f7 100644
---- a/ggml/src/ggml-metal.m
-+++ b/ggml/src/ggml-metal.m
-@@ -2604,7 +2604,6 @@ static void ggml_metal_encode_node(
+ }
+ #endif
+diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
+index b4b5cfd2..cca13752 100644
+--- a/ggml/src/ggml-metal/ggml-metal.m
++++ b/ggml/src/ggml-metal/ggml-metal.m
+@@ -2608,7 +2608,6 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_GROUP_NORM:
              {
@@ -23,7 +23,7 @@ index 04ec5117..314bf6f7 100644
                  GGML_ASSERT(ggml_is_contiguous(src0));
  
                  float eps;
-@@ -4076,6 +4075,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
+@@ -4080,6 +4079,10 @@ static void ggml_backend_metal_device_get_memory(ggml_backend_dev_t dev, size_t
      }
  }
  
