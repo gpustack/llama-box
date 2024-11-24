@@ -655,8 +655,8 @@ struct server_response {
 
     // when the request is finished, we can remove task associated with it
     void remove_waiting_task_id(int id_task) {
-        SRV_DBG("remove task %d from waiting list. current waiting = %d (before remove)\n", id_task, (int)waiting_task_ids.size());
         std::unique_lock<std::mutex> lock(mutex_results);
+        SRV_DBG("remove task %d from waiting list. current waiting = %d (before remove)\n", id_task, (int)waiting_task_ids.size());
         waiting_task_ids.erase(id_task);
     }
 
