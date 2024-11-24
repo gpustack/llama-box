@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann/aclnn_ops.cpp b/ggml/src/ggml-cann/aclnn_ops.cpp
-index a4ec8418..705414dc 100644
+index 1f4ee986..76b591f5 100644
 --- a/ggml/src/ggml-cann/aclnn_ops.cpp
 +++ b/ggml/src/ggml-cann/aclnn_ops.cpp
 @@ -32,6 +32,8 @@
@@ -11,7 +11,7 @@ index a4ec8418..705414dc 100644
  #include <aclnnop/aclnn_matmul.h>
  #include <aclnnop/aclnn_max_pool.h>
  #include <aclnnop/aclnn_permute.h>
-@@ -2425,6 +2427,84 @@ static void aclnn_mat_mul(ggml_backend_cann_context& ctx, aclTensor* acl_input,
+@@ -2443,6 +2445,84 @@ static void aclnn_mat_mul(ggml_backend_cann_context& ctx, aclTensor* acl_input,
          aclnnMatmul(workspaceAddr, workspaceSize, executor, ctx.stream()));
  }
  
@@ -96,7 +96,7 @@ index a4ec8418..705414dc 100644
  /**
   * @brief Performs matrix multiplication with floating-point precision on
   * tensors using the CANN backend.
-@@ -2466,6 +2546,67 @@ static void ggml_cann_mat_mul_fp(ggml_backend_cann_context& ctx,
+@@ -2484,6 +2564,67 @@ static void ggml_cann_mat_mul_fp(ggml_backend_cann_context& ctx,
      ACL_CHECK(aclDestroyTensor(acl_dst));
  }
  
@@ -164,7 +164,7 @@ index a4ec8418..705414dc 100644
  /**
   * @brief Performs matrix multiplication with quantized weights and
   * floating-point inputs using the CANN backend.
-@@ -2618,16 +2759,215 @@ static void ggml_cann_mul_mat_quant(ggml_backend_cann_context& ctx,
+@@ -2636,16 +2777,215 @@ static void ggml_cann_mul_mat_quant(ggml_backend_cann_context& ctx,
      ACL_CHECK(aclDestroyTensor(acl_dst_tensor));
  }
  

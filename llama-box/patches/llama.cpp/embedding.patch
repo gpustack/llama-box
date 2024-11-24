@@ -12,7 +12,7 @@ index 90791d5f..5414ade0 100644
  }
  #endif
 diff --git a/src/llama.cpp b/src/llama.cpp
-index c51b36e6..882b7074 100644
+index 00171103..fe2d8a74 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -19680,10 +19680,10 @@ struct llama_context * llama_new_context_with_model(
