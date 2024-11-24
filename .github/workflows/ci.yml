@@ -775,7 +775,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
-            -DSOC_TYPE=ASCEND_910B \
+            -DSOC_TYPE=Ascend910B3 \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
