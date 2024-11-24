@@ -1,10 +1,10 @@
 diff --git a/include/llama.h b/include/llama.h
-index 5e742642..2c61c0f9 100644
+index 90791d5f..5414ade0 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1246,6 +1246,8 @@ extern "C" {
- 
-     LLAMA_API void llama_perf_dump_yaml(FILE * stream, const struct llama_context * ctx);
+@@ -1247,6 +1247,8 @@ extern "C" {
+     LLAMA_API void                           llama_perf_sampler_print(const struct llama_sampler * chain);
+     LLAMA_API void                           llama_perf_sampler_reset(      struct llama_sampler * chain);
  
 +    LLAMA_API bool llama_supports_embedding_only (const struct llama_context * ctx);
 +
@@ -12,10 +12,10 @@ index 5e742642..2c61c0f9 100644
  }
  #endif
 diff --git a/src/llama.cpp b/src/llama.cpp
-index dc5dfba0..965d222e 100644
+index c51b36e6..882b7074 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -19503,10 +19503,10 @@ struct llama_context * llama_new_context_with_model(
+@@ -19680,10 +19680,10 @@ struct llama_context * llama_new_context_with_model(
      cparams.rope_freq_scale  = params.rope_freq_scale == 0.0f ? hparams.rope_freq_scale_train : params.rope_freq_scale;
  
      // this is necessary due to kv_self.n being padded later during inference
@@ -28,7 +28,7 @@ index dc5dfba0..965d222e 100644
  
      // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
      // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
-@@ -19516,7 +19516,7 @@ struct llama_context * llama_new_context_with_model(
+@@ -19693,7 +19693,7 @@ struct llama_context * llama_new_context_with_model(
          cparams.n_batch = GGML_KQ_MASK_PAD;
      }
  
@@ -37,7 +37,7 @@ index dc5dfba0..965d222e 100644
  
      cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
                                 hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
-@@ -22140,3 +22140,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
+@@ -22300,3 +22300,7 @@ void llama_log_callback_default(ggml_log_level level, const char * text, void *
      fputs(text, stderr);
      fflush(stderr);
  }
@@ -45,4 +45,3 @@ index dc5dfba0..965d222e 100644
 +bool llama_supports_embedding_only(const struct llama_context * ctx) {
 +    return !ctx->cparams.causal_attn;
 +}
-\ No newline at end of file
