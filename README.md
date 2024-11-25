@@ -451,7 +451,7 @@ The available endpoints for the LLaMA Box server mode are:
 - **GET** `/health`: Returns the heath check result of the LLaMA Box.
 
     ```
-    RESPONSE: 
+    RESPONSE : (application/json)
     CASE 1: model is still being loaded
       {"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}
     CASE 2: model is successfully loaded and the server is ready
@@ -476,7 +476,7 @@ The available endpoints for the LLaMA Box server mode are:
     + `llamacpp:requests_deferred`: (Gauge) Number of request deferred.
 
     ```
-    RESPONSE:
+    RESPONSE : (text/plain)
     # HELP llamacpp:prompt_tokens_total Number of prompt tokens processed.
     ....
     ```
@@ -484,7 +484,7 @@ The available endpoints for the LLaMA Box server mode are:
 - **GET** `/props`: Returns current server settings.
 
     ```
-    RESPONSE:
+    RESPONSE : (application/json)
     {
       "chat_template": "...",
       "default_generation_settings": {...},
@@ -499,7 +499,7 @@ The available endpoints for the LLaMA Box server mode are:
     + `slot[i].state == 0` is idle, otherwise processing.
 
     ```
-    RESPONSE:
+    RESPONSE : (application/json)
     [
       {
         "id": 0,
@@ -522,14 +522,14 @@ The available endpoints for the LLaMA Box server mode are:
     + This is only work to `Text-To-Text` or `Embedding` models.
 
     ```
-    REQUEST :
+    REQUEST : (application/json)
     {
       "content": "",
       "add_special": false,
       "with_pieces": false
     }
     
-    RESPONSE: 
+    RESPONSE : (application/json)
     CASE 1: without pieces
       {
         "tokens": [123, ...]
@@ -547,12 +547,12 @@ The available endpoints for the LLaMA Box server mode are:
     + This is only work to `Text-To-Text` or `Embedding` models.
 
     ```
-    REQUEST :
+    REQUEST : (application/json)
     {
       "tokens": [123, ...]
     }
     
-    RESPONSE: 
+    RESPONSE : (application/json)
     {
       "content": "..."
     }
@@ -563,7 +563,7 @@ The available endpoints for the LLaMA Box server mode are:
     + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
 
     ```
-    RESPONSE: 
+    RESPONSE : (application/json)
     [
       {
         "id": 0, 
@@ -580,7 +580,7 @@ The available endpoints for the LLaMA Box server mode are:
     + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
 
     ```
-    REQUEST :
+    REQUEST : (application/json)
     [
       {
         "id": 0, 
@@ -620,17 +620,50 @@ The available endpoints for the LLaMA Box server mode are:
     + This endpoint is available if the `--images` flag is enabled.
     + This endpoint supports `stream: true` to return the progressing of the generation.
       ```
-      REQUEST :
+      REQUEST : (application/json)
       {
         "n": 1,
         "response_format": "b64_json",
         "size": "512x512",
+        "prompt": "A lovely cat",
         "quality": "standard",
         "stream": true,
-        "prompt": "A lovely cat"
+        "stream_options": {
+          "include_usage": true, // return usage information
+          "chunk_result": true   // split the final image b64_json into chunks to avoid browser caching
+        }
       }
       
-      RESPONSE:
+      RESPONSE : (text/event-stream)
+      data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
+      ...
+      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
+      ...
+      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
+      data: [DONE]
+      ```
+    + This endpoint also supports some options like [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
+      ![https://github.com/AUTOMATIC1111/stable-diffusion-webui](https://raw.githubusercontent.com/AUTOMATIC1111/stable-diffusion-webui/82a973c04367123ae98bd9abdf80d9eda9b910e2/screenshot.png)
+      ```
+      REQUEST : (application/json)
+      {
+        "n": 1,
+        "response_format": "b64_json",
+        "size": "512x512",
+        "prompt": "A lovely cat",
+        "sampler": "euler",      // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+        "seed": null,            // optional, random seed
+        "cfg_scale": 4.5,        // optional, for sampler, the scale of classifier-free guidance in the output phase
+        "sample_steps": 20,      // optional, number of sample steps
+        "negative_prompt": "",   // optional, negative prompt
+        "stream": true,
+        "stream_options": {
+          "include_usage": true, // return usage information
+          "chunk_result": true   // split the final image b64_json into chunks to avoid browser caching
+        }
+      }
+      
+      RESPONSE : (text/event-stream)
       data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
       ...
       data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
@@ -645,10 +678,19 @@ The available endpoints for the LLaMA Box server mode are:
     + This endpoint is available if the `--images` flag is enabled.
     + This endpoint supports `stream: true` to return the progressing of the generation.
       ```
-      REQUEST :
-      "n"=1&"response_format"="b64_json"&"size"="512x512"&"quality"="standard"&"stream"=true&"prompt"="A lovely cat"&"image"="..."
+      REQUEST: (multipart/form-data)
+      n=1
+      response_format=b64_json
+      size=512x512
+      prompt="A lovely cat"
+      quality=standard
+      image=...                         // required
+      mask=...                          // optional
+      stream=true
+      stream_options_include_usage=true // return usage information
+      stream_options_chunk_result=true  // split the final image b64_json into chunks to avoid browser caching
       
-      RESPONSE:
+      RESPONSE : (text/event-stream)
       CASE 1: correct input image
         data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
         ...
@@ -659,12 +701,53 @@ The available endpoints for the LLaMA Box server mode are:
       CASE 2: illegal input image
         error: {"code": 400, "message": "Invalid image", "type": "invalid_request_error"}
       ```
+    + This endpoint also supports some options like [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
+      ```
+      REQUEST: (multipart/form-data)
+      n=1
+      response_format=b64_json
+      size=512x512
+      prompt="A lovely cat"
+      image=...                         // required
+      mask=...                          // optional
+      sampler=euler                     // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+      seed=null                         // optional, random seed
+      cfg_scale=4.5                     // optional, for sampler, the scale of classifier-free guidance in the output phase
+      sample_steps=20                   // optional, number of sample steps
+      negative_prompt=""                // optional, negative prompt
+      stream=true
+      stream_options_include_usage=true // return usage information
+      stream_options_chunk_result=true  // split the final image b64_json into chunks to avoid browser caching
+
+      RESPONSE : (text/event-stream)
+      CASE 1: correct input image
+      data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
+      ...
+      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
+      ...
+      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
+      data: [DONE]
+      CASE 2: illegal input image
+      error: {"code": 400, "message": "Invalid image", "type": "invalid_request_error"}
+      ```
 
 - **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.
     + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
     + This endpoint is only available if the `--rerank` flag is provided.
     + This is unavailable for the GGUF files created
       before [llama.cpp#pr9510](https://github.com/ggerganov/llama.cpp/pull/9510).
+    + This endpoint supports `normalize: false` to return the original `relevance_score` score.
+      ```
+      REQUEST: (application/json)
+      {
+        "model": "...",
+        "query": "...",
+        "documents": [
+          "..."
+        ],
+        "normalize": false
+      }
+      ```
 
 ## Tools
 
