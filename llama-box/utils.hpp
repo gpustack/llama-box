@@ -18,20 +18,35 @@
 
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
 
-#define SLT_INF(slot, fmt, ...) LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
+#define SLT_INF(slot, fmt, ...)                                                                                \
+    if (common_log_verbosity_thold > 2) {                                                                      \
+        LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__); \
+    }
 #define SLT_WRN(slot, fmt, ...) LOG_WRN("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
 #define SLT_ERR(slot, fmt, ...) LOG_ERR("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
-#define SLT_DBG(slot, fmt, ...) LOG_DBG("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
+#define SLT_DBG(slot, fmt, ...)                                                                                \
+    if (common_log_verbosity_thold > 3) {                                                                      \
+        LOG_DBG("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__); \
+    }
 
 #define SRV_INF(fmt, ...) LOG_INF("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define SRV_WRN(fmt, ...) LOG_WRN("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define SRV_ERR(fmt, ...) LOG_ERR("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define SRV_DBG(fmt, ...) LOG_DBG("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_DBG(fmt, ...)                                        \
+    if (common_log_verbosity_thold > 3) {                        \
+        LOG_DBG("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
+    }
 
-#define QUE_INF(fmt, ...) LOG_INF("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_INF(fmt, ...)                                        \
+    if (common_log_verbosity_thold > 2) {                        \
+        LOG_INF("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
+    }
 #define QUE_WRN(fmt, ...) LOG_WRN("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define QUE_ERR(fmt, ...) LOG_ERR("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define QUE_DBG(fmt, ...) LOG_DBG("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_DBG(fmt, ...)                                        \
+    if (common_log_verbosity_thold > 3) {                        \
+        LOG_DBG("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
+    }
 
 using json         = nlohmann::json;
 using llama_tokens = std::vector<llama_token>;

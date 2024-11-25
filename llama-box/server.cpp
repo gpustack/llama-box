@@ -1401,15 +1401,15 @@ struct server_context {
             if (samplers != data.end()) {
                 if (samplers->is_array()) {
                     std::vector<std::string> sampler_names;
-                    for (const auto & name : *samplers) {
+                    for (const auto &name : *samplers) {
                         if (name.is_string()) {
                             sampler_names.emplace_back(name);
                         }
                     }
                     slot.sparams.samplers = common_sampler_types_from_names(sampler_names, false);
-                } else if (samplers->is_string()){
+                } else if (samplers->is_string()) {
                     std::string sampler_string;
-                    for (const auto & name : *samplers) {
+                    for (const auto &name : *samplers) {
                         sampler_string += name;
                     }
                     slot.sparams.samplers = common_sampler_types_from_chars(sampler_string);
@@ -2366,6 +2366,7 @@ struct server_context {
             }
 
             if (all_idle) {
+                SRV_DBG("%s", "all slots are idle\n");
                 if (!cache_prompt) {
                     if (ctx != nullptr) {
                         llama_kv_cache_clear(ctx);
@@ -2528,10 +2529,7 @@ struct server_context {
                 }
             }
 
-            SLT_DBG(slot,
-                    "slot decode token, "
-                    "n_ctx = %d, n_past = %d, "
-                    "n_cache_tokens = %d, truncated = %d\n",
+            SLT_DBG(slot, "slot decode token, n_ctx = %d, n_past = %d, n_cache_tokens = %d, truncated = %d\n",
                     slot.n_ctx, slot.n_past, (int)slot.cache_tokens.size(), slot.truncated);
         }
 
@@ -2569,8 +2567,7 @@ struct server_context {
                         slot.n_prompt_tokens        = int32_t(prompt_tokens.size());
                         slot.state                  = SLOT_STATE_PROCESSING_PROMPT;
 
-                        SLT_INF(slot, "new prompt, n_ctx_slot = %d, n_keep = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep,
-                                slot.n_prompt_tokens);
+                        SLT_INF(slot, "new prompt, n_ctx_slot = %d, n_keep = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep, slot.n_prompt_tokens);
 
                         if (slot.inf_type == SERVER_TASK_INF_TYPE_EMBEDDING || slot.inf_type == SERVER_TASK_INF_TYPE_RERANK) {
                             if (slot.n_prompt_tokens > n_ubatch) {
@@ -2591,10 +2588,7 @@ struct server_context {
                                 //       context shift should be applied only during the generation phase
                                 if (slot.n_prompt_tokens >= slot.n_ctx) {
                                     slot.release();
-                                    send_error(slot,
-                                               "the request exceeds the available context size. try "
-                                               "increasing the context size or enable context shift",
-                                               ERROR_TYPE_INVALID_REQUEST);
+                                    send_error(slot, "the request exceeds the available context size. try increasing the context size or enable context shift", ERROR_TYPE_INVALID_REQUEST);
                                     continue;
                                 }
                             }
@@ -2611,20 +2605,21 @@ struct server_context {
                                 const int n_block_size  = n_left / 2;
                                 const int erased_blocks = (slot.n_prompt_tokens - slot.params.n_keep - n_block_size) / n_block_size;
 
-                                llama_tokens new_tokens(prompt_tokens.begin(), prompt_tokens.begin() + slot.params.n_keep);
+                                llama_tokens new_tokens(
+                                    prompt_tokens.begin(),
+                                    prompt_tokens.begin() + slot.params.n_keep);
 
-                                new_tokens.insert(new_tokens.end(), prompt_tokens.begin() + slot.params.n_keep + erased_blocks * n_block_size,
-                                                  prompt_tokens.end());
+                                new_tokens.insert(
+                                    new_tokens.end(),
+                                    prompt_tokens.begin() + slot.params.n_keep + erased_blocks * n_block_size,
+                                    prompt_tokens.end());
 
                                 prompt_tokens = std::move(new_tokens);
 
                                 slot.truncated       = true;
                                 slot.n_prompt_tokens = int32_t(prompt_tokens.size());
 
-                                SLT_WRN(slot,
-                                        "input truncated, "
-                                        "n_ctx = %d, n_keep = %d, n_left = %d, n_prompt_tokens = %d\n",
-                                        slot.n_ctx, slot.params.n_keep, n_left, slot.n_prompt_tokens);
+                                SLT_WRN(slot, "input truncated, n_ctx = %d, n_keep = %d, n_left = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep, n_left, slot.n_prompt_tokens);
 
                                 GGML_ASSERT(slot.n_prompt_tokens < slot.n_ctx);
                             }
@@ -2667,7 +2662,6 @@ struct server_context {
 
                                             for (size_t i = 0; i < n_match; i++) {
                                                 slot.cache_tokens[head_p + i] = slot.cache_tokens[head_c + i];
-
                                                 slot.n_past++;
                                             }
 
@@ -2685,10 +2679,7 @@ struct server_context {
 
                         if (slot.n_past == slot.n_prompt_tokens && slot.n_past > 0) {
                             // we have to evaluate at least 1 token to generate logits.
-                            SLT_DBG(slot,
-                                    "need to evaluate at least 1 token to generate logits, "
-                                    "n_past = %d, n_prompt_tokens = %d\n",
-                                    slot.n_past, slot.n_prompt_tokens);
+                            SLT_DBG(slot, "need to evaluate at least 1 token to generate logits, n_past = %d, n_prompt_tokens = %d\n", slot.n_past, slot.n_prompt_tokens);
 
                             slot.n_past--;
                         }
@@ -2758,6 +2749,8 @@ struct server_context {
                         continue;
                     }
 
+                    SLT_INF(slot, "prompt processing progress, n_past = %d, n_tokens = %d, progress = %f\n", slot.n_past, batch.n_tokens, (float)slot.n_prompt_tokens_processed / slot.n_prompt_tokens);
+
                     // entire prompt has been processed
                     if (slot.n_past == slot.n_prompt_tokens) {
                         slot.state = SLOT_STATE_DONE_PROMPT;
@@ -2765,16 +2758,15 @@ struct server_context {
                         GGML_ASSERT(batch.n_tokens > 0);
 
                         common_sampler_reset(slot.smpl);
-                        // Process all prompt tokens through sampler system
-                        for (int prompt_token : prompt_tokens) {
-                            common_sampler_accept(slot.smpl, prompt_token, false);
-                        }
-
                         if (ctx_draft != nullptr) {
                             common_sampler_reset(slot.smpl_draft);
-                            // Process all prompt tokens through sampler system
-                            for (int prompt_token : prompt_tokens) {
-                                common_sampler_accept(slot.smpl_draft, prompt_token, false);
+                        }
+
+                        // Process all prompt tokens through sampler system
+                        for (int i = 0; i < slot.n_prompt_tokens; ++i) {
+                            common_sampler_accept(slot.smpl, prompt_tokens[i], false);
+                            if (ctx_draft != nullptr) {
+                                common_sampler_accept(slot.smpl_draft, prompt_tokens[i], false);
                             }
                         }
 
@@ -2783,6 +2775,8 @@ struct server_context {
 
                         slot.n_decoded = 0;
                         slot.i_batch   = batch.n_tokens - 1;
+
+                        SLT_INF(slot, "prompt done, n_past = %d, n_tokens = %d\n", slot.n_past, batch.n_tokens);
                     }
                 }
 
@@ -2793,8 +2787,11 @@ struct server_context {
         }
 
         if (batch.n_tokens == 0) {
+            SRV_WRN("%s", "no tokens to decode\n");
             return;
         }
+
+        SRV_DBG("decoding batch, n_tokens = %d\n", batch.n_tokens);
 
         // make sure we're in the right embedding mode
         llama_set_embeddings(ctx, batch_type == 1);
@@ -2821,15 +2818,11 @@ struct server_context {
                 if (n_batch == 1 || ret < 0) {
                     // if you get here, it means the KV cache is full - try
                     // increasing it via the context size
-                    SRV_ERR("failed to decode the batch: "
-                            "KV cache is full - "
-                            "try increasing it via the context size, "
-                            "i = %d, n_batch = %d, ret = %d\n",
-                            i, n_batch, ret);
+                    SRV_ERR("failed to decode the batch: KV cache is full - try increasing it via the context size, i = %d, n_batch = %d, ret = %d\n", i, n_batch, ret);
+
                     for (auto &slot : slots) {
                         slot.release();
-                        send_error(slot, "input prompt is too big compared to KV size. "
-                                         "please increase KV size");
+                        send_error(slot, "input prompt is too big compared to KV size, please increase KV size");
                     }
                     break; // break loop of n_batch
                 }
@@ -2839,11 +2832,7 @@ struct server_context {
                 n_batch /= 2;
                 i -= n_batch;
 
-                SRV_WRN("failed to find free space in the KV cache, "
-                        "retrying with smaller batch size - "
-                        "try increasing it via the context size or enable defragmentation, "
-                        "i = %d, n_batch = %d, ret = %d\n",
-                        i, n_batch, ret);
+                SRV_WRN("failed to find free space in the KV cache, retrying with smaller batch size - try increasing it via the context size or enable defragmentation, i = %d, n_batch = %d, ret = %d\n", i, n_batch, ret);
 
                 continue; // continue loop of n_batch
             }
@@ -3143,8 +3132,7 @@ static void log_server_request(const httplib::Request &req, const httplib::Respo
         return;
     }
 
-    SRV_INF("request %d: "
-            "%s %s %s:%d\n",
+    SRV_INF("request %d: %s %s %s:%d\n",
             res.status, req.method.c_str(), req.path.c_str(), req.remote_addr.c_str(), req.remote_port);
 }
 
@@ -4411,8 +4399,7 @@ int main(int argc, char **argv) {
     svr.new_task_queue = [&n_threads_http] { return new httplib::ThreadPool(n_threads_http); };
 
     // bind HTTP listen port, run the HTTP server in a thread
-    SRV_INF("listening, "
-            "hostname = %s, port = %d, n_threads = %d + %d\n",
+    SRV_INF("listening, hostname = %s, port = %d, n_threads = %d + %d\n",
             params.hostname.c_str(), params.port, n_threads_http, n_threads_http_addition);
     if (!svr.bind_to_port(params.hostname, params.port)) {
         SRV_ERR("%s", "existing due to listening error\n");
@@ -4454,8 +4441,7 @@ int main(int argc, char **argv) {
                 c = char(std::tolower(c));
             }
         }
-        SRV_INF("chat template, "
-                "built_in: %d, chat_example:\n%s",
+        SRV_INF("chat template, built_in: %d, chat_example:\n%s",
                 built_in_chat_template, common_chat_format_example(ctx_server.model, params.chat_template).c_str());
     }
 
