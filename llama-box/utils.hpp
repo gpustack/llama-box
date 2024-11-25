@@ -1118,17 +1118,21 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
     }
 
-    // Handle "stream" field
+    // Handle "stream" & "stream_options" field
+    // "stream_options": {"include_usage": bool, "chunk_result": bool}
     if (json_value(body, "stream", false)) {
         llama_params["stream"] = true;
         if (!body.contains("stream_options")) {
             llama_params["stream_options"] = json{{"include_usage", true}};
-        } else if (body.at("stream_options").is_object()) {
-            if (!body.at("stream_options").contains("include_usage")) {
-                llama_params["stream_options"]["include_usage"] = true;
-            }
         } else {
-            throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+            if (body.at("stream_options").is_object()) {
+                llama_params["stream_options"] = body.at("stream_options");
+                if (!body.at("stream_options").contains("include_usage")) {
+                    llama_params["stream_options"]["include_usage"] = true;
+                }
+            } else {
+                throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+            }
         }
     }
 
@@ -1231,24 +1235,20 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
     }
 
-    // Handle "stream" field
+    // Handle "stream" & "stream_options" field
+    // "stream_options": {"include_usage": bool, "chunk_result": bool}
     if (json_value(body, "stream", false)) {
-        llama_params["stream"] = true;
-        if (!body.contains("stream_options")) {
-            llama_params["stream_options"] = json{{"include_usage", true}};
-        } else if (body.at("stream_options").is_object()) {
-            if (!body.at("stream_options").contains("include_usage")) {
-                llama_params["stream_options"]["include_usage"] = true;
-            }
-        } else {
-            throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+        llama_params["stream"]         = true;
+        llama_params["stream_options"] = json{{"include_usage", json_value(body, "stream_options_include_usage", true)}};
+        if (json_value(body, "stream_options_chunk_result", false)) {
+            llama_params["stream_options"]["chunk_result"] = true;
         }
     }
 
     return llama_params;
 }
 
-static json oaicompat_images_response(const json &request, const json &result, const bool streaming = false, const std::vector<json> &usages = {}) {
+static json oaicompat_images_response(const json &request, const json &result, const bool streaming = false, const bool stop = false, const std::vector<json> &usages = {}) {
     json data = json::array();
     for (auto &ret : result) {
         json item = json{
@@ -1261,8 +1261,10 @@ static json oaicompat_images_response(const json &request, const json &result, c
             item["object"] = "image";
         }
         if (ret.contains("b64_json")) {
-            item["b64_json"]      = ret.at("b64_json");
-            item["finish_reason"] = "stop";
+            item["b64_json"] = ret.at("b64_json");
+            if (stop) {
+                item["finish_reason"] = "stop";
+            }
         } else {
             item["finish_reason"] = nullptr;
         }

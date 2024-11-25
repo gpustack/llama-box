@@ -33,6 +33,7 @@ SAMPLE_STEPS="${SAMPLE_STEPS:-"20"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
 parse() {
+    TIME="${1:-$(date +%s)}"
     echo "A: ${LINE}" >>"${LOG_FILE}"
     if [[ ! "${LINE}" = data:* ]]; then
         if [[ "${LINE}" =~ error:.* ]]; then
@@ -50,19 +51,28 @@ parse() {
         echo "Error: ${LINE}"
         return 1
     fi
-    RESULT_JSON="/tmp/image_generate_$(date +%s).json"
+    RESULT_JSON="/tmp/image_generate_${TIME}.json"
     printf "%s" "${LINE}" >"${RESULT_JSON}"
     printf "%i: %3.2f%%...\r" "$(jq -cr ".data[0] | .index" "${RESULT_JSON}")" "$(jq -cr ".data[0] | .progress" "${RESULT_JSON}")"
     if [[ "$(jq -cr ".data[0] | .b64_json" "${RESULT_JSON}")" == "null" ]]; then
         return 0
     fi
+    RESULT_PNG_IDX="$(jq -cr ".data[0] | .index" "${RESULT_JSON}")"
+    RESULT_PNG_B64="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}.png.b64"
+    if [[ ! -f "${RESULT_PNG_B64}" ]]; then
+        touch "${RESULT_PNG_B64}"
+    fi
+    jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >>"${RESULT_PNG_B64}"
+    if [[ "$(jq -cr ".data[0] | .finish_reason" "${RESULT_JSON}")" != "stop" ]]; then
+        return 0
+    fi
     printf "\n"
     set +e
-    RESULT_PNG="/tmp/image_generate_$(date +%s).png"
+    RESULT_PNG="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}.png"
     if command -v gbase64 >/dev/null; then
-        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" | gbase64 -d >"${RESULT_PNG}"
+        gbase64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
     else
-        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" | base64 -d >"${RESULT_PNG}"
+        base64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
     fi
     echo "Generated image: ${RESULT_PNG}"
     if [[ "$(uname -s)" =~ Darwin ]]; then
@@ -112,7 +122,10 @@ image_generate() {
                   cfg_scale: $cfg_scale,
                   sample_steps: $sample_steps,
                   negative_prompt: $negative_prompt,
-                  stream: true
+                  stream: true,
+                  stream_options: {
+                    chunk_result: true
+                  }
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
         DATA="$(echo -n "${DATA}" | jq \
@@ -127,7 +140,10 @@ image_generate() {
                   size: $size,
                   quality: $quality,
                   style: $style,
-                  stream: true
+                  stream: true,
+                  stream_options: {
+                    chunk_result: true
+                  }
                 } * .')"
     else
         DATA="$(echo -n "${DATA}" | jq \
@@ -140,16 +156,20 @@ image_generate() {
                   response_format: $response_format,
                   size: $size,
                   quality: $quality,
-                  stream: true
+                  stream: true,
+                  stream_options: {
+                    chunk_result: true
+                  }
                 } * .')"
     fi
     echo "Q: ${DATA}" >>"${LOG_FILE}"
 
     START_TIME=$(date +%s)
 
+    TIME=$(date +%s)
     set -e
     while IFS= read -r LINE; do
-        if ! parse; then
+        if ! parse "${TIME}"; then
             break
         fi
     done < <(curl \
@@ -161,7 +181,7 @@ image_generate() {
         --data-raw "${DATA}")
     set +e
 
-    rm -f /tmp/image_generate_*.json
+#    rm -f /tmp/image_generate_*.json
     printf "\n"
 }
 

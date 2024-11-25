@@ -180,12 +180,12 @@ int stablediffusion_context::progress_steps(stablediffusion_sampling_stream *str
         return 0;
     }
 
-    return sd_sampling_stream_sampled_steps(stream->stream);
+    return sd_sampling_stream_steps(stream->stream);
 }
 
 std::pair<int, int> stablediffusion_context::progress_stream(stablediffusion_sampling_stream *stream) {
     if (stream == nullptr) {
-        return {0, 0};
+        return {0, 1};
     }
 
     return {sd_sampling_stream_sampled_steps(stream->stream), sd_sampling_stream_steps(stream->stream)};

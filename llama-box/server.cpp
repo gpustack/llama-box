@@ -1914,34 +1914,23 @@ struct server_context {
         queue_results.send(res);
     }
 
-    void send_partial_image(const server_slot &slot, const float progress) {
+    void send_image(const server_slot &slot, const int32_t progressed_steps, const int32_t total_steps) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
-        res.stop  = false;
+        res.stop  = progressed_steps == total_steps;
         res.data  = json{
              {"index", slot.index},
-             {"progress", progress},
-             {"stop", false},
+             {"progress_steps", total_steps},
+             {"progress", float(progressed_steps) / float(total_steps) * 100},
+             {"stop", res.stop},
              {"model", params.model_alias},
         };
 
-        queue_results.send(res);
-    }
-
-    void send_image(const server_slot &slot) {
-        server_task_result res;
-        res.id    = slot.id_task;
-        res.error = false;
-        res.stop  = true;
-        res.data  = json{
-             {"index", slot.index},
-             {"progress", 100.0f},
-             {"stop", true},
-             {"model", params.model_alias},
-             {"b64_json", base64_encode(slot.generated_image.data, slot.generated_image.size)},
-             {"timings", slot.get_formated_timings()},
-        };
+        if (res.stop) {
+            res.data["b64_json"] = base64_encode(slot.generated_image.data, slot.generated_image.size);
+            res.data["timings"]  = slot.get_formated_timings();
+        }
 
         queue_results.send(res);
     }
@@ -2428,10 +2417,10 @@ struct server_context {
                 size_t t1     = ggml_time_us();
                 auto progress = sd_ctx->progress_stream(slot.sdsstream);
                 SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
+                if (slot.sdsparams.stream) {
+                    send_image(slot, progress.first, progress.second + 1);
+                }
                 if (goahead) {
-                    if (slot.sdsparams.stream) {
-                        send_partial_image(slot, float(progress.first) / float(progress.second) * 100);
-                    }
                     continue;
                 }
 
@@ -2444,7 +2433,7 @@ struct server_context {
                 }
 
                 slot.release();
-                send_image(slot);
+                send_image(slot, progress.first + 1, progress.second + 1);
             }
 
             return;
@@ -3282,7 +3271,7 @@ int main(int argc, char **argv) {
     // configure and bind
     svr.set_read_timeout(params.timeout_read);
     svr.set_write_timeout(params.timeout_write);
-    svr.set_payload_max_length(1024 * 1024 * 10);
+    svr.set_payload_max_length(10 * 1024 * 1024); // 10 MiB
     svr.set_idle_interval(bparams.conn_idle);
     svr.set_keep_alive_timeout(bparams.conn_keepalive);
 
@@ -3798,6 +3787,7 @@ int main(int argc, char **argv) {
                 [&](const server_task_result &result) -> bool {
                     json infills_json = result.data;
                     if (!server_sent_event(sink, "data", infills_json)) {
+                        LOG_ERR("%s", "handle_infill: failed to send chunk data\n");
                         sink.done();
                         return false;
                     }
@@ -3921,6 +3911,7 @@ int main(int argc, char **argv) {
                         completions_json = oaicompat_completions_response(request, json::array({completions_json}), completion_id, true);
                     }
                     if (!server_sent_event(sink, "data", completions_json)) {
+                        LOG_ERR("%s", "handle_completions: failed to send chunk data\n");
                         sink.done();
                         return false;
                     }
@@ -3928,6 +3919,7 @@ int main(int argc, char **argv) {
                         if (oaicompat) {
                             const std::string done = "data: [DONE] \n\n";
                             if (!sink.write(done.c_str(), done.size())) {
+                                LOG_ERR("%s", "handle_completions: failed to send chunk data\n");
                                 sink.done();
                                 return false;
                             }
@@ -4030,6 +4022,7 @@ int main(int argc, char **argv) {
                         first                 = false;
                         json completions_json = oaicompat_completions_response(request, json::array(), completion_id, true, true);
                         if (!server_sent_event(sink, "data", completions_json)) {
+                            LOG_ERR("%s", "handle_chat_completions: failed to send chunk data\n");
                             sink.done();
                             return false;
                         }
@@ -4037,6 +4030,7 @@ int main(int argc, char **argv) {
 
                     json completions_json = oaicompat_completions_response(request, json::array({result.data}), completion_id, true);
                     if (!server_sent_event(sink, "data", completions_json)) {
+                        LOG_ERR("%s", "handle_chat_completions: failed to send chunk data\n");
                         sink.done();
                         return false;
                     }
@@ -4044,6 +4038,7 @@ int main(int argc, char **argv) {
                     if (result.stop) {
                         const std::string done = "data: [DONE] \n\n";
                         if (!sink.write(done.c_str(), done.size())) {
+                            LOG_ERR("%s", "handle_chat_completions: failed to send chunk data\n");
                             sink.done();
                             return false;
                         }
@@ -4265,6 +4260,12 @@ int main(int argc, char **argv) {
             if (req.has_file("stream")) {
                 request["stream"] = req.get_file_value("stream").content == "true";
             }
+            if (req.has_file("stream_options_include_usage")) {
+                request["stream_options_include_usage"] = req.get_file_value("stream_options_include_usage").content == "true";
+            }
+            if (req.has_file("stream_options_chunk_result")) {
+                request["stream_options_chunk_result"] = req.get_file_value("stream_options_chunk_result").content == "true";
+            }
             request = oaicompat_images_edits_request(ctx_server.sdparams, request);
         }
 
@@ -4289,7 +4290,7 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    const json images_json = oaicompat_images_response(request, responses, false, usages);
+                    const json images_json = oaicompat_images_response(request, responses, false, true, usages);
                     res_ok(res, images_json);
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
@@ -4300,6 +4301,10 @@ int main(int argc, char **argv) {
 
         // process streaming requests
         const auto on_chunk = [task_ids, &ctx_server, request, tps](size_t, httplib::DataSink &sink) {
+            bool chunk_result = false;
+            if (request.contains("stream_options")) {
+                chunk_result = json_value(request.at("stream_options"), "chunk_result", false);
+            }
             std::vector<json> usages;
             std::vector<bool> stops(task_ids.size(), false);
             ctx_server.receive_cmpl_results_stream(
@@ -4309,20 +4314,58 @@ int main(int argc, char **argv) {
                         usages.push_back(result.data.at("timings"));
                         stops[json_value(result.data, "index", 0)] = true;
                     }
-                    if (!std::all_of(stops.begin(), stops.end(), [](bool stop) { return stop; })) {
-                        json images_json = oaicompat_images_response(request, json::array({result.data}), true);
+                    const bool all_stops = std::all_of(stops.begin(), stops.end(), [](bool stop) { return stop; });
+                    if (!result.stop || !chunk_result) {
+                        json images_json = oaicompat_images_response(request, json::array({result.data}), true, result.stop, all_stops ? usages : std::vector<json>());
                         if (!server_sent_event(sink, "data", images_json)) {
+                            LOG_ERR("%s", "handle_images: failed to send chunk data\n");
                             sink.done();
                             return false;
                         }
                     } else {
-                        json images_json = oaicompat_images_response(request, json::array({result.data}), true, usages);
-                        if (!server_sent_event(sink, "data", images_json)) {
-                            sink.done();
-                            return false;
+                        // split the huge result into chunks
+                        std::string b64_json = result.data.at("b64_json").get<std::string>();
+                        int32_t total_steps  = result.data.at("progress_steps").get<int32_t>();
+
+                        json chunk_index                = result.data.at("index");
+                        json chunk_model                = result.data.at("model");
+                        size_t chunk_size               = 16 * 1024;
+                        size_t chunk_sent               = 0;
+                        size_t chunk_send               = b64_json.size() / chunk_size + 1;
+                        float chunk_send_progress       = 0.0f;
+                        float chunk_send_progress_base  = float(total_steps - 1) / float(total_steps) * 100;
+                        float chunk_send_progress_scale = 1 - float(total_steps - 1) / float(total_steps);
+                        bool chunk_stop                 = false;
+                        while (!chunk_stop) {
+                            chunk_sent++;
+                            chunk_send_progress = chunk_send_progress_base + float(chunk_sent) / float(chunk_send) * 100 * chunk_send_progress_scale;
+                            chunk_stop          = chunk_sent == chunk_send;
+                            json chunk_data     = {
+                                {"index", chunk_index},
+                                {"progress_steps", total_steps},
+                                {"progress", chunk_send_progress},
+                                {"stop", chunk_stop},
+                                {"model", chunk_model},
+                            };
+                            if (chunk_stop) {
+                                chunk_data["b64_json"] = b64_json;
+                                chunk_data["timings"]  = result.data.at("timings");
+                            } else {
+                                chunk_data["b64_json"] = b64_json.substr(0, chunk_size);
+                                b64_json               = b64_json.substr(chunk_size);
+                            }
+                            json chunk_images_json = oaicompat_images_response(request, json::array({chunk_data}), true, chunk_stop, chunk_stop ? usages : std::vector<json>());
+                            if (!server_sent_event(sink, "data", chunk_images_json)) {
+                                LOG_ERR("%s", "handle_images: failed to send chunk data\n");
+                                sink.done();
+                                return false;
+                            }
                         }
+                    }
+                    if (all_stops) {
                         const std::string done = "data: [DONE] \n\n";
                         if (!sink.write(done.c_str(), done.size())) {
+                            LOG_ERR("%s", "handle_images: failed to send chunk data\n");
                             sink.done();
                             return false;
                         }
