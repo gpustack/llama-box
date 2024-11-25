@@ -201,9 +201,9 @@ static llama_tokens format_rerank(const struct llama_model *model, const llama_t
     result.reserve(doc.size() + query.size() + 4);
     result.push_back(llama_token_bos(model));
     result.insert(result.end(), query.begin(), query.end());
-    result.push_back(llama_token_eos(model));
     result.push_back(llama_token_sep(model));
     result.insert(result.end(), doc.begin(), doc.end());
+    result.push_back(llama_token_sep(model));
     result.push_back(llama_token_eos(model));
     return result;
 }
@@ -1333,8 +1333,9 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     llama_params["model"] = json_value(body, "model", params.model_alias);
 
     // Handle "query" and "documents" fields
-    json prompt = json::array();
-    prompt.push_back(json_value(body, "query", std::string("")));
+    json prompt       = json::array();
+    std::string query = json_value(body, "query", std::string(""));
+    prompt.push_back(query);
     for (const json &doc : body.at("documents")) {
         if (doc.is_string()) {
             prompt.push_back(doc.get<std::string>());
@@ -1344,6 +1345,8 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
             throw std::runtime_error("Illegal param: documents must be an array of strings or objects with a 'text' field");
         }
     }
+    prompt.push_back(query); // Add the query again for reranking
+    prompt.push_back("");    // Add an empty string for reranking
     llama_params["prompt"] = prompt;
 
     // Handle "top_n" field
@@ -1403,24 +1406,24 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
 
     int num_prompt_tokens = 0;
     int32_t start         = 0;
-    auto end              = int32_t(result.size() - 1);
+    auto end              = int32_t(result.size() - 3);
     jinaicompat_rerank_response_sort(result, start, end);
 
     json data      = json::array();
-    double scr_max = json_value(result[start], "score", 1e-6);
-    double scr_min = json_value(result[end], "score", 1e-6);
+    double scr_max = std::max(json_value(result[result.size() - 2], "score", 1e-6), json_value(result[start], "score", 1e-6));
+    double scr_min = std::min(json_value(result[result.size() - 1], "score", 1e-6), json_value(result[end], "score", 1e-6));
     double scr_dst = scr_max - scr_min;
     double a = 0.01, b = 0.98;
     if (scr_dst < 1e-6) {
-        scr_dst = scr_min;
-        scr_min = 0.0;
-        if (request.at("prompt")[0].get<std::string>() == documents[start].get<std::string>()) {
+        scr_dst = scr_max;
+        scr_min = 0.0f;
+        if (request.at("prompt")[0].get<std::string>() == documents[json_value(result[end], "index", 0)].get<std::string>()) {
             a = 0;
             b = 1;
         }
     }
     const bool normalize = request.at("normalize").get<bool>();
-    for (int32_t i = 0; i <= end && i < top_n; i++) {
+    for (int32_t i = start; i <= end && i < top_n; i++) {
         const json &ret = result[i];
 
         double scr = json_value(ret, "score", 1e-6);
