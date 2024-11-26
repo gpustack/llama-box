@@ -3834,10 +3834,10 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
-        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
-        res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
+        res.set_chunked_content_provider("text/event-stream; charset=utf-8", on_chunk, on_complete);
     };
 
     const auto handle_completions = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
@@ -3966,7 +3966,7 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
-        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
@@ -4085,7 +4085,7 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
-        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
         res.set_header("Trailer", "X-Response-Tokens-Per-Second");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
@@ -4409,6 +4409,7 @@ int main(int argc, char **argv) {
                             sink.done();
                             return false;
                         }
+                        sink.done();
                     }
                     return true;
                 },
@@ -4421,7 +4422,7 @@ int main(int argc, char **argv) {
         };
         const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
 
-        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
         res.set_chunked_content_provider("text/event-stream", on_chunk, on_complete);
     };
