@@ -42,8 +42,7 @@ enum slot_state {
 };
 
 enum server_state {
-    SERVER_STATE_LOADING_MODEL, // Server is starting up, model not fully
-                                // loaded yet
+    SERVER_STATE_LOADING_MODEL, // Server is starting up, model not fully loaded yet
     SERVER_STATE_READY,         // Server is ready and model is loaded
 };
 
@@ -98,8 +97,7 @@ struct server_task_result {
 };
 
 struct slot_params {
-    bool stream       = true;
-    bool cache_prompt = true; // remember the prompt to avoid reprocessing all prompt
+    bool stream = true;
 
     int32_t n_keep    = 0;  // number of tokens to keep from initial prompt
     int32_t n_discard = 0;  // number of tokens after n_keep that may be discarded when shifting context, 0 defaults to half
@@ -939,7 +937,7 @@ struct server_context {
         n_ctx            = int32_t(llama_n_ctx(ctx));
         n_tps            = bparams.n_tps;
         lookup_ngram_min = bparams.lookup_ngram_min;
-        cache_prompt     = bparams.cache_prompt;
+        cache_prompt     = bparams.cache_prompt || lookup_ngram_min > 0 || ctx_draft != nullptr;
 
         // sample tokens per second
         if (n_tps < 0) {
@@ -1282,12 +1280,11 @@ struct server_context {
         slot.oaicompat_completion_chat        = json_value(data, "__oaicompat_completion_chat", false);
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && ctx_clip != nullptr;
 
-        slot.params.stream       = json_value(data, "stream", false);
-        slot.params.cache_prompt = json_value(data, "cache_prompt", cache_prompt);
-        slot.params.n_predict    = json_value(data, "n_predict", params_base.n_predict);
-        slot.params.n_indent     = json_value(data, "n_indent", 0);
-        slot.params.n_keep       = json_value(data, "n_keep", params_base.n_keep);
-        slot.params.n_discard    = json_value(data, "n_discard", 0);
+        slot.params.stream    = json_value(data, "stream", false);
+        slot.params.n_predict = json_value(data, "n_predict", params_base.n_predict);
+        slot.params.n_indent  = json_value(data, "n_indent", 0);
+        slot.params.n_keep    = json_value(data, "n_keep", params_base.n_keep);
+        slot.params.n_discard = json_value(data, "n_discard", 0);
         // slot.params.t_max_prompt_ms    = json_value(data, "t_max_prompt_ms",   -1); // TODO: implement
         slot.params.t_max_predict_ms = json_value(data, "t_max_predict_ms", -1);
 
@@ -1351,8 +1348,7 @@ struct server_context {
         // get prompt
         {
             if (slot.oaicompat_completion_chat_vision) {
-                slot.params.cache_prompt = false;
-                slot.prompt              = json_value(data, "prompt", json::object());
+                slot.prompt = json_value(data, "prompt", json::object());
             } else {
                 slot.prompt_tokens = task.prompt_tokens;
             }
@@ -2485,7 +2481,7 @@ struct server_context {
                     llama_kv_cache_seq_add(ctx_draft, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
                 }
 
-                if (slot.params.cache_prompt) {
+                if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
                     for (size_t i = n_keep + n_discard; i < slot.cache_tokens.size(); i++) {
                         slot.cache_tokens[i - n_discard] = slot.cache_tokens[i];
                     }
@@ -2529,7 +2525,7 @@ struct server_context {
             }
             slot.n_past += 1;
 
-            if (slot.params.cache_prompt) {
+            if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
                 for (const llama_token &tok : slot.sampled) {
                     slot.cache_tokens.push_back(tok);
                 }
@@ -2630,7 +2626,7 @@ struct server_context {
                                 GGML_ASSERT(slot.n_prompt_tokens < slot.n_ctx);
                             }
 
-                            if (slot.params.cache_prompt && !slot.cache_tokens.empty()) {
+                            if (cache_prompt && !slot.oaicompat_completion_chat_vision && !slot.cache_tokens.empty()) {
                                 // reuse any previously computed tokens that are
                                 // common with the new prompt
                                 slot.n_past = int32_t(common_lcp(slot.cache_tokens, prompt_tokens));
@@ -2742,7 +2738,7 @@ struct server_context {
                             common_batch_add(batch_draft, prompt_tokens[slot.n_past], slot.n_past, {slot.id}, false);
                         }
 
-                        if (slot.params.cache_prompt) {
+                        if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
                             slot.cache_tokens.push_back(prompt_tokens[slot.n_past]);
                         }
 
