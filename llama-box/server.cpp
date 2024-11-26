@@ -1888,24 +1888,24 @@ struct server_context {
         queue_results.send(res);
     }
 
-    void send_rerank(const server_slot &slot, const llama_batch &batch) {
+    void send_rerank(const server_slot &slot, const llama_batch &batch_view) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
         res.stop  = true;
 
-        for (int i = 0; i < batch.n_tokens; ++i) {
-            if (!batch.logits[i] || batch.seq_id[i][0] != slot.id) {
+        for (int i = 0; i < batch_view.n_tokens; ++i) {
+            if (!batch_view.logits[i] || batch_view.seq_id[i][0] != slot.id) {
                 continue;
             }
 
-            const float *embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
+            const float *embd = llama_get_embeddings_seq(ctx, batch_view.seq_id[i][0]);
             if (embd == nullptr) {
                 embd = llama_get_embeddings_ith(ctx, i);
             }
 
             if (embd == nullptr) {
-                SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n", batch.token[i], batch.seq_id[i][0]);
+                SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n", batch_view.token[i], batch_view.seq_id[i][0]);
 
                 res.data = json{
                     {"index", slot.index},
