@@ -433,6 +433,7 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_N_PARALLEL`: equivalent to `-np`, `--parallel`.
 - `LLAMA_ARG_BATCH`: equivalent to `-b`, `--batch-size`.
 - `LLAMA_ARG_UBATCH`: equivalent to `-ub`, `--ubatch-size`.
+- `LLAMA_ARG_DEVICE`: equivalent to `-dev`, `--device`.
 - `LLAMA_ARG_N_GPU_LAYERS`: equivalent to `-ngl`, `--gpu-layers`, `--n-gpu-layers`.
 - `LLAMA_ARG_THREADS_HTTP`: equivalent to `--threads-http`
 - `LLAMA_ARG_CACHE_REUSE`: equivalent to `--cache-reuse`
@@ -449,6 +450,7 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_PORT`: equivalent to `--port`
 - `LLAMA_ARG_DRAFT`: equivalent to `--draft`
 - `LLAMA_ARG_MODEL_DRAFT`: equivalent to `-md`, `--model-draft`.
+- `LLAMA_ARG_DEVICE_DRAFT`: equivalent to `-devd`, `--device-draft`.
 - `LLAMA_ARG_N_GPU_LAYERS_DRAFT`: equivalent to `-ngld`, `--gpu-layers-draft`.
 - `LLAMA_ARG_LOOKUP_NGRAM_MIN`: equivalent to `--lookup-ngram-min`.
 - `LLAMA_ARG_LOOKUP_CACHE_STATIC`: equivalent to `-lcs`, `--lookup-cache-static`.
