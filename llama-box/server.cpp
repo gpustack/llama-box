@@ -1447,10 +1447,14 @@ struct server_context {
                     common_sampler_free(slot.smpl_draft);
                 }
 
-                slot.smpl_draft = common_sampler_init(model_draft, slot.params.sampling);
+                struct common_params_sampling params_draft = slot.params.sampling;
+                params_draft.top_k                         = 10;
+                params_draft.samplers                      = {
+                    COMMON_SAMPLER_TYPE_TOP_K,
+                };
+                slot.smpl_draft = common_sampler_init(model_draft, params_draft);
                 if (slot.smpl_draft == nullptr) {
-                    // for now, the only error that may happen here is invalid
-                    // grammar
+                    // for now, the only error that may happen here is invalid grammar
                     send_error(task, "Failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
@@ -2920,7 +2924,6 @@ struct server_context {
 
                 if (ctx_draft != nullptr) {
                     llama_pos pos = slot.n_past + slot.n_drafted_accepted;
-                    llama_kv_cache_seq_rm(ctx, slot.id, pos, -1);
                     llama_kv_cache_seq_rm(ctx_draft, slot.id, pos, -1);
 
                     slot.sampled_draft.clear();
@@ -2935,7 +2938,13 @@ struct server_context {
                     slot.n_drafted += 1;
 
                     for (int32_t j = 0; j < params_base.speculative.n_max; ++j) {
-                        llama_token tok = common_sampler_sample(slot.smpl_draft, ctx_draft, 0);
+                        llama_token tok = common_sampler_sample(slot.smpl_draft, ctx_draft, 0, true);
+
+                        const llama_token_data_array *cur_p = common_sampler_get_candidates(slot.smpl_draft);
+                        if (cur_p->data[0].p < params_base.speculative.p_min) {
+                            break;
+                        }
+
                         slot.sampled_draft.push_back(tok);
                         common_sampler_accept(slot.smpl_draft, tok, true);
                         if (llama_token_is_eog(model_draft, tok)) {
@@ -2947,6 +2956,11 @@ struct server_context {
                             break;
                         }
                         slot.n_drafted += 1;
+                    }
+
+                    // ignore small drafts
+                    if (int32_t(slot.sampled_draft.size()) < params_base.speculative.n_min) {
+                        slot.sampled_draft.clear();
                     }
                 } else if (lookup_ngram_min > 0) {
                     llama_pos pos = slot.n_past + slot.n_drafted_accepted;
