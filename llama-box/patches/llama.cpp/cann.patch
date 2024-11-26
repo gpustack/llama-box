@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cann/aclnn_ops.cpp b/ggml/src/ggml-cann/aclnn_ops.cpp
-index 1f4ee986..76b591f5 100644
+index 6113b59f..bf75b245 100644
 --- a/ggml/src/ggml-cann/aclnn_ops.cpp
 +++ b/ggml/src/ggml-cann/aclnn_ops.cpp
-@@ -32,6 +32,8 @@
+@@ -33,6 +33,8 @@
  #include <aclnnop/aclnn_group_norm.h>
  #include <aclnnop/aclnn_index_fill_tensor.h>
  #include <aclnnop/aclnn_layer_norm.h>
@@ -11,7 +11,7 @@ index 1f4ee986..76b591f5 100644
  #include <aclnnop/aclnn_matmul.h>
  #include <aclnnop/aclnn_max_pool.h>
  #include <aclnnop/aclnn_permute.h>
-@@ -2443,6 +2445,84 @@ static void aclnn_mat_mul(ggml_backend_cann_context& ctx, aclTensor* acl_input,
+@@ -2441,6 +2443,84 @@ static void aclnn_mat_mul(ggml_backend_cann_context& ctx, aclTensor* acl_input,
          aclnnMatmul(workspaceAddr, workspaceSize, executor, ctx.stream()));
  }
  
@@ -96,7 +96,7 @@ index 1f4ee986..76b591f5 100644
  /**
   * @brief Performs matrix multiplication with floating-point precision on
   * tensors using the CANN backend.
-@@ -2484,6 +2564,67 @@ static void ggml_cann_mat_mul_fp(ggml_backend_cann_context& ctx,
+@@ -2482,6 +2562,67 @@ static void ggml_cann_mat_mul_fp(ggml_backend_cann_context& ctx,
      ACL_CHECK(aclDestroyTensor(acl_dst));
  }
  
@@ -164,7 +164,7 @@ index 1f4ee986..76b591f5 100644
  /**
   * @brief Performs matrix multiplication with quantized weights and
   * floating-point inputs using the CANN backend.
-@@ -2636,16 +2777,215 @@ static void ggml_cann_mul_mat_quant(ggml_backend_cann_context& ctx,
+@@ -2634,16 +2775,215 @@ static void ggml_cann_mul_mat_quant(ggml_backend_cann_context& ctx,
      ACL_CHECK(aclDestroyTensor(acl_dst_tensor));
  }
  
@@ -411,7 +411,7 @@ index edfa4961..5164cb74 100644
      /**
       * @brief Destructor for cleaning up resources.
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index d96f6593..3266c24f 100644
+index 2ef5b590..ab6eb6a5 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -122,6 +122,10 @@ static ggml_cann_device_info ggml_cann_init() {
@@ -656,7 +656,7 @@ index d96f6593..3266c24f 100644
          GGML_LOG_WARN("%s: failed to allocate %.2f MiB of pinned memory: %s\n", __func__,
                             size / 1024.0 / 1024.0, aclGetRecentErrMsg());
          return nullptr;
-@@ -1863,17 +1872,17 @@ struct ggml_backend_cann_device_context {
+@@ -1913,17 +1922,17 @@ struct ggml_backend_cann_device_context {
  };
  
  static const char * ggml_backend_cann_device_get_name(ggml_backend_dev_t dev) {
@@ -677,7 +677,7 @@ index d96f6593..3266c24f 100644
      ggml_backend_cann_get_device_memory(ctx->device, free, total);
  }
  
-@@ -1900,7 +1909,7 @@ static void ggml_backend_cann_device_get_props(ggml_backend_dev_t dev, ggml_back
+@@ -1950,7 +1959,7 @@ static void ggml_backend_cann_device_get_props(ggml_backend_dev_t dev, ggml_back
  
  static ggml_backend_t ggml_backend_cann_device_init(ggml_backend_dev_t dev, const char * params) {
      GGML_UNUSED(params);
@@ -686,7 +686,7 @@ index d96f6593..3266c24f 100644
      return ggml_backend_cann_init(ctx->device);
  }
  
-@@ -1920,7 +1929,7 @@ static ggml_backend_t ggml_backend_cann_device_init(ggml_backend_dev_t dev, cons
+@@ -1970,7 +1979,7 @@ static ggml_backend_t ggml_backend_cann_device_init(ggml_backend_dev_t dev, cons
  static bool ggml_backend_cann_supports_buft(
      ggml_backend_dev_t dev, ggml_backend_buffer_type_t buft) {
      if (ggml_backend_buft_is_cann(buft)) {
@@ -695,7 +695,7 @@ index d96f6593..3266c24f 100644
          ggml_backend_cann_buffer_type_context * buft_ctx =
                          (ggml_backend_cann_buffer_type_context *)buft->context;
          return buft_ctx->device == dev_ctx->device;
-@@ -1929,7 +1938,7 @@ static bool ggml_backend_cann_supports_buft(
+@@ -1979,7 +1988,7 @@ static bool ggml_backend_cann_supports_buft(
  }
  
  static ggml_backend_buffer_type_t ggml_backend_cann_device_get_buffer_type(ggml_backend_dev_t dev) {
@@ -704,7 +704,7 @@ index d96f6593..3266c24f 100644
      return ggml_backend_cann_buffer_type(ctx->device);
  }
  
-@@ -1950,7 +1959,7 @@ static ggml_backend_buffer_type_t ggml_backend_cann_device_get_host_buffer_type(
+@@ -2000,7 +2009,7 @@ static ggml_backend_buffer_type_t ggml_backend_cann_device_get_host_buffer_type(
   */
  static ggml_backend_event_t ggml_backend_cann_device_event_new(
      ggml_backend_dev_t dev) {
@@ -713,7 +713,7 @@ index d96f6593..3266c24f 100644
  
      ggml_cann_set_device(dev_ctx->device);
  
-@@ -2058,11 +2067,7 @@ ggml_backend_reg_t ggml_backend_cann_reg() {
+@@ -2108,11 +2117,7 @@ ggml_backend_reg_t ggml_backend_cann_reg() {
              ggml_backend_cann_reg_context * ctx = new ggml_backend_cann_reg_context;
  
              for (int i = 0; i < ggml_cann_info().device_count; i++) {
@@ -726,7 +726,7 @@ index d96f6593..3266c24f 100644
                  ggml_backend_dev_t dev = new ggml_backend_device {
                      /* .iface   = */ ggml_backend_cann_device_interface,
                      /* .reg     = */ &reg,
-@@ -2091,17 +2096,12 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
+@@ -2141,17 +2146,12 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
          return nullptr;
      }
  
