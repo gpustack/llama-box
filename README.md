@@ -306,7 +306,7 @@ server/completion:
          --frequency-penalty N    repeat alpha frequency penalty (default: 0.0, 0.0 = disabled)
          --dry-multiplier N       set DRY sampling multiplier (default: 0.0, 0.0 = disabled)
          --dry-base N             set DRY sampling base value (default: 1.75)
-         --dry--allowed-length N  set allowed length for DRY sampling (default: 2)
+         --dry-allowed-length N   set allowed length for DRY sampling (default: 2)
          --dry-penalty-last-n N   set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
          --dry-sequence-breaker N 
                                   add sequence breaker for DRY sampling, clearing out default breakers (
@@ -332,13 +332,12 @@ server/completion:
          --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
          --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
   -nkvo, --no-kv-offload          disable KV offload
-         --cache-prompt           enable caching prompt (default: enabled)
-         --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting, implicit --cache-prompt if value (default: 0)
+         --no-cache-prompt        disable caching prompt
+         --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting (default: 0)
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
   -np,   --parallel N             number of parallel sequences to decode (default: 1)
-  -cb,   --cont-batching          enable continuous batching (a.k.a dynamic batching) (default: enabled)
   -nocb, --no-cont-batching       disable continuous batching
          --mmproj FILE            path to a multimodal projector file for LLaVA
          --mlock                  force system to keep model in RAM rather than swapping or compressing
@@ -436,6 +435,8 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_DEVICE`: equivalent to `-dev`, `--device`.
 - `LLAMA_ARG_N_GPU_LAYERS`: equivalent to `-ngl`, `--gpu-layers`, `--n-gpu-layers`.
 - `LLAMA_ARG_THREADS_HTTP`: equivalent to `--threads-http`
+- `LLAMA_ARG_CACHE_PROMPT`: if set to `0`, it will **disable** caching prompt (equivalent
+  to `--no-cache-prompt`). This feature is enabled by default.
 - `LLAMA_ARG_CACHE_REUSE`: equivalent to `--cache-reuse`
 - `LLAMA_ARG_CHAT_TEMPLATE`: equivalent to `--chat-template`
 - `LLAMA_ARG_N_PREDICT`: equivalent to `-n`, `--predict`.

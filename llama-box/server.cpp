@@ -1068,7 +1068,7 @@ struct server_context {
         server_slot *ret = nullptr;
 
         // find the slot that has at least n% prompt similarity
-        if (ret == nullptr && slot_prompt_similarity != 0.0f) {
+        if (slot_prompt_similarity != 0.0f) {
             int lcs_len      = 0;
             float similarity = 0;
 

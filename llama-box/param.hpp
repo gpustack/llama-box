@@ -224,7 +224,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --frequency-penalty N",                  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sampling.penalty_freq });
     opts.push_back({ "server/completion",                  "       --dry-multiplier N",                     "set DRY sampling multiplier (default: %.1f, 0.0 = disabled)", (double)params.sampling.dry_multiplier });
     opts.push_back({ "server/completion",                  "       --dry-base N",                           "set DRY sampling base value (default: %.2f)", (double)params.sampling.dry_base });
-    opts.push_back({ "server/completion",                  "       --dry--allowed-length N",                "set allowed length for DRY sampling (default: %d)", params.sampling.dry_allowed_length });
+    opts.push_back({ "server/completion",                  "       --dry-allowed-length N",                 "set allowed length for DRY sampling (default: %d)", params.sampling.dry_allowed_length });
     opts.push_back({ "server/completion",                  "       --dry-penalty-last-n N",                 "set DRY penalty for the last n tokens (default: %d, 0 = disable, -1 = context size)", params.sampling.dry_penalty_last_n });
     opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", default_dry_sequence_breaker_names.c_str() });
     opts.push_back({ "server/completion",                  "       --dynatemp-range N",                     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sampling.dynatemp_range });
@@ -248,13 +248,12 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/completion",              "-nkvo, --no-kv-offload",                        "disable KV offload" });
     }
-    opts.push_back({ "server/completion",                  "       --cache-prompt",                         "enable caching prompt (default: %s)", bparams.cache_prompt ? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "min chunk size to attempt reusing from the cache via KV shifting, implicit --cache-prompt if value (default: %d)", params.n_cache_reuse });
+    opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "disable caching prompt" });
+    opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "min chunk size to attempt reusing from the cache via KV shifting (default: %d)", params.n_cache_reuse });
     opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K (default: %s)", params.cache_type_k.c_str() });
     opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V (default: %s)", params.cache_type_v.c_str() });
     opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold });
     opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "number of parallel sequences to decode (default: %d)", params.n_parallel });
-    opts.push_back({ "server/completion",                  "-cb,   --cont-batching",                        "enable continuous batching (a.k.a dynamic batching) (default: %s)", params.cont_batching ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "disable continuous batching" });
     opts.push_back({ "server/completion",                  "       --mmproj FILE",                          "path to a multimodal projector file for LLaVA" });
     if (llama_supports_mlock()) {
@@ -1383,8 +1382,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
-            if (!strcmp(flag, "--cache-prompt")) {
-                bparams.cache_prompt = true;
+            if (!strcmp(flag, "--no-cache-prompt")) {
+                bparams.cache_prompt = false;
                 continue;
             }
 
@@ -1433,11 +1432,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg                  = argv[i++];
                 bparams.gparams.n_parallel = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-cb") || !strcmp(flag, "--cont-batching")) {
-                bparams.gparams.cont_batching = true;
                 continue;
             }
 
@@ -1949,6 +1943,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     get_env("LLAMA_ARG_DEVICE", bparams.gparams.devices);
     get_env("LLAMA_ARG_N_GPU_LAYERS", bparams.gparams.n_gpu_layers);
     get_env("LLAMA_ARG_THREADS_HTTP", bparams.gparams.n_threads_http);
+    get_env("LLAMA_ARG_CACHE_PROMPT", bparams.cache_prompt);
     get_env("LLAMA_ARG_CACHE_REUSE", bparams.gparams.n_cache_reuse);
     get_env("LLAMA_ARG_CHAT_TEMPLATE", bparams.gparams.chat_template);
     get_env("LLAMA_ARG_N_PREDICT", bparams.gparams.n_predict);
