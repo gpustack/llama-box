@@ -4129,7 +4129,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"documents\" must not be empty", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = jinaaicompat_rerank_request(ctx_server.params, request);
+        request = jinaaicompat_rerank_request(ctx_server.params, request, ctx_server.ctx);
 
         // post tasks
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_RERANK);

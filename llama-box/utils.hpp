@@ -1308,7 +1308,7 @@ static json oaicompat_images_response(const json &request, const json &result, c
     return res;
 }
 
-static json jinaaicompat_rerank_request(const struct common_params &params, const json &body) {
+static json jinaaicompat_rerank_request(const struct common_params &params, const json &body, const llama_context *ctx) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -1345,8 +1345,8 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
             throw std::runtime_error("Illegal param: documents must be an array of strings or objects with a 'text' field");
         }
     }
-    prompt.push_back(query); // Add the query again for reranking
-    prompt.push_back("");    // Add an empty string for reranking
+    prompt.push_back(query);                                                                    // Add the query again for reranking
+    prompt.push_back(common_token_to_piece(ctx, llama_token_unk(llama_get_model(ctx)), false)); // Add an empty string for reranking
     llama_params["prompt"] = prompt;
 
     // Handle "top_n" field
@@ -1413,14 +1413,11 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
     double scr_max = std::max(json_value(result[result.size() - 2], "score", 1e-6), json_value(result[start], "score", 1e-6));
     double scr_min = std::min(json_value(result[result.size() - 1], "score", 1e-6), json_value(result[end], "score", 1e-6));
     double scr_dst = scr_max - scr_min;
-    double a = 0.01, b = 0.98;
-    if (scr_dst < 1e-6) {
+    double a = 0.001, b = 0.998;
+    if (scr_dst < 1e-6 || request.at("prompt")[0].get<std::string>() == documents[json_value(result[start], "index", 0)].get<std::string>()) {
         scr_dst = scr_max;
         scr_min = 0.0f;
-        if (request.at("prompt")[0].get<std::string>() == documents[json_value(result[end], "index", 0)].get<std::string>()) {
-            a = 0;
-            b = 1;
-        }
+        a = 0, b = 1;
     }
     const bool normalize = request.at("normalize").get<bool>();
     for (int32_t i = start; i <= end && i < top_n; i++) {
@@ -1429,6 +1426,9 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         double scr = json_value(ret, "score", 1e-6);
         if (normalize) {
             scr = a + (scr - scr_min) * b / scr_dst;
+            if (scr > 0.99999) {
+                scr = 1;
+            }
         }
 
         int32_t tke = json_value(ret, "tokens_evaluated", 0);
