@@ -4284,6 +4284,14 @@ int main(int argc, char **argv) {
             if (req.has_file("stream_options_chunk_result")) {
                 request["stream_options_chunk_result"] = req.get_file_value("stream_options_chunk_result").content == "true";
             }
+            if (req.has_file("stream_options_chunk_size")) {
+                try {
+                    request["stream_options_chunk_size"] = std::stoi(req.get_file_value("stream_options_chunk_size").content);
+                } catch (const std::exception &) {
+                    res_error(res, format_error_response("\"stream_options_chunk_size\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                    return;
+                }
+            }
             request = oaicompat_images_edits_request(ctx_server.sdparams, request);
         }
 
@@ -4320,8 +4328,13 @@ int main(int argc, char **argv) {
         // process streaming requests
         const auto on_chunk = [task_ids, &ctx_server, request, tps](size_t, httplib::DataSink &sink) {
             bool chunk_result = false;
+            size_t chunk_size = 4096;
             if (request.contains("stream_options")) {
                 chunk_result = json_value(request.at("stream_options"), "chunk_result", false);
+                chunk_size   = json_value(request.at("stream_options"), "chunk_size", 4096);
+                if (chunk_size < 1024) {
+                    chunk_size = 1024;
+                }
             }
             std::vector<json> usages;
             std::vector<bool> stops(task_ids.size(), false);
@@ -4347,7 +4360,6 @@ int main(int argc, char **argv) {
 
                         json chunk_index                = result.data.at("index");
                         json chunk_model                = result.data.at("model");
-                        size_t chunk_size               = 16 * 1024;
                         size_t chunk_sent               = 0;
                         size_t chunk_send               = b64_json.size() / chunk_size + 1;
                         float chunk_send_progress       = 0.0f;

@@ -48,7 +48,7 @@
         LOG_DBG("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
-using json         = nlohmann::json;
+using json = nlohmann::json;
 
 // https://community.openai.com/t/openai-chat-list-of-error-codes-and-types/357791/11
 enum error_type {
@@ -1050,6 +1050,9 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (height > params.max_height) {
             throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.max_height));
         }
+        if (width % 64 != 0 || height % 64 != 0) {
+            throw std::runtime_error("Illegal param: width and height must be multiples of 64");
+        }
         llama_params["width"]  = width;
         llama_params["height"] = height;
     }
@@ -1069,8 +1072,12 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         } else {
             if (body.at("stream_options").is_object()) {
                 llama_params["stream_options"] = body.at("stream_options");
-                if (!body.at("stream_options").contains("include_usage")) {
+                if (!llama_params["stream_options"].contains("include_usage")) {
                     llama_params["stream_options"]["include_usage"] = true;
+                }
+                if (json_value(llama_params["stream_options"], "chunk_result", false)) {
+                    llama_params["stream_options"]["chunk_result"] = true;
+                    llama_params["stream_options"]["chunk_size"]   = json_value(llama_params["stream_options"], "chunk_size", 4096);
                 }
             } else {
                 throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
@@ -1184,6 +1191,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         llama_params["stream_options"] = json{{"include_usage", json_value(body, "stream_options_include_usage", true)}};
         if (json_value(body, "stream_options_chunk_result", false)) {
             llama_params["stream_options"]["chunk_result"] = true;
+            llama_params["stream_options"]["chunk_size"]   = json_value(body, "stream_options_chunk_size", 4096);
         }
     }
 

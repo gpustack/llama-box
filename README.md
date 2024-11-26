@@ -643,7 +643,8 @@ The available endpoints for the LLaMA Box server mode are:
         "stream": true,
         "stream_options": {
           "include_usage": true, // return usage information
-          "chunk_result": true   // split the final image b64_json into chunks to avoid browser caching
+          "chunk_result": true,  // split the final image b64_json into chunks to avoid browser caching
+          "chunk_size": 4096     // split the final image b64_json into chunks with the given size, default 4k
         }
       }
       
@@ -672,7 +673,8 @@ The available endpoints for the LLaMA Box server mode are:
         "stream": true,
         "stream_options": {
           "include_usage": true, // return usage information
-          "chunk_result": true   // split the final image b64_json into chunks to avoid browser caching
+          "chunk_result": true,  // split the final image b64_json into chunks to avoid browser caching
+          "chunk_size": 4096     // split the final image b64_json into chunks with the given size, default 4k
         }
       }
       
@@ -702,6 +704,7 @@ The available endpoints for the LLaMA Box server mode are:
       stream=true
       stream_options_include_usage=true // return usage information
       stream_options_chunk_result=true  // split the final image b64_json into chunks to avoid browser caching
+      stream_options_chunk_size=4096    // split the final image b64_json into chunks with the given size, default 4k
       
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
@@ -731,6 +734,7 @@ The available endpoints for the LLaMA Box server mode are:
       stream=true
       stream_options_include_usage=true // return usage information
       stream_options_chunk_result=true  // split the final image b64_json into chunks to avoid browser caching
+      stream_options_chunk_size=4096    // split the final image b64_json into chunks with the given size, default 4k
 
       RESPONSE : (text/event-stream)
       CASE 1: correct input image

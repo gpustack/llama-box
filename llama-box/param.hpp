@@ -1676,6 +1676,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (bparams.sdparams.max_height < 256) {
                     invalid("--image-max-height");
                 }
+                if (bparams.sdparams.max_height % 64 != 0) {
+                    invalid("--image-max-height");
+                }
                 continue;
             }
 
@@ -1686,6 +1689,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg                  = argv[i++];
                 bparams.sdparams.max_width = std::stoi(std::string(arg));
                 if (bparams.sdparams.max_width < 256) {
+                    invalid("--image-max-width");
+                }
+                if (bparams.sdparams.max_width % 64 != 0) {
                     invalid("--image-max-width");
                 }
                 continue;

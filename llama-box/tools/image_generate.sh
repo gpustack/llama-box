@@ -124,7 +124,8 @@ image_generate() {
                   negative_prompt: $negative_prompt,
                   stream: true,
                   stream_options: {
-                    chunk_result: true
+                    chunk_result: true,
+                    chunk_size: 32768
                   }
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
@@ -142,7 +143,8 @@ image_generate() {
                   style: $style,
                   stream: true,
                   stream_options: {
-                    chunk_result: true
+                    chunk_result: true,
+                    chunk_size: 32768
                   }
                 } * .')"
     else
@@ -158,7 +160,8 @@ image_generate() {
                   quality: $quality,
                   stream: true,
                   stream_options: {
-                    chunk_result: true
+                    chunk_result: true,
+                    chunk_size: 32768
                   }
                 } * .')"
     fi
