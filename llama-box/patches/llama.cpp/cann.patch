@@ -411,7 +411,7 @@ index edfa4961..5164cb74 100644
      /**
       * @brief Destructor for cleaning up resources.
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index 77634088..a9a1cfb6 100644
+index d96f6593..3266c24f 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -122,6 +122,10 @@ static ggml_cann_device_info ggml_cann_init() {
@@ -724,9 +724,9 @@ index 77634088..a9a1cfb6 100644
 -                ggml_cann_set_device(i);
 +                ggml_backend_cann_context* dev_ctx = new ggml_backend_cann_context(i);
                  ggml_backend_dev_t dev = new ggml_backend_device {
-                     /* .interface = */ ggml_backend_cann_device_interface,
-                     /* .reg       = */ &reg,
-@@ -2090,17 +2095,12 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
+                     /* .iface   = */ ggml_backend_cann_device_interface,
+                     /* .reg     = */ &reg,
+@@ -2091,17 +2096,12 @@ ggml_backend_t ggml_backend_cann_init(int32_t device) {
          return nullptr;
      }
  

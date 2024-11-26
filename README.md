@@ -202,8 +202,9 @@ usage: llama-box [options]
 general:
 
   -h,    --help, --usage          print usage and exit
-         --version                show version and build info
-         --system-info            show system info
+         --version                print version and exit
+         --system-info            print system info and exit
+         --list-devices           print list of available devices and exit
   -v,    --verbose, --log-verbose 
                                   set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V
@@ -237,7 +238,11 @@ server:
 
 server/completion:
 
-  -ngl,  --gpu-layers N           number of layers to store in VRAM
+  -dev,  --device <dev1,dev2,...> 
+                                  comma-separated list of devices to use for offloading (none = don't offload)
+                                  use --list-devices to see a list of available devices
+  -ngl,  --gpu-layers,  --n-gpu-layers N
+                                  number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
                                     - layer (default): split layers and KV across GPUs
@@ -327,7 +332,7 @@ server/completion:
          --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
          --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
   -nkvo, --no-kv-offload          disable KV offload
-         --cache-prompt           enable caching prompt (default: disabled)
+         --cache-prompt           enable caching prompt (default: enabled)
          --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting, implicit --cache-prompt if value (default: 0)
   -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
@@ -354,9 +359,17 @@ server/completion:
 
 server/completion/speculative:
 
-         --draft N                number of tokens to draft for speculative decoding (default: 5)
+         --draft-max, --draft, --draft-n N
+                                  number of tokens to draft for speculative decoding (default: 16)
+         --draft-min, --draft-n-min N
+                                  minimum number of draft tokens to use for speculative decoding (default: 5)
+         --draft-p-min P          minimum speculative decoding probability (greedy) (default: 0.9)
   -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
-  -ngld, --gpu-layers-draft N     number of layers to store in VRAM for the draft model
+  -devd, --device-draft <dev1,dev2,...>
+                                  comma-separated list of devices to use for offloading the draft model (none = don't offload)
+                                  use --list-devices to see a list of available devices
+  -ngld, --gpu-layers-draft, --n-gpu-layers-draft N
+                                  number of layers to store in VRAM for the draft model
          --lookup-ngram-min N     minimum n-gram size for lookup cache (default: 0, 0 = disabled)
   -lcs,  --lookup-cache-static FILE
                                   path to static lookup cache to use for lookup decoding (not updated by generation)

@@ -1,5 +1,5 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 00171103..01eb35ae 100644
+index af5e686e..2d70ebcb 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -158,6 +158,7 @@ enum llm_arch {
@@ -42,7 +42,7 @@ index 00171103..01eb35ae 100644
              { LLM_TENSOR_ATTN_OUT,        "blk.%d.attn_output" },
              { LLM_TENSOR_LAYER_OUT_NORM,  "blk.%d.layer_output_norm" },
              { LLM_TENSOR_FFN_DOWN,        "blk.%d.ffn_down" },
-@@ -5608,6 +5627,17 @@ static void llm_load_hparams(
+@@ -5610,6 +5629,17 @@ static void llm_load_hparams(
                          model.type = e_model::MODEL_335M; break; // bge-large
                  }
              } break;
@@ -60,7 +60,7 @@ index 00171103..01eb35ae 100644
          case LLM_ARCH_JINA_BERT_V2:
              {
                  ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-@@ -7847,13 +7877,14 @@ static bool llm_load_tensors(
+@@ -7849,13 +7879,14 @@ static bool llm_load_tensors(
                      }
                  } break;
              case LLM_ARCH_BERT:
@@ -77,7 +77,7 @@ index 00171103..01eb35ae 100644
  
                          model.cls   = create_tensor(tn(LLM_TENSOR_CLS, "weight"), {n_embd, n_embd}, llama_model_loader::TENSOR_NOT_REQUIRED);
                          model.cls_b = create_tensor(tn(LLM_TENSOR_CLS, "bias"),   {n_embd},         llama_model_loader::TENSOR_NOT_REQUIRED);
-@@ -7868,8 +7899,8 @@ static bool llm_load_tensors(
+@@ -7870,8 +7901,8 @@ static bool llm_load_tensors(
                      for (int i = 0; i < n_layer; ++i) {
                          auto & layer = model.layers[i];
  
@@ -88,7 +88,7 @@ index 00171103..01eb35ae 100644
                              layer.bq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "bias", i),   {n_embd}, 0);
  
                              layer.wk = create_tensor(tn(LLM_TENSOR_ATTN_K,   "weight", i), {n_embd, n_embd_gqa}, 0);
-@@ -7879,6 +7910,7 @@ static bool llm_load_tensors(
+@@ -7881,6 +7912,7 @@ static bool llm_load_tensors(
                              layer.bv = create_tensor(tn(LLM_TENSOR_ATTN_V,   "bias", i),   {n_embd_gqa}, 0);
                          } else {
                              layer.wqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "weight", i), {n_embd, n_embd + 2*n_embd_gqa}, 0);
@@ -96,7 +96,7 @@ index 00171103..01eb35ae 100644
                          }
  
                          layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT,      "weight", i), {n_embd, n_embd}, 0);
-@@ -7886,12 +7918,16 @@ static bool llm_load_tensors(
+@@ -7888,12 +7920,16 @@ static bool llm_load_tensors(
                          layer.attn_out_norm   = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "weight", i), {n_embd}, 0);
                          layer.attn_out_norm_b = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "bias", i),   {n_embd}, 0);
  
@@ -116,7 +116,7 @@ index 00171103..01eb35ae 100644
                              layer.ffn_down_b = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd}, 0);
                          } else {
                              layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
-@@ -11691,7 +11727,7 @@ struct llm_build_context {
+@@ -11693,7 +11729,7 @@ struct llm_build_context {
          // token types are hardcoded to zero ("Sentence A")
          struct ggml_tensor * type_row0 = ggml_view_1d(ctx0, model.type_embd, n_embd, 0);
          inpL = ggml_add(ctx0, inpL, type_row0);
@@ -125,7 +125,7 @@ index 00171103..01eb35ae 100644
              inpL = ggml_add(ctx0, ggml_get_rows(ctx0, model.pos_embd, inp_pos), inpL);
          }
          cb(inpL, "inp_embd", -1);
-@@ -11712,7 +11748,7 @@ struct llm_build_context {
+@@ -11714,7 +11750,7 @@ struct llm_build_context {
              struct ggml_tensor * Vcur;
  
              // self-attention
@@ -134,7 +134,7 @@ index 00171103..01eb35ae 100644
                  Qcur = ggml_add(ctx0, llm_build_lora_mm(lctx, ctx0, model.layers[il].wq, cur), model.layers[il].bq);
                  cb(Qcur, "Qcur", il);
  
-@@ -11742,6 +11778,11 @@ struct llm_build_context {
+@@ -11744,6 +11780,11 @@ struct llm_build_context {
                  cur = llm_build_lora_mm(lctx, ctx0, model.layers[il].wqkv, cur);
                  cb(cur, "wqkv", il);
  
@@ -146,7 +146,7 @@ index 00171103..01eb35ae 100644
                  Qcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd,     n_tokens, cur->nb[1], 0*sizeof(float)*(n_embd)));
                  Kcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd)));
                  Vcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd + n_embd_gqa)));
-@@ -11827,6 +11868,13 @@ struct llm_build_context {
+@@ -11829,6 +11870,13 @@ struct llm_build_context {
                          model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
                          NULL,
                          LLM_FFN_GELU, LLM_FFN_SEQ, cb, il);
@@ -160,7 +160,7 @@ index 00171103..01eb35ae 100644
              } else if (model.arch == LLM_ARCH_JINA_BERT_V2) {
                  cur = llm_build_ffn(ctx0, lctx, cur,
                          model.layers[il].ffn_up,   NULL,                        NULL,
-@@ -16700,6 +16748,7 @@ static struct ggml_cgraph * llama_build_graph(
+@@ -16702,6 +16750,7 @@ static struct ggml_cgraph * llama_build_graph(
                  result = llm.build_refact();
              } break;
          case LLM_ARCH_BERT:
@@ -168,7 +168,7 @@ index 00171103..01eb35ae 100644
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
              {
-@@ -20064,6 +20113,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
+@@ -20078,6 +20127,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
          case LLM_ARCH_BERT:

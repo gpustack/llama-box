@@ -1217,7 +1217,7 @@ jobs:
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install Intel oneAPI SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
-            -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
+            -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel:intel.oneapi.win.dnnl:intel.oneapi.win.tbb.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
 
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify Intel oneAPI SDK"
           & 'C:\Program Files (x86)\Intel\oneAPI\*\bin\icx.exe' --version

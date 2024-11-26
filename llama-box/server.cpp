@@ -12,6 +12,7 @@
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/common/sampling.h"
+#include "llama.cpp/common/speculative.h"
 #include "llama.cpp/examples/llava/clip.h"
 #include "llama.cpp/examples/llava/llava.h"
 #include "llama.cpp/ggml/include/ggml.h"
@@ -98,7 +99,7 @@ struct server_task_result {
 
 struct slot_params {
     bool stream       = true;
-    bool cache_prompt = false; // remember the prompt to avoid reprocessing all prompt
+    bool cache_prompt = true; // remember the prompt to avoid reprocessing all prompt
 
     int32_t n_keep    = 0;  // number of tokens to keep from initial prompt
     int32_t n_discard = 0;  // number of tokens after n_keep that may be discarded when shifting context, 0 defaults to half
@@ -109,6 +110,8 @@ struct slot_params {
     int64_t t_max_predict_ms = -1; // if positive, limit the generation phase to this time limit
 
     std::vector<std::string> antiprompt;
+
+    struct common_params_sampling sampling;
 };
 
 struct server_slot {
@@ -119,6 +122,8 @@ struct server_slot {
     size_t index = 0;
 
     slot_state state = SLOT_STATE_IDLE;
+
+    struct slot_params params;
 
     /* STABLE DIFFUSION */
 
@@ -143,8 +148,6 @@ struct server_slot {
     // input prompt tokens
     llama_tokens prompt_tokens;
     json prompt; // original prompt NB(thxCode): for chat vision
-
-    struct slot_params params;
 
     // used to determine the slot that has been used the longest
     int64_t t_last_used = -1;
@@ -187,7 +190,6 @@ struct server_slot {
 
     json json_schema;
 
-    struct common_sampler_params sparams;
     struct common_sampler *smpl = nullptr;
 
     // stats
@@ -281,7 +283,7 @@ struct server_slot {
         lookup_ngram_min = 0;
     }
 
-    bool has_budget(common_params &global_params) {
+    bool has_budget(const common_params &global_params) {
         if (params.n_predict == -1 && global_params.n_predict == -1) {
             return true; // limitless
         }
@@ -408,11 +410,11 @@ struct server_slot {
 
         result.toks.push_back(tok);
 
-        if (sparams.n_probs > 0) {
+        if (params.sampling.n_probs > 0) {
             result.probss.emplace_back();
             const auto last_idx                 = int32_t(result.probss.size() - 1);
             const llama_token_data_array *cur_p = common_sampler_get_candidates(smpl);
-            for (size_t i = 0; i < (size_t)sparams.n_probs; ++i) {
+            for (size_t i = 0; i < (size_t)params.sampling.n_probs; ++i) {
                 result.probss[last_idx].push_back({
                     cur_p->data[i].id,
                     i >= cur_p->size ? 0.0f : cur_p->data[i].p,
@@ -709,7 +711,7 @@ struct server_response {
 };
 
 struct server_context {
-    common_params params;
+    common_params params_base;
 
     /* STABLE DIFFUSION */
 
@@ -808,7 +810,9 @@ struct server_context {
     }
 
     bool load_model(llama_box_params &bparams) {
-        params = bparams.gparams;
+        SRV_INF("loading model '%s'\n", params_base.model.c_str());
+
+        params_base = bparams.gparams;
 
         /* STABLE DIFFUSION */
 
@@ -843,60 +847,62 @@ struct server_context {
         /* LLAMA */
 
         // load multimodal projection model
-        if (!params.mmproj.empty()) {
-            if (params.n_ctx < 2048) {
+        if (!params_base.mmproj.empty()) {
+            if (params_base.n_ctx < 2048) {
                 SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
-                params.n_ctx = 2048;
+                params_base.n_ctx = 2048;
             }
-            ctx_clip = clip_model_load(params.mmproj.c_str(), /* verbosity */ 1);
+            ctx_clip = clip_model_load(params_base.mmproj.c_str(), /* verbosity */ 1);
             if (ctx_clip == nullptr) {
-                SRV_ERR("failed to load multimodal project model, '%s'\n", params.mmproj.c_str());
+                SRV_ERR("failed to load multimodal project model, '%s'\n", params_base.mmproj.c_str());
                 return false;
             }
         }
 
         // load the draft model if needed
-        if (!params.model_draft.empty() && params.n_draft > 0) {
-            common_params params_draft   = params;
-            params_draft.model           = params.model_draft;
-            params_draft.n_gpu_layers    = params.n_gpu_layers_draft;
-            params_draft.cpuparams       = params.draft_cpuparams;
-            params_draft.cpuparams_batch = params.draft_cpuparams_batch;
+        if (!params_base.speculative.model.empty() && params_base.speculative.n_max > 0) {
+            SRV_INF("loading draft model '%s'\n", params_base.speculative.model.c_str());
+
+            common_params params_draft   = params_base;
+            params_draft.model           = params_base.speculative.model;
+            params_draft.n_gpu_layers    = params_base.speculative.n_gpu_layers;
+            params_draft.cpuparams       = params_base.speculative.cpuparams;
+            params_draft.cpuparams_batch = params_base.speculative.cpuparams_batch;
             params_draft.warmup          = false;
             common_init_result ir        = common_init_from_params(params_draft);
             model_draft                  = ir.model;
             ctx_draft                    = ir.context;
             if (model_draft == nullptr) {
-                SRV_ERR("failed to load draft model, '%s'\n", params.model_draft.c_str());
+                SRV_ERR("failed to load draft model, '%s'\n", params_base.speculative.model.c_str());
                 return false;
             }
         }
 
         // load the ngram cache if needed
         if (bparams.lookup_ngram_min > 0) {
-            if (!params.lookup_cache_static.empty()) {
+            if (!params_base.lookup_cache_static.empty()) {
                 try {
-                    ngram_cache_static = common_ngram_cache_load(params.lookup_cache_static);
+                    ngram_cache_static = common_ngram_cache_load(params_base.lookup_cache_static);
                 } catch (std::ifstream::failure const &) {
-                    SRV_ERR("failed to load static ngram cache, '%s'\n", params.lookup_cache_static.c_str());
+                    SRV_ERR("failed to load static ngram cache, '%s'\n", params_base.lookup_cache_static.c_str());
                     return false;
                 }
             }
-            if (!params.lookup_cache_dynamic.empty()) {
+            if (!params_base.lookup_cache_dynamic.empty()) {
                 try {
-                    ngram_cache_dynamic = common_ngram_cache_load(params.lookup_cache_dynamic);
+                    ngram_cache_dynamic = common_ngram_cache_load(params_base.lookup_cache_dynamic);
                 } catch (std::ifstream::failure const &) {
                     // NOP
                 }
             }
         }
 
-        common_init_result ir = common_init_from_params(params);
+        common_init_result ir = common_init_from_params(params_base);
         model                 = ir.model;
         ctx                   = ir.context;
         lora_adapters         = ir.lora_adapters;
         if (model == nullptr) {
-            SRV_ERR("failed to load model, '%s'\n", params.model.c_str());
+            SRV_ERR("failed to load model, '%s'\n", params_base.model.c_str());
             return false;
         }
 
@@ -938,9 +944,9 @@ struct server_context {
         // sample tokens per second
         if (n_tps < 0) {
             SRV_INF("%s", "sampling tokens per second, this will take some time...\n");
-            const int32_t n_check            = std::min(n_ctx, params.n_ubatch);
+            const int32_t n_check            = std::min(n_ctx, params_base.n_ubatch);
             llama_tokens check_prompt_tokens = {llama_token_bos(model)};
-            common_sampler *check_smpl       = common_sampler_init(model, params.sparams);
+            common_sampler *check_smpl       = common_sampler_init(model, params_base.sampling);
             int64_t t_start_decoding         = ggml_time_us();
             int32_t n_check_decoded          = 0;
             while (true) {
@@ -969,14 +975,14 @@ struct server_context {
 
         // thread pool
         {
-            struct ggml_threadpool_params tpp = ggml_threadpool_params_from_cpu_params(params.cpuparams);
+            struct ggml_threadpool_params tpp = ggml_threadpool_params_from_cpu_params(params_base.cpuparams);
             threadpool                        = ggml_threadpool_new(&tpp);
             if (!threadpool) {
                 SRV_ERR("threadpool create failed : n_threads %d\n", tpp.n_threads);
                 return false;
             }
 
-            struct ggml_threadpool_params tpp_batch = ggml_threadpool_params_from_cpu_params(params.cpuparams_batch);
+            struct ggml_threadpool_params tpp_batch = ggml_threadpool_params_from_cpu_params(params_base.cpuparams_batch);
             threadpool_batch                        = ggml_threadpool_new(&tpp_batch);
             if (!threadpool_batch) {
                 SRV_ERR("threadpool_batch create failed : n_threads %d\n", tpp_batch.n_threads);
@@ -1005,15 +1011,15 @@ struct server_context {
     }
 
     bool init() {
-        SRV_INF("initializing slots, n_slots = %d\n", params.n_parallel);
+        SRV_INF("initializing slots, n_slots = %d\n", params_base.n_parallel);
 
-        const int32_t n_ctx_slot = n_ctx / params.n_parallel;
-        for (int i = 0; i < params.n_parallel; i++) {
+        const int32_t n_ctx_slot = n_ctx / params_base.n_parallel;
+        for (int i = 0; i < params_base.n_parallel; i++) {
             server_slot slot;
 
             slot.id        = i;
             slot.n_ctx     = n_ctx_slot;
-            slot.n_predict = params.n_predict;
+            slot.n_predict = params_base.n_predict;
 
             SLT_INF(slot, "new slot n_ctx_slot = %d\n", slot.n_ctx);
 
@@ -1032,9 +1038,9 @@ struct server_context {
         // attention models such as BERT where the KV cache is not used)
         if (ctx != nullptr) {
             const auto n_batch = int32_t(llama_n_batch(ctx));
-            batch              = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
+            batch              = llama_batch_init(std::max(n_batch, params_base.n_parallel), 0, 1);
             if (ctx_draft != nullptr) {
-                batch_draft = llama_batch_init(std::max(n_batch, params.n_parallel), 0, 1);
+                batch_draft = llama_batch_init(std::max(n_batch, params_base.n_parallel), 0, 1);
             }
         }
 
@@ -1044,8 +1050,8 @@ struct server_context {
 
     void clean(httplib::Server &svr) {
         svr.stop();
-        if (lookup_ngram_min > 0 && !params.lookup_cache_dynamic.empty()) {
-            common_ngram_cache_save(ngram_cache_dynamic, params.lookup_cache_dynamic);
+        if (lookup_ngram_min > 0 && !params_base.lookup_cache_dynamic.empty()) {
+            common_ngram_cache_save(ngram_cache_dynamic, params_base.lookup_cache_dynamic);
         }
         llama_backend_free();
     }
@@ -1080,7 +1086,7 @@ struct server_context {
                 }
 
                 // length of the Longest Common Subsequence between the current slot's prompt and the input prompt
-                int cur_lcs_len = int32_t(longest_common_subsequence(slot.cache_tokens, task.prompt_tokens));
+                int cur_lcs_len = int32_t(common_lcs(slot.cache_tokens, task.prompt_tokens));
 
                 // fraction of the common subsequence length compared to the current slot's prompt length
                 float cur_similarity = static_cast<float>(cur_lcs_len) / static_cast<float>(slot.cache_tokens.size());
@@ -1123,8 +1129,11 @@ struct server_context {
     }
 
     bool launch_slot_with_task(server_slot &slot, const server_task &task) {
-        common_sampler_params sparams = params.sparams;
-        const json &data              = task.data;
+        // Sampling parameter defaults are loaded from the global server context (but individual requests can still override them)
+        slot_params defaults;
+        defaults.sampling = params_base.sampling;
+
+        const json &data = task.data;
 
         /* STABLE DIFFUSION */
 
@@ -1133,7 +1142,7 @@ struct server_context {
             slot.oaicompat_image_generate = json_value(data, "__oaicompat_image_generate", false);
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
 
-            slot.sdsparams.seed            = json_value(data, "seed", sparams.seed);
+            slot.sdsparams.seed            = json_value(data, "seed", defaults.sampling.seed);
             slot.sdsparams.height          = json_value(data, "height", 512);
             slot.sdsparams.width           = json_value(data, "width", 512);
             slot.sdsparams.sampler         = json_value(data, "sampler", sdparams.sampler);
@@ -1275,37 +1284,42 @@ struct server_context {
 
         slot.params.stream       = json_value(data, "stream", false);
         slot.params.cache_prompt = json_value(data, "cache_prompt", cache_prompt);
-        slot.params.n_predict    = json_value(data, "n_predict", params.n_predict);
+        slot.params.n_predict    = json_value(data, "n_predict", params_base.n_predict);
         slot.params.n_indent     = json_value(data, "n_indent", 0);
-        slot.params.n_keep       = json_value(data, "n_keep", params.n_keep);
+        slot.params.n_keep       = json_value(data, "n_keep", params_base.n_keep);
         slot.params.n_discard    = json_value(data, "n_discard", 0);
-
-        slot.sparams.top_k              = json_value(data, "top_k", sparams.top_k);
-        slot.sparams.top_p              = json_value(data, "top_p", sparams.top_p);
-        slot.sparams.min_p              = json_value(data, "min_p", sparams.min_p);
-        slot.sparams.xtc_probability    = json_value(data, "xtc_probability", sparams.xtc_probability);
-        slot.sparams.xtc_threshold      = json_value(data, "xtc_threshold", sparams.xtc_threshold);
-        slot.sparams.typ_p              = json_value(data, "typical_p", sparams.typ_p);
-        slot.sparams.temp               = json_value(data, "temperature", sparams.temp);
-        slot.sparams.dynatemp_range     = json_value(data, "dynatemp_range", sparams.dynatemp_range);
-        slot.sparams.dynatemp_exponent  = json_value(data, "dynatemp_exponent", sparams.dynatemp_exponent);
-        slot.sparams.penalty_last_n     = json_value(data, "repeat_last_n", sparams.penalty_last_n);
-        slot.sparams.penalty_repeat     = json_value(data, "repeat_penalty", sparams.penalty_repeat);
-        slot.sparams.penalty_freq       = json_value(data, "frequency_penalty", sparams.penalty_freq);
-        slot.sparams.penalty_present    = json_value(data, "presence_penalty", sparams.penalty_present);
-        slot.sparams.dry_multiplier     = json_value(data, "dry_multiplier", sparams.dry_multiplier);
-        slot.sparams.dry_base           = json_value(data, "dry_base", sparams.dry_base);
-        slot.sparams.dry_allowed_length = json_value(data, "dry_allowed_length", sparams.dry_allowed_length);
-        slot.sparams.dry_penalty_last_n = json_value(data, "dry_penalty_last_n", sparams.dry_penalty_last_n);
-        slot.sparams.mirostat           = json_value(data, "mirostat", sparams.mirostat);
-        slot.sparams.mirostat_tau       = json_value(data, "mirostat_tau", sparams.mirostat_tau);
-        slot.sparams.mirostat_eta       = json_value(data, "mirostat_eta", sparams.mirostat_eta);
-        slot.sparams.penalize_nl        = json_value(data, "penalize_nl", sparams.penalize_nl);
-        slot.sparams.seed               = json_value(data, "seed", sparams.seed);
-        slot.sparams.n_probs            = json_value(data, "n_probs", sparams.n_probs);
-        slot.sparams.min_keep           = json_value(data, "min_keep", sparams.min_keep);
         // slot.params.t_max_prompt_ms    = json_value(data, "t_max_prompt_ms",   -1); // TODO: implement
         slot.params.t_max_predict_ms = json_value(data, "t_max_predict_ms", -1);
+
+        slot.params.sampling.top_k              = json_value(data, "top_k", defaults.sampling.top_k);
+        slot.params.sampling.top_p              = json_value(data, "top_p", defaults.sampling.top_p);
+        slot.params.sampling.min_p              = json_value(data, "min_p", defaults.sampling.min_p);
+        slot.params.sampling.xtc_probability    = json_value(data, "xtc_probability", defaults.sampling.xtc_probability);
+        slot.params.sampling.xtc_threshold      = json_value(data, "xtc_threshold", defaults.sampling.xtc_threshold);
+        slot.params.sampling.typ_p              = json_value(data, "typical_p", defaults.sampling.typ_p);
+        slot.params.sampling.temp               = json_value(data, "temperature", defaults.sampling.temp);
+        slot.params.sampling.dynatemp_range     = json_value(data, "dynatemp_range", defaults.sampling.dynatemp_range);
+        slot.params.sampling.dynatemp_exponent  = json_value(data, "dynatemp_exponent", defaults.sampling.dynatemp_exponent);
+        slot.params.sampling.penalty_last_n     = json_value(data, "repeat_last_n", defaults.sampling.penalty_last_n);
+        slot.params.sampling.penalty_repeat     = json_value(data, "repeat_penalty", defaults.sampling.penalty_repeat);
+        slot.params.sampling.penalty_freq       = json_value(data, "frequency_penalty", defaults.sampling.penalty_freq);
+        slot.params.sampling.penalty_present    = json_value(data, "presence_penalty", defaults.sampling.penalty_present);
+        slot.params.sampling.dry_multiplier     = json_value(data, "dry_multiplier", defaults.sampling.dry_multiplier);
+        slot.params.sampling.dry_base           = json_value(data, "dry_base", defaults.sampling.dry_base);
+        slot.params.sampling.dry_allowed_length = json_value(data, "dry_allowed_length", defaults.sampling.dry_allowed_length);
+        slot.params.sampling.dry_penalty_last_n = json_value(data, "dry_penalty_last_n", defaults.sampling.dry_penalty_last_n);
+        slot.params.sampling.mirostat           = json_value(data, "mirostat", defaults.sampling.mirostat);
+        slot.params.sampling.mirostat_tau       = json_value(data, "mirostat_tau", defaults.sampling.mirostat_tau);
+        slot.params.sampling.mirostat_eta       = json_value(data, "mirostat_eta", defaults.sampling.mirostat_eta);
+        slot.params.sampling.penalize_nl        = json_value(data, "penalize_nl", defaults.sampling.penalize_nl);
+        slot.params.sampling.seed               = json_value(data, "seed", defaults.sampling.seed);
+        slot.params.sampling.n_probs            = json_value(data, "n_probs", defaults.sampling.n_probs);
+        slot.params.sampling.min_keep           = json_value(data, "min_keep", defaults.sampling.min_keep);
+
+        // process "sampling" parameters
+        if (slot.params.sampling.dry_base < 1.0f) {
+            slot.params.sampling.dry_base = defaults.sampling.dry_base;
+        }
 
         // process "json_schema" and "grammar"
         if (data.contains("json_schema") && !data.at("json_schema").is_null() && data.contains("grammar") && !data.at("grammar").is_null()) {
@@ -1317,14 +1331,14 @@ struct server_context {
         }
         if (data.contains("json_schema") && !data.contains("grammar")) {
             try {
-                auto schema          = json_value(data, "json_schema", json::object());
-                slot.sparams.grammar = json_schema_to_grammar(schema);
+                auto schema                  = json_value(data, "json_schema", json::object());
+                slot.params.sampling.grammar = json_schema_to_grammar(schema);
             } catch (const std::exception &e) {
                 send_error(task, std::string("\"json_schema\": ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
                 return false;
             }
         } else {
-            slot.sparams.grammar = json_value(data, "grammar", sparams.grammar);
+            slot.params.sampling.grammar = json_value(data, "grammar", defaults.sampling.grammar);
         }
 
         // process "n_predict"
@@ -1345,10 +1359,10 @@ struct server_context {
         }
 
         {
-            slot.sparams.logit_bias.clear();
+            slot.params.sampling.logit_bias.clear();
 
             if (json_value(data, "ignore_eos", false)) {
-                slot.sparams.logit_bias.push_back({llama_token_eos(model), -INFINITY});
+                slot.params.sampling.logit_bias.push_back({llama_token_eos(model), -INFINITY});
             }
 
             const auto &logit_bias = data.find("logit_bias");
@@ -1370,12 +1384,12 @@ struct server_context {
                         if (el[0].is_number_integer()) {
                             llama_token tok = el[0].get<llama_token>();
                             if (tok >= 0 && tok < n_vocab) {
-                                slot.sparams.logit_bias.push_back({tok, bias});
+                                slot.params.sampling.logit_bias.push_back({tok, bias});
                             }
                         } else if (el[0].is_string()) {
                             auto toks = common_tokenize(model, el[0].get<std::string>(), false);
                             for (auto tok : toks) {
-                                slot.sparams.logit_bias.push_back({tok, bias});
+                                slot.params.sampling.logit_bias.push_back({tok, bias});
                             }
                         }
                     }
@@ -1406,16 +1420,16 @@ struct server_context {
                             sampler_names.emplace_back(name);
                         }
                     }
-                    slot.sparams.samplers = common_sampler_types_from_names(sampler_names, false);
+                    slot.params.sampling.samplers = common_sampler_types_from_names(sampler_names, false);
                 } else if (samplers->is_string()) {
                     std::string sampler_string;
                     for (const auto &name : *samplers) {
                         sampler_string += name;
                     }
-                    slot.sparams.samplers = common_sampler_types_from_chars(sampler_string);
+                    slot.params.sampling.samplers = common_sampler_types_from_chars(sampler_string);
                 }
             } else {
-                slot.sparams.samplers = sparams.samplers;
+                slot.params.sampling.samplers = params_base.sampling.samplers;
             }
         }
 
@@ -1424,7 +1438,7 @@ struct server_context {
                 common_sampler_free(slot.smpl);
             }
 
-            slot.smpl = common_sampler_init(model, slot.sparams);
+            slot.smpl = common_sampler_init(model, slot.params.sampling);
             if (slot.smpl == nullptr) {
                 // for now, the only error that may happen here is invalid
                 // grammar
@@ -1437,7 +1451,7 @@ struct server_context {
                     common_sampler_free(slot.smpl_draft);
                 }
 
-                slot.smpl_draft = common_sampler_init(model_draft, slot.sparams);
+                slot.smpl_draft = common_sampler_init(model_draft, slot.params.sampling);
                 if (slot.smpl_draft == nullptr) {
                     // for now, the only error that may happen here is invalid
                     // grammar
@@ -1476,8 +1490,8 @@ struct server_context {
                 slot.ctx_ngram_cache.clear();
                 const auto sz_ngram_cache = int32_t(ngram_cache_dynamic.size());
                 if (sz_ngram_cache >= 100000) {
-                    if (!params.lookup_cache_dynamic.empty()) {
-                        common_ngram_cache_save(ngram_cache_dynamic, params.lookup_cache_dynamic);
+                    if (!params_base.lookup_cache_dynamic.empty()) {
+                        common_ngram_cache_save(ngram_cache_dynamic, params_base.lookup_cache_dynamic);
                     }
                     // shuffle the keys to avoid always using the same ngrams
                     std::vector<common_ngram> keys;
@@ -1509,7 +1523,7 @@ struct server_context {
         slot.sampled.clear();
         std::string token_str;
         for (const llama_token &tok : result.toks) {
-            token_str += common_token_to_piece(ctx, tok, params.special);
+            token_str += common_token_to_piece(ctx, tok, params_base.special);
             slot.sampled.push_back(tok);
         }
 
@@ -1573,7 +1587,7 @@ struct server_context {
         }
 
         // check the limits
-        if (slot.n_decoded > 0 && slot.has_next_token && !slot.has_budget(params)) {
+        if (slot.n_decoded > 0 && slot.has_next_token && !slot.has_budget(params_base)) {
             slot.stopped_limit  = true;
             slot.has_next_token = false;
 
@@ -1629,7 +1643,7 @@ struct server_context {
         }
 
         // if context shift is disabled, we stop when it reaches the context limit
-        if (!params.ctx_shift && slot.n_past >= slot.n_ctx) {
+        if (!params_base.ctx_shift && slot.n_past >= slot.n_ctx) {
             slot.truncated      = true;
             slot.stopped_limit  = true;
             slot.has_next_token = false;
@@ -1665,8 +1679,8 @@ struct server_context {
 
     json get_formated_generation(const server_slot &slot) const {
         std::vector<std::string> samplers;
-        samplers.reserve(slot.sparams.samplers.size());
-        for (const auto &sampler : slot.sparams.samplers) {
+        samplers.reserve(slot.params.sampling.samplers.size());
+        for (const auto &sampler : slot.params.sampling.samplers) {
             samplers.emplace_back(common_sampler_type_to_str(sampler));
         }
 
@@ -1674,8 +1688,8 @@ struct server_context {
 
         if (sd_ctx != nullptr) {
             return json{
-                {"model", params.model_alias},
-                {"seed", slot.sparams.seed},
+                {"model", params_base.model_alias},
+                {"seed", slot.params.sampling.seed},
                 {"seed_cur", slot.sdsparams.seed},
                 {"max_batch_count", sdparams.max_batch_count},
                 {"max_height", sdparams.max_height},
@@ -1706,36 +1720,37 @@ struct server_context {
         return json{
             {"n_ctx", slot.n_ctx},
             {"n_predict", slot.n_predict}, // Server configured n_predict
-            {"model", params.model_alias},
-            {"seed", slot.sparams.seed},
+            {"model", params_base.model_alias},
+            {"seed", slot.params.sampling.seed},
             {"seed_cur", slot.smpl ? common_sampler_get_seed(slot.smpl) : 0},
-            {"temperature", slot.sparams.temp},
-            {"dynatemp_range", slot.sparams.dynatemp_range},
-            {"dynatemp_exponent", slot.sparams.dynatemp_exponent},
-            {"top_k", slot.sparams.top_k},
-            {"top_p", slot.sparams.top_p},
-            {"min_p", slot.sparams.min_p},
-            {"xtc_probability", slot.sparams.xtc_probability},
-            {"xtc_threshold", slot.sparams.xtc_threshold},
-            {"typical_p", slot.sparams.typ_p},
-            {"repeat_last_n", slot.sparams.penalty_last_n},
-            {"repeat_penalty", slot.sparams.penalty_repeat},
-            {"presence_penalty", slot.sparams.penalty_present},
-            {"frequency_penalty", slot.sparams.penalty_freq},
-            {"mirostat", slot.sparams.mirostat},
-            {"mirostat_tau", slot.sparams.mirostat_tau},
-            {"mirostat_eta", slot.sparams.mirostat_eta},
-            {"penalize_nl", slot.sparams.penalize_nl},
+            {"temperature", slot.params.sampling.temp},
+            {"dynatemp_range", slot.params.sampling.dynatemp_range},
+            {"dynatemp_exponent", slot.params.sampling.dynatemp_exponent},
+            {"top_k", slot.params.sampling.top_k},
+            {"top_p", slot.params.sampling.top_p},
+            {"min_p", slot.params.sampling.min_p},
+            {"xtc_probability", slot.params.sampling.xtc_probability},
+            {"xtc_threshold", slot.params.sampling.xtc_threshold},
+            {"typical_p", slot.params.sampling.typ_p},
+            {"repeat_last_n", slot.params.sampling.penalty_last_n},
+            {"repeat_penalty", slot.params.sampling.penalty_repeat},
+            {"presence_penalty", slot.params.sampling.penalty_present},
+            {"frequency_penalty", slot.params.sampling.penalty_freq},
+            {"mirostat", slot.params.sampling.mirostat},
+            {"mirostat_tau", slot.params.sampling.mirostat_tau},
+            {"mirostat_eta", slot.params.sampling.mirostat_eta},
+            {"penalize_nl", slot.params.sampling.penalize_nl},
             {"stop", slot.params.antiprompt},
             {"max_tokens", slot.params.n_predict}, // User configured n_predict
             {"n_keep", slot.params.n_keep},
             {"n_discard", slot.params.n_discard},
-            {"ignore_eos", slot.sparams.ignore_eos},
+            {"ignore_eos", slot.params.sampling.ignore_eos},
             {"stream", slot.params.stream},
-            {"n_probs", slot.sparams.n_probs},
-            {"min_keep", slot.sparams.min_keep},
-            {"grammar", slot.sparams.grammar},
+            {"n_probs", slot.params.sampling.n_probs},
+            {"min_keep", slot.params.sampling.min_keep},
+            {"grammar", slot.params.sampling.grammar},
             {"samplers", samplers},
+            {"speculative", ctx_draft != nullptr},
         };
     }
 
@@ -1769,10 +1784,10 @@ struct server_context {
              {"id_slot", slot.id},
              {"index", slot.index},
              {"stop", false},
-             {"model", params.model_alias},
+             {"model", params_base.model_alias},
         };
 
-        if (slot.sparams.n_probs > 0) {
+        if (slot.params.sampling.n_probs > 0) {
             const llama_tokens to_send_toks = common_tokenize(ctx, tkn.text_to_send, false);
             const size_t probs_pos          = std::min(slot.n_sent_token_probs, slot.generated_token_probs.size());
             const size_t probs_stop_pos     = std::min(slot.n_sent_token_probs + to_send_toks.size(), slot.generated_token_probs.size());
@@ -1800,7 +1815,7 @@ struct server_context {
              {"id_slot", slot.id},
              {"index", slot.index},
              {"stop", true},
-             {"model", params.model_alias},
+             {"model", params_base.model_alias},
              {"tokens_predicted", slot.n_decoded},
              {"tokens_evaluated", slot.n_prompt_tokens},
              {"tokens_cached", slot.n_past},
@@ -1814,7 +1829,7 @@ struct server_context {
              {"timings", slot.get_formated_timings()},
         };
 
-        if (slot.sparams.n_probs > 0) {
+        if (slot.params.sampling.n_probs > 0) {
             std::vector<completion_token_output> probs;
             if (!slot.params.stream && slot.stopped_word) {
                 const llama_tokens stop_word_toks = common_tokenize(ctx, slot.stopping_word, false);
@@ -1924,7 +1939,7 @@ struct server_context {
              {"progress_steps", total_steps},
              {"progress", float(progressed_steps) / float(total_steps) * 100},
              {"stop", res.stop},
-             {"model", params.model_alias},
+             {"model", params_base.model_alias},
         };
 
         if (res.stop) {
@@ -1962,7 +1977,7 @@ struct server_context {
             SRV_DBG("creating multi-image tasks, batch_count = %d\n", batch_count);
             for (int i = 0; i < batch_count; i++) {
                 data["index"] = i;
-                data["seed"]  = json_value(data, "seed", int64_t(params.sparams.seed)) + i;
+                data["seed"]  = json_value(data, "seed", int64_t(params_base.sampling.seed)) + i;
                 create_task(data, empty_tokens, tps);
             }
 
@@ -1992,10 +2007,16 @@ struct server_context {
                     SRV_DBG("creating infill tasks, n_prompts = %d\n", (int)tokenized_prompts.size());
                     for (size_t i = 0; i < tokenized_prompts.size(); i++) {
                         data["index"] = i;
-                        auto tokens   = format_infill(ctx, data.at("input_prefix"), data.at("input_suffix"), data.at("input_extra"), params.n_batch,
-                                                      params.n_predict,
-                                                      slots[0].n_ctx, // TODO: there should be a better way
-                                                      params.spm_infill, tokenized_prompts[i]);
+                        auto tokens   = format_infill(
+                            ctx,
+                            data.at("input_prefix"),
+                            data.at("input_suffix"),
+                            data.at("input_extra"),
+                            params_base.n_batch,
+                            params_base.n_predict,
+                            slots[0].n_ctx, // TODO: there should be a better way
+                            params_base.spm_infill,
+                            tokenized_prompts[i]);
                         create_task(data, tokens, tps);
                     }
                 } break;
@@ -2270,11 +2291,7 @@ struct server_context {
                     llama_state_seq_load_file(ctx, filepath.c_str(), slot->id, slot->cache_tokens.data(), slot->cache_tokens.size(), &token_count);
                 if (nread == 0) {
                     slot->cache_tokens.resize(0);
-                    send_error(task,
-                               "Unable to restore slot, no available space in KV "
-                               "cache or invalid slot "
-                               "save file",
-                               ERROR_TYPE_INVALID_REQUEST);
+                    send_error(task, "Unable to restore slot, no available space in KV cache or invalid slot save file", ERROR_TYPE_INVALID_REQUEST);
                     break;
                 }
                 slot->cache_tokens.resize(token_count);
@@ -2445,7 +2462,7 @@ struct server_context {
         // TODO: simplify and improve
         for (server_slot &slot : slots) {
             if (slot.is_processing() && slot.n_past + 1 >= slot.n_ctx) {
-                if (!params.ctx_shift) {
+                if (!params_base.ctx_shift) {
                     // this check is redundant (for good)
                     // we should never get here, because generation should already stopped in
                     // process_token()
@@ -2533,7 +2550,7 @@ struct server_context {
         int32_t batch_type = batch.n_tokens > 0 ? 0 : -1;
 
         // next, batch any pending prompts without exceeding n_batch
-        if (params.cont_batching || batch.n_tokens == 0) {
+        if (params_base.cont_batching || batch.n_tokens == 0) {
             for (auto &slot : slots) {
                 // this slot still has a prompt to be processed
                 if (slot.state == SLOT_STATE_PROCESSING_PROMPT || slot.state == SLOT_STATE_STARTED) {
@@ -2571,7 +2588,7 @@ struct server_context {
                                 continue;
                             }
                         } else {
-                            if (!params.ctx_shift) {
+                            if (!params_base.ctx_shift) {
                                 // if context shift is disabled, we make sure prompt size is smaller than KV size
                                 // TODO: there should be a separate parameter that control prompt truncation
                                 //       context shift should be applied only during the generation phase
@@ -2616,14 +2633,14 @@ struct server_context {
                             if (slot.params.cache_prompt && !slot.cache_tokens.empty()) {
                                 // reuse any previously computed tokens that are
                                 // common with the new prompt
-                                slot.n_past = int32_t(longest_common_prefix(slot.cache_tokens, prompt_tokens));
+                                slot.n_past = int32_t(common_lcp(slot.cache_tokens, prompt_tokens));
 
                                 // reuse chunks from the cached prompt by shifting their KV cache in the new position
-                                if (params.n_cache_reuse > 0 && slot.n_past > 0) {
+                                if (params_base.n_cache_reuse > 0 && slot.n_past > 0) {
                                     size_t head_c = slot.n_past; // cache
                                     size_t head_p = slot.n_past; // current prompt
 
-                                    SLT_DBG(slot, "trying to reuse chunks with size > %d, slot.n_past = %d\n", params.n_cache_reuse, slot.n_past);
+                                    SLT_DBG(slot, "trying to reuse chunks with size > %d, slot.n_past = %d\n", params_base.n_cache_reuse, slot.n_past);
 
                                     while (head_c < slot.cache_tokens.size() && head_p < prompt_tokens.size()) {
                                         size_t n_match = 0;
@@ -2632,7 +2649,7 @@ struct server_context {
                                             n_match++;
                                         }
 
-                                        if (n_match >= (size_t)params.n_cache_reuse) {
+                                        if (n_match >= (size_t)params_base.n_cache_reuse) {
                                             SLT_INF(slot, "reusing chunk with size %zu, shifting KV cache [%zu, %zu) -> [%zu, %zu)\n", n_match,
                                                     head_c, head_c + n_match, head_p, head_p + n_match);
                                             // for (size_t i = head_p; i < head_p + n_match; i++) {
@@ -2878,8 +2895,9 @@ struct server_context {
                     // +1 to allow for the last token to be generated
                     for (int32_t j = 0; j < sz_draft + 1; ++j) {
                         // greedy verification only
-                        bool accept = false;
-                        tok         = common_sampler_sample(slot.smpl, ctx, slot.i_batch - i + j);
+                        bool accept       = false;
+                        tok               = common_sampler_sample(slot.smpl, ctx, slot.i_batch - i + j);
+                        const auto *cur_p = common_sampler_get_candidates(slot.smpl);
                         common_sampler_accept(slot.smpl, tok, true);
                         slot.push_token_into_result(tok, result);
                         if (j < sz_draft && tok == slot.sampled_draft[j]) {
@@ -2920,7 +2938,7 @@ struct server_context {
                     }
                     slot.n_drafted += 1;
 
-                    for (int32_t j = 0; j < params.n_draft; ++j) {
+                    for (int32_t j = 0; j < params_base.speculative.n_max; ++j) {
                         llama_token tok = common_sampler_sample(slot.smpl_draft, ctx_draft, 0);
                         slot.sampled_draft.push_back(tok);
                         common_sampler_accept(slot.smpl_draft, tok, true);
@@ -2941,7 +2959,7 @@ struct server_context {
                     slot.sampled_draft.clear();
 
                     slot.sampled_draft.push_back(result.toks[result.toks.size() - 1]);
-                    common_ngram_cache_draft(slot.prompt_tokens, slot.sampled_draft, params.n_draft, lookup_ngram_min, LLAMA_NGRAM_MAX,
+                    common_ngram_cache_draft(slot.prompt_tokens, slot.sampled_draft, params_base.speculative.n_max, lookup_ngram_min, LLAMA_NGRAM_MAX,
                                              slot.ctx_ngram_cache, ngram_cache_dynamic, ngram_cache_static);
                     slot.n_drafted += int32_t(slot.sampled_draft.size()) - 1;
 
@@ -3021,7 +3039,7 @@ struct server_context {
                     return false;
                 }
                 const std::vector<uint8_t> buff = base64_decode(img);
-                llava_image_embed *img_embd     = llava_image_embed_make_with_bytes(ctx_clip, params.cpuparams.n_threads, buff.data(), int(buff.size()));
+                llava_image_embed *img_embd     = llava_image_embed_make_with_bytes(ctx_clip, params_base.cpuparams.n_threads, buff.data(), int(buff.size()));
                 if (!img_embd) {
                     send_error(slot, "Failed to embed image", ERROR_TYPE_INVALID_REQUEST);
                     return false;
@@ -3141,15 +3159,6 @@ inline void signal_handler(int signal) {
 }
 
 int main(int argc, char **argv) {
-    // print arguments
-    for (int i = 0; i < argc; i++) {
-        printf("%s", argv[i]);
-        if (i < argc - 1) {
-            printf(" ");
-        }
-    }
-    printf("\n");
-
     common_log_set_prefix(common_log_main(), true);
     common_log_set_timestamps(common_log_main(), true);
     llama_log_set(
@@ -3178,6 +3187,15 @@ int main(int argc, char **argv) {
         return 1;
     }
     common_params &params = bparams.gparams;
+
+    // print arguments
+    for (int i = 0; i < argc; i++) {
+        printf("%s", argv[i]);
+        if (i < argc - 1) {
+            printf(" ");
+        }
+    }
+    printf("\n");
 
     llama_numa_init(params.numa);
 
@@ -3850,7 +3868,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.params, request, ctx_server.model, std::string());
+            request = oaicompat_completions_request(ctx_server.params_base, request, ctx_server.model, std::string());
         }
 
         // post tasks
@@ -3980,7 +3998,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.params, request, ctx_server.model, params.chat_template);
+        request = oaicompat_completions_request(ctx_server.params_base, request, ctx_server.model, params.chat_template);
 
         // post the task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_COMPLETION, tps);
@@ -4075,7 +4093,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"input\" must be provided", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_embeddings_request(ctx_server.params, request);
+        request = oaicompat_embeddings_request(ctx_server.params_base, request);
 
         // post tasks
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_EMBEDDING);
@@ -4129,7 +4147,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"documents\" must not be empty", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = jinaaicompat_rerank_request(ctx_server.params, request, ctx_server.ctx);
+        request = jinaaicompat_rerank_request(ctx_server.params_base, request, ctx_server.ctx);
 
         // post tasks
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_RERANK);

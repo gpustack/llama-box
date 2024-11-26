@@ -56,9 +56,10 @@ add_custom_target(patch
         VERBATIM
 )
 add_dependencies(patch version build_info)
+add_dependencies(ggml-base patch)
 add_dependencies(ggml patch)
-add_dependencies(llama ggml patch)
-add_dependencies(stable-diffusion ggml patch)
+add_dependencies(llama ggml ggml-base patch)
+add_dependencies(stable-diffusion ggml ggml-base patch)
 
 #
 # llama-box
