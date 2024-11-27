@@ -228,6 +228,7 @@ server:
                                   load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
   -mg,   --main-gpu N             the GPU to use for the model (default: 0)
+  -fa,   --flash-attn             enable Flash Attention (default: disabled)
          --metrics                enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 enable infill endpoint (default: disabled)
          --embeddings             enable embedding endpoint (default: disabled)
@@ -287,7 +288,6 @@ server/completion:
   -b,    --batch-size N           logical maximum batch size (default: 2048)
   -ub,   --ubatch-size N          physical maximum batch size (default: 512)
          --keep N                 number of tokens to keep from the initial prompt (default: 0, -1 = all)
-  -fa,   --flash-attn             enable Flash Attention (default: disabled)
   -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
          --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';' (default: dry;top_k;typ_p;top_p;min_p;xtc;temperature)
@@ -385,7 +385,12 @@ server/images:
          --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
          --image-sampler TYPE     sampler that will be used for generation, automatically retrieve the default value according to --model, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
          --image-sample-steps N   number of sample steps, automatically retrieve the default value according to --model, and +10 when requesting high definition generation
-         --image-cfg-scale N      for sampler, the scale of classifier-free guidance in the output phase, automatically retrieve the default value according to --model (1.0 = disabled)
+         --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
+         --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
+         --image-slg-skip-layer   the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)
+         --image-slg-start N      the phase to enable SLG (default: 0.01)
+         --image-slg-end N        the phase to disable SLG (default: 0.20)
+                                  SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])
          --image-schedule TYPE    denoiser sigma schedule, select from default;discrete;karras;exponential;ays;gits (default: default)
          --image-no-text-encoder-model-offload
                                   disable text-encoder(clip-l/clip-g/t5xxl) model offload
@@ -741,14 +746,14 @@ The available endpoints for the LLaMA Box server mode are:
 
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
-      data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
-      ...
-      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
-      ...
-      data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
-      data: [DONE]
+        data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
+        ...
+        data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":50.0}], ...}
+        ...
+        data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
+        data: [DONE]
       CASE 2: illegal input image
-      error: {"code": 400, "message": "Invalid image", "type": "invalid_request_error"}
+        error: {"code": 400, "message": "Invalid image", "type": "invalid_request_error"}
       ```
 
 - **POST** `/v1/rerank`: Returns the completion of the given prompt via lookup cache.

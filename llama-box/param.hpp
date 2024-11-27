@@ -149,6 +149,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server",                         "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", params.main_gpu });
     }
+    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --infill",                               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
@@ -205,7 +206,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "logical maximum batch size (default: %d)", params.n_batch });
     opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "physical maximum batch size (default: %d)", params.n_ubatch });
     opts.push_back({ "server/completion",                  "       --keep N",                               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", params.n_keep });
-    opts.push_back({ "server/completion",                  "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --no-escape",                            "do not process escape sequences" });
     opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
@@ -302,7 +302,12 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
     opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, select from %s", sd_sampler_type_names.c_str() });
     opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically retrieve the default value according to --model, and +10 when requesting high definition generation" });
-    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "for sampler, the scale of classifier-free guidance in the output phase, automatically retrieve the default value according to --model (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
+    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sdparams.slg_start });
+    opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
+                                                                                                            "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sdparams.slg_end });
     opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, select from %s (default: %s)", sd_scheduler_names.c_str(), sd_schedule_to_argument(sdparams.schedule) });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
@@ -632,6 +637,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     }
                     continue;
                 }
+            }
+
+            if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
+                bparams.gparams.flash_attn = true;
+                continue;
             }
 
             if (!strcmp(flag, "--metrics")) {
@@ -990,11 +1000,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg              = argv[i++];
                 bparams.gparams.n_keep = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
-                bparams.gparams.flash_attn = true;
                 continue;
             }
 
@@ -1748,6 +1753,61 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 continue;
             }
 
+            if (!strcmp(flag, "--image-slg-scale")) {
+                if (i == argc) {
+                    missing("--image-slg-scale");
+                }
+                char *arg                  = argv[i++];
+                bparams.sdparams.slg_scale = std::stof(std::string(arg));
+                if (bparams.sdparams.slg_scale < 0.0f) {
+                    invalid("--image-slg-scale");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-skip-layer")) {
+                if (i == argc) {
+                    missing("--image-skip-layer");
+                }
+                char *arg = argv[i++];
+                auto lyr  = std::stoi(std::string(arg));
+                if (lyr < 0) {
+                    invalid("--image-skip-layer");
+                }
+                static bool defaults_cleared = false;
+                if (!defaults_cleared) {
+                    bparams.sdparams.slg_skip_layers.clear();
+                    defaults_cleared = true;
+                }
+
+                bparams.sdparams.slg_skip_layers.push_back(lyr);
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-slg-start")) {
+                if (i == argc) {
+                    missing("--image-slg-start");
+                }
+                char *arg                  = argv[i++];
+                bparams.sdparams.slg_start = std::stof(std::string(arg));
+                if (bparams.sdparams.slg_start < 0.0f) {
+                    invalid("--image-slg-start");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-slg-end")) {
+                if (i == argc) {
+                    missing("--image-slg-end");
+                }
+                char *arg                = argv[i++];
+                bparams.sdparams.slg_end = std::stof(std::string(arg));
+                if (bparams.sdparams.slg_end < 0.0f) {
+                    invalid("--image-slg-end");
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--image-schedule")) {
                 if (i == argc) {
                     missing("--image-schedule");
@@ -1984,6 +2044,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
         bparams.gparams.enable_chat_template     = false;
         bparams.sdparams.model                   = bparams.gparams.model;
         bparams.sdparams.model_alias             = bparams.gparams.model_alias;
+        bparams.sdparams.flash_attn              = bparams.gparams.flash_attn;
         bparams.sdparams.n_threads               = bparams.gparams.cpuparams.n_threads;
         bparams.sdparams.main_gpu                = bparams.gparams.main_gpu;
         bparams.sdparams.lora_init_without_apply = bparams.gparams.lora_init_without_apply;

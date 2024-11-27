@@ -10,40 +10,46 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stable-diffusion.cpp/thirdparty/stb_image_write.h"
 
+#include "stable-diffusion.cpp/model.h"
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 struct stablediffusion_params {
-    int max_batch_count             = 4;
-    int max_height                  = 1024;
-    int max_width                   = 1024;
-    float guidance                  = 3.5f;
-    float strength                  = 0.75f;
-    sample_method_t sampler         = N_SAMPLE_METHODS;
-    int sample_steps                = 0;
-    float cfg_scale                 = 0.0f;
-    schedule_t schedule             = DEFAULT;
-    bool text_encoder_model_offload = true;
-    std::string clip_l_model        = "";
-    std::string clip_g_model        = "";
-    std::string t5xxl_model         = "";
-    bool vae_model_offload          = true;
-    std::string vae_model           = "";
-    bool vae_tiling                 = false;
-    std::string taesd_model         = "";
-    std::string upscale_model       = "";
-    int upscale_repeats             = 1;
-    bool control_model_offload      = true;
-    std::string control_net_model   = "";
-    float control_strength          = 0.9f;
-    bool control_canny              = false;
+    int max_batch_count              = 4;
+    int max_height                   = 1024;
+    int max_width                    = 1024;
+    float guidance                   = 3.5f;
+    float strength                   = 0.75f;
+    sample_method_t sampler          = N_SAMPLE_METHODS;
+    int sample_steps                 = 0;
+    float cfg_scale                  = 0.0f;
+    float slg_scale                  = 0.0f;
+    std::vector<int> slg_skip_layers = {7, 8, 9};
+    float slg_start                  = 0.01;
+    float slg_end                    = 0.2;
+    schedule_t schedule              = DEFAULT;
+    bool text_encoder_model_offload  = true;
+    std::string clip_l_model         = "";
+    std::string clip_g_model         = "";
+    std::string t5xxl_model          = "";
+    bool vae_model_offload           = true;
+    std::string vae_model            = "";
+    bool vae_tiling                  = false;
+    std::string taesd_model          = "";
+    std::string upscale_model        = "";
+    int upscale_repeats              = 1;
+    bool control_model_offload       = true;
+    std::string control_net_model    = "";
+    float control_strength           = 0.9f;
+    bool control_canny               = false;
 
     // inherited from common_params
-    std::string model            = "";
-    std::string model_alias      = "";
-    int n_threads                = 1;
-    int main_gpu                 = 0;
-    bool lora_init_without_apply = false;
-    std::vector<common_lora_adapter_info> lora_adapters;
+    std::string model                                   = "";
+    std::string model_alias                             = "";
+    bool flash_attn                                     = false;
+    int n_threads                                       = 1;
+    int main_gpu                                        = 0;
+    bool lora_init_without_apply                        = false;
+    std::vector<common_lora_adapter_info> lora_adapters = {};
 };
 
 struct stablediffusion_sampler_params {
@@ -79,6 +85,7 @@ class stablediffusion_context {
     sample_method_t get_default_sample_method();
     int get_default_sample_steps();
     float get_default_cfg_scale();
+    float get_default_slg_scale();
     void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
     stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_sampler_params sparams);
     bool sample_stream(stablediffusion_sampling_stream *stream);
@@ -104,15 +111,72 @@ stablediffusion_context::~stablediffusion_context() {
 }
 
 sample_method_t stablediffusion_context::get_default_sample_method() {
-    return sd_get_default_sample_method(sd_ctx);
+    switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1:
+        case VERSION_SD2:
+            return EULER_A;
+        case VERSION_SDXL:
+        case VERSION_SDXL_REFINER:
+        case VERSION_SD3_2B:
+        case VERSION_SD3_5_2B:
+        case VERSION_SD3_5_8B:
+        case VERSION_FLUX_DEV:
+        case VERSION_FLUX_SCHNELL:
+        case VERSION_FLUX_LITE:
+            return EULER;
+        default:
+            return EULER_A;
+    }
 }
 
 int stablediffusion_context::get_default_sample_steps() {
-    return sd_get_default_sample_steps(sd_ctx);
+    switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1:
+        case VERSION_SD2:
+            return 20;
+        case VERSION_SDXL:
+        case VERSION_SDXL_REFINER:
+            return 40;
+        case VERSION_SD3_2B:
+        case VERSION_SD3_5_2B:
+        case VERSION_SD3_5_8B:
+        case VERSION_FLUX_DEV:
+        case VERSION_FLUX_SCHNELL:
+            return 10;
+        case VERSION_FLUX_LITE:
+            return 22;
+        default:
+            return 20;
+    }
 }
 
 float stablediffusion_context::get_default_cfg_scale() {
-    return sd_get_default_cfg_scale(sd_ctx);
+    switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1:
+        case VERSION_SD2:
+            return 9.0f;
+        case VERSION_SDXL:
+        case VERSION_SDXL_REFINER:
+            return 5.0f;
+        case VERSION_SD3_2B:
+        case VERSION_SD3_5_2B:
+        case VERSION_SD3_5_8B:
+            return 4.5f;
+        case VERSION_FLUX_DEV:
+        case VERSION_FLUX_SCHNELL:
+            return 1.0f;
+        case VERSION_FLUX_LITE:
+            return 3.5f;
+        default:
+            return 4.5f;
+    }
+}
+
+float stablediffusion_context::get_default_slg_scale() {
+    if (sd_get_version(sd_ctx) == VERSION_SD3_5_2B) {
+        return 2.5f;
+    }
+    return 0.0f;
 }
 
 void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters) {
@@ -144,7 +208,12 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             params.strength,
             sparams.seed,
             control_img,
-            params.control_strength);
+            params.control_strength,
+            params.slg_skip_layers.data(),
+            params.slg_skip_layers.size(),
+            params.slg_scale,
+            params.slg_start,
+            params.slg_end);
     } else {
         stream = txt2img_stream(
             sd_ctx,
@@ -159,7 +228,12 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.sample_steps,
             sparams.seed,
             control_img,
-            params.control_strength);
+            params.control_strength,
+            params.slg_skip_layers.data(),
+            params.slg_skip_layers.size(),
+            params.slg_scale,
+            params.slg_start,
+            params.slg_end);
     }
 
     return new stablediffusion_sampling_stream{
@@ -262,6 +336,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         !params.text_encoder_model_offload,
         !params.control_model_offload,
         !params.vae_model_offload,
+        params.flash_attn,
         params.main_gpu);
     if (sd_ctx == nullptr) {
         LOG_ERR("%s: failed to create stable diffusion context\n", __func__);
@@ -289,11 +364,11 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     return new stablediffusion_context(sd_ctx, upscaler_ctx, params);
 }
 
-void sd_log_set(sd_log_cb_t cb, void* data) {
+static void sd_log_set(sd_log_cb_t cb, void *data) {
     sd_set_log_callback(cb, data);
 }
 
-void sd_progress_set(sd_progress_cb_t cb, void* data) {
+static void sd_progress_set(sd_progress_cb_t cb, void *data) {
     sd_set_progress_callback(cb, data);
 }
 

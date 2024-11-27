@@ -834,10 +834,20 @@ struct server_context {
                 bparams.sdparams.cfg_scale = sd_ctx->get_default_cfg_scale();
             }
 
+            if (bparams.sdparams.slg_scale <= 0.0f) {
+                bparams.sdparams.slg_scale = sd_ctx->get_default_slg_scale();
+            }
+
             sdparams = bparams.sdparams;
             n_tps    = bparams.n_tps;
 
-            SRV_INF("sampler: %s, steps: %d, cfg scale: %.2f\n", sd_sample_method_to_argument(sdparams.sampler), sdparams.sample_steps, sdparams.cfg_scale);
+            SRV_INF("seed: %d, flash attn: %s, sampler: %s, steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
+                    params_base.sampling.seed,
+                    sdparams.flash_attn ? "true" : "false",
+                    sd_sample_method_to_argument(sdparams.sampler),
+                    sdparams.sample_steps,
+                    sdparams.cfg_scale,
+                    sdparams.slg_scale);
 
             return true;
         }
