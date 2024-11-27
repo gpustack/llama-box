@@ -1,8 +1,8 @@
 diff --git a/util.cpp b/util.cpp
-index 0d6b13e..b8a2dba 100644
+index 11e7dc2..6ab46e1 100644
 --- a/util.cpp
 +++ b/util.cpp
-@@ -374,12 +374,12 @@ void* sd_log_cb_data         = NULL;
+@@ -380,12 +380,12 @@ void* sd_log_cb_data         = NULL;
  
  #define LOG_BUFFER_SIZE 1024
  
@@ -12,17 +12,17 @@ index 0d6b13e..b8a2dba 100644
      va_start(args, format);
  
      static char log_buffer[LOG_BUFFER_SIZE + 1];
--    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s:%-4d - ", path_basename(file).c_str(), line);
+-    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s:%-4d - ", sd_basename(file).c_str(), line);
 +    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s: ", func);
  
      if (written >= 0 && written < LOG_BUFFER_SIZE) {
          vsnprintf(log_buffer + written, LOG_BUFFER_SIZE - written, format, args);
 diff --git a/util.h b/util.h
-index a0d1008..ea6b7a2 100644
+index b6f188a..76ca144 100644
 --- a/util.h
 +++ b/util.h
-@@ -52,14 +52,14 @@ std::string path_basename(const std::string& path);
- 
+@@ -48,7 +48,7 @@ std::string path_join(const std::string& p1, const std::string& p2);
+ std::vector<std::string> splitString(const std::string& str, char delimiter);
  void pretty_progress(int step, int steps, float time);
  
 -void log_printf(sd_log_level_t level, const char* file, int line, const char* format, ...);
@@ -30,7 +30,9 @@ index a0d1008..ea6b7a2 100644
  
  std::string trim(const std::string& s);
  
- std::vector<std::pair<std::string, float>> parse_prompt_attention(const std::string& text);
+@@ -58,8 +58,8 @@ std::string path_dirname(const std::string& path);
+ 
+ std::string path_basename(const std::string& path);
  
 -#define LOG_DEBUG(format, ...) log_printf(SD_LOG_DEBUG, __FILE__, __LINE__, format, ##__VA_ARGS__)
 -#define LOG_INFO(format, ...) log_printf(SD_LOG_INFO, __FILE__, __LINE__, format, ##__VA_ARGS__)

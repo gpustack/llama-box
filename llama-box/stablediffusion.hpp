@@ -51,7 +51,7 @@ struct stablediffusion_sampler_params {
     int height                  = 512;
     int width                   = 512;
     sample_method_t sampler     = EULER_A;
-    float cfg_scale             = 9.0f;
+    float cfg_scale             = 4.5f;
     int sample_steps            = 20;
     std::string negative_prompt = "";
     bool stream                 = false;
@@ -94,11 +94,11 @@ class stablediffusion_context {
 
 stablediffusion_context::~stablediffusion_context() {
     if (sd_ctx != nullptr) {
-        sd_ctx_free(sd_ctx);
+        free_sd_ctx(sd_ctx);
         sd_ctx = nullptr;
     }
     if (upscaler_ctx != nullptr) {
-        upscaler_ctx_free(upscaler_ctx);
+        free_upscaler_ctx(upscaler_ctx);
         upscaler_ctx = nullptr;
     }
 }
@@ -273,7 +273,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, wtype, params.main_gpu);
         if (upscaler_ctx == nullptr) {
             LOG_ERR("%s: failed to create upscaler context\n", __func__);
-            sd_ctx_free(sd_ctx);
+            free_sd_ctx(sd_ctx);
             return nullptr;
         }
     }
@@ -287,4 +287,25 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     }
 
     return new stablediffusion_context(sd_ctx, upscaler_ctx, params);
+}
+
+void sd_log_set(sd_log_cb_t cb, void* data) {
+    sd_set_log_callback(cb, data);
+}
+
+void sd_progress_set(sd_progress_cb_t cb, void* data) {
+    sd_set_progress_callback(cb, data);
+}
+
+ggml_log_level sd_log_level_to_ggml_log_level(sd_log_level_t level) {
+    switch (level) {
+        case SD_LOG_INFO:
+            return GGML_LOG_LEVEL_INFO;
+        case SD_LOG_WARN:
+            return GGML_LOG_LEVEL_WARN;
+        case SD_LOG_ERROR:
+            return GGML_LOG_LEVEL_ERROR;
+        default:
+            return GGML_LOG_LEVEL_DEBUG;
+    }
 }
