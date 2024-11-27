@@ -999,7 +999,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         llama_params["sample_steps"] = params.sample_steps;
         llama_params["cfg_scale"]    = params.cfg_scale;
         if (quality == "hd") {
-            llama_params["sample_steps"]    = params.sample_steps + 10;
+            llama_params["sample_steps"]    = params.sample_steps + 2;
             llama_params["negative_prompt"] = "low quality";
         }
         if (body.contains("style")) {
@@ -1009,13 +1009,13 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
             }
             if (style == "vivid") {
                 if (llama_params.contains("negative_prompt")) {
-                    llama_params["negative_prompt"] += " and not vivid";
+                    llama_params["negative_prompt"] = "low quality, not vivid";
                 } else {
                     llama_params["negative_prompt"] = "not vivid";
                 }
             } else {
                 if (llama_params.contains("negative_prompt")) {
-                    llama_params["negative_prompt"] += " and unnatural";
+                    llama_params["negative_prompt"] = "low quality, unnatural";
                 } else {
                     llama_params["negative_prompt"] = "unnatural";
                 }
