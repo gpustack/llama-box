@@ -28,23 +28,23 @@ struct stablediffusion_params {
     float slg_end                    = 0.2;
     schedule_t schedule              = DEFAULT;
     bool text_encoder_model_offload  = true;
-    std::string clip_l_model         = "";
-    std::string clip_g_model         = "";
-    std::string t5xxl_model          = "";
-    bool vae_model_offload           = true;
-    std::string vae_model            = "";
-    bool vae_tiling                  = false;
-    std::string taesd_model          = "";
-    std::string upscale_model        = "";
-    int upscale_repeats              = 1;
-    bool control_model_offload       = true;
-    std::string control_net_model    = "";
-    float control_strength           = 0.9f;
-    bool control_canny               = false;
+    std::string clip_l_model;
+    std::string clip_g_model;
+    std::string t5xxl_model;
+    bool vae_model_offload = true;
+    std::string vae_model;
+    bool vae_tiling = false;
+    std::string taesd_model;
+    std::string upscale_model;
+    int upscale_repeats        = 1;
+    bool control_model_offload = true;
+    std::string control_net_model;
+    float control_strength = 0.9f;
+    bool control_canny     = false;
 
     // inherited from common_params
-    std::string model                                   = "";
-    std::string model_alias                             = "";
+    std::string model;
+    std::string model_alias;
     bool flash_attn                                     = false;
     int n_threads                                       = 1;
     int main_gpu                                        = 0;
@@ -53,13 +53,13 @@ struct stablediffusion_params {
 };
 
 struct stablediffusion_sampler_params {
-    int64_t seed                = LLAMA_DEFAULT_SEED;
-    int height                  = 512;
-    int width                   = 512;
-    sample_method_t sampler     = EULER_A;
-    float cfg_scale             = 4.5f;
-    int sample_steps            = 20;
-    std::string negative_prompt = "";
+    int64_t seed            = LLAMA_DEFAULT_SEED;
+    int height              = 512;
+    int width               = 512;
+    sample_method_t sampler = EULER_A;
+    float cfg_scale         = 4.5f;
+    int sample_steps        = 20;
+    std::string negative_prompt;
     bool stream                 = false;
     uint8_t *init_img_buffer    = nullptr;
     uint8_t *control_img_buffer = nullptr;
@@ -184,7 +184,16 @@ void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_con
 }
 
 stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const char *prompt, stablediffusion_sampler_params sparams) {
-    int clip_skip           = -1;
+    int clip_skip = -1;
+    switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1:
+            clip_skip = 1;
+            break;
+        case VERSION_SD2:
+            clip_skip = 2;
+            break;
+    }
+
     sd_image_t *control_img = nullptr;
 
     sd_sampling_stream_t *stream = nullptr;
@@ -305,14 +314,14 @@ stablediffusion_generated_image stablediffusion_context::result_stream(stabledif
 }
 
 stablediffusion_context *common_sd_init_from_params(stablediffusion_params params) {
-    std::string diffusion_model      = "";
-    std::string embed_dir            = "";
-    std::string stacked_id_embed_dir = "";
-    std::string lora_model_dir       = "";
-    ggml_type wtype                  = GGML_TYPE_COUNT;
-    rng_type_t rng_type              = CUDA_RNG;
-    bool vae_decode_only             = false;
-    bool free_params_immediately     = false;
+    std::string diffusion_model;
+    std::string embed_dir;
+    std::string stacked_id_embed_dir;
+    std::string lora_model_dir;
+    ggml_type wtype              = GGML_TYPE_COUNT;
+    rng_type_t rng_type          = CUDA_RNG;
+    bool vae_decode_only         = false;
+    bool free_params_immediately = false;
 
     sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
@@ -372,7 +381,7 @@ static void sd_progress_set(sd_progress_cb_t cb, void *data) {
     sd_set_progress_callback(cb, data);
 }
 
-ggml_log_level sd_log_level_to_ggml_log_level(sd_log_level_t level) {
+static ggml_log_level sd_log_level_to_ggml_log_level(sd_log_level_t level) {
     switch (level) {
         case SD_LOG_INFO:
             return GGML_LOG_LEVEL_INFO;
