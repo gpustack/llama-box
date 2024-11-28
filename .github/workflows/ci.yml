@@ -1169,7 +1169,7 @@ jobs:
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
