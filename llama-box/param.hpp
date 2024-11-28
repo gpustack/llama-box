@@ -296,8 +296,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // images //
     opts.push_back({ "server/images" });
     opts.push_back({ "server/images",                      "       --image-max-batch N",                    "maximum batch count (default: %d)", sdparams.max_batch_count});
-    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 (default: %d)", sdparams.max_height});
-    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 (default: %d)", sdparams.max_width});
+    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 128 (default: %d)", sdparams.max_height});
+    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 128 (default: %d)", sdparams.max_width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
     opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
     opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, select from %s", sd_sampler_type_names.c_str() });
@@ -1672,10 +1672,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg                   = argv[i++];
                 bparams.sdparams.max_height = std::stoi(std::string(arg));
-                if (bparams.sdparams.max_height < 256) {
-                    invalid("--image-max-height");
-                }
-                if (bparams.sdparams.max_height % 64 != 0) {
+                if (bparams.sdparams.max_height < 128) {
                     invalid("--image-max-height");
                 }
                 continue;
@@ -1687,10 +1684,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg                  = argv[i++];
                 bparams.sdparams.max_width = std::stoi(std::string(arg));
-                if (bparams.sdparams.max_width < 256) {
-                    invalid("--image-max-width");
-                }
-                if (bparams.sdparams.max_width % 64 != 0) {
+                if (bparams.sdparams.max_width < 128) {
                     invalid("--image-max-width");
                 }
                 continue;

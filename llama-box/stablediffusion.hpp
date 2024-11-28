@@ -15,8 +15,8 @@
 
 struct stablediffusion_params {
     int max_batch_count              = 4;
-    int max_height                   = 1024;
-    int max_width                    = 1024;
+    int max_height                   = 2304;
+    int max_width                    = 2304;
     float guidance                   = 3.5f;
     float strength                   = 0.75f;
     sample_method_t sampler          = N_SAMPLE_METHODS;
