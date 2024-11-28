@@ -25,6 +25,8 @@
 
 // mime type for sending response
 #define MIMETYPE_JSON "application/json; charset=utf-8"
+#define HEADER_REQUEST_ID "X-Request-ID"
+#define HEADER_REQUEST_ACCEPTED_AT "X-Request-Accepted-At"
 
 using json = nlohmann::json;
 
@@ -66,6 +68,8 @@ enum server_task_inf_type {
 };
 
 struct server_task {
+    std::string rid;
+
     int id        = -1; // to be filled by server_queue
     int id_target = -1;
 
@@ -80,8 +84,8 @@ struct server_task {
     // utility function
     static std::unordered_set<int> get_list_id(const std::vector<server_task> &tasks) {
         std::unordered_set<int> ids(tasks.size());
-        for (size_t i = 0; i < tasks.size(); i++) {
-            ids.insert(tasks[i].id);
+        for (const auto &task : tasks) {
+            ids.insert(task.id);
         }
         return ids;
     }
@@ -92,8 +96,8 @@ struct server_task_result {
 
     json data;
 
-    bool stop;
-    bool error;
+    bool stop  = false;
+    bool error = false;
 };
 
 struct slot_params {
@@ -113,7 +117,9 @@ struct slot_params {
 };
 
 struct server_slot {
-    int id;
+    std::string rid;
+
+    int id      = -1;
     int id_task = -1;
 
     // the index relative to completion multi-task request
@@ -320,6 +326,7 @@ struct server_slot {
                 t_image_generation = double(ggml_time_us() - t_start_generate_image) / 1e3;
                 state              = SLOT_STATE_IDLE;
                 callback_on_release(id);
+                return;
             }
 
             /* LLAMA */
@@ -696,10 +703,10 @@ struct server_response {
     // Send a new result to a waiting id_task
     void send(server_task_result &result) {
         std::unique_lock<std::mutex> lock(mutex_results);
-        SRV_DBG("sending result for task id = %d\n", result.id);
+        SRV_DBG("task %d | sending result\n", result.id);
         for (const auto &id_task : waiting_task_ids) {
             if (result.id == id_task) {
-                SRV_DBG("task id = %d moved to result queue\n", result.id);
+                SRV_DBG("task %d | moved to result queue\n", result.id);
                 queue_results.push_back(std::move(result));
                 condition_results.notify_all();
                 return;
@@ -1773,7 +1780,7 @@ struct server_context {
     }
 
     void send_error(const int id_task, const std::string &error, const enum error_type type = ERROR_TYPE_SERVER) {
-        SRV_ERR("task id = %d, error: %s\n", id_task, error.c_str());
+        SRV_ERR("task %d | error = %s\n", id_task, error.c_str());
 
         server_task_result res;
         res.id    = id_task;
@@ -1877,9 +1884,7 @@ struct server_context {
             }
 
             if (embd == nullptr) {
-                SLT_ERR(slot,
-                        "failed to get embeddings, "
-                        "token = %d, seq_id = %d\n",
+                SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n",
                         batch.token[i], batch.seq_id[i][0]);
 
                 res.data = json{
@@ -1965,10 +1970,11 @@ struct server_context {
     //
 
     // break the input "prompt" into multiple tasks if needed, then format and tokenize the input prompt(s)
-    std::vector<server_task> create_tasks_inference(json data, server_task_inf_type inf_type, int tps = 0) {
+    std::vector<server_task> create_tasks_inference(const std::string rid, json data, server_task_inf_type inf_type, int tps = 0) {
         std::vector<server_task> tasks;
         auto create_task = [&](json &task_data, llama_tokens &prompt_tokens, int tps = 0) {
             server_task task;
+            task.rid           = rid;
             task.id            = queue_tasks.get_new_id();
             task.inf_type      = inf_type;
             task.type          = SERVER_TASK_TYPE_INFERENCE;
@@ -2046,11 +2052,12 @@ struct server_context {
         return tasks;
     }
 
-    void cancel_tasks(const std::unordered_set<int> &id_tasks) {
+    void cancel_tasks(const std::string rid, const std::unordered_set<int> &id_tasks) {
         std::vector<server_task> cancel_tasks;
         cancel_tasks.reserve(id_tasks.size());
         for (const auto &id_task : id_tasks) {
             server_task task;
+            task.rid       = rid;
             task.type      = SERVER_TASK_TYPE_CANCEL;
             task.id_target = id_task;
             cancel_tasks.push_back(task);
@@ -2061,8 +2068,9 @@ struct server_context {
     }
 
     // receive the results from task(s) created by create_tasks_inference
-    void receive_cmpl_results(const std::unordered_set<int> &id_tasks, std::function<void(std::vector<server_task_result> &)> result_handler,
-                              std::function<void(json)> error_handler) {
+    void receive_cmpl_results(const std::unordered_set<int> &id_tasks,
+                              const std::function<void(std::vector<server_task_result> &)> &result_handler,
+                              const std::function<void(json)> &error_handler) {
         // TODO: currently, there is no way to detect the client has cancelled the request
         std::vector<server_task_result> results(id_tasks.size());
         for (size_t i = 0; i < id_tasks.size(); i++) {
@@ -2081,8 +2089,9 @@ struct server_context {
     }
 
     // receive the results from task(s) created by create_tasks_inference, in stream mode
-    void receive_cmpl_results_stream(const std::unordered_set<int> &id_tasks, std::function<bool(server_task_result &)> result_handler,
-                                     std::function<void(json)> error_handler) {
+    void receive_cmpl_results_stream(const std::unordered_set<int> &id_tasks,
+                                     const std::function<bool(server_task_result &)> result_handler,
+                                     const std::function<void(json)> error_handler) {
         size_t n_finished = 0;
         while (true) {
             server_task_result result = queue_results.recv(id_tasks);
@@ -2131,6 +2140,7 @@ struct server_context {
 
                 slot->reset();
 
+                slot->rid      = task.rid;
                 slot->id_task  = task.id;
                 slot->inf_type = task.inf_type;
                 slot->index    = json_value(task.data, "index", 0);
@@ -2765,7 +2775,7 @@ struct server_context {
                         continue;
                     }
 
-                    SLT_INF(slot, "prompt processing progress, n_past = %d, n_tokens = %d, progress = %f\n", slot.n_past, batch.n_tokens, (float)slot.n_prompt_tokens_processed / slot.n_prompt_tokens);
+                    SLT_INF(slot, "prompt processing, n_past = %d, n_tokens = %d, n_cached_tokens = %d\n", slot.n_past, batch.n_tokens, slot.n_prompt_tokens - slot.n_prompt_tokens_processed);
 
                     // entire prompt has been processed
                     if (slot.n_past == slot.n_prompt_tokens) {
@@ -3154,13 +3164,43 @@ struct server_context {
     }
 };
 
-static void log_server_request(const httplib::Request &req, const httplib::Response &res) {
+static void log_server_request(const httplib::Request &req, httplib::Response &res) {
     if (req.path == "/v1/health") {
         return;
     }
 
-    SRV_INF("request %d: %s %s %s:%d\n",
-            res.status, req.method.c_str(), req.path.c_str(), req.remote_addr.c_str(), req.remote_port);
+    std::string rid = req.get_header_value(HEADER_REQUEST_ID);
+    if (rid.empty()) {
+        rid = std::to_string(ggml_time_us());
+    }
+    res.set_header(HEADER_REQUEST_ID, rid);
+    res.set_header(HEADER_REQUEST_ACCEPTED_AT, std::to_string(ggml_time_us()));
+    SRV_INF("rid %s | %s %s %s:%d\n",
+            rid.c_str(), req.method.c_str(), req.path.c_str(), req.remote_addr.c_str(), req.remote_port);
+}
+
+static void log_server_response(const httplib::Request &req, const httplib::Response &res) {
+    if (req.path == "/v1/health") {
+        return;
+    }
+
+    std::string rid = res.get_header_value(HEADER_REQUEST_ID);
+    uint64_t rst    = res.get_header_value_u64(HEADER_REQUEST_ACCEPTED_AT);
+    SRV_INF("rid %s | %s %s %s:%d | status %d | cost %.2fs\n",
+            rid.c_str(), req.method.c_str(), req.path.c_str(), req.remote_addr.c_str(), req.remote_port, res.status, (ggml_time_us() - rst) / 1e6);
+}
+
+static void log_server_exception(const httplib::Request &req, httplib::Response &res, const std::string &err_msg) {
+    if (req.path == "/v1/health") {
+        return;
+    }
+
+    std::string rid = res.get_header_value(HEADER_REQUEST_ID);
+    if (rid.empty()) {
+        rid = req.get_header_value(HEADER_REQUEST_ID);
+    }
+
+    SRV_ERR("rid %s | exception = %s\n", rid.c_str(), err_msg.c_str());
 }
 
 std::function<void(int)> shutdown_handler;
@@ -3254,7 +3294,7 @@ int main(int argc, char **argv) {
     std::atomic<server_state> state{SERVER_STATE_LOADING_MODEL};
 
     // default headers
-    svr.set_default_headers({{"Server", "llama-box"}});
+    svr.set_default_headers({{"Server", "llama-box/" + std::string(LLAMA_BOX_BUILD_VERSION)}});
 
     // CORS preflight
     svr.Options(R"(.*)", [](const httplib::Request &, httplib::Response &res) {
@@ -3265,7 +3305,7 @@ int main(int argc, char **argv) {
     });
 
     // logger
-    svr.set_logger(log_server_request);
+    svr.set_logger(log_server_response);
 
     // error handlers
     auto res_error = [](httplib::Response &res, json data) {
@@ -3281,7 +3321,7 @@ int main(int argc, char **argv) {
         res.status = 200;
     };
 
-    svr.set_exception_handler([&res_error](const httplib::Request &, httplib::Response &res, const std::exception_ptr &ep) {
+    svr.set_exception_handler([&res_error](const httplib::Request &req, httplib::Response &res, const std::exception_ptr &ep) {
         error_type err_type = ERROR_TYPE_SERVER;
         std::string message;
         try {
@@ -3292,8 +3332,9 @@ int main(int argc, char **argv) {
         } catch (std::exception &e) {
             message = e.what();
         } catch (...) {
-            message = "Unknown Exception";
+            message = "Unknown exception";
         }
+        log_server_exception(req, res, message);
 
         json formatted_error = format_error_response(message, err_type);
         res_error(res, formatted_error);
@@ -3320,6 +3361,8 @@ int main(int argc, char **argv) {
     svr.set_pre_routing_handler([&res_error, &state](const httplib::Request &req, httplib::Response &res) {
         res.set_header("Access-Control-Allow-Origin", req.get_header_value("Origin"));
 
+        log_server_request(req, res);
+
         // Server state loading.
         server_state current_state = state.load();
         if (current_state == SERVER_STATE_LOADING_MODEL) {
@@ -3340,9 +3383,10 @@ int main(int argc, char **argv) {
         res_ok(res, health);
     };
 
-    const auto handle_metrics = [&](const httplib::Request &, httplib::Response &res) {
+    const auto handle_metrics = [&](const httplib::Request &req, httplib::Response &res) {
         // request slots data using task queue
         server_task task;
+        task.rid       = res.get_header_value(HEADER_REQUEST_ID);
         task.id_target = -1;
         task.type      = SERVER_TASK_TYPE_METRICS;
         task.data.push_back({{"reset_bucket", true}});
@@ -3500,6 +3544,7 @@ int main(int argc, char **argv) {
     const auto handle_slots = [&](const httplib::Request &req, httplib::Response &res) {
         // request slots data using task queue
         server_task task;
+        task.rid       = res.get_header_value(HEADER_REQUEST_ID);
         task.id_target = -1;
         task.type      = SERVER_TASK_TYPE_METRICS;
 
@@ -3533,6 +3578,7 @@ int main(int argc, char **argv) {
         std::string filepath = params.slot_save_path + filename;
 
         server_task task;
+        task.rid  = res.get_header_value(HEADER_REQUEST_ID);
         task.type = SERVER_TASK_TYPE_SLOT_SAVE;
         task.data = {{"id_slot", id_slot}, {"filename", filename}, {"filepath", filepath}};
 
@@ -3563,6 +3609,7 @@ int main(int argc, char **argv) {
         std::string filepath = params.slot_save_path + filename;
 
         server_task task;
+        task.rid  = res.get_header_value(HEADER_REQUEST_ID);
         task.type = SERVER_TASK_TYPE_SLOT_RESTORE;
         task.data = {{"id_slot", id_slot}, {"filename", filename}, {"filepath", filepath}};
 
@@ -3582,8 +3629,9 @@ int main(int argc, char **argv) {
         res_ok(res, result.data);
     };
 
-    const auto handle_slots_erase = [&ctx_server, &res_error, &res_ok](const httplib::Request &, httplib::Response &res, int id_slot) {
+    const auto handle_slots_erase = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res, int id_slot) {
         server_task task;
+        task.rid  = res.get_header_value(HEADER_REQUEST_ID);
         task.type = SERVER_TASK_TYPE_SLOT_ERASE;
         task.data = {{"id_slot", id_slot}};
 
@@ -3603,8 +3651,7 @@ int main(int argc, char **argv) {
         res_ok(res, result.data);
     };
 
-    const auto handle_slots_action = [&res_error, &handle_slots_save, &handle_slots_restore, &handle_slots_erase](const httplib::Request &req,
-                                                                                                                  httplib::Response &res) {
+    const auto handle_slots_action = [&res_error, &handle_slots_save, &handle_slots_restore, &handle_slots_erase](const httplib::Request &req, httplib::Response &res) {
         int id_slot = -1;
         {
             const std::string id_slot_str = req.path_params.at("id_slot");
@@ -3679,6 +3726,7 @@ int main(int argc, char **argv) {
 
         // post the task
         server_task task;
+        task.rid  = res.get_header_value(HEADER_REQUEST_ID);
         task.type = SERVER_TASK_TYPE_SET_LORA;
         task.id   = ctx_server.queue_tasks.post(task);
         ctx_server.queue_results.add_waiting_task_id(task.id);
@@ -3691,15 +3739,21 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_models = [&ctx_server, &params, &res_ok](const httplib::Request &, httplib::Response &res) {
-        json models = {{"object", "list"},
-                       {"data",
-                        {
-                            {{"id", params.model_alias},
-                             {"object", "model"},
-                             {"created", std::time(nullptr)},
-                             {"owned_by", "llama-box"},
-                             {"meta", ctx_server.model_meta()}},
-                        }}};
+        json models = {
+            {"object", "list"},
+            {
+                "data",
+                {
+                    {
+                        {"id", params.model_alias},
+                        {"object", "model"},
+                        {"created", std::time(nullptr)},
+                        {"owned_by", "llama-box"},
+                        {"meta", ctx_server.model_meta()},
+                    },
+                },
+            },
+        };
 
         res_ok(res, models);
     };
@@ -3753,6 +3807,8 @@ int main(int argc, char **argv) {
             }
         }
 
+        const std::string rid = res.get_header_value(HEADER_REQUEST_ID);
+
         json request = json::parse(req.body);
 
         // validate input
@@ -3765,7 +3821,7 @@ int main(int argc, char **argv) {
         }
 
         if (request.contains("input_extra") && !request.at("input_extra").is_array()) {
-            res_error(res, format_error_response("\"input_extra\" must be an array of {\"filename\": string, \"text\": string}",
+            res_error(res, format_error_response(R"("input_extra" must be an array of {"filename": string, "text": string})",
                                                  ERROR_TYPE_INVALID_REQUEST));
             return;
         }
@@ -3786,7 +3842,7 @@ int main(int argc, char **argv) {
         request["input_extra"] = input_extra; // default to empty array if it's not exist
 
         // post tasks
-        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_INFILL, tps);
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_INF_TYPE_INFILL, tps);
         ctx_server.queue_results.add_waiting_tasks(tasks);
         ctx_server.queue_tasks.post(tasks);
 
@@ -3814,7 +3870,7 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
-            ctx_server.cancel_tasks(task_ids);
+            ctx_server.cancel_tasks(rid, task_ids);
             return;
         }
 
@@ -3842,7 +3898,7 @@ int main(int argc, char **argv) {
 
             return false;
         };
-        const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
+        const auto on_complete = [rid, task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(rid, task_ids); };
 
         res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
@@ -3881,6 +3937,8 @@ int main(int argc, char **argv) {
             }
         }
 
+        const std::string rid = res.get_header_value(HEADER_REQUEST_ID);
+
         bool oaicompat = req.path == "/v1/completions";
         json request   = json::parse(req.body);
         if (!request.contains("prompt")) {
@@ -3888,11 +3946,11 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.params_base, request, ctx_server.model, std::string());
+            request = oaicompat_completions_request(ctx_server.params_base, rid, request, ctx_server.model, std::string());
         }
 
         // post tasks
-        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_COMPLETION, tps);
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_INF_TYPE_COMPLETION, tps);
         ctx_server.queue_results.add_waiting_tasks(tasks);
         ctx_server.queue_tasks.post(tasks);
 
@@ -3935,7 +3993,7 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
-            ctx_server.cancel_tasks(task_ids);
+            ctx_server.cancel_tasks(rid, task_ids);
             return;
         }
 
@@ -3974,7 +4032,7 @@ int main(int argc, char **argv) {
 
             return false;
         };
-        const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
+        const auto on_complete = [rid, task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(rid, task_ids); };
 
         res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
@@ -4013,15 +4071,17 @@ int main(int argc, char **argv) {
             }
         }
 
+        const std::string rid = res.get_header_value(HEADER_REQUEST_ID);
+
         json request = json::parse(req.body);
         if (!request.contains("messages") || !request.at("messages").is_array()) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.params_base, request, ctx_server.model, params.chat_template);
+        request = oaicompat_completions_request(ctx_server.params_base, rid, request, ctx_server.model, params.chat_template);
 
         // post the task
-        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_COMPLETION, tps);
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_INF_TYPE_COMPLETION, tps);
         ctx_server.queue_results.add_waiting_tasks(tasks);
         ctx_server.queue_tasks.post(tasks);
 
@@ -4046,7 +4106,7 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
-            ctx_server.cancel_tasks(task_ids);
+            ctx_server.cancel_tasks(rid, task_ids);
             return;
         }
 
@@ -4093,7 +4153,7 @@ int main(int argc, char **argv) {
 
             return false;
         };
-        const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
+        const auto on_complete = [rid, task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(rid, task_ids); };
 
         res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");
@@ -4108,15 +4168,17 @@ int main(int argc, char **argv) {
             return;
         }
 
+        const std::string rid = res.get_header_value(HEADER_REQUEST_ID);
+
         json request = json::parse(req.body);
         if (!request.contains("input")) {
             res_error(res, format_error_response("\"input\" must be provided", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_embeddings_request(ctx_server.params_base, request);
+        request = oaicompat_embeddings_request(ctx_server.params_base, rid, request);
 
         // post tasks
-        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_EMBEDDING);
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_INF_TYPE_EMBEDDING);
         ctx_server.queue_results.add_waiting_tasks(tasks);
         ctx_server.queue_tasks.post(tasks);
 
@@ -4136,7 +4198,7 @@ int main(int argc, char **argv) {
             },
             [&](const json &error_data) { res_error(res, error_data); });
 
-        ctx_server.cancel_tasks(task_ids);
+        ctx_server.cancel_tasks(rid, task_ids);
     };
 
     const auto handle_rerank = [&ctx_server, &res_error, &res_ok](const httplib::Request &req, httplib::Response &res) {
@@ -4170,7 +4232,7 @@ int main(int argc, char **argv) {
         request = jinaaicompat_rerank_request(ctx_server.params_base, request, ctx_server.ctx);
 
         // post tasks
-        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_RERANK);
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(res.get_header_value(HEADER_REQUEST_ID), request, SERVER_TASK_INF_TYPE_RERANK);
         ctx_server.queue_results.add_waiting_tasks(tasks);
         ctx_server.queue_tasks.post(tasks);
 
@@ -4197,29 +4259,7 @@ int main(int argc, char **argv) {
             return;
         }
 
-        int tps = 0;
-        {
-            const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
-            if (!tps_s.empty()) {
-                try {
-                    tps = std::stoi(tps_s);
-                } catch (const std::exception &) {
-                    tps = ctx_server.n_tps;
-                }
-            }
-            if (tps > ctx_server.n_tps) {
-                // if the request exceeds the maximum tokens per second, return
-                // 410 Gone
-                if (ctx_server.n_tps > 0) {
-                    res.status = httplib::StatusCode::Gone_410;
-                    res.set_content("This request exceeds the maximum tokens per second", "text/plain; charset=utf-8");
-                    return;
-                }
-                // if the server is not limited by tokens per second, set tps to
-                // 0
-                tps = 0;
-            }
-        }
+        std::string rid = res.get_header_value(HEADER_REQUEST_ID);
 
         bool generations = req.path == "/v1/images/generations";
         json request;
@@ -4229,7 +4269,7 @@ int main(int argc, char **argv) {
                 res_error(res, format_error_response("\"prompt\" must be provided", ERROR_TYPE_INVALID_REQUEST));
                 return;
             }
-            request = oaicompat_images_generations_request(ctx_server.sdparams, request);
+            request = oaicompat_images_generations_request(ctx_server.sdparams, rid, request);
         } else {
             if (!req.is_multipart_form_data()) {
                 res_error(res, format_error_response("Request must be multipart/form-data", ERROR_TYPE_INVALID_REQUEST));
@@ -4316,7 +4356,7 @@ int main(int argc, char **argv) {
         }
 
         // post tasks
-        std::vector<server_task> tasks = ctx_server.create_tasks_inference(request, SERVER_TASK_INF_TYPE_IMAGE);
+        std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_INF_TYPE_IMAGE);
         ctx_server.queue_results.add_waiting_tasks(tasks);
         ctx_server.queue_tasks.post(tasks);
 
@@ -4341,12 +4381,12 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) { res_error(res, error_data); });
 
-            ctx_server.cancel_tasks(task_ids);
+            ctx_server.cancel_tasks(rid, task_ids);
             return;
         }
 
         // process streaming requests
-        const auto on_chunk = [task_ids, &ctx_server, request, tps](size_t, httplib::DataSink &sink) {
+        const auto on_chunk = [task_ids, &ctx_server, request](size_t, httplib::DataSink &sink) {
             bool chunk_result = false;
             size_t chunk_size = 4096;
             if (request.contains("stream_options")) {
@@ -4430,7 +4470,7 @@ int main(int argc, char **argv) {
 
             return false;
         };
-        const auto on_complete = [task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(task_ids); };
+        const auto on_complete = [rid, task_ids, &ctx_server](bool) { ctx_server.cancel_tasks(rid, task_ids); };
 
         res.set_header("Cache-Control", "no-cache, no-store, no-transform");
         res.set_header("Connection", "keep-alive");

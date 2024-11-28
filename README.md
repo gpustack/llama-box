@@ -28,6 +28,7 @@ than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/
   see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
 - Support speculative decoding: draft model or n-gram lookup.
 - Support RPC server mode, which can serve as a remote inference backend.
+- Support injecting `X-REQUEST-ID` http header for tracking requests.
 
 ## Supports
 

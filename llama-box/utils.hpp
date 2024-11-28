@@ -18,34 +18,52 @@
 
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
 
-#define SLT_INF(slot, fmt, ...)                                                                                \
-    if (common_log_verbosity_thold > 2) {                                                                      \
-        LOG_INF("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__); \
+#define SLT_INF(slot, fmt, ...)                                                                                                                 \
+    if (common_log_verbosity_thold > 2) {                                                                                                       \
+        if ((slot).rid.empty()) {                                                                                                               \
+            LOG_INF("slt %25.*s: id %02d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__);                              \
+        } else {                                                                                                                                \
+            LOG_INF("slt %25.*s: rid %s | id %02d | task %d | " fmt, 25, __func__, (slot).rid.c_str(), (slot).id, (slot).id_task, __VA_ARGS__); \
+        }                                                                                                                                       \
     }
-#define SLT_WRN(slot, fmt, ...) LOG_WRN("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
-#define SLT_ERR(slot, fmt, ...) LOG_ERR("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__)
-#define SLT_DBG(slot, fmt, ...)                                                                                \
-    if (common_log_verbosity_thold > 3) {                                                                      \
-        LOG_DBG("slot %25.*s: id %2d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__); \
+#define SLT_WRN(slot, fmt, ...)                                                                                                             \
+    if ((slot).rid.empty()) {                                                                                                               \
+        LOG_WRN("slt %25.*s: id %02d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__);                              \
+    } else {                                                                                                                                \
+        LOG_WRN("slt %25.*s: rid %s | id %02d | task %d | " fmt, 25, __func__, (slot).rid.c_str(), (slot).id, (slot).id_task, __VA_ARGS__); \
+    }
+#define SLT_ERR(slot, fmt, ...)                                                                                                             \
+    if ((slot).rid.empty()) {                                                                                                               \
+        LOG_ERR("slt %25.*s: id %02d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__);                              \
+    } else {                                                                                                                                \
+        LOG_ERR("slt %25.*s: rid %s | id %02d | task %d | " fmt, 25, __func__, (slot).rid.c_str(), (slot).id, (slot).id_task, __VA_ARGS__); \
+    }
+#define SLT_DBG(slot, fmt, ...)                                                                                                                 \
+    if (common_log_verbosity_thold > 2) {                                                                                                       \
+        if ((slot).rid.empty()) {                                                                                                               \
+            LOG_DBG("slt %25.*s: id %02d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__);                              \
+        } else {                                                                                                                                \
+            LOG_DBG("slt %25.*s: rid %s | id %02d | task %d | " fmt, 25, __func__, (slot).rid.c_str(), (slot).id, (slot).id_task, __VA_ARGS__); \
+        }                                                                                                                                       \
     }
 
-#define SRV_INF(fmt, ...) LOG_INF("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define SRV_WRN(fmt, ...) LOG_WRN("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define SRV_ERR(fmt, ...) LOG_ERR("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define SRV_DBG(fmt, ...)                                        \
-    if (common_log_verbosity_thold > 3) {                        \
-        LOG_DBG("srv  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
+#define SRV_INF(fmt, ...) LOG_INF("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_WRN(fmt, ...) LOG_WRN("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_ERR(fmt, ...) LOG_ERR("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define SRV_DBG(fmt, ...)                                       \
+    if (common_log_verbosity_thold > 3) {                       \
+        LOG_DBG("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
-#define QUE_INF(fmt, ...)                                        \
-    if (common_log_verbosity_thold > 2) {                        \
-        LOG_INF("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
+#define QUE_INF(fmt, ...)                                       \
+    if (common_log_verbosity_thold > 2) {                       \
+        LOG_INF("que %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
-#define QUE_WRN(fmt, ...) LOG_WRN("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define QUE_ERR(fmt, ...) LOG_ERR("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__)
-#define QUE_DBG(fmt, ...)                                        \
-    if (common_log_verbosity_thold > 3) {                        \
-        LOG_DBG("que  %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
+#define QUE_WRN(fmt, ...) LOG_WRN("que %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_ERR(fmt, ...) LOG_ERR("que %25.*s: " fmt, 25, __func__, __VA_ARGS__)
+#define QUE_DBG(fmt, ...)                                       \
+    if (common_log_verbosity_thold > 3) {                       \
+        LOG_DBG("que %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
 using json = nlohmann::json;
@@ -607,7 +625,7 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completions_request(const struct common_params &params, const json &body, const struct llama_model *model,
+static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model,
                                           const std::string &chat_template) {
     // Print the request for debugging
     {
@@ -619,7 +637,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 body_cp["prompt"] = "...";
             }
         }
-        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     bool chat = !chat_template.empty();
@@ -902,7 +920,7 @@ static json oaicompat_completions_response(const json &request, const json &resu
     return res;
 }
 
-static json oaicompat_embeddings_request(const struct common_params &params, const json &body) {
+static json oaicompat_embeddings_request(const struct common_params &params, const std::string &rid, const json &body) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -913,7 +931,7 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
                 body_cp["input"] = "[...]";
             }
         }
-        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("rdi %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
@@ -957,14 +975,14 @@ static json oaicompat_embeddings_response(const json &request, const json &resul
     return res;
 }
 
-static json oaicompat_images_generations_request(const struct stablediffusion_params &params, const json &body) {
+static json oaicompat_images_generations_request(const struct stablediffusion_params &params, const std::string rid, const json &body) {
     // Print the request for debugging
     {
         json body_cp = body;
         if (common_log_verbosity_thold < 2) {
             body_cp["prompt"] = "...";
         }
-        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
