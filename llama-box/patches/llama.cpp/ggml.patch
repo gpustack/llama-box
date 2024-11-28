@@ -12,60 +12,47 @@ index 669c1f84..f5d1892c 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index c47f07a9..895afedc 100644
+index ae6b25ed..c8571dbc 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -1929,27 +1929,23 @@ static void ggml_metal_encode_node(
+@@ -1930,11 +1930,11 @@ static void ggml_metal_encode_node(
                  // to the matrix-vector kernel
                  int ne11_mm_min = 4;
  
 -#if 0
++//#if 0
                  // the numbers below are measured on M2 Ultra for 7B and 13B models
                  // these numbers do not translate to other devices or model sizes
                  // TODO: need to find a better approach
 -                        if ([device.name isEqualToString:@"Apple M2 Ultra"]) {
--                            switch (src0t) {
--                                case GGML_TYPE_F16:  ne11_mm_min = 2;  break;
--                                case GGML_TYPE_Q8_0: ne11_mm_min = 7;  break;
--                                case GGML_TYPE_Q2_K: ne11_mm_min = 15; break;
--                                case GGML_TYPE_Q3_K: ne11_mm_min = 7;  break;
--                                case GGML_TYPE_Q4_0:
--                                case GGML_TYPE_Q4_1: ne11_mm_min = 15; break;
--                                case GGML_TYPE_Q4_K: ne11_mm_min = 11; break;
--                                case GGML_TYPE_Q5_0:                          // not tested yet
--                                case GGML_TYPE_Q5_1: ne11_mm_min = 13; break; // not tested yet
--                                case GGML_TYPE_Q5_K: ne11_mm_min = 7;  break;
--                                case GGML_TYPE_Q6_K: ne11_mm_min = 7;  break;
++//                        if ([device.name isEqualToString:@"Apple M2 Ultra"]) {
+                             switch (src0t) {
+                                 case GGML_TYPE_F16:  ne11_mm_min = 2;  break;
+                                 case GGML_TYPE_Q8_0: ne11_mm_min = 7;  break;
+@@ -1947,10 +1947,10 @@ static void ggml_metal_encode_node(
+                                 case GGML_TYPE_Q5_1: ne11_mm_min = 13; break; // not tested yet
+                                 case GGML_TYPE_Q5_K: ne11_mm_min = 7;  break;
+                                 case GGML_TYPE_Q6_K: ne11_mm_min = 7;  break;
 -                                default:             ne11_mm_min = 1;  break;
--                            }
++                                default:             ne11_mm_min = 4;  break;
+                             }
 -                        }
 -#endif
-+                switch (src0t) {
-+                    case GGML_TYPE_F16:  ne11_mm_min = 4;  break;
-+                    case GGML_TYPE_Q8_0: ne11_mm_min = 7;  break;
-+                    case GGML_TYPE_Q2_K: ne11_mm_min = 15; break;
-+                    case GGML_TYPE_Q3_K: ne11_mm_min = 7;  break;
-+                    case GGML_TYPE_Q4_0:
-+                    case GGML_TYPE_Q4_1: ne11_mm_min = 15; break;
-+                    case GGML_TYPE_Q4_K: ne11_mm_min = 11; break;
-+                    case GGML_TYPE_Q5_0:                          // not tested yet
-+                    case GGML_TYPE_Q5_1: ne11_mm_min = 13; break; // not tested yet
-+                    case GGML_TYPE_Q5_K: ne11_mm_min = 7;  break;
-+                    case GGML_TYPE_Q6_K: ne11_mm_min = 7;  break;
-+                    default:             ne11_mm_min = 4;  break;
-+                }
++//                        }
++//#endif
  
                  // for now the matrix-matrix multiplication kernel only works on A14+/M1+ SoCs
                  // AMD GPU and older A-chips will reuse matrix-vector multiplication kernel
-@@ -2672,7 +2668,6 @@ static void ggml_metal_encode_node(
+@@ -2637,7 +2637,7 @@ static void ggml_metal_encode_node(
              } break;
-         case GGML_OP_GROUP_NORM:
+         case GGML_OP_RMS_NORM:
              {
 -                GGML_ASSERT(ne00 % 4 == 0);
-                 GGML_ASSERT(ggml_is_contiguous(src0));
++//                GGML_ASSERT(ne00 % 4 == 0);
+                 GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -4423,4 +4418,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+@@ -4423,4 +4423,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
      return &g_ggml_backend_metal_reg;
  }
  
