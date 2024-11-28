@@ -1014,6 +1014,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
         llama_params["sampler"]      = params.sampler;
+        llama_params["schedule"]     = params.schedule;
         llama_params["sample_steps"] = params.sample_steps;
         llama_params["cfg_scale"]    = params.cfg_scale;
         if (quality == "hd") {
@@ -1042,6 +1043,8 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     } else {
         std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
         llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
+        std::string schedule_str        = json_value(body, "schedule", std::string("default"));
+        llama_params["schedule"]        = sd_argument_to_schedule(schedule_str.c_str());
         llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.cfg_scale);
         llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
         llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
@@ -1154,15 +1157,18 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
         llama_params["sampler"]      = params.sampler;
+        llama_params["schedule"]     = params.schedule;
         llama_params["sample_steps"] = params.sample_steps;
         llama_params["cfg_scale"]    = params.cfg_scale;
         if (quality == "hd") {
-            llama_params["sample_steps"]    = params.sample_steps + 10;
+            llama_params["sample_steps"]    = params.sample_steps + 2;
             llama_params["negative_prompt"] = "low quality";
         }
     } else {
         std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
         llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
+        std::string schedule_str        = json_value(body, "schedule", std::string("default"));
+        llama_params["schedule"]        = sd_argument_to_schedule(schedule_str.c_str());
         llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.cfg_scale);
         llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
         llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));

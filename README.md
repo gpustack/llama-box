@@ -675,6 +675,7 @@ The available endpoints for the LLaMA Box server mode are:
         "size": "512x512",
         "prompt": "A lovely cat",
         "sampler": "euler",      // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+        "schedule": "default",   // optional, select from default;discrete;karras;exponential;ays;gits
         "seed": null,            // optional, random seed
         "cfg_scale": 4.5,        // optional, for sampler, the scale of classifier-free guidance in the output phase
         "sample_steps": 20,      // optional, number of sample steps
@@ -736,6 +737,7 @@ The available endpoints for the LLaMA Box server mode are:
       image=...                         // required
       mask=...                          // optional
       sampler=euler                     // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+      schedule=default                  // optional, select from default;discrete;karras;exponential;ays;gits
       seed=null                         // optional, random seed
       cfg_scale=4.5                     // optional, for sampler, the scale of classifier-free guidance in the output phase
       sample_steps=20                   // optional, number of sample steps

@@ -1161,6 +1161,7 @@ struct server_context {
             slot.sdsparams.height          = json_value(data, "height", 512);
             slot.sdsparams.width           = json_value(data, "width", 512);
             slot.sdsparams.sampler         = json_value(data, "sampler", sdparams.sampler);
+            slot.sdsparams.schedule        = json_value(data, "schedule", sdparams.schedule);
             slot.sdsparams.cfg_scale       = json_value(data, "cfg_scale", sdparams.cfg_scale);
             slot.sdsparams.sample_steps    = json_value(data, "sample_steps", sdparams.sample_steps);
             slot.sdsparams.negative_prompt = json_value(data, "negative_prompt", std::string(""));

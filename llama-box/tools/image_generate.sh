@@ -27,6 +27,7 @@ SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
 STYLE="${STYLE:-"null"}"
 SAMPLER="${SAMPLER:-"null"}"
+SCHEDULE="${SCHEDULE:-"default"}"
 SEED="${SEED:-"null"}"
 CFG_SCALE="${CFG_SCALE:-"9"}"
 SAMPLE_STEPS="${SAMPLE_STEPS:-"20"}"
@@ -109,6 +110,7 @@ image_generate() {
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
             --argjson sampler "\"${SAMPLER}\"" \
+            --argjson schedule "\"${SCHEDULE}\"" \
             --argjson seed "${SEED}" \
             --argjson cfg_scale "${CFG_SCALE}" \
             --argjson sample_steps "${SAMPLE_STEPS}" \
@@ -118,6 +120,7 @@ image_generate() {
                   response_format: $response_format,
                   size: $size,
                   sampler: $sampler,
+                  schedule: $schedule,
                   seed: $seed,
                   cfg_scale: $cfg_scale,
                   sample_steps: $sample_steps,
@@ -125,7 +128,7 @@ image_generate() {
                   stream: true,
                   stream_options: {
                     chunk_result: true,
-                    chunk_size: 32768
+                    chunk_size: 65536
                   }
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
@@ -144,7 +147,7 @@ image_generate() {
                   stream: true,
                   stream_options: {
                     chunk_result: true,
-                    chunk_size: 32768
+                    chunk_size: 65536
                   }
                 } * .')"
     else
@@ -161,7 +164,7 @@ image_generate() {
                   stream: true,
                   stream_options: {
                     chunk_result: true,
-                    chunk_size: 32768
+                    chunk_size: 65536
                   }
                 } * .')"
     fi
@@ -197,6 +200,7 @@ echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "STYLE             : ${STYLE} // ONE OF [natural, vivid]"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
+echo "SCHEDULE          : ${SCHEDULE} // AVAILABLE FOR SAMPLER, ONE OF [default, discrete, karras, exponential, ays, gits]"
 echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"
 echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
 echo "SAMPLE_STEPS      : ${SAMPLE_STEPS} // AVAILABLE FOR SAMPLER"

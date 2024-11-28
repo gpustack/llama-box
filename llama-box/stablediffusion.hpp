@@ -57,6 +57,7 @@ struct stablediffusion_sampler_params {
     int height              = 512;
     int width               = 512;
     sample_method_t sampler = EULER_A;
+    schedule_t schedule     = DEFAULT;
     float cfg_scale         = 4.5f;
     int sample_steps        = 20;
     std::string negative_prompt;
@@ -213,6 +214,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.width,
             sparams.height,
             sparams.sampler,
+            sparams.schedule,
             sparams.sample_steps,
             params.strength,
             sparams.seed,
@@ -234,6 +236,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.width,
             sparams.height,
             sparams.sampler,
+            sparams.schedule,
             sparams.sample_steps,
             sparams.seed,
             control_img,
