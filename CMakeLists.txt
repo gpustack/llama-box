@@ -21,7 +21,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/source-charset:utf-8>")
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:/execution-charset:utf-8>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/execution-charset:utf-8>")
-endif()
+endif ()
 
 #
 # Options
@@ -68,8 +68,6 @@ add_definitions(-DGGML_MAX_NAME=128)
 # change the default for these sd options
 if (GGML_CUDA)
     set(SD_CUDA ON CACHE BOOL "sd: cuda backend" FORCE)
-elseif (GGML_MUSA)
-    set(SD_CUBLAS ON CACHE BOOL "sd: musa backend" FORCE)
 elseif (GGML_HIP)
     set(SD_HIP ON CACHE BOOL "sd: rocm backend" FORCE)
 elseif (GGML_VULKAN)
