@@ -536,11 +536,10 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
-            -DGGML_CUDA_F16=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -946,6 +945,8 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
+        # doesn't support ccache,
+        # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
@@ -1100,20 +1101,18 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
-        # doesn't support ccache,
-        # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
           key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}\build
+            ${{ github.workspace }}\.cache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install curl -y
+          choco install ccache ninja curl -y
       - name: Setup CUDA
         run: |
           $ErrorActionPreference = "Stop"
@@ -1136,32 +1135,36 @@ jobs:
           "CUDA_PATH=${cudaPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CUDA_PATH_V${cudaVersion}=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CUDA_PATH_VX_Y=CUDA_PATH_V${cudaVersion}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+          cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+            if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+          }
       - name: Build
         env:
+          CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-
+          
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
-
+          
           Write-Host "===== BUILD ====="
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
-            -DGGML_CUDA_F16=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- /m:$((${env:NUMBER_OF_PROCESSORS} - 1))
-          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
-              exit 1
+            exit 1
           }
           
           Write-Host "===== PACKAGE ====="
@@ -1204,7 +1207,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install curl ninja -y
+          choco install ninja curl -y
       - name: Setup oneAPI
         run: |
           $ErrorActionPreference = "Stop"
@@ -1226,6 +1229,10 @@ jobs:
           "ONEAPI_PATH=${oneapiPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
           $oneapiRoot = "$(Split-Path -Path $oneapiPath)"
           "ONEAPI_ROOT=${oneapiRoot}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+          cmd /c "call `"${oneapiRoot}\setvars.bat`" && set" | ForEach-Object { `
+            if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+          }
       - name: Build
         run: |
           $ErrorActionPreference = "Stop"
@@ -1235,7 +1242,14 @@ jobs:
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
           
           Write-Host "===== BUILD ====="
-          & "${{ github.workspace }}\llama-box\scripts\build-windows-oneapi.bat" "${{ github.workspace }}" "${{ matrix.arch }}"
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx `
+            -DGGML_SYCL=on -DGGML_SYCL_F16=on `
+            ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {

@@ -67,11 +67,11 @@ add_definitions(-DGGML_MAX_NAME=128)
 
 # change the default for these sd options
 if (GGML_CUDA)
-    set(SD_CUBLAS ON CACHE BOOL "sd: cuda backend" FORCE)
+    set(SD_CUDA ON CACHE BOOL "sd: cuda backend" FORCE)
 elseif (GGML_MUSA)
     set(SD_CUBLAS ON CACHE BOOL "sd: musa backend" FORCE)
-elseif (GGML_HIPBLAS)
-    set(SD_HIPBLAS ON CACHE BOOL "sd: rocm backend" FORCE)
+elseif (GGML_HIP)
+    set(SD_HIP ON CACHE BOOL "sd: rocm backend" FORCE)
 elseif (GGML_VULKAN)
     set(SD_VULKAN ON CACHE BOOL "sd: vulkan backend" FORCE)
 elseif (GGML_METAL)
@@ -80,6 +80,8 @@ elseif (GGML_SYCL)
     set(SD_SYCL ON CACHE BOOL "sd: sycl backend" FORCE)
 elseif (GGML_CANN)
     set(SD_CANN ON CACHE BOOL "sd: cann backend" FORCE)
+elseif (GGML_MUSA)
+    set(SD_MUSA ON CACHE BOOL "sd: musa backend" FORCE)
 endif ()
 
 #
