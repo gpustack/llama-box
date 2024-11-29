@@ -194,6 +194,10 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             clip_skip = 2;
             break;
     }
+    int64_t seed = sparams.seed;
+    if (seed == LLAMA_DEFAULT_SEED) {
+        seed = -1;
+    }
 
     sd_image_t *control_img = nullptr;
 
@@ -217,7 +221,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.schedule,
             sparams.sample_steps,
             params.strength,
-            sparams.seed,
+            seed,
             control_img,
             params.control_strength,
             params.slg_skip_layers.data(),
@@ -238,7 +242,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.sampler,
             sparams.schedule,
             sparams.sample_steps,
-            sparams.seed,
+            seed,
             control_img,
             params.control_strength,
             params.slg_skip_layers.data(),
