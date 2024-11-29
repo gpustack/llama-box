@@ -1071,6 +1071,9 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (height > params.max_height) {
             throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.max_height));
         }
+        if (width % 64 != 0 || height % 64 != 0) {
+            throw std::runtime_error("Illegal param: width and height must be multiples of 64");
+        }
         llama_params["width"]  = width;
         llama_params["height"] = height;
     }
