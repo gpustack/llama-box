@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index aae49c96..e6060d82 100644
+index 7ba4cea5..3def24e1 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -24,6 +24,10 @@
@@ -13,7 +13,26 @@ index aae49c96..e6060d82 100644
  #define STB_IMAGE_IMPLEMENTATION
  #include "stb_image.h"
  
-@@ -1162,6 +1166,11 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -40,17 +44,7 @@
+ #include <cinttypes>
+ #include <limits>
+ 
+-#if defined(LLAVA_LOG_OFF)
+-#   define LOG_INF(...)
+-#   define LOG_WRN(...)
+-#   define LOG_ERR(...)
+-#   define LOG_DBG(...)
+-#else // defined(LLAVA_LOG_OFF)
+-#   define LOG_INF(...) do { fprintf(stdout, __VA_ARGS__); } while (0)
+-#   define LOG_WRN(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
+-#   define LOG_ERR(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
+-#   define LOG_DBG(...) do { fprintf(stdout, __VA_ARGS__); } while (0)
+-#endif // defined(LLAVA_LOG_OFF)
++#include "common/log.h"
+ 
+ //#define CLIP_DEBUG_FUNCTIONS
+ 
+@@ -1169,6 +1163,11 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
      LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
  #endif
  
@@ -26,30 +45,29 @@ index aae49c96..e6060d82 100644
          new_clip->backend = ggml_backend_cpu_init();
          LOG_INF("%s: CLIP using CPU backend\n", __func__);
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index be698854..448954b1 100644
+index 4ca53a0b..924ad064 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
-@@ -2,6 +2,7 @@
- #include "llava.h"
+@@ -11,17 +11,7 @@
+ #include <limits>
+ #include <vector>
  
- #include "llama.h"
+-#if defined(LLAVA_LOG_OFF)
+-#   define LOG_INF(...)
+-#   define LOG_WRN(...)
+-#   define LOG_ERR(...)
+-#   define LOG_DBG(...)
+-#else // defined(LLAVA_LOG_OFF)
+-#   define LOG_INF(...) do { fprintf(stdout, __VA_ARGS__); } while (0)
+-#   define LOG_WRN(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
+-#   define LOG_ERR(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
+-#   define LOG_DBG(...) do { fprintf(stdout, __VA_ARGS__); } while (0)
+-#endif // defined(LLAVA_LOG_OFF)
 +#include "common/log.h"
  
- #include <algorithm>
- #include <cerrno>
-@@ -14,11 +15,6 @@
- #define die(msg)          do { fputs("error: " msg "\n", stderr);                exit(1); } while (0)
- #define die_fmt(fmt, ...) do { fprintf(stderr, "error: " fmt "\n", __VA_ARGS__); exit(1); } while (0)
- 
--#define LOG_INF(...) do { fprintf(stdout, __VA_ARGS__); } while (0)
--#define LOG_WRN(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
--#define LOG_ERR(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
--#define LOG_DBG(...) do { fprintf(stdout, __VA_ARGS__); } while (0)
--
  // RGB uint8 image
  struct clip_image_u8 {
-     int nx;
-@@ -362,7 +358,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -366,7 +356,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
      const int64_t t_img_enc_end_us = ggml_time_us();
      float t_img_enc_ms = (t_img_enc_end_us - t_img_enc_start_us) / 1000.0;
  
