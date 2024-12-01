@@ -100,7 +100,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Building in debug mode")
     target_compile_definitions(ggml PUBLIC GGML_DEBUG)
 endif ()
-target_compile_features(${TARGET} PUBLIC cxx_std_11)
+target_compile_features(${TARGET} PUBLIC cxx_std_17)
 
 #
 # clean patches
