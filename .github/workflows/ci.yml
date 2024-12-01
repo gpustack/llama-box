@@ -455,12 +455,17 @@ jobs:
       matrix:
         # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
         #     12.4 ==> 12.4.0, CentOS 7.
+        #     11.8 ==> 11.8.0, CentOS 7
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         include:
           - arch: 'amd64'
             version: '12.4'
             distro_container_image: 'nvidia/cuda:12.4.0-devel-centos7'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+          - arch: 'amd64'
+            version: '11.8'
+            distro_container_image: 'nvidia/cuda:11.8.0-devel-centos7'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: ubuntu-22.04
     steps:
@@ -1086,12 +1091,17 @@ jobs:
       matrix:
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
         #     12.4 ==> 12.4.1, Windows Server 2022.
+        #     11.8 ==> 11.8.0, Windows Server 2022.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         include:
           - arch: 'amd64'
             version: '12.4'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.1/network_installers/cuda_12.4.1_windows_network.exe'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+          - arch: 'amd64'
+            version: '11.8'
+            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/11.8.0/network_installers/cuda_11.8.0_windows_network.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: windows-2022
     steps:
