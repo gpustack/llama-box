@@ -118,12 +118,8 @@ sample_method_t stablediffusion_context::get_default_sample_method() {
             return EULER_A;
         case VERSION_SDXL:
         case VERSION_SDXL_REFINER:
-        case VERSION_SD3_2B:
-        case VERSION_SD3_5_2B:
-        case VERSION_SD3_5_8B:
-        case VERSION_FLUX_DEV:
-        case VERSION_FLUX_SCHNELL:
-        case VERSION_FLUX_LITE:
+        case VERSION_SD3:
+        case VERSION_FLUX:
             return EULER;
         default:
             return EULER_A;
@@ -138,14 +134,9 @@ int stablediffusion_context::get_default_sample_steps() {
         case VERSION_SDXL:
         case VERSION_SDXL_REFINER:
             return 40;
-        case VERSION_SD3_2B:
-        case VERSION_SD3_5_2B:
-        case VERSION_SD3_5_8B:
-        case VERSION_FLUX_DEV:
-        case VERSION_FLUX_SCHNELL:
+        case VERSION_SD3:
+        case VERSION_FLUX:
             return 10;
-        case VERSION_FLUX_LITE:
-            return 22;
         default:
             return 20;
     }
@@ -159,22 +150,17 @@ float stablediffusion_context::get_default_cfg_scale() {
         case VERSION_SDXL:
         case VERSION_SDXL_REFINER:
             return 5.0f;
-        case VERSION_SD3_2B:
-        case VERSION_SD3_5_2B:
-        case VERSION_SD3_5_8B:
+        case VERSION_SD3:
             return 4.5f;
-        case VERSION_FLUX_DEV:
-        case VERSION_FLUX_SCHNELL:
+        case VERSION_FLUX:
             return 1.0f;
-        case VERSION_FLUX_LITE:
-            return 3.5f;
         default:
             return 4.5f;
     }
 }
 
 float stablediffusion_context::get_default_slg_scale() {
-    if (sd_get_version(sd_ctx) == VERSION_SD3_5_2B) {
+    if (sd_get_version(sd_ctx) == VERSION_SD3) {
         return 2.5f;
     }
     return 0.0f;
@@ -326,7 +312,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string embed_dir;
     std::string stacked_id_embed_dir;
     std::string lora_model_dir;
-    ggml_type wtype              = GGML_TYPE_COUNT;
+    sd_type_t wtype              = SD_TYPE_COUNT;
     rng_type_t rng_type          = CUDA_RNG;
     bool vae_decode_only         = false;
     bool free_params_immediately = false;
@@ -362,7 +348,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
 
     upscaler_ctx_t *upscaler_ctx = nullptr;
     if (!params.upscale_model.empty()) {
-        upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, wtype, params.main_gpu);
+        upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, params.main_gpu);
         if (upscaler_ctx == nullptr) {
             LOG_ERR("%s: failed to create upscaler context\n", __func__);
             free_sd_ctx(sd_ctx);
