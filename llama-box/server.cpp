@@ -4533,14 +4533,25 @@ int main(int argc, char **argv) {
     }
     svr.new_task_queue = [&n_threads_http] { return new httplib::ThreadPool(n_threads_http); };
 
-    // bind HTTP listen port, run the HTTP server in a thread
-    SRV_INF("listening, hostname = %s, port = %d, n_threads = %d + %d\n",
-            params.hostname.c_str(), params.port, n_threads_http, n_threads_http_addition);
-    if (!svr.bind_to_port(params.hostname, params.port)) {
+    // bind HTTP listen port
+    bool was_bound = false;
+    if (params.port == 0) {
+        int bound_port = svr.bind_to_any_port(params.hostname);
+        if ((was_bound = (bound_port >= 0))) {
+            params.port = bound_port;
+        }
+    } else {
+        was_bound = svr.bind_to_port(params.hostname, params.port);
+    }
+    if (!was_bound) {
         SRV_ERR("%s", "existing due to listening error\n");
         ctx_server.clean(svr);
         return 1;
     }
+    SRV_INF("listening, hostname = %s, port = %d, n_threads = %d + %d\n",
+            params.hostname.c_str(), params.port, n_threads_http, n_threads_http_addition);
+
+    // run the HTTP server in a thread
     std::thread t([&]() { svr.listen_after_bind(); });
     svr.wait_until_ready();
 

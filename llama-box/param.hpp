@@ -522,7 +522,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 char *arg            = argv[i++];
                 bparams.gparams.port = std::stoi(std::string(arg));
-                if (bparams.gparams.port <= 0 || bparams.gparams.port > 65535) {
+                if (bparams.gparams.port < 0 || bparams.gparams.port > 65535) {
                     invalid("--port");
                 }
                 continue;
