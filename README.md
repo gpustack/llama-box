@@ -207,7 +207,7 @@ general:
          --version                print version and exit
          --system-info            print system info and exit
          --list-devices           print list of available devices and exit
-  -v,    --verbose, --log-verbose 
+  -v,    --verbose, --log-verbose
                                   set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V
                                   set the verbosity threshold, messages with a higher verbosity will be ignored
@@ -224,7 +224,7 @@ server:
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
   -a,    --alias NAME             model name alias (default: unknown)
          --lora FILE              apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE 
+         --lora-scaled FILE SCALE
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
          --lora-init-without-apply
                                   load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
@@ -238,10 +238,11 @@ server:
          --rerank                 enable reranking endpoint (default: disabled)
          --slots                  enable slots monitoring endpoint (default: disabled)
          --rpc SERVERS            comma separated list of RPC servers
+         --no-warmup              skip warming up the model with an empty run
 
 server/completion:
 
-  -dev,  --device <dev1,dev2,...> 
+  -dev,  --device <dev1,dev2,...>
                                   comma-separated list of devices to use for offloading (none = don't offload)
                                   use --list-devices to see a list of available devices
   -ngl,  --gpu-layers,  --n-gpu-layers N
@@ -262,25 +263,25 @@ server/completion:
          --slot-save-path PATH    path to save slot kv cache (default: disabled)
   -sps,  --slot-prompt-similarity N
                                   how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-                                  
+
   -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
                                   when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
   -t,    --threads N              number of threads to use during generation (default: -1)
   -C,    --cpu-mask M             set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
   -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
          --cpu-strict <0|1>       use strict CPU placement (default: 0)
-                                  
+
          --prio N                 set process/thread priority (default: 0), one of:
                                     - 0-normal
                                     - 1-medium
                                     - 2-high
                                     - 3-realtime
          --poll <0...100>         use polling level to wait for work (0 - no polling, default: 50)
-                                  
+
   -tb,   --threads-batch N        number of threads to use during batch and prompt processing (default: same as --threads)
   -Cb,   --cpu-mask-batch M       set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
   -Crb,  --cpu-range-batch lo-hi  ranges of CPUs for affinity. Complements --cpu-mask-batch
-         --cpu-strict-batch <0|1> 
+         --cpu-strict-batch <0|1>
                                   use strict CPU placement (default: same as --cpu-strict)
          --prio-batch N           set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   use polling to wait for work (default: same as --poll
@@ -310,7 +311,7 @@ server/completion:
          --dry-base N             set DRY sampling base value (default: 1.75)
          --dry-allowed-length N   set allowed length for DRY sampling (default: 2)
          --dry-penalty-last-n N   set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
-         --dry-sequence-breaker N 
+         --dry-sequence-breaker N
                                   add sequence breaker for DRY sampling, clearing out default breakers (
                                   ;:;";*) in the process; use "none" to not use any sequence breakers
          --dynatemp-range N       dynamic temperature range (default: 0.0, 0.0 = disabled)
@@ -354,7 +355,6 @@ server/completion:
                                   add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
                                   layer range to apply the control vector(s) to, start and end inclusive
-         --no-warmup              skip warming up the model with an empty run
          --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                special tokens output enabled (default: false)
 
@@ -400,13 +400,13 @@ server/images:
                                   path to the CLIP Large (clip-l) text encoder, or use --model included
          --image-clip-g-model PATH
                                   path to the CLIP Generic (clip-g) text encoder, or use --model included
-         --image-t5xxl-model PATH 
+         --image-t5xxl-model PATH
                                   path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
          --image-no-vae-model-offload
                                   disable vae(taesd) model offload
          --image-vae-model PATH   path to Variational AutoEncoder (vae), or use --model included
          --image-vae-tiling       indicate to process vae decoder in tiles to reduce memory usage (default: disabled)
-         --image-taesd-model PATH 
+         --image-taesd-model PATH
                                   path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
          --image-upscale-model PATH
                                   path to the upscale model, or use --model included
