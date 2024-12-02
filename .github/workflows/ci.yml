@@ -1091,7 +1091,7 @@ jobs:
       matrix:
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
         #     12.4 ==> 12.4.1, Windows Server 2022.
-        #     11.8 ==> 11.8.0, Windows Server 2022.
+        #     11.8 ==> 11.8.0, Windows Server 2019.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         include:
@@ -1103,7 +1103,7 @@ jobs:
             version: '11.8'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/11.8.0/network_installers/cuda_11.8.0_windows_network.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-    runs-on: windows-2022
+    runs-on: ${{ matrix.version == '11.8' && 'windows-2019' || 'windows-2022' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1146,8 +1146,14 @@ jobs:
           "CUDA_PATH_V${cudaVersion}=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CUDA_PATH_VX_Y=CUDA_PATH_V${cudaVersion}" | Out-File -FilePath $env:GITHUB_ENV -Append
           
-          cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
-            if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+          if (Test-Path -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          } else {
+            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
           }
       - name: Build
         env:
