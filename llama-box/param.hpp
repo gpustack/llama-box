@@ -159,6 +159,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     if (llama_supports_rpc()) {
         opts.push_back({ "server",                         "       --rpc SERVERS",                          "comma separated list of RPC servers" });
     }
+    opts.push_back({ "server",                             "       --no-warmup",                            "skip warming up the model with an empty run" });
     // server // completion //
     opts.push_back({ "server/completion" });
     if (llama_supports_gpu_offload()) {
@@ -270,7 +271,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "add a control vector" });
     opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "add a control vector with user defined scaling SCALE" });
     opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "layer range to apply the control vector(s) to, start and end inclusive" });
-    opts.push_back({ "server/completion",                  "       --no-warmup",                            "skip warming up the model with an empty run" });
     opts.push_back({ "server/completion",                  "       --spm-infill",                           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                  "-sp,   --special",                              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
     // server // completion //
@@ -2044,6 +2044,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
         bparams.gparams.enable_chat_template     = false;
         bparams.sdparams.model                   = bparams.gparams.model;
         bparams.sdparams.model_alias             = bparams.gparams.model_alias;
+        bparams.sdparams.warmup                  = bparams.gparams.warmup;
         bparams.sdparams.flash_attn              = bparams.gparams.flash_attn;
         bparams.sdparams.n_threads               = bparams.gparams.cpuparams.n_threads;
         bparams.sdparams.main_gpu                = bparams.gparams.main_gpu;

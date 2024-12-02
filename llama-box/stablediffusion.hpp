@@ -45,6 +45,7 @@ struct stablediffusion_params {
     // inherited from common_params
     std::string model;
     std::string model_alias;
+    bool warmup                                         = true;
     bool flash_attn                                     = false;
     int n_threads                                       = 1;
     int main_gpu                                        = 0;
@@ -364,7 +365,25 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         sd_lora_adapters_apply(sd_ctx, lora_adapters);
     }
 
-    return new stablediffusion_context(sd_ctx, upscaler_ctx, params);
+    auto sc = new stablediffusion_context(sd_ctx, upscaler_ctx, params);
+    if (params.warmup) {
+        LOG_WRN("%s: warming up the model with an empty run - please wait ... (--no-warmup to disable)\n", __func__);
+
+        stablediffusion_sampler_params wparams = {};
+        wparams.seed = LLAMA_DEFAULT_SEED;
+        wparams.height = params.max_height;
+        wparams.width = params.max_width;
+        wparams.sampler = sc->get_default_sample_method();
+        wparams.schedule = DEFAULT;
+        wparams.cfg_scale = sc->get_default_cfg_scale();
+        wparams.sample_steps = 1;
+        stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
+        sc->sample_stream(stream);
+        sd_sampling_stream_free(stream->stream);
+        delete stream;
+    }
+
+    return sc;
 }
 
 static void sd_log_set(sd_log_cb_t cb, void *data) {
