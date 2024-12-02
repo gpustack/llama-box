@@ -369,16 +369,20 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     if (params.warmup) {
         LOG_WRN("%s: warming up the model with an empty run - please wait ... (--no-warmup to disable)\n", __func__);
 
-        stablediffusion_sampler_params wparams = {};
-        wparams.seed = LLAMA_DEFAULT_SEED;
-        wparams.height = params.max_height;
-        wparams.width = params.max_width;
-        wparams.sampler = sc->get_default_sample_method();
-        wparams.schedule = DEFAULT;
-        wparams.cfg_scale = sc->get_default_cfg_scale();
-        wparams.sample_steps = 1;
+        stablediffusion_sampler_params wparams  = {};
+        wparams.seed                            = LLAMA_DEFAULT_SEED;
+        wparams.height                          = params.max_height;
+        wparams.width                           = params.max_width;
+        wparams.sampler                         = sc->get_default_sample_method();
+        wparams.schedule                        = DEFAULT;
+        wparams.cfg_scale                       = sc->get_default_cfg_scale();
+        wparams.sample_steps                    = 1;
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);
+        stablediffusion_generated_image img = sc->result_stream(stream);
+        if (img.data != nullptr) {
+            stbi_image_free(img.data);
+        }
         sd_sampling_stream_free(stream->stream);
         delete stream;
     }
