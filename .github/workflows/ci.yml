@@ -709,6 +709,8 @@ jobs:
         distro_container_image:
           - 'ascendai/cann:8.0.rc2.alpha003-910b-openeuler20.03-py3.9'
           - 'ascendai/cann:8.0.rc2.alpha003-910b-ubuntu20.04-py3.9'
+          - 'gpustack/ascendai-cann:8.0.RC2.alpha003-310p-openeuler20.03-py3.9'
+          - 'gpustack/ascendai-cann:8.0.RC2.alpha003-310p-ubuntu20.04-py3.9'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
