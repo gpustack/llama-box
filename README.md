@@ -37,7 +37,8 @@ LLaMA Box supports the following platforms.
 
 | Backend                      | OS/Arch                                                | Device Requirement                                                                                                                                                                                                                                                                                                                                                                         |
 |------------------------------|--------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **NVIDIA CUDA 12.4**         | `linux/amd64`<br/> `windows/amd64`                     | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`, see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                         |
+| **NVIDIA CUDA 12.4**         | `linux/amd64`<br/> `windows/amd64`                     | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                              |
+| **NVIDIA CUDA 11.8**         | `linux/amd64`<br/> `windows/amd64`                     | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=450.80.02`(linux)/`>=452.39`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                              |
 | **AMD ROCm/HIP 6.1**         | `linux/amd64`<br/> `windows/amd64`                     | LLVM target matches `gfx906 (linux only)`, `gfx908 (linux only)`, `gfx90a (linux only)`, `gfx942 (linux only)`, `gfx1030`, `gfx1100`, `gfx1101` or `gfx1102`, see <br/>https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html, <br/> https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.1.2/reference/system-requirements.html. |
 | **Intel oneAPI 2025.0**      | `linux/amd64`<br/> `windows/amd64`                     | Support [Intel oneAPI](https://en.wikipedia.org/wiki/OneAPI_(compute_acceleration)), see <br/>https://www.intel.com/content/www/us/en/developer/articles/system-requirements/intel-oneapi-base-toolkit-system-requirements.html.                                                                                                                                                           |
 | **Huawei Ascend CANN 8.0**   | `linux/amd64`<br/> `linux/arm64`                       | `Ascend 910b`, see <br/>https://www.hiascend.com/document/detail/en/CANNCommunityEdition/600alphaX/softwareinstall/instg/atlasdeploy_03_0015.html.                                                                                                                                                                                                                                         |
@@ -51,7 +52,7 @@ LLaMA Box supports the following platforms.
 >
 > Since v0.0.60, the build of Linux releases are as follows:
 >
-> - **"NVIDIA CUDA 12.4"** and **"AMD ROCm/HIP 6.1"** releases are built on CentOS 7 (glibc 2.17),
+> - **"NVIDIA CUDA 12.4/11.8"** and **"AMD ROCm/HIP 6.1"** releases are built on CentOS 7 (glibc 2.17),
 > - **"Intel oneAPI 2025.0"** releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"Huawei Ascend CANN 8.0"** releases are built on Ubuntu 20.04 (glibc 2.31) and OpenEuler 20.03 (glibc 2.28).
 > - **"Moore Threads MUSA rc3.1"** releases are built on Ubuntu 22.04 (glibc 2.34).
@@ -665,7 +666,8 @@ The available endpoints for the LLaMA Box server mode are:
       data: {"created":1731916371,"data":[{"index":0,"object":"image.chunk","progress":100.0,"b64_json":"..."}], "usage":{"generation_per_second":...,"time_per_generation_ms":...,"time_to_process_ms":...}, ...}
       data: [DONE]
       ```
-    + This endpoint also supports some options like [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
+    + This endpoint also supports some options
+      like [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
       ![https://github.com/AUTOMATIC1111/stable-diffusion-webui](https://raw.githubusercontent.com/AUTOMATIC1111/stable-diffusion-webui/82a973c04367123ae98bd9abdf80d9eda9b910e2/screenshot.png)
       ```
       REQUEST : (application/json)
@@ -727,7 +729,8 @@ The available endpoints for the LLaMA Box server mode are:
       CASE 2: illegal input image
         error: {"code": 400, "message": "Invalid image", "type": "invalid_request_error"}
       ```
-    + This endpoint also supports some options like [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
+    + This endpoint also supports some options
+      like [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
       ```
       REQUEST: (multipart/form-data)
       n=1
