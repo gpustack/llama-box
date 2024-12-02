@@ -320,6 +320,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     }
     opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
     opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sdparams.vae_tiling ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-no-vae-tiling",                  "disable vae decoder in tiles" });
     opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
     opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sdparams.upscale_repeats });
@@ -1869,6 +1870,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             if (!strcmp(flag, "--image-vae-tiling")) {
                 bparams.sdparams.vae_tiling = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-no-vae-tiling")) {
+                bparams.sdparams.vae_tiling = false;
                 continue;
             }
 
