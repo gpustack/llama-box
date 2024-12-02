@@ -725,7 +725,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}
+          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Setup QEMU
@@ -779,10 +779,11 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
-            -DSOC_TYPE=Ascend910B3 \
+            -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_C_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
             ${{ matrix.arch == 'arm64' && '-DCMAKE_CXX_FLAGS_INIT="-march=armv8.2-a"' || '' }} \
+            ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
@@ -813,12 +814,12 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}.zip ${{ github.workspace }}/build/bin/llama-box
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}
+          name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
 
   linux-musa:
     strategy:
