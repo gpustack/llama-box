@@ -420,6 +420,8 @@ server/images:
          --image-control-strength N
                                   how strength to apply the control net (default: 0.900000)
          --image-control-canny    indicate to apply canny preprocessor (default: disabled)
+         --image-free-compute-memory-immediately
+                                  indicate to free compute memory immediately, which allow generating high resolution image (default: disabled)
 
 rpc-server:
 
