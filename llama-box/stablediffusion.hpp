@@ -313,10 +313,11 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string embed_dir;
     std::string stacked_id_embed_dir;
     std::string lora_model_dir;
-    sd_type_t wtype              = SD_TYPE_COUNT;
-    rng_type_t rng_type          = CUDA_RNG;
-    bool vae_decode_only         = false;
-    bool free_params_immediately = false;
+    sd_type_t wtype               = SD_TYPE_COUNT;
+    rng_type_t rng_type           = CUDA_RNG;
+    bool vae_decode_only          = false;
+    bool free_params_immediately  = false;
+    bool free_compute_immediately = !params.warmup;
 
     sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
@@ -333,6 +334,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         vae_decode_only,
         params.vae_tiling,
         free_params_immediately,
+        free_compute_immediately,
         params.n_threads,
         wtype,
         rng_type,
