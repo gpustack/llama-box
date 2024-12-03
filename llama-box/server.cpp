@@ -136,7 +136,6 @@ struct server_slot {
     bool oaicompat_image_edit     = false;
     struct stablediffusion_sampler_params sdsparams;
     stablediffusion_sampling_stream *sdsstream = nullptr;
-    stablediffusion_generated_image generated_image;
 
     // state
     int32_t n_generate_image_steps = 0;
@@ -238,10 +237,6 @@ struct server_slot {
                 sd_sampling_stream_free(sdsstream->stream);
                 delete sdsstream;
                 sdsstream = nullptr;
-            }
-            if (generated_image.data != nullptr) {
-                stbi_image_free(generated_image.data);
-                generated_image.data = nullptr;
             }
             return;
         }
@@ -1945,7 +1940,7 @@ struct server_context {
         queue_results.send(res);
     }
 
-    void send_image(const server_slot &slot, const int32_t progressed_steps, const int32_t total_steps) {
+    void send_image(const server_slot &slot, const int32_t progressed_steps, const int32_t total_steps, const stablediffusion_generated_image &generated_image) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
@@ -1959,7 +1954,7 @@ struct server_context {
         };
 
         if (res.stop) {
-            res.data["b64_json"] = base64_encode(slot.generated_image.data, slot.generated_image.size);
+            res.data["b64_json"] = base64_encode(generated_image.data, generated_image.size);
             res.data["timings"]  = slot.get_formated_timings();
         }
 
@@ -2449,6 +2444,8 @@ struct server_context {
                     continue;
                 }
 
+                stablediffusion_generated_image generated_image{};
+
                 SLT_DBG(slot, "%s", "sampling image\n");
                 size_t t0     = ggml_time_us();
                 bool goahead  = sd_ctx->sample_stream(slot.sdsstream);
@@ -2456,22 +2453,23 @@ struct server_context {
                 auto progress = sd_ctx->progress_stream(slot.sdsstream);
                 SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
                 if (slot.sdsparams.stream) {
-                    send_image(slot, progress.first, progress.second + 1);
+                    send_image(slot, progress.first, progress.second + 1, generated_image);
                 }
                 if (goahead) {
                     continue;
                 }
 
                 slot.n_generate_image_steps = sd_ctx->progress_steps(slot.sdsstream);
-                slot.generated_image        = sd_ctx->result_stream(slot.sdsstream);
-                if (slot.generated_image.data == nullptr) {
+                generated_image             = sd_ctx->result_stream(slot.sdsstream);
+                if (generated_image.data == nullptr) {
                     slot.release();
                     send_error(slot, "failed to get result image from generation stream", ERROR_TYPE_SERVER);
                     continue;
                 }
-
                 slot.release();
-                send_image(slot, progress.first + 1, progress.second + 1);
+                send_image(slot, progress.first + 1, progress.second + 1, generated_image);
+
+                stbi_image_free(generated_image.data);
             }
 
             return;
