@@ -39,8 +39,9 @@ struct stablediffusion_params {
     int upscale_repeats        = 1;
     bool control_model_offload = true;
     std::string control_net_model;
-    float control_strength = 0.9f;
-    bool control_canny     = false;
+    float control_strength        = 0.9f;
+    bool control_canny            = false;
+    bool free_compute_immediately = false;
 
     // inherited from common_params
     std::string model;
@@ -317,7 +318,6 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     rng_type_t rng_type           = CUDA_RNG;
     bool vae_decode_only          = false;
     bool free_params_immediately  = false;
-    bool free_compute_immediately = !params.warmup;
 
     sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
@@ -334,7 +334,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         vae_decode_only,
         params.vae_tiling,
         free_params_immediately,
-        free_compute_immediately,
+        params.free_compute_immediately,
         params.n_threads,
         wtype,
         rng_type,
@@ -375,9 +375,9 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         wparams.seed                            = LLAMA_DEFAULT_SEED;
         wparams.height                          = params.max_height;
         wparams.width                           = params.max_width;
-        wparams.sampler                         = sc->get_default_sample_method();
+        wparams.sampler                         = EULER;
         wparams.schedule                        = DEFAULT;
-        wparams.cfg_scale                       = sc->get_default_cfg_scale();
+        wparams.cfg_scale                       = 1.0f;
         wparams.sample_steps                    = 1;
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);

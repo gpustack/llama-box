@@ -330,6 +330,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sdparams.control_strength });
     opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sdparams.control_canny ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-free-compute-memory-immediately",
+                                                                                                            "indicate to free compute memory immediately, which allow generating high resolution image (default: %s)", sdparams.free_compute_immediately ? "enabled" : "disabled" });
     // server // images //
     // server //
     // rpc-server //
@@ -1938,6 +1940,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             if (!strcmp(flag, "--image-control-canny")) {
                 bparams.sdparams.control_canny = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--image-free-compute-memory-immediately")) {
+                bparams.sdparams.free_compute_immediately = true;
                 continue;
             }
 
