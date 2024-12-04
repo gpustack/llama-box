@@ -97,26 +97,38 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     std::string default_sampler_type_names;
     for (const auto &sampler : sampling.samplers) {
         default_sampler_type_chars += common_sampler_type_to_chr(sampler);
-        default_sampler_type_names += common_sampler_type_to_str(sampler) + ";";
+        default_sampler_type_names += common_sampler_type_to_str(sampler);
+        default_sampler_type_names += (&sampler == &sampling.samplers.back() ? "" : ";");
     }
-    default_sampler_type_names.pop_back();
 
     std::string sd_sampler_type_names;
     for (int m = 0; m < N_SAMPLE_METHODS; m++) {
-        sd_sampler_type_names += std::string(sd_sample_method_to_argument(sample_method_t(m))) + ";";
+        sd_sampler_type_names += std::string(sd_sample_method_to_argument(sample_method_t(m)));
+        sd_sampler_type_names += (m == N_SAMPLE_METHODS - 1 ? "" : ";");
     }
-    sd_sampler_type_names.pop_back();
     std::string sd_scheduler_names;
     for (int d = 0; d < N_SCHEDULES; d++) {
-        sd_scheduler_names += std::string(sd_schedule_to_argument(schedule_t(d))) + ";";
+        sd_scheduler_names += std::string(sd_schedule_to_argument(schedule_t(d)));
+        sd_scheduler_names += (d == N_SCHEDULES - 1 ? "" : ";");
     }
-    sd_scheduler_names.pop_back();
 
     std::string default_dry_sequence_breaker_names;
     for (const auto &breaker : sampling.dry_sequence_breakers) {
-        default_dry_sequence_breaker_names += breaker + ";";
+        default_dry_sequence_breaker_names += breaker;
+        default_dry_sequence_breaker_names += (&breaker == &sampling.dry_sequence_breakers.back() ? "" : ";");
     }
-    default_dry_sequence_breaker_names.pop_back();
+
+    std::string default_builtin_chat_templates;
+    {
+        std::vector<const char *> supported_tmpl;
+        int32_t res = llama_chat_builtin_templates(nullptr, 0);
+        supported_tmpl.resize(res);
+        llama_chat_builtin_templates(supported_tmpl.data(), supported_tmpl.size());
+        for (const auto &tmpl : supported_tmpl) {
+            default_builtin_chat_templates += tmpl;
+            default_builtin_chat_templates += (&tmpl == &supported_tmpl.back() ? "" : ";");
+        }
+    }
 
     // clang-format off
     std::vector<opt> opts;
@@ -175,7 +187,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
                                                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
     opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
-                                                                                                           "only commonly used templates are accepted: https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template" });
+                                                                                                            "list of built-in templates:\n%s", default_builtin_chat_templates.c_str() });
     opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
     opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "path to save slot kv cache (default: disabled)" });
     opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
@@ -460,7 +472,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 fprintf(stderr, "compiler : %s\n", LLAMA_BOX_BUILD_COMPILER);
                 fprintf(stderr, "target   : %s\n", LLAMA_BOX_BUILD_TARGET);
                 fprintf(stderr, "vendor   : \n");
-                fprintf(stderr, "  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_BOX_BUILD_NUMBER);
+                fprintf(stderr, "  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER);
                 fprintf(stderr, "  - stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
                 exit(0);
             }

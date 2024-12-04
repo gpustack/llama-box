@@ -1,19 +1,8 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 7ba4cea5..3def24e1 100644
+index d7c94352..63e5febe 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -24,6 +24,10 @@
- #include "ggml-vulkan.h"
- #endif
- 
-+#ifdef GGML_USE_SYCL
-+#include "ggml-sycl.h"
-+#endif
-+
- #define STB_IMAGE_IMPLEMENTATION
- #include "stb_image.h"
- 
-@@ -40,17 +44,7 @@
+@@ -44,17 +44,7 @@
  #include <cinttypes>
  #include <limits>
  
@@ -32,18 +21,6 @@ index 7ba4cea5..3def24e1 100644
  
  //#define CLIP_DEBUG_FUNCTIONS
  
-@@ -1169,6 +1163,11 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
-     LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
- #endif
- 
-+#ifdef GGML_USE_SYCL
-+    new_clip->backend = ggml_backend_sycl_init(0);
-+    LOG_INF("%s: CLIP using SYCL backend\n", __func__);
-+#endif
-+
-     if (!new_clip->backend) {
-         new_clip->backend = ggml_backend_cpu_init();
-         LOG_INF("%s: CLIP using CPU backend\n", __func__);
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
 index 4ca53a0b..924ad064 100644
 --- a/examples/llava/llava.cpp

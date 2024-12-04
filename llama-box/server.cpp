@@ -878,6 +878,8 @@ struct server_context {
             params_draft.n_gpu_layers    = params_base.speculative.n_gpu_layers;
             params_draft.cpuparams       = params_base.speculative.cpuparams;
             params_draft.cpuparams_batch = params_base.speculative.cpuparams_batch;
+            params_draft.cache_type_k    = "fp16";
+            params_draft.cache_type_v    = "fp16";
             params_draft.warmup          = false;
             common_init_result ir        = common_init_from_params(params_draft);
             model_draft                  = ir.model;
@@ -3263,7 +3265,7 @@ int main(int argc, char **argv) {
     LOG_INF("compiler: %s\n", LLAMA_BOX_BUILD_COMPILER);
     LOG_INF("target: %s\n", LLAMA_BOX_BUILD_TARGET);
     LOG_INF("vendor: \n");
-    LOG_INF("  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_BOX_BUILD_NUMBER);
+    LOG_INF("  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER);
     LOG_INF("  - stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
     LOG_INF("%s\n", common_params_get_system_info(params).c_str());
     LOG_INF("\n");

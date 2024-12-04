@@ -1,15 +1,40 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 22b951ba..b8c1810c 100644
+index 6a6f4c2a..22e1a87e 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -22123,6 +22123,26 @@ static int32_t llama_chat_apply_template_internal(
+@@ -1577,6 +1577,7 @@ enum llm_chat_template {
+     LLM_CHAT_TEMPLATE_EXAONE_3,
+     LLM_CHAT_TEMPLATE_RWKV_WORLD,
+     LLM_CHAT_TEMPLATE_GRANITE,
++    LLM_CHAT_TEMPLATE_FALCON,
+     LLM_CHAT_TEMPLATE_UNKNOWN,
+ };
+ 
+@@ -1608,6 +1609,7 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
+     { "exaone3",           LLM_CHAT_TEMPLATE_EXAONE_3          },
+     { "rwkv-world",        LLM_CHAT_TEMPLATE_RWKV_WORLD        },
+     { "granite",           LLM_CHAT_TEMPLATE_GRANITE           },
++    { "falcon",            LLM_CHAT_TEMPLATE_FALCON           },
+ };
+ 
+ static llm_arch llm_arch_from_string(const std::string & name) {
+@@ -21994,6 +21996,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+         return LLM_CHAT_TEMPLATE_RWKV_WORLD;
+     } else if (tmpl_contains("<|start_of_role|>")) {
+         return LLM_CHAT_TEMPLATE_GRANITE;
++    } else if ((tmpl_contains("Falcon:") && tmpl_contains("message['content']"))) {
++        return LLM_CHAT_TEMPLATE_FALCON;
+     }
+     return LLM_CHAT_TEMPLATE_UNKNOWN;
+ }
+@@ -22317,6 +22321,26 @@ static int32_t llama_chat_apply_template_internal(
          if (add_ass) {
              ss << "<|start_of_role|>assistant<|end_of_role|>\n";
          }
-+    } else if (tmpl == "falcon" || (tmpl_contains("Falcon:") && tmpl_contains("message['content']"))) {
++    } else if (tmpl == LLM_CHAT_TEMPLATE_FALCON) {
 +        // Falcon
-+        std::string system_prompt = "";
-+        for (auto message : chat) {
++        std::string system_prompt;
++        for (const auto &message : chat) {
 +            std::string role(message->role);
 +            if (role == "system") {
 +                system_prompt = trim(message->content);
