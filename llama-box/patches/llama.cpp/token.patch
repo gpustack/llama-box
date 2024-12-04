@@ -1,8 +1,8 @@
 diff --git a/include/llama.h b/include/llama.h
-index e85f459f..ccc30c60 100644
+index 168c3fa1..ed03d56a 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -901,6 +901,7 @@ extern "C" {
+@@ -902,6 +902,7 @@ extern "C" {
      LLAMA_API llama_token llama_token_sep(const struct llama_model * model); // sentence separator
      LLAMA_API llama_token llama_token_nl (const struct llama_model * model); // next-line
      LLAMA_API llama_token llama_token_pad(const struct llama_model * model); // padding
@@ -38,10 +38,10 @@ index 4bb16d2e..528f0291 100644
  llama_token llama_token_prefix_impl(const struct llama_vocab & vocab);
  llama_token llama_token_middle_impl(const struct llama_vocab & vocab);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 6a6f4c2a..b729c137 100644
+index 00f78639..05648091 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -21820,6 +21820,10 @@ llama_token llama_token_pad(const struct llama_model * model) {
+@@ -21683,6 +21683,10 @@ llama_token llama_token_pad(const struct llama_model * model) {
      return llama_token_pad_impl(model->vocab);
  }
  
