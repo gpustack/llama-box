@@ -389,6 +389,26 @@ jobs:
             source /etc/os-release
             cat /etc/os-release
             if [ "\${ID}" = "centos" ]; then
+              # NB(thxCode): Patch for CentOS, see
+              # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
+              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+              yum install -y centos-release-scl
+              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
+                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+              yum update -y \
+                && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
+              export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
+                && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
+                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info\${INFOPATH}" \
+                && export PCP_DIR="/opt/rh/devtoolset-9/root" \
+                && export PERL5LIB="/opt/rh/devtoolset-9/root//usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root//usr/share/perl5/" \
+                && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
+                && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
+                && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
+              yum --enablerepo=extras install -y epel-release
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
               yum update -y \
                 && yum install -y make glibc-static libstdc++-static ccache curl git
@@ -405,7 +425,8 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIP=on -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DGGML_HIP=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
@@ -430,8 +451,6 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
-            --env CC=/opt/rocm/llvm/bin/clang \
-            --env CXX=/opt/rocm/llvm/bin/clang++ \
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
             --env AMDGPU_TARGETS \
@@ -1064,7 +1083,7 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
-            -DGGML_HIP=on -DGGML_HIPBLAS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DGGML_HIP=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             ${{ matrix.arch == 'amd64' && '-DGGML_NATIVE=off' || '-DGGML_NATIVE=on' }} `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
