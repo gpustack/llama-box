@@ -332,10 +332,25 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
             if (curr_msg["content"].is_string()) {
                 content = curr_msg["content"].get<std::string>();
             } else if (curr_msg["content"].is_array()) {
+                int32_t n_img = 0;
                 for (const json &part : curr_msg["content"]) {
-                    if (part.contains("text")) {
-                        content += "\n" + part["text"].get<std::string>();
+                    if (part.contains("type") && part.at("type") == "image_url") {
+                        n_img++;
+                        continue;
                     }
+                    if (part.contains("text")) {
+                        if (!content.empty()) {
+                            content += "\n";
+                        }
+                        for (int i = 0; i < n_img; i++) {
+                            content += "<image>\n";
+                        }
+                        content += part["text"].get<std::string>();
+                        n_img = 0;
+                    }
+                }
+                for (int i = 0; i < n_img; i++) {
+                    content += "\n<image>";
                 }
             } else {
                 throw std::runtime_error("Invalid 'content' type (ref: "
@@ -660,8 +675,8 @@ static json oaicompat_completions_request(const struct common_params &params, co
 
     // Apply chat template to the list of messages
     if (chat) {
-        const json messages = body.at("messages");
-        bool chat_vision    = false;
+        const json &messages = body.at("messages");
+        bool chat_vision     = false;
         for (const json &msg : messages) {
             if (!msg.contains("content") || !msg.at("content").is_array()) {
                 continue;
@@ -673,21 +688,37 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 }
             }
         }
-        if (!chat_vision) {
-            llama_params["prompt"] = format_chat(model, chat_template, messages);
-        } else {
+        llama_params["prompt"] = format_chat(model, chat_template, messages);
+        if (chat_vision) {
             llama_params["__oaicompat_completion_chat_vision"] = true;
-            // Parse the vision messages,
+            // Extract the image messages,
             // see https://platform.openai.com/docs/guides/vision
+            json images = json::array();
             for (const json &msg : messages) {
-                if (msg.contains("role") && msg.at("role") == "user") {
-                    llama_params["prompt"] = msg.at("content");
-                    break;
+                if (!msg.contains("role") || msg.at("role") != "user") {
+                    continue;
+                }
+                for (const json &part : msg.at("content")) {
+                    if (!part.contains("type") || part.at("type") != "image_url") {
+                        continue;
+                    }
+                    std::string img = json_value(part.at("image_url"), "url", std::string());
+                    if (img.find("data:image/") == std::string::npos) {
+                        throw std::runtime_error("Illegal param: image data URI is not supported");
+                    }
+                    const std::string split = "base64,";
+                    const size_t idx        = img.find(split);
+                    if (idx == std::string::npos) {
+                        throw std::runtime_error("Illegal param: invalid image URL, must be a base64-encoded image");
+                    }
+                    img = img.substr(idx + split.length());
+                    if (img.empty()) {
+                        throw std::runtime_error("Illegal param: empty image base64-encoded data");
+                    }
+                    images.push_back(img);
                 }
             }
-            if (!llama_params.contains("prompt")) {
-                throw std::runtime_error(R"(Illegal param: only "user" role is supported to request vision completion)");
-            }
+            llama_params["multi_modal_data"] = json{{"images", images}};
         }
     } else if (body.contains("prompt")) {
         llama_params["prompt"] = body.at("prompt");
@@ -1505,3 +1536,71 @@ static json format_error_response(const std::string &message, const enum error_t
         {"type", type_str},
     };
 }
+
+struct llama_text_token_batch_wrapper {
+    std::vector<llama_pos> pos;
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id> seq_id_0;
+    std::vector<llama_seq_id *> seq_ids;
+    std::vector<int8_t> logits;
+    llama_batch batch;
+
+    llama_text_token_batch_wrapper(llama_token *token, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
+        pos.resize(n_tokens);
+        n_seq_id.resize(n_tokens);
+        seq_ids.resize(n_tokens + 1);
+        logits.resize(n_tokens);
+        seq_id_0.resize(1);
+        seq_id_0[0]       = seq_id;
+        seq_ids[n_tokens] = nullptr;
+        batch             = {
+            /*n_tokens       =*/n_tokens,
+            /*tokens         =*/token,
+            /*embd           =*/nullptr,
+            /*pos            =*/pos.data(),
+            /*n_seq_id       =*/n_seq_id.data(),
+            /*seq_id         =*/seq_ids.data(),
+            /*logits         =*/logits.data(),
+        };
+        for (int i = 0; i < n_tokens; i++) {
+            batch.pos[i]      = pos_0 + i;
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i]   = seq_id_0.data();
+            batch.logits[i]   = false;
+        }
+    }
+};
+
+struct llava_image_embed_batch_wrapper {
+    std::vector<llama_pos> pos;
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id> seq_id_0;
+    std::vector<llama_seq_id *> seq_ids;
+    std::vector<int8_t> logits;
+    llama_batch batch;
+
+    llava_image_embed_batch_wrapper(float *embd, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
+        pos.resize(n_tokens);
+        n_seq_id.resize(n_tokens);
+        seq_ids.resize(n_tokens + 1);
+        logits.resize(n_tokens);
+        seq_id_0.resize(1);
+        seq_id_0[0]       = seq_id;
+        seq_ids[n_tokens] = nullptr;
+        batch             = {
+            /*n_tokens       =*/n_tokens,
+            /*tokens         =*/nullptr,
+            /*embd           =*/embd,
+            /*pos            =*/pos.data(),
+            /*n_seq_id       =*/n_seq_id.data(),
+            /*seq_id         =*/seq_ids.data(),
+            /*logits         =*/logits.data(),
+        };
+        for (int i = 0; i < n_tokens; i++) {
+            batch.pos[i]      = pos_0 + i;
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i]   = seq_id_0.data();
+            batch.logits[i]   = false;
+        }
+    }
+};

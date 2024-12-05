@@ -1,24 +1,28 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 00f78639..ef37379d 100644
+index 00f78639..a7eff8d3 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -1579,6 +1579,7 @@ enum llm_chat_template {
+@@ -1579,6 +1579,9 @@ enum llm_chat_template {
      LLM_CHAT_TEMPLATE_EXAONE_3,
      LLM_CHAT_TEMPLATE_RWKV_WORLD,
      LLM_CHAT_TEMPLATE_GRANITE,
 +    LLM_CHAT_TEMPLATE_FALCON,
++    LLM_CHAT_TEMPLATE_LLAVA,
++    LLM_CHAT_TEMPLATE_LLAVA_MISTRAL,
      LLM_CHAT_TEMPLATE_UNKNOWN,
  };
  
-@@ -1610,6 +1611,7 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
+@@ -1610,6 +1613,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
      { "exaone3",           LLM_CHAT_TEMPLATE_EXAONE_3          },
      { "rwkv-world",        LLM_CHAT_TEMPLATE_RWKV_WORLD        },
      { "granite",           LLM_CHAT_TEMPLATE_GRANITE           },
-+    { "falcon",            LLM_CHAT_TEMPLATE_FALCON           },
++    { "falcon",            LLM_CHAT_TEMPLATE_FALCON            },
++    { "llava",             LLM_CHAT_TEMPLATE_LLAVA             },
++    { "llava-mistral",     LLM_CHAT_TEMPLATE_LLAVA_MISTRAL     },
  };
  
  static llm_arch llm_arch_from_string(const std::string & name) {
-@@ -21857,6 +21859,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -21857,6 +21863,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
          return LLM_CHAT_TEMPLATE_RWKV_WORLD;
      } else if (tmpl_contains("<|start_of_role|>")) {
          return LLM_CHAT_TEMPLATE_GRANITE;
@@ -27,7 +31,7 @@ index 00f78639..ef37379d 100644
      }
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
-@@ -22180,6 +22184,26 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22180,6 +22188,61 @@ static int32_t llama_chat_apply_template_internal(
          if (add_ass) {
              ss << "<|start_of_role|>assistant<|end_of_role|>\n";
          }
@@ -50,6 +54,41 @@ index 00f78639..ef37379d 100644
 +        }
 +        if (add_ass) {
 +            ss << "\nAssistant:";
++        }
++    } else if (tmpl == LLM_CHAT_TEMPLATE_LLAVA || tmpl == LLM_CHAT_TEMPLATE_LLAVA_MISTRAL) {
++        // llava 1.5
++        if (tmpl != LLM_CHAT_TEMPLATE_LLAVA_MISTRAL) {
++            ss << "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.\n";
++        }
++        for (auto message : chat) {
++            std::string role(message->role);
++            if (role == "user") {
++                std::string content(message->content);
++                if (tmpl != LLM_CHAT_TEMPLATE_LLAVA_MISTRAL) {
++                    ss << "USER:" << message->content << "\n";
++                } else {
++                    const std::string sign = "<image>\n";
++                    const size_t sign_pos = content.find(sign);
++                    if (sign_pos != std::string::npos) {
++                        content = content.replace(sign_pos, sign.size(), "");
++                        ss << "<image>\n";
++                    }
++                    ss << "USER:\n" << content.c_str() << "\n";
++                }
++            } else if (role == "assistant") {
++                if (tmpl != LLM_CHAT_TEMPLATE_LLAVA_MISTRAL) {
++                    ss << "ASSISTANT:" << message->content << "</s>\n";
++                } else {
++                    ss << "ASSISTANT:\n" << message->content << "</s>\n";
++                }
++            }
++        }
++        if (add_ass) {
++            if (tmpl != LLM_CHAT_TEMPLATE_LLAVA_MISTRAL) {
++                ss << "ASSISTANT:";
++            } else {
++                ss << "ASSISTANT:\n";
++            }
 +        }
      } else {
          // template not supported

@@ -105,7 +105,7 @@ image_generate() {
         DATA="{\"prompt\":\"${PROMPT}\"}"
     fi
     if [[ "${SAMPLER}" != "null" ]]; then
-        DATA="$(echo -n "${DATA}" | jq \
+        DATA="$(echo -n "${DATA}" | jq -cr \
             --argjson n "${N}" \
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
@@ -132,7 +132,7 @@ image_generate() {
                   }
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
-        DATA="$(echo -n "${DATA}" | jq \
+        DATA="$(echo -n "${DATA}" | jq -cr \
             --argjson n "${N}" \
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
@@ -151,7 +151,7 @@ image_generate() {
                   }
                 } * .')"
     else
-        DATA="$(echo -n "${DATA}" | jq \
+        DATA="$(echo -n "${DATA}" | jq -cr \
             --argjson n "${N}" \
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
@@ -169,6 +169,7 @@ image_generate() {
                 } * .')"
     fi
     echo "Q: ${DATA}" >>"${LOG_FILE}"
+    echo "${DATA}" > /tmp/request.json
 
     START_TIME=$(date +%s)
 
@@ -184,10 +185,10 @@ image_generate() {
         --request POST \
         --url "${API_URL}/v1/images/generations" \
         --header "Content-Type: application/json" \
-        --data-raw "${DATA}")
+        --data @/tmp/request.json)
     set +e
 
-#    rm -f /tmp/image_generate_*.json
+    #    rm -f /tmp/image_generate_*.json
     printf "\n"
 }
 

@@ -106,7 +106,7 @@ image_edit() {
     fi
     DATA="{\"prompt\":\"${PROMPT}\"}"
     if [[ "${SAMPLER}" != "null" ]]; then
-        DATA="$(echo -n "${DATA}" | jq \
+        DATA="$(echo -n "${DATA}" | jq -cr \
             --argjson n "${N}" \
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
@@ -133,7 +133,7 @@ image_edit() {
                   stream: true
                 } * .')"
     else
-        DATA="$(echo -n "${DATA}" | jq \
+        DATA="$(echo -n "${DATA}" | jq -cr \
             --argjson n "${N}" \
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \

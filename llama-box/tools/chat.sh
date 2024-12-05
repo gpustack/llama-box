@@ -53,7 +53,7 @@ chat_completion() {
     else
         DATA="{\"messages\":[$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]}"
     fi
-    DATA="$(echo -n "${DATA}" | jq \
+    DATA="$(echo -n "${DATA}" | jq -cr \
         --argjson frequency_penalty "${FREQUENCY_PENALTY}" \
         --argjson logprobs "${LOGPROBS}" \
         --argjson top_logprobs "${TOP_LOGPROBS}" \
@@ -80,6 +80,7 @@ chat_completion() {
         top_p: $top_p
       } * .')"
     echo "Q: ${DATA}" >>"${LOG_FILE}"
+    echo "${DATA}" > /tmp/request.json
 
     ANSWER=''
     PRE_CONTENT=''
@@ -140,7 +141,7 @@ chat_completion() {
         --request POST \
         --url "${API_URL}/v1/chat/completions" \
         --header "Content-Type: application/json" \
-        --data-raw "${DATA}")
+        --data @/tmp/request.json)
 
     printf "\n"
 

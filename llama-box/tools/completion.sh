@@ -61,7 +61,12 @@ N_KEEP=$(tokenize "${INSTRUCTION}" | wc -l)
 
 completion() {
     PROMPT="$(trim_trailing "$(format_prompt "$1")")"
-    DATA="$(echo -n "${PROMPT}" | jq -crs \
+    if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
+        DATA="$(cat "${PROMPT:1}")"
+    else
+        DATA="{\"prompt\":\"${PROMPT}\"}"
+    fi
+    DATA="$(echo -n "${DATA}" | jq -cr \
         --argjson n_predict "${N_PREDICT}" \
         --argjson seed "${SEED}" \
         --argjson stop "${STOP}" \
@@ -70,7 +75,6 @@ completion() {
         --argjson top_k "${TOP_K}" \
         --argjson n_keep "${N_KEEP}" \
         '{
-        prompt: .,
         n_predict: $n_predict,
         seed: $seed,
         stop: $stop,
@@ -79,9 +83,11 @@ completion() {
         top_k: $top_k,
         n_keep: $n_keep,
         cache_prompt: false,
-        stream: true
-      }')"
+        stream: true,
+        stream_options: {include_usage: true}
+      } * .')"
     echo "Q: ${DATA}" >>"${LOG_FILE}"
+    echo "${DATA}" > /tmp/request.json
 
     ANSWER=''
     PRE_CONTENT=''
@@ -142,7 +148,7 @@ completion() {
         --request POST \
         --url "${API_URL}/completion" \
         --header "Content-Type: application/json" \
-        --data-raw "${DATA}")
+        --data @/tmp/request.json)
 
     printf "\n"
 

@@ -129,6 +129,10 @@ struct server_slot {
 
     struct slot_params params;
 
+    llama_tokens prompt_tokens;
+    std::string prompt_string;
+    json prompt_multi_modal_data;
+
     /* STABLE DIFFUSION */
 
     bool oaicompat_image          = false;
@@ -148,16 +152,13 @@ struct server_slot {
 
     /* LLAMA */
 
-    // input prompt tokens
-    llama_tokens prompt_tokens;
-    json prompt; // original prompt NB(thxCode): for chat vision
-
     // used to determine the slot that has been used the longest
     int64_t t_last_used = -1;
 
     // generation props
     int32_t n_ctx       = 0; // context size per slot
     int32_t n_past      = 0;
+    int32_t n_past_mmd  = 0;
     int32_t n_decoded   = 0;
     int32_t n_remaining = -1;
     int32_t i_batch     = -1;
@@ -222,6 +223,10 @@ struct server_slot {
     void reset() {
         SLT_DBG(*this, "%s", "\n");
 
+        prompt_tokens.clear();
+        prompt_string = "";
+        prompt_multi_modal_data.clear();
+
         /* STABLE DIFFUSION */
 
         if (oaicompat_image) {
@@ -243,19 +248,21 @@ struct server_slot {
 
         /* LLAMA */
 
-        n_prompt_tokens    = 0;
-        last_nl_pos        = 0;
-        generated_text     = "";
-        has_new_line       = false;
-        truncated          = false;
-        stopped_eos        = false;
-        stopped_word       = false;
-        stopped_limit      = false;
-        stopping_word      = "";
-        n_past             = 0;
-        n_sent_text        = 0;
-        n_sent_token_probs = 0;
-        inf_type           = SERVER_TASK_INF_TYPE_COMPLETION;
+        n_prompt_tokens           = 0;
+        n_prompt_tokens_processed = 0;
+        last_nl_pos               = 0;
+        generated_text            = "";
+        has_new_line              = false;
+        truncated                 = false;
+        stopped_eos               = false;
+        stopped_word              = false;
+        stopped_limit             = false;
+        stopping_word             = "";
+        n_past                    = 0;
+        n_past_mmd                = 0;
+        n_sent_text               = 0;
+        n_sent_token_probs        = 0;
+        inf_type                  = SERVER_TASK_INF_TYPE_COMPLETION;
 
         if (smpl != nullptr) {
             common_sampler_free(smpl);
@@ -1165,7 +1172,7 @@ struct server_context {
             slot.sdsparams.stream          = json_value(data, "stream", false);
 
             // get prompt
-            slot.prompt = json_value(data, "prompt", json::object());
+            slot.prompt_string = json_value(data, "prompt", std::string(""));
 
             // get image
             if (slot.oaicompat_image_edit) {
@@ -1363,7 +1370,8 @@ struct server_context {
         // get prompt
         {
             if (slot.oaicompat_completion_chat_vision) {
-                slot.prompt = json_value(data, "prompt", json::object());
+                slot.prompt_string           = data.at("prompt").get<std::string>();
+                slot.prompt_multi_modal_data = data.at("multi_modal_data");
             } else {
                 slot.prompt_tokens = task.prompt_tokens;
             }
@@ -2426,7 +2434,7 @@ struct server_context {
                 slot.t_start_generate_image = 0;
 
                 SLT_DBG(slot, "%s", "creating image generation stream\n");
-                slot.sdsstream = sd_ctx->generate_stream(slot.prompt.get<std::string>().c_str(), slot.sdsparams);
+                slot.sdsstream = sd_ctx->generate_stream(slot.prompt_string.c_str(), slot.sdsparams);
                 if (slot.sdsstream == nullptr) {
                     slot.release();
                     send_error(slot, "failed to create image generation stream", ERROR_TYPE_SERVER);
@@ -2582,7 +2590,6 @@ struct server_context {
                         // empty prompt passed -> release the slot and send empty response
                         if (!slot.oaicompat_completion_chat_vision && prompt_tokens.empty()) {
                             SLT_WRN(slot, "%s", "empty prompt - releasing slot\n");
-
                             slot.release();
                             send_completion(slot);
                             continue;
@@ -2591,8 +2598,15 @@ struct server_context {
                         slot.t_start_process_prompt = ggml_time_us();
                         slot.t_start_generation     = 0;
                         slot.n_past                 = 0;
+                        slot.n_past_mmd             = 0;
                         slot.n_prompt_tokens        = int32_t(prompt_tokens.size());
                         slot.state                  = SLOT_STATE_PROCESSING_PROMPT;
+
+                        if (slot.oaicompat_completion_chat_vision && !preprocess_multi_modal_data(slot, n_batch)) {
+                            slot.release();
+                            send_error(slot, "failed to preprocess multi-modal images", ERROR_TYPE_SERVER);
+                            continue;
+                        }
 
                         SLT_INF(slot, "new prompt, n_ctx_slot = %d, n_keep = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep, slot.n_prompt_tokens);
 
@@ -2740,43 +2754,39 @@ struct server_context {
                         // could not partially delete (likely using a on-Transformer model)
                         llama_kv_cache_seq_rm(ctx, slot.id, -1, -1);
                         // there is no common part left
-                        slot.n_past = 0;
+                        slot.n_past     = 0;
+                        slot.n_past_mmd = 0;
                     }
                     if (ctx_draft != nullptr) {
                         if (!llama_kv_cache_seq_rm(ctx_draft, slot.id, slot_npast, -1)) {
                             llama_kv_cache_seq_rm(ctx_draft, slot.id, -1, -1);
-                            if (slot_npast != 0) {
-                                llama_kv_cache_seq_cp(ctx_draft, 0, slot.id, -1, -1);
-                            }
                         }
                     }
-
-                    SLT_DBG(slot, "kv cache rm [%d, end)\n", slot.n_past);
+                    SLT_DBG(slot, "kv cache rm [%d, end)\n", slot_npast);
 
                     // remove the non-common part from the cache
-                    slot.cache_tokens.resize(slot.n_past);
+                    if (!slot.oaicompat_completion_chat_vision) {
+                        slot.cache_tokens.resize(slot.n_past);
+                    }
 
                     // add prompt tokens for processing in the current batch
                     while (slot.n_past < slot.n_prompt_tokens && batch.n_tokens < n_batch) {
-                        common_batch_add(batch, prompt_tokens[slot.n_past], slot.n_past, {slot.id}, false);
+                        const int32_t idx = slot.n_past - slot.n_past_mmd;
+
+                        common_batch_add(batch, prompt_tokens[idx], slot.n_past, {slot.id}, false);
                         if (ctx_draft != nullptr) {
-                            common_batch_add(batch_draft, prompt_tokens[slot.n_past], slot.n_past, {slot.id}, false);
+                            common_batch_add(batch_draft, prompt_tokens[idx], slot.n_past, {slot.id}, false);
                         }
 
                         if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
-                            slot.cache_tokens.push_back(prompt_tokens[slot.n_past]);
+                            slot.cache_tokens.push_back(prompt_tokens[idx]);
                         }
 
                         slot.n_prompt_tokens_processed++;
                         slot.n_past++;
                     }
 
-                    if (slot.oaicompat_completion_chat_vision && !process_vision_prompt(slot, n_batch)) {
-                        slot.release();
-                        continue;
-                    }
-
-                    SLT_INF(slot, "prompt processing, n_past = %d, n_tokens = %d, n_cached_tokens = %d\n", slot.n_past, batch.n_tokens, slot.n_prompt_tokens - slot.n_prompt_tokens_processed);
+                    SLT_INF(slot, "prompt processing, n_past = %d, n_tokens = %d, n_prompt_tokens = %d, n_preprocessed_tokens = %d\n", slot.n_past, batch.n_tokens, slot.n_prompt_tokens, slot.n_prompt_tokens - slot.n_prompt_tokens_processed);
 
                     // entire prompt has been processed
                     if (slot.n_past == slot.n_prompt_tokens) {
@@ -2790,10 +2800,10 @@ struct server_context {
                         }
 
                         // Process all prompt tokens through sampler system
-                        for (int i = 0; i < slot.n_prompt_tokens; ++i) {
-                            common_sampler_accept(slot.smpl, prompt_tokens[i], false);
+                        for (const llama_token &token : prompt_tokens) {
+                            common_sampler_accept(slot.smpl, token, false);
                             if (ctx_draft != nullptr) {
-                                common_sampler_accept(slot.smpl_draft, prompt_tokens[i], false);
+                                common_sampler_accept(slot.smpl_draft, token, false);
                             }
                         }
 
@@ -3009,111 +3019,161 @@ struct server_context {
         }
     }
 
-    bool process_vision_prompt(server_slot &slot, int n_batch) {
-        const int n_embd = llama_n_embd(model);
-        const auto sz_i  = int32_t(slot.prompt.size());
-        for (int32_t i = 0; i < sz_i; ++i) {
-            const json &jp = slot.prompt.at(i);
-            if (!jp.contains("type")) {
-                continue;
+    bool preprocess_multi_modal_data_text(server_slot &slot, int32_t n_batch, const std::string text, const bool add_bos) const {
+        llama_tokens tokens = common_tokenize(ctx, text, add_bos, true);
+        SLT_INF(slot, "processing text tokens: %zu\n", tokens.size());
+        if (common_log_verbosity_thold > 2) {
+            for (const llama_token &token : tokens) {
+                SLT_INF(slot, "processing text tokens | %6d -> '%s'\n", token, common_token_to_piece(ctx, token).c_str());
             }
-            const std::string type = jp.at("type");
-            if (type == "text" && jp.contains("text")) {
-                // process text prompt
-                llama_tokens tokens = tokenize_mixed(ctx, jp.at("text"), false, true);
-                const auto sz_j     = int32_t(tokens.size());
-                for (int32_t j = 0; j < sz_j; ++j) {
-                    common_batch_add(batch, tokens[j], slot.n_past, {slot.id}, false);
-                    slot.n_past += 1;
-                    slot.n_prompt_tokens += 1;
-                    slot.n_prompt_tokens_processed += 1;
-                    slot.prompt_tokens.push_back(tokens[j]);
-                }
-                if (i + 1 >= sz_i) {
-                    continue;
-                }
-                for (int32_t j = 0; j < batch.n_tokens; j += n_batch) {
-                    const int32_t n_tokens = std::min(n_batch, batch.n_tokens - j);
-                    // clang-format off
-                    llama_batch batch_view = {
-                        n_tokens,
-                        batch.token    + j,
-                        nullptr,
-                        batch.pos      + j,
-                        batch.n_seq_id + j,
-                        batch.seq_id   + j,
-                        batch.logits   + j,
-                    };
-                    // clang-format on
-                    if (llama_decode(ctx, batch_view)) {
-                        send_error(slot, "Failed to decode text", ERROR_TYPE_SERVER);
-                        return false;
-                    }
-                }
-                common_batch_clear(batch);
-            } else if (type == "image_url" && jp.contains("image_url")) {
-                // process image prompt
-                std::string img = json_value(jp.at("image_url"), "url", std::string());
-                if (img.find("data:image/") != 0) {
-                    send_error(slot, "Failed to load image: illegal prefix", ERROR_TYPE_INVALID_REQUEST);
-                    return false;
-                }
-                const std::string split = "base64,";
-                const size_t idx        = img.find(split);
-                if (idx <= 0) {
-                    send_error(slot, "Failed to load image: illegal format", ERROR_TYPE_INVALID_REQUEST);
-                    return false;
-                }
-                img = img.substr(idx + split.length());
-                if (img.empty()) {
-                    send_error(slot, "Failed to load image: empty data", ERROR_TYPE_INVALID_REQUEST);
-                    return false;
-                }
-                const std::vector<uint8_t> buff = base64_decode(img);
-                llava_image_embed *img_embd     = llava_image_embed_make_with_bytes(ctx_clip, params_base.cpuparams.n_threads, buff.data(), int(buff.size()));
-                if (!img_embd) {
-                    send_error(slot, "Failed to embed image", ERROR_TYPE_INVALID_REQUEST);
-                    return false;
-                }
-                for (int32_t j = 0; j < img_embd->n_image_pos; j += n_embd) {
-                    const int32_t n_tokens = std::min(n_embd, img_embd->n_image_pos - j);
-                    // clang-format off
-                    llama_batch batch_img = {
-                        n_tokens,
-                        nullptr,
-                        (img_embd -> embed + j),
-                        nullptr,
-                        nullptr,
-                        nullptr,
-                        nullptr,
-                    };
-                    // clang-format on
-                    if (llama_decode(ctx, batch_img)) {
-                        send_error(slot, "Failed to decode image", ERROR_TYPE_SERVER);
-                        return false;
-                    }
-                    slot.n_past += n_tokens;
-                    slot.n_prompt_tokens += n_tokens;
-                    slot.n_prompt_tokens_processed += n_tokens;
-                }
-                llava_image_embed_free(img_embd);
+            SLT_INF(slot, "%s", "processing text tokens\n");
+        }
+        for (size_t j = 0; j < tokens.size(); j += n_batch) {
+            int32_t n_eval                           = std::min(n_batch, int32_t(tokens.size() - j));
+            llama_text_token_batch_wrapper batch_txt = llama_text_token_batch_wrapper((tokens.data() + j), n_eval, slot.n_past, slot.id);
+            if (llama_decode(ctx, batch_txt.batch)) {
+                SLT_ERR(slot, "%s", "Failed to decode text");
+                return false;
             }
+            slot.n_past += n_eval;
+            slot.n_prompt_tokens += n_eval;
+            slot.n_prompt_tokens_processed += n_eval;
+        }
+        slot.prompt_tokens.insert(slot.prompt_tokens.end(), tokens.begin(), tokens.end());
+        return true;
+    }
+
+    bool preprocess_multi_modal_data_image(server_slot &slot, int32_t n_batch, const llava_image_embed *img_embd) const {
+        auto llama_decode_img_embd = [&](const llava_image_embed *img_embd) {
+            for (int32_t j = 0; j < img_embd->n_image_pos; j += n_batch) {
+                const int32_t n_eval                      = std::min(n_batch, img_embd->n_image_pos - j);
+                llava_image_embed_batch_wrapper batch_img = llava_image_embed_batch_wrapper((img_embd->embed + j), n_eval, slot.n_past, slot.id);
+                if (llama_decode(ctx, batch_img.batch)) {
+                    return false;
+                }
+                slot.n_past += n_eval;
+                slot.n_past_mmd += n_eval;
+                slot.n_prompt_tokens += n_eval;
+                slot.n_prompt_tokens_processed += n_eval;
+            }
+            return true;
+        };
+
+        SLT_INF(slot, "processing image tokens: %d\n", img_embd->n_image_pos);
+        if (clip_is_minicpmv(ctx_clip) == 0) {
+            if (!llama_decode_img_embd(img_embd)) {
+                SLT_ERR(slot, "%s", "Failed to decode image");
+                return false;
+            }
+            return true;
         }
 
-        std::string suffix;
-        if (batch.n_tokens == 0) {
-            suffix = "\n### Assistant:\n";
-        } else {
-            suffix = "\nAnswer the questions.\n### Assistant:\n";
+        int idx                      = 0;
+        auto slice_llava_image_embed = [&](const llava_image_embed *img_embd) {
+            auto *embed = (float *)malloc(clip_embd_nbytes(ctx_clip));
+            std::memcpy(embed, img_embd->embed + (idx++) * clip_n_patches(ctx_clip) * clip_n_mmproj_embd(ctx_clip), clip_embd_nbytes(ctx_clip));
+
+            auto *slice_embed        = (llava_image_embed *)malloc(sizeof(llava_image_embed));
+            slice_embed->embed       = embed;
+            slice_embed->n_image_pos = clip_n_patches(ctx_clip);
+            return slice_embed;
+        };
+
+        size_t n_img_embd = img_embd->n_image_pos / clip_n_patches(ctx_clip);
+        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
+            return false;
         }
-        llama_tokens tokens = common_tokenize(ctx, suffix, false, true);
-        const auto sz_j     = int32_t(tokens.size());
-        for (int32_t j = 0; j < sz_j; ++j) {
-            common_batch_add(batch, tokens[j], slot.n_past, {slot.id}, false);
-            slot.n_past += 1;
-            slot.n_prompt_tokens += 1;
-            slot.n_prompt_tokens_processed += 1;
+        llava_image_embed *img_embd_sliced = slice_llava_image_embed(img_embd);
+        bool img_embd_sliced_decoded       = llama_decode_img_embd(img_embd_sliced);
+        llava_image_embed_free(img_embd_sliced);
+        if (!img_embd_sliced_decoded) {
+            SLT_ERR(slot, "%s", "Failed to decode sliced image");
+            return false;
         }
+        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
+            return false;
+        }
+        if (n_img_embd > 1) {
+            size_t n_img_embd_col = clip_uhd_num_image_embeds_col(ctx_clip);
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<slice>"), false)) {
+                return false;
+            }
+            for (size_t i = 0; i < (n_img_embd - 1) / n_img_embd_col; ++i) {
+                for (size_t j = 0; j < n_img_embd_col; ++j) {
+                    if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
+                        return false;
+                    }
+                    img_embd_sliced         = slice_llava_image_embed(img_embd);
+                    img_embd_sliced_decoded = llama_decode_img_embd(img_embd_sliced);
+                    llava_image_embed_free(img_embd_sliced);
+                    if (!img_embd_sliced_decoded) {
+                        SLT_ERR(slot, "%s", "Failed to decode sliced image");
+                        return false;
+                    }
+                    if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
+                        return false;
+                    }
+                }
+            }
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</slice>"), false)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool preprocess_multi_modal_data(server_slot &slot, int32_t n_batch) const {
+        // remove previous memory
+        llama_kv_cache_seq_rm(ctx, slot.id, -1, -1);
+        if (ctx_draft != nullptr) {
+            llama_kv_cache_seq_rm(ctx_draft, slot.id, -1, -1);
+        }
+
+        const std::string image_sign = "<image>";
+        const json images_json       = slot.prompt_multi_modal_data.at("images");
+
+        std::string prompt_string = slot.prompt_string;
+        size_t images_count       = 0;
+        size_t image_pos          = prompt_string.find(image_sign);
+        SLT_DBG(slot, "preprocessing multi-modal images in prompt format:\n%s\n", prompt_string.c_str());
+        bool add_bos = true;
+        while (image_pos != std::string::npos) {
+            // process text
+            const std::string text = prompt_string.substr(0, image_pos);
+            if (!preprocess_multi_modal_data_text(slot, n_batch, text, add_bos)) {
+                return false;
+            }
+            add_bos = false;
+
+            // process image
+            const std::string img           = images_json.at(images_count++).get<std::string>();
+            const std::vector<uint8_t> buff = base64_decode(img);
+            llava_image_embed *img_embd     = llava_image_embed_make_with_bytes(ctx_clip, params_base.cpuparams.n_threads, buff.data(), int(buff.size()));
+            if (!img_embd) {
+                SLT_ERR(slot, "%s", "failed to embed image\n");
+                return false;
+            }
+            if (!preprocess_multi_modal_data_image(slot, n_batch, img_embd)) {
+                llava_image_embed_free(img_embd);
+                return false;
+            }
+            llava_image_embed_free(img_embd);
+
+            prompt_string = prompt_string.substr(image_pos + image_sign.length());
+            image_pos     = prompt_string.find(image_sign);
+        }
+
+        // process remain text
+        llama_tokens tokens = common_tokenize(ctx, prompt_string, add_bos, true);
+        SLT_INF(slot, "processing text tokens: %zu\n", tokens.size());
+        if (common_log_verbosity_thold > 2) {
+            for (const llama_token &token : tokens) {
+                SLT_INF(slot, "processing text tokens | %6d -> '%s'\n", token, common_token_to_piece(ctx, token).c_str());
+            }
+            SLT_INF(slot, "%s", "processing text tokens\n");
+        }
+        slot.prompt_tokens.insert(slot.prompt_tokens.end(), tokens.begin(), tokens.end());
+        slot.n_prompt_tokens += int32_t(tokens.size());
 
         return true;
     }
@@ -4587,7 +4647,7 @@ int main(int argc, char **argv) {
                 c = char(std::tolower(c));
             }
         }
-        SRV_INF("chat template, built_in: %d, chat_example:\n%s",
+        SRV_INF("chat template, built_in: %d, chat_example:\n%s\n",
                 built_in_chat_template, common_chat_format_example(ctx_server.model, params.chat_template).c_str());
     }
 
