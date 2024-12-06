@@ -4,8 +4,9 @@
 [![](https://img.shields.io/github/license/gpustack/llama-box?label=license)](https://github.com/gpustack/llama-box#license)
 [![](https://img.shields.io/github/downloads/gpustack/llama-box/total)](https://github.com/gpustack/llama-box/releases)
 
-LLaMA box is a clean, pure API(without frontend assets) LLMs inference server rather
-than [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server).
+LLaMA Box is an LM inference server(pure API, w/o frontend assets) based on
+the [llama.cpp](https://github.com/ggerganov/llama.cpp)
+and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 ## Agenda
 
