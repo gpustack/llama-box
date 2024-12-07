@@ -3044,10 +3044,11 @@ struct server_context {
     }
 
     bool preprocess_multi_modal_data_image(server_slot &slot, int32_t n_batch, const llava_image_embed *img_embd) const {
+        int n_embd                 = llama_n_embd(llama_get_model(ctx));
         auto llama_decode_img_embd = [&](const llava_image_embed *img_embd) {
             for (int32_t j = 0; j < img_embd->n_image_pos; j += n_batch) {
                 const int32_t n_eval                      = std::min(n_batch, img_embd->n_image_pos - j);
-                llava_image_embed_batch_wrapper batch_img = llava_image_embed_batch_wrapper((img_embd->embed + j), n_eval, slot.n_past, slot.id);
+                llava_image_embed_batch_wrapper batch_img = llava_image_embed_batch_wrapper((img_embd->embed + j * n_embd), n_eval, slot.n_past, slot.id);
                 if (llama_decode(ctx, batch_img.batch)) {
                     return false;
                 }
