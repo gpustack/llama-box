@@ -314,7 +314,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string embed_dir;
     std::string stacked_id_embed_dir;
     std::string lora_model_dir;
-    sd_type_t wtype               = SD_TYPE_COUNT;
+    sd_type_t wtype               = sd_type_t(GGML_TYPE_COUNT);
     rng_type_t rng_type           = CUDA_RNG;
     bool vae_decode_only          = false;
     bool free_params_immediately  = false;

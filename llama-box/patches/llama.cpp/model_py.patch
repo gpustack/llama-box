@@ -1,8 +1,8 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 9f1419e2..1f06ed83 100755
+index c63d929c..c6d67bd1 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
-@@ -2659,7 +2659,67 @@ class XLMRobertaModel(BertModel):
+@@ -2671,7 +2671,67 @@ class XLMRobertaModel(BertModel):
  
          tokenizer_path = self.dir_model / 'sentencepiece.bpe.model'
          if not tokenizer_path.is_file():
@@ -71,7 +71,7 @@ index 9f1419e2..1f06ed83 100755
  
          sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
          sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
-@@ -2745,6 +2805,121 @@ class XLMRobertaModel(BertModel):
+@@ -2757,6 +2817,121 @@ class XLMRobertaModel(BertModel):
  
          return super().modify_tensors(data_torch, name, bid)
  
@@ -194,7 +194,7 @@ index 9f1419e2..1f06ed83 100755
  @Model.register("GemmaForCausalLM")
  class GemmaModel(Model):
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 703199fc..b493980b 100644
+index 4c8710b3..f7b3dd27 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
 @@ -220,6 +220,7 @@ class MODEL_ARCH(IntEnum):
@@ -243,7 +243,7 @@ index 703199fc..b493980b 100644
          MODEL_TENSOR.TOKEN_EMBD,
          MODEL_TENSOR.TOKEN_EMBD_NORM,
 diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index 1b6a3f4a..f2364c7f 100644
+index f0a7b647..4907da34 100644
 --- a/gguf-py/gguf/tensor_mapping.py
 +++ b/gguf-py/gguf/tensor_mapping.py
 @@ -138,9 +138,11 @@ class TensorNameMap:
@@ -258,7 +258,7 @@ index 1b6a3f4a..f2364c7f 100644
          ),
  
          # Attention query
-@@ -196,6 +198,7 @@ class TensorNameMap:
+@@ -198,6 +200,7 @@ class TensorNameMap:
              "model.layers.{bid}.self_attn.dense",                           # persimmon
              "h.{bid}.attn.c_proj",                                          # gpt2
              "transformer.h.{bid}.mixer.out_proj",                           # phi2
@@ -266,7 +266,7 @@ index 1b6a3f4a..f2364c7f 100644
              "model.layers.layers.{bid}.self_attn.o_proj",                   # plamo
              "model.layers.{bid}.attention.wo",                              # internlm2
              "encoder.layers.{bid}.attn.out_proj",                           # nomic-bert
-@@ -204,6 +207,7 @@ class TensorNameMap:
+@@ -206,6 +209,7 @@ class TensorNameMap:
              "encoder.layers.{bid}.self_attention.dense",                    # chatglm
              "transformer.layers.{bid}.attn.out_proj",                       # openelm
              "transformer.h.{bid}.attn.attention.out_proj",                  # exaone
@@ -274,7 +274,7 @@ index 1b6a3f4a..f2364c7f 100644
          ),
  
          # Attention output norm
-@@ -212,6 +216,7 @@ class TensorNameMap:
+@@ -214,6 +218,7 @@ class TensorNameMap:
              "encoder.layers.{bid}.norm1",                      # nomic-bert
              "transformer.decoder_layer.{bid}.rms_norm_1",      # Grok
              "transformer.blocks.{bid}.norm_attn_norm.norm_2",  # dbrx
@@ -282,7 +282,7 @@ index 1b6a3f4a..f2364c7f 100644
          ),
  
          MODEL_TENSOR.ATTN_POST_NORM: (
-@@ -290,9 +295,11 @@ class TensorNameMap:
+@@ -292,9 +297,11 @@ class TensorNameMap:
              "encoder.layers.{bid}.mlp.fc11",                          # nomic-bert
              "model.layers.{bid}.mlp.c_fc",                            # starcoder2
              "encoder.layer.{bid}.mlp.gated_layers_v",                 # jina-bert-v2
@@ -294,7 +294,7 @@ index 1b6a3f4a..f2364c7f 100644
          ),
  
          MODEL_TENSOR.FFN_UP_EXP: (
-@@ -360,11 +367,13 @@ class TensorNameMap:
+@@ -362,11 +369,13 @@ class TensorNameMap:
              "encoder.layers.{bid}.mlp.fc2",                           # nomic-bert
              "model.layers.{bid}.mlp.c_proj",                          # starcoder2
              "encoder.layer.{bid}.mlp.wo",                             # jina-bert-v2
@@ -308,7 +308,7 @@ index 1b6a3f4a..f2364c7f 100644
          ),
  
          MODEL_TENSOR.FFN_DOWN_EXP: (
-@@ -407,7 +416,8 @@ class TensorNameMap:
+@@ -409,7 +418,8 @@ class TensorNameMap:
              "encoder.layers.{bid}.norm2",                   # nomic-bert
              "transformer.decoder_layer.{bid}.rms_norm_3",   # Grok
              "encoder.layer.{bid}.mlp.layernorm",            # jina-bert-v2

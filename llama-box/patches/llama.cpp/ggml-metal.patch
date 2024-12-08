@@ -12,10 +12,10 @@ index 669c1f84..f5d1892c 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index f80fda7a..0ed829b4 100644
+index 34fe5778..cae949fd 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -2892,7 +2892,7 @@ static void ggml_metal_encode_node(
+@@ -2921,7 +2921,7 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
@@ -24,7 +24,7 @@ index f80fda7a..0ed829b4 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -4840,4 +4840,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+@@ -4869,4 +4869,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
      return &g_ggml_backend_metal_reg;
  }
  
