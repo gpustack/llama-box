@@ -68,17 +68,6 @@
 
 using json = nlohmann::json;
 
-// https://community.openai.com/t/openai-chat-list-of-error-codes-and-types/357791/11
-enum error_type {
-    ERROR_TYPE_INVALID_REQUEST,
-    ERROR_TYPE_AUTHENTICATION,
-    ERROR_TYPE_SERVER,
-    ERROR_TYPE_NOT_FOUND,
-    ERROR_TYPE_PERMISSION,
-    ERROR_TYPE_UNAVAILABLE,   // custom error
-    ERROR_TYPE_NOT_SUPPORTED, // custom error
-};
-
 template <typename T>
 static T json_value(const json &body, const std::string &key, const T &default_value) {
     // Fallback null to default value
@@ -527,20 +516,18 @@ static std::string tokens_to_output_formatted_string(const llama_context *ctx, c
 }
 
 struct completion_token_output {
-    std::vector<llama_token> toks;
-    std::string text_to_send;
-
     struct token_prob {
         llama_token tok;
         float prob;
     };
 
+    std::vector<llama_token> toks;
+    std::string text_to_send;
     std::vector<std::vector<token_prob>> probss;
 };
 
 // convert a vector of completion_token_output to json
-static json probs_vector_to_json(const llama_context *ctx, const std::vector<completion_token_output> &probs, const bool oaicompat_completion = false,
-                                 const bool oaicompat_completion_chat = false) {
+static json probs_vector_to_json(const llama_context *ctx, const std::vector<completion_token_output> &probs, const bool oaicompat_completion = false, const bool oaicompat_completion_chat = false) {
     if (oaicompat_completion) {
         if (oaicompat_completion_chat) {
             json content = json::array();
@@ -804,8 +791,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     return llama_params;
 }
 
-static json oaicompat_completions_response(const json &request, const json &result, const std::string &completion_id, bool streaming = false,
-                                           bool first = false) {
+static json oaicompat_completions_response(const json &request, const json &result, const std::string &completion_id, bool streaming = false, bool first = false) {
     json res = json{
         {"id", completion_id},
         {"created", std::time(nullptr)},
@@ -833,19 +819,10 @@ static json oaicompat_completions_response(const json &request, const json &resu
     }
     bool finish = false;
     for (const json &ret : result) {
-        bool stopped_word  = json_value(ret, "stopped_word", false);
-        bool stopped_eos   = json_value(ret, "stopped_eos", false);
-        bool stopped_limit = json_value(ret, "stopped_limit", false);
-        std::string finish_reason;
-        if (stopped_word || stopped_eos) {
-            finish_reason = "stop";
-        }
-        if (stopped_limit) {
-            finish_reason = "length";
-        }
-        finish              = !finish_reason.empty();
-        std::string content = json_value(ret, "content", std::string(""));
-        int index           = json_value(ret, "index", 0);
+        std::string finish_reason = json_value(ret, "stop_type", std::string(""));
+        finish                    = !finish_reason.empty();
+        std::string content       = json_value(ret, "content", std::string(""));
+        int index                 = json_value(ret, "index", 0);
 
         json choice;
         if (chat) {
@@ -1495,46 +1472,6 @@ static bool is_valid_utf8(const std::string &str) {
     }
 
     return true;
-}
-
-static json format_error_response(const std::string &message, const enum error_type type) {
-    std::string type_str;
-    int code = 500;
-    switch (type) {
-        case ERROR_TYPE_INVALID_REQUEST:
-            type_str = "invalid_request_error";
-            code     = 400;
-            break;
-        case ERROR_TYPE_AUTHENTICATION:
-            type_str = "authentication_error";
-            code     = 401;
-            break;
-        case ERROR_TYPE_NOT_FOUND:
-            type_str = "not_found_error";
-            code     = 404;
-            break;
-        case ERROR_TYPE_SERVER:
-            type_str = "server_error";
-            code     = 500;
-            break;
-        case ERROR_TYPE_PERMISSION:
-            type_str = "permission_error";
-            code     = 403;
-            break;
-        case ERROR_TYPE_NOT_SUPPORTED:
-            type_str = "not_supported_error";
-            code     = 501;
-            break;
-        case ERROR_TYPE_UNAVAILABLE:
-            type_str = "unavailable_error";
-            code     = 503;
-            break;
-    }
-    return json{
-        {"code", code},
-        {"message", message},
-        {"type", type_str},
-    };
 }
 
 struct llama_text_token_batch_wrapper {

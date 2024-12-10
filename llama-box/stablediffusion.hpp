@@ -46,6 +46,7 @@ struct stablediffusion_params {
     // inherited from common_params
     std::string model;
     std::string model_alias;
+    uint32_t seed                                       = LLAMA_DEFAULT_SEED;
     bool warmup                                         = true;
     bool flash_attn                                     = false;
     int n_threads                                       = 1;
@@ -314,10 +315,10 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string embed_dir;
     std::string stacked_id_embed_dir;
     std::string lora_model_dir;
-    sd_type_t wtype               = sd_type_t(GGML_TYPE_COUNT);
-    rng_type_t rng_type           = CUDA_RNG;
-    bool vae_decode_only          = false;
-    bool free_params_immediately  = false;
+    sd_type_t wtype              = sd_type_t(GGML_TYPE_COUNT);
+    rng_type_t rng_type          = CUDA_RNG;
+    bool vae_decode_only         = false;
+    bool free_params_immediately = false;
 
     sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
