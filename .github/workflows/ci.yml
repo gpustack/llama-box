@@ -260,11 +260,11 @@ jobs:
                 && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
               export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
                 && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
-                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info\${INFOPATH}" \
+                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info:\${INFOPATH}" \
+                && export PKG_CONFIG_PATH="/opt/rh/devtoolset-9/root/usr/lib64/pkgconfig:\${PKG_CONFIG_PATH}" \
                 && export PCP_DIR="/opt/rh/devtoolset-9/root" \
-                && export PERL5LIB="/opt/rh/devtoolset-9/root//usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root//usr/share/perl5/" \
-                && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
-                && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
+                && export PERL5LIB="/opt/rh/devtoolset-9/root/usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root/usr/share/perl5/" \
+                && export LD_LIBRARY_PATH="/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:/opt/rh/devtoolset-9/root/usr/lib64/dyninst:/opt/rh/devtoolset-9/root/usr/lib/dyninst:/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:\${LD_LIBRARY_PATH}" \
                 && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
               yum --enablerepo=extras install -y epel-release
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
@@ -402,11 +402,11 @@ jobs:
                 && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
               export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
                 && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
-                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info\${INFOPATH}" \
+                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info:\${INFOPATH}" \
+                && export PKG_CONFIG_PATH="/opt/rh/devtoolset-9/root/usr/lib64/pkgconfig:\${PKG_CONFIG_PATH}" \
                 && export PCP_DIR="/opt/rh/devtoolset-9/root" \
-                && export PERL5LIB="/opt/rh/devtoolset-9/root//usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root//usr/share/perl5/" \
-                && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
-                && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
+                && export PERL5LIB="/opt/rh/devtoolset-9/root/usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root/usr/share/perl5/" \
+                && export LD_LIBRARY_PATH="/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:/opt/rh/devtoolset-9/root/usr/lib64/dyninst:/opt/rh/devtoolset-9/root/usr/lib/dyninst:/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:\${LD_LIBRARY_PATH}" \
                 && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
               yum --enablerepo=extras install -y epel-release
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
@@ -537,11 +537,11 @@ jobs:
                 && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
               export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
                 && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
-                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info\${INFOPATH}" \
+                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info:\${INFOPATH}" \
+                && export PKG_CONFIG_PATH="/opt/rh/devtoolset-9/root/usr/lib64/pkgconfig:\${PKG_CONFIG_PATH}" \
                 && export PCP_DIR="/opt/rh/devtoolset-9/root" \
-                && export PERL5LIB="/opt/rh/devtoolset-9/root//usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root//usr/share/perl5/" \
-                && export LD_LIBRARY_PATH="/usr/local/lib:/opt/rh/devtoolset-9/root\$rpmlibdir\$rpmlibdir32\${LD_LIBRARY_PATH}" \
-                && export PYTHONPATH="/opt/rh/devtoolset-9/root/usr/lib64/python\$pythonvers/site-packages:/opt/rh/devtoolset-9/root/usr/lib/python\$pythonvers/" \
+                && export PERL5LIB="/opt/rh/devtoolset-9/root/usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root/usr/share/perl5/" \
+                && export LD_LIBRARY_PATH="/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:/opt/rh/devtoolset-9/root/usr/lib64/dyninst:/opt/rh/devtoolset-9/root/usr/lib/dyninst:/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:\${LD_LIBRARY_PATH}" \
                 && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
               yum --enablerepo=extras install -y epel-release
               yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
