@@ -139,7 +139,7 @@ completion() {
             fi
             ELAPSED=$(($(date +%s) - START_TIME))
             printf "\n- TC   : %10.2fs   -" "${ELAPSED}"
-            printf "\n------------------------"
+            printf "\n------------------------\n"
             break
         fi
     done < <(curl \

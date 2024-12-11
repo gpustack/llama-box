@@ -92,7 +92,7 @@ parse() {
         printf "\n- GPS  : %10.2f    -" "$(echo "${USAGE}" | jq -cr '.generation_per_second')"
         ELAPSED=$(($(date +%s) - START_TIME))
         printf "\n- TC   : %10.2fs   -" "${ELAPSED}"
-        printf "\n------------------------"
+        printf "\n------------------------\n"
     fi
     return 0
 }
