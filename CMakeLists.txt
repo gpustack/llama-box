@@ -16,12 +16,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "build shared libraries" FORCE)
 set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "sd: build shared libs" FORCE)
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    add_compile_options("$<$<COMPILE_LANGUAGE:C>:/source-charset:utf-8>")
-    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/source-charset:utf-8>")
-    add_compile_options("$<$<COMPILE_LANGUAGE:C>:/execution-charset:utf-8>")
-    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/execution-charset:utf-8>")
-endif ()
+if (MSVC)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:/utf-8>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/utf-8>")
+endif()
 
 #
 # Options
