@@ -12,10 +12,33 @@ index 669c1f84..f5d1892c 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 34fe5778..cae949fd 100644
+index 34fe5778..16af6edd 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -2921,7 +2921,7 @@ static void ggml_metal_encode_node(
+@@ -2062,7 +2062,21 @@ static void ggml_metal_encode_node(
+ 
+                 // find the break-even point where the matrix-matrix kernel becomes more efficient compared
+                 // to the matrix-vector kernel
+-                const int ne11_mm_min = 4;
++                int ne11_mm_min = 4;
++                switch (src0t) {
++                    case GGML_TYPE_F16:  ne11_mm_min = 4;  break;
++                    case GGML_TYPE_Q8_0: ne11_mm_min = 7;  break;
++                    case GGML_TYPE_Q2_K: ne11_mm_min = 15; break;
++                    case GGML_TYPE_Q3_K: ne11_mm_min = 7;  break;
++                    case GGML_TYPE_Q4_0:
++                    case GGML_TYPE_Q4_1: ne11_mm_min = 15; break;
++                    case GGML_TYPE_Q4_K: ne11_mm_min = 11; break;
++                    case GGML_TYPE_Q5_0:                          // not tested yet
++                    case GGML_TYPE_Q5_1: ne11_mm_min = 13; break; // not tested yet
++                    case GGML_TYPE_Q5_K: ne11_mm_min = 7;  break;
++                    case GGML_TYPE_Q6_K: ne11_mm_min = 7;  break;
++                    default:             ne11_mm_min = 4;  break;
++                }
+ 
+                 // first try to use small-batch mat-mv kernels
+                 // these should be efficient for BS [2, ~8]
+@@ -2921,7 +2935,7 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
@@ -24,7 +47,7 @@ index 34fe5778..cae949fd 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -4869,4 +4869,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+@@ -4869,4 +4883,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
      return &g_ggml_backend_metal_reg;
  }
  
