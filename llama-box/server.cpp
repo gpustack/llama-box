@@ -41,13 +41,12 @@ enum stop_type {
 static inline std::string format_stop_type(const enum stop_type type) {
     switch (type) {
         case STOP_TYPE_EOS:
-            return "eos";
         case STOP_TYPE_WORD:
-            return "word";
+            return "stop";
         case STOP_TYPE_LIMIT:
-            return "limit";
+            return "length";
         default:
-            return "none";
+            return "";
     }
 }
 
