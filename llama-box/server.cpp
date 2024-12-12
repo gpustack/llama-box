@@ -2191,9 +2191,10 @@ struct server_context {
 
                 slot->reset();
 
-                slot->rid     = task.rid;
-                slot->id_task = task.id;
-                slot->index   = json_value(task.data, "index", 0);
+                slot->rid       = task.rid;
+                slot->id_task   = task.id;
+                slot->task_type = task.type;
+                slot->index     = json_value(task.data, "index", 0);
                 // slot->prompt_tokens = task.prompt_tokens; // NB(thxCode): prompt_tokens will be processed in launch_slot_with_task
 
                 if (!launch_slot_with_task(*slot, task)) {
@@ -2758,7 +2759,7 @@ struct server_context {
                     }
 
                     // check that we are in the right batch_type, if not defer the slot
-                    const int slot_type = slot.is_non_causal();
+                    const int32_t slot_type = slot.is_non_causal() ? 1 : 0;
                     if (batch_type == -1) {
                         batch_type = slot_type;
                     } else if (batch_type != slot_type) {
