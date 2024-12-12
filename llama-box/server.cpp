@@ -877,9 +877,9 @@ struct server_context {
     bool load_model(llama_box_params &params_) {
         SRV_INF("loading model '%s'\n", llm_params.model.c_str());
 
-        params = params_;
+        params     = params_;
         llm_params = params.llm_params;
-        sd_params = params.sd_params;
+        sd_params  = params.sd_params;
 
         /* STABLE DIFFUSION */
 
@@ -3636,7 +3636,7 @@ int main(int argc, char **argv) {
     const auto handle_tokenize = [&](const httplib::Request &req, httplib::Response &res) {
         if (!ctx_server.support_completion()) {
             res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to do infill from this model", MIMETYPE_TEXT);
+            res.set_content("You are not allowed to do tokenize from this model", MIMETYPE_TEXT);
             return;
         }
 
@@ -3683,7 +3683,7 @@ int main(int argc, char **argv) {
     const auto handle_detokenize = [&](const httplib::Request &req, httplib::Response &res) {
         if (!ctx_server.support_completion()) {
             res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to do infill from this model", MIMETYPE_TEXT);
+            res.set_content("You are not allowed to do detokenize from this model", MIMETYPE_TEXT);
             return;
         }
 
@@ -3845,12 +3845,6 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_lora_adapters_list = [&](const httplib::Request &, httplib::Response &res) {
-        if (!ctx_server.support_completion()) {
-            res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to do infill from this model", MIMETYPE_TEXT);
-            return;
-        }
-
         json response = json::array();
         for (size_t i = 0; i < ctx_server.lora_adapters.size(); ++i) {
             auto &la = ctx_server.lora_adapters[i];
@@ -3864,12 +3858,6 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_lora_adapters_apply = [&](const httplib::Request &req, httplib::Response &res) {
-        if (!ctx_server.support_completion()) {
-            res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to do infill from this model", MIMETYPE_TEXT);
-            return;
-        }
-
         const std::vector<json> request = json::parse(req.body);
 
         for (common_lora_adapter_container &la : ctx_server.lora_adapters) {
@@ -4417,7 +4405,7 @@ int main(int argc, char **argv) {
     const auto handle_images = [&](const httplib::Request &req, httplib::Response &res) {
         if (!ctx_server.support_image()) {
             res.status = httplib::StatusCode::Forbidden_403;
-            res.set_content("You are not allowed to do completion from this model", MIMETYPE_TEXT);
+            res.set_content("You are not allowed to do operation from this model", MIMETYPE_TEXT);
             return;
         }
 
