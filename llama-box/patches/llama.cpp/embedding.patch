@@ -1,8 +1,8 @@
 diff --git a/include/llama.h b/include/llama.h
-index 36945cde..7b4e00c3 100644
+index eebbacb8..705f14b4 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1255,6 +1255,8 @@ extern "C" {
+@@ -1256,6 +1256,8 @@ extern "C" {
      LLAMA_API void                           llama_perf_sampler_print(const struct llama_sampler * chain);
      LLAMA_API void                           llama_perf_sampler_reset(      struct llama_sampler * chain);
  
