@@ -1,8 +1,8 @@
 diff --git a/util.cpp b/util.cpp
-index b683e7f..9757790 100644
+index 7a58d0a..7cb85a0 100644
 --- a/util.cpp
 +++ b/util.cpp
-@@ -379,12 +379,12 @@ void* sd_log_cb_data         = NULL;
+@@ -380,12 +380,12 @@ void* sd_log_cb_data         = NULL;
  
  #define LOG_BUFFER_SIZE 1024
  
