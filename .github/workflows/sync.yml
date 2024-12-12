@@ -49,6 +49,7 @@ jobs:
           gitcode-token: "${{ secrets.CI_GITCODE_TOKEN }}"
           max-releases: "${{ inputs.max_releases && inputs.max_releases || '1' }}"
           specific-release-tag: "${{ inputs.specific_release_tag && inputs.specific_release_tag || '' }}"
+          code-only: true
           dry-run: "${{ inputs.dry_run && inputs.dry_run || 'false' }}"
 
   gitee:
@@ -68,6 +69,7 @@ jobs:
           gitee-token: "${{ secrets.CI_GITEE_TOKEN }}"
           max-releases: "${{ inputs.max_releases && inputs.max_releases || '1' }}"
           specific-release-tag: "${{ inputs.specific_release_tag && inputs.specific_release_tag || '' }}"
+          code-only: true
           dry-run: "${{ inputs.dry_run && inputs.dry_run || 'false' }}"
 
   tencent-cos:
