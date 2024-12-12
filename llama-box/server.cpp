@@ -903,6 +903,12 @@ struct server_context {
             if (sd_params.slg_scale <= 0.0f) {
                 sd_params.slg_scale = sd_ctx->get_default_slg_scale();
             }
+            for (const auto &la : sd_params.lora_adapters) {
+                common_lora_adapter_container loaded_la;
+                loaded_la.path  = la.path;
+                loaded_la.scale = la.scale;
+                lora_adapters.push_back(loaded_la);
+            }
 
             SRV_INF("seed: %d, flash attn: %s, sampler: %s, steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
                     sd_params.seed,
