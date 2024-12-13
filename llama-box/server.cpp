@@ -945,8 +945,8 @@ struct server_context {
             llm_params_draft.n_gpu_layers    = llm_params.speculative.n_gpu_layers;
             llm_params_draft.cpuparams       = llm_params.speculative.cpuparams;
             llm_params_draft.cpuparams_batch = llm_params.speculative.cpuparams_batch;
-            llm_params_draft.cache_type_k    = "f16";
-            llm_params_draft.cache_type_v    = "f16";
+            llm_params_draft.cache_type_k    = GGML_TYPE_F16;
+            llm_params_draft.cache_type_v    = GGML_TYPE_F16;
             llm_params_draft.warmup          = false;
             common_init_result ir            = common_init_from_params(llm_params_draft);
             llm_model_draft                  = ir.model;

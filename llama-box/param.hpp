@@ -39,19 +39,16 @@ struct llama_box_params {
     int32_t lookup_ngram_min = 0;  // minimum n-gram size for lookup cache
 };
 
-static int unknown(const char *flag) {
+static void unknown(const char *flag) {
     fprintf(stderr, "Unknown argument: %s\n", flag);
-    return 1;
 }
 
-static int missing(const char *flag) {
+[[noreturn]] static void missing(const char *flag) {
     throw std::invalid_argument("Missing argument: " + std::string(flag));
-    return 1;
 }
 
-static int invalid(const char *flag) {
+[[noreturn]] static void invalid(const char *flag) {
     throw std::invalid_argument("Invalid argument: " + std::string(flag));
-    return 1;
 }
 
 #ifdef __GNUC__
@@ -64,329 +61,51 @@ static int invalid(const char *flag) {
 #define LLAMA_COMMON_ATTRIBUTE_FORMAT(...)
 #endif
 
-static void llama_box_params_print_usage(int, char **argv, const llama_box_params &bparams) {
-    struct opt {
-        LLAMA_COMMON_ATTRIBUTE_FORMAT(4, 5)
-
-        opt(const std::string &tags, const char *args, const char *desc, ...)
-            : tags(tags), args(args), desc(desc) {
-            va_list args_list;
-            va_start(args_list, desc);
-            char buffer[1024];
-            vsnprintf(buffer, sizeof(buffer), desc, args_list);
-            va_end(args_list);
-            this->desc = buffer;
-        }
-
-        opt(const std::string &grp)
-            : grp(grp) {
-        }
-
-        std::string tags;
-        std::string args;
-        std::string desc;
-        std::string grp;
-    };
-
-    const auto &params   = bparams.llm_params;
-    const auto &rparams  = bparams.rpc_params;
-    const auto &sampling = params.sampling;
-    const auto &sdparams = bparams.sd_params;
-
-    std::string default_sampler_type_chars;
-    std::string default_sampler_type_names;
-    for (const auto &sampler : sampling.samplers) {
-        default_sampler_type_chars += common_sampler_type_to_chr(sampler);
-        default_sampler_type_names += common_sampler_type_to_str(sampler);
-        default_sampler_type_names += (&sampler == &sampling.samplers.back() ? "" : ";");
-    }
-
-    std::string sd_sampler_type_names;
-    for (int m = 0; m < N_SAMPLE_METHODS; m++) {
-        sd_sampler_type_names += std::string(sd_sample_method_to_argument(sample_method_t(m)));
-        sd_sampler_type_names += (m == N_SAMPLE_METHODS - 1 ? "" : ";");
-    }
-    std::string sd_scheduler_names;
-    for (int d = 0; d < N_SCHEDULES; d++) {
-        sd_scheduler_names += std::string(sd_schedule_to_argument(schedule_t(d)));
-        sd_scheduler_names += (d == N_SCHEDULES - 1 ? "" : ";");
-    }
-
-    std::string default_dry_sequence_breaker_names;
-    for (const auto &breaker : sampling.dry_sequence_breakers) {
-        default_dry_sequence_breaker_names += breaker;
-        default_dry_sequence_breaker_names += (&breaker == &sampling.dry_sequence_breakers.back() ? "" : ";");
-    }
-
-    std::string default_builtin_chat_templates;
-    {
-        std::vector<const char *> supported_tmpl;
-        int32_t res = llama_chat_builtin_templates(nullptr, 0);
-        supported_tmpl.resize(res);
-        llama_chat_builtin_templates(supported_tmpl.data(), supported_tmpl.size());
-        for (const auto &tmpl : supported_tmpl) {
-            default_builtin_chat_templates += tmpl;
-            default_builtin_chat_templates += (&tmpl == &supported_tmpl.back() ? "" : ";");
-        }
-    }
-
-    // clang-format off
-    std::vector<opt> opts;
-    // general //
-    opts.push_back({ "general" });
-    opts.push_back({ "general",                            "-h,    --help, --usage",                        "print usage and exit" });
-    opts.push_back({ "general",                            "       --version",                              "print version and exit" });
-    opts.push_back({ "general",                            "       --system-info",                          "print system info and exit" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "general",                        "       --list-devices",                         "print list of available devices and exit" });
-    }
-    opts.push_back({ "general",                            "-v,    --verbose, --log-verbose",               "set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
-    opts.push_back({ "general",                            "-lv,   --verbosity, --log-verbosity V",         "set the verbosity threshold, messages with a higher verbosity will be ignored" });
-    opts.push_back({ "general",                            "       --log-colors",                           "enable colored logging" });
-    // general //
-    // server //
-    opts.push_back({ "server" });
-    opts.push_back({ "server",                             "       --host HOST",                            "ip address to listen (default: %s)", params.hostname.c_str() });
-    opts.push_back({ "server",                             "       --port PORT",                            "port to listen (default: %d)", params.port });
-    opts.push_back({ "server",                             "-to    --timeout N",                            "server read/write timeout in seconds (default: %d)", params.timeout_read });
-    opts.push_back({ "server",                             "       --threads-http N",                       "number of threads used to process HTTP requests (default: %d)", params.n_threads_http });
-    opts.push_back({ "server",                             "       --conn-idle N",                          "server connection idle in seconds (default: %d)", bparams.conn_idle });
-    opts.push_back({ "server",                             "       --conn-keepalive N",                     "server connection keep-alive in seconds (default: %d)", bparams.conn_keepalive });
-    opts.push_back({ "server",                             "-m,    --model FILE",                           "model path (default: %s)", DEFAULT_MODEL_PATH });
-    opts.push_back({ "server",                             "-a,    --alias NAME",                           "model name alias (default: %s)", params.model_alias.c_str() });
-    opts.push_back({ "server",                             "       --lora FILE",                            "apply LoRA adapter (implies --no-mmap)" });
-    opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
-    opts.push_back({ "server",                             "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", sampling.seed, LLAMA_DEFAULT_SEED });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server",                         "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", params.main_gpu });
-    }
-    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", params.flash_attn ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", params.endpoint_metrics ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --infill",                               "enable infill endpoint (default: %s)", bparams.endpoint_infill? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --embeddings",                           "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --images",                               "enable image endpoint (default: %s)", bparams.endpoint_images ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --rerank",                               "enable reranking endpoint (default: %s)", params.reranking ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --slots",                                "enable slots monitoring endpoint (default: %s)", params.endpoint_slots ? "enabled" : "disabled" });
-    if (llama_supports_rpc()) {
-        opts.push_back({ "server",                         "       --rpc SERVERS",                          "comma separated list of RPC servers" });
-    }
-    opts.push_back({ "server",                             "       --no-warmup",                            "skip warming up the model with an empty run" });
-    // server // completion //
-    opts.push_back({ "server/completion" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/completion",              "-dev,  --device <dev1,dev2,...>",               "comma-separated list of devices to use for offloading (none = don't offload)\n"
-                                                                                                            "use --list-devices to see a list of available devices"});
-        opts.push_back({ "server/completion",              "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM" });
-        opts.push_back({ "server/completion",              "-sm,   --split-mode SPLIT_MODE",                "how to split the model across multiple GPUs, one of:\n"
-                                                                                                            "  - none: use one GPU only\n"
-                                                                                                            "  - layer (default): split layers and KV across GPUs\n"
-                                                                                                            "  - row: split rows across GPUs, store intermediate results and KV in --main-gpu" });
-        opts.push_back({ "server/completion",              "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
-    }
-    opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
-                                                                                                            "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
-    opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
-                                                                                                            "list of built-in templates:\n%s", default_builtin_chat_templates.c_str() });
-    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
-    opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "path to save slot kv cache (default: disabled)" });
-    opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
-    opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
-                                                                                                           "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", bparams.n_tps });
-    opts.push_back({ "server/completion",                  "-t,    --threads N",                            "number of threads to use during generation (default: %d)", params.cpuparams.n_threads });
-#ifndef GGML_USE_OPENMP
-    opts.push_back({ "server/completion",                  "-C,    --cpu-mask M",                           "set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: \"\")"});
-    opts.push_back({ "server/completion",                  "-Cr,   --cpu-range lo-hi",                      "range of CPUs for affinity. Complements --cpu-mask"});
-    opts.push_back({ "server/completion",                  "       --cpu-strict <0|1>",                     "use strict CPU placement (default: %u)\n", (unsigned) params.cpuparams.strict_cpu});
-    opts.push_back({ "server/completion",                  "       --prio N",                               "set process/thread priority (default: %d), one of:\n"
-                                                                                                            "  - 0-normal\n"
-                                                                                                            "  - 1-medium\n"
-                                                                                                            "  - 2-high\n"
-                                                                                                            "  - 3-realtime", params.cpuparams.priority});
-    opts.push_back({ "server/completion",                  "       --poll <0...100>",                       "use polling level to wait for work (0 - no polling, default: %u)\n", (unsigned) params.cpuparams.poll});
-#endif
-    opts.push_back({ "server/completion",                  "-tb,   --threads-batch N",                      "number of threads to use during batch and prompt processing (default: same as --threads)" });
-#ifndef GGML_USE_OPENMP
-    opts.push_back({ "server/completion",                  "-Cb,   --cpu-mask-batch M",                     "set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)"});
-    opts.push_back({ "server/completion",                  "-Crb,  --cpu-range-batch lo-hi",                "ranges of CPUs for affinity. Complements --cpu-mask-batch"});
-    opts.push_back({ "server/completion",                  "       --cpu-strict-batch <0|1>",               "use strict CPU placement (default: same as --cpu-strict)"});
-    opts.push_back({ "server/completion",                  "       --prio-batch N",                         "set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)"});
-    opts.push_back({ "server/completion",                  "       --poll-batch <0...100>",                 "use polling to wait for work (default: same as --poll"});
-#endif
-    opts.push_back({ "server/completion",                  "-c,    --ctx-size N",                           "size of the prompt context (default: %d, 0 = loaded from model)", params.n_ctx });
-    opts.push_back({ "server/completion",                  "       --no-context-shift",                     "disables context shift on infinite text generation (default: %s)", params.ctx_shift ? "disabled" : "enabled" });
-    opts.push_back({ "server/completion",                  "-n,    --predict N",                            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", params.n_predict });
-    opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "logical maximum batch size (default: %d)", params.n_batch });
-    opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "physical maximum batch size (default: %d)", params.n_ubatch });
-    opts.push_back({ "server/completion",                  "       --keep N",                               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", params.n_keep });
-    opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", params.escape ? "true" : "false" });
-    opts.push_back({ "server/completion",                  "       --no-escape",                            "do not process escape sequences" });
-    opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
-    opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
-    opts.push_back({ "server/completion",                  "       --penalize-nl",                          "penalize newline tokens (default: %s)", sampling.penalize_nl ? "true" : "false" });
-    opts.push_back({ "server/completion",                  "       --temp T",                               "temperature (default: %.1f)", (double)sampling.temp });
-    opts.push_back({ "server/completion",                  "       --top-k N",                              "top-k sampling (default: %d, 0 = disabled)", sampling.top_k });
-    opts.push_back({ "server/completion",                  "       --top-p P",                              "top-p sampling (default: %.1f, 1.0 = disabled)", (double) sampling.top_p });
-    opts.push_back({ "server/completion",                  "       --min-p P",                              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)sampling.min_p });
-    opts.push_back({ "server/completion",                  "       --xtc-probability N",                    "xtc probability (default: %.1f, 0.0 = disabled)", (double)sampling.xtc_probability });
-    opts.push_back({ "server/completion",                  "       --xtc-threshold N",                      "xtc threshold (default: %.1f, 1.0 = disabled)", (double)sampling.xtc_threshold });
-    opts.push_back({ "server/completion",                  "       --typical P",                            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)sampling.typ_p });
-    opts.push_back({ "server/completion",                  "       --repeat-last-n N",                      "last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", sampling.penalty_last_n });
-    opts.push_back({ "server/completion",                  "       --repeat-penalty N",                     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)sampling.penalty_repeat });
-    opts.push_back({ "server/completion",                  "       --presence-penalty N",                   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)sampling.penalty_present });
-    opts.push_back({ "server/completion",                  "       --frequency-penalty N",                  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sampling.penalty_freq });
-    opts.push_back({ "server/completion",                  "       --dry-multiplier N",                     "set DRY sampling multiplier (default: %.1f, 0.0 = disabled)", (double)params.sampling.dry_multiplier });
-    opts.push_back({ "server/completion",                  "       --dry-base N",                           "set DRY sampling base value (default: %.2f)", (double)params.sampling.dry_base });
-    opts.push_back({ "server/completion",                  "       --dry-allowed-length N",                 "set allowed length for DRY sampling (default: %d)", params.sampling.dry_allowed_length });
-    opts.push_back({ "server/completion",                  "       --dry-penalty-last-n N",                 "set DRY penalty for the last n tokens (default: %d, 0 = disable, -1 = context size)", params.sampling.dry_penalty_last_n });
-    opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", default_dry_sequence_breaker_names.c_str() });
-    opts.push_back({ "server/completion",                  "       --dynatemp-range N",                     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sampling.dynatemp_range });
-    opts.push_back({ "server/completion",                  "       --dynatemp-exp N",                       "dynamic temperature exponent (default: %.1f)", (double)sampling.dynatemp_exponent });
-    opts.push_back({ "server/completion",                  "       --mirostat N",                           "use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", sampling.mirostat });
-    opts.push_back({ "server/completion",                  "       --mirostat-lr N",                        "Mirostat learning rate, parameter eta (default: %.1f)", (double)sampling.mirostat_eta });
-    opts.push_back({ "server/completion",                  "       --mirostat-ent N",                       "Mirostat target entropy, parameter tau (default: %.1f)", (double)sampling.mirostat_tau });
-    opts.push_back({ "server/completion",                  "-l     --logit-bias TOKEN_ID(+/-)BIAS",         R"(modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello')" });
-    opts.push_back({ "server/completion",                  "       --grammar GRAMMAR",                      "BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '%s')", sampling.grammar.c_str() });
-    opts.push_back({ "server/completion",                  "       --grammar-file FILE",                    "file to read grammar from" });
-    opts.push_back({ "server/completion",                  "-j,    --json-schema SCHEMA",                   "JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead" });
-    opts.push_back({ "server/completion",                  "       --rope-scaling {none,linear,yarn}",      "RoPE frequency scaling method, defaults to linear unless specified by the model" });
-    opts.push_back({ "server/completion",                  "       --rope-scale N",                         "RoPE context scaling factor, expands context by a factor of N" });
-    opts.push_back({ "server/completion",                  "       --rope-freq-base N",                     "RoPE base frequency, used by NTK-aware scaling (default: loaded from model)" });
-    opts.push_back({ "server/completion",                  "       --rope-freq-scale N",                    "RoPE frequency scaling factor, expands context by a factor of 1/N" });
-    opts.push_back({ "server/completion",                  "       --yarn-orig-ctx N",                      "YaRN: original context size of model (default: %d = model training context size)", params.yarn_orig_ctx });
-    opts.push_back({ "server/completion",                  "       --yarn-ext-factor N",                    "YaRN: extrapolation mix factor (default: %.1f, 0.0 = full interpolation)", (double)params.yarn_ext_factor });
-    opts.push_back({ "server/completion",                  "       --yarn-attn-factor N",                   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)params.yarn_attn_factor });
-    opts.push_back({ "server/completion",                  "       --yarn-beta-fast N",                     "YaRN: low correction dim or beta (default: %.1f)", (double)params.yarn_beta_fast });
-    opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN: high correction dim or alpha (default: %.1f)", (double)params.yarn_beta_slow });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/completion",              "-nkvo, --no-kv-offload",                        "disable KV offload" });
-    }
-    opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "disable caching prompt" });
-    opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "min chunk size to attempt reusing from the cache via KV shifting (default: %d)", params.n_cache_reuse });
-    opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K (default: %s)", params.cache_type_k.c_str() });
-    opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V (default: %s)", params.cache_type_v.c_str() });
-    opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)params.defrag_thold });
-    opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "number of parallel sequences to decode (default: %d)", params.n_parallel });
-    opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "disable continuous batching" });
-    opts.push_back({ "server/completion",                  "       --mmproj FILE",                          "path to a multimodal projector file for LLaVA" });
-    if (llama_supports_mlock()) {
-        opts.push_back({ "server/completion",              "       --mlock",                                "force system to keep model in RAM rather than swapping or compressing" });
-    }
-    if (llama_supports_mmap()) {
-        opts.push_back({ "server/completion",              "       --no-mmap",                              "do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
-    }
-    opts.push_back({ "server/completion",                  "       --numa TYPE",                            "attempt optimizations that help on some NUMA systems\n"
-                                                                                                            "  - distribute: spread execution evenly over all nodes\n"
-                                                                                                            "  - isolate: only spawn threads on CPUs on the node that execution started on\n"
-                                                                                                            "  - numactl: use the CPU map provided by numactl\n"
-                                                                                                            "if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437" });
-    opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "add a control vector" });
-    opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "add a control vector with user defined scaling SCALE" });
-    opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "layer range to apply the control vector(s) to, start and end inclusive" });
-    opts.push_back({ "server/completion",                  "       --spm-infill",                           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", params.spm_infill ? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",                  "-sp,   --special",                              "special tokens output enabled (default: %s)", params.special ? "true" : "false" });
-    // server // completion //
-    // server // completion // speculative //
-    opts.push_back({ "server/completion/speculative" });
-    opts.push_back({ "server/completion/speculative",      "       --draft-max, --draft, --draft-n N",      "number of tokens to draft for speculative decoding (default: %d)", params.speculative.n_max });
-    opts.push_back({ "server/completion/speculative",      "       --draft-min, --draft-n-min N",           "minimum number of draft tokens to use for speculative decoding (default: %d)", params.speculative.n_min });
-    opts.push_back({ "server/completion/speculative",      "       --draft-p-min P",                        "minimum speculative decoding probability (greedy) (default: %.1f)", params.speculative.p_min });
-    opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "draft model for speculative decoding (default: unused)" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/completion/speculative",  "-devd, --device-draft <dev1,dev2,...>",         "comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
-                                                                                                            "use --list-devices to see a list of available devices" });
-        opts.push_back({ "server/completion/speculative",  "-ngld, --gpu-layers-draft, --n-gpu-layers-draft N",
-                                                                                                            "number of layers to store in VRAM for the draft model" });
-    }
-    opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", bparams.lookup_ngram_min });
-    opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "path to static lookup cache to use for lookup decoding (not updated by generation)" });
-    opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
-    // server // completion // speculative //
-    // server // embedding //
-    opts.push_back({ "server/embedding",                   "       --pooling",                              "pooling type for embeddings, use model default if unspecified" });
-    // server // embedding //
-    // server // images //
-    opts.push_back({ "server/images" });
-    opts.push_back({ "server/images",                      "       --image-max-batch N",                    "maximum batch count (default: %d)", sdparams.max_batch_count});
-    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sdparams.max_height});
-    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sdparams.max_width});
-    opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sdparams.guidance });
-    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sdparams.strength });
-    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, select from %s", sd_sampler_type_names.c_str() });
-    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
-    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
-    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
-    opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
-    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sdparams.slg_start });
-    opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
-                                                                                                            "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sdparams.slg_end });
-    opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, select from %s (default: %s)", sd_scheduler_names.c_str(), sd_schedule_to_argument(sdparams.schedule) });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
-    }
-    opts.push_back({ "server/images",                      "       --image-clip-l-model PATH",              "path to the CLIP Large (clip-l) text encoder, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-clip-g-model PATH",              "path to the CLIP Generic (clip-g) text encoder, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-t5xxl-model PATH",               "path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/images",                  "       --image-no-vae-model-offload",           "disable vae(taesd) model offload" });
-    }
-    opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sdparams.vae_tiling ? "enabled" : "disabled" });
-    opts.push_back({ "server/images",                      "       --image-no-vae-tiling",                  "disable vae decoder in tiles" });
-    opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sdparams.upscale_repeats });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/images",                  "       --image-no-control-net-model-offload",   "disable control-net model offload" });
-    }
-    opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sdparams.control_strength });
-    opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sdparams.control_canny ? "enabled" : "disabled" });
-    opts.push_back({ "server/images",                      "       --image-free-compute-memory-immediately",
-                                                                                                            "indicate to free compute memory immediately, which allow generating high resolution image (default: %s)", sdparams.free_compute_immediately ? "enabled" : "disabled" });
-    // server // images //
-    // server //
-    // rpc-server //
-    opts.push_back({ "rpc-server" });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-host HOST",                 "ip address to rpc server listen (default: %s)", rparams.hostname.c_str() });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "port to rpc server listen (default: %d, 0 = disabled)", rparams.port });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "rpc-server",                     "       --rpc-server-main-gpu N",                "the GPU VRAM to use for the rpc server (default: %d, -1 = disabled, use RAM)", rparams.main_gpu });
-    }
-    opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "reserve memory in MiB (default: %zu)", rparams.reserve_memory });
-    // rpc-server //
-
-    // clang-format on
-
-    printf("usage: %s [options]\n", argv[0]);
-
-    for (const auto &o : opts) {
-        if (!o.grp.empty()) {
-            printf("\n%s:\n\n", o.grp.c_str());
-            continue;
-        }
-        printf("  %-32s", o.args.c_str());
-        if (o.args.length() > 30) {
-            printf("\n%34s", "");
-        }
-
-        const auto desc = o.desc;
-        size_t start    = 0;
-        size_t end      = desc.find('\n');
-        while (end != std::string::npos) {
-            printf("%s\n%34s", desc.substr(start, end - start).c_str(), "");
-            start = end + 1;
-            end   = desc.find('\n', start);
-        }
-
-        printf("%s\n", desc.substr(start).c_str());
-    }
-    printf("\n");
-}
-
 //
 // Utils
 //
+
+const std::vector<ggml_type> kv_cache_types = {
+    GGML_TYPE_F32,
+    GGML_TYPE_F16,
+    GGML_TYPE_BF16,
+    GGML_TYPE_Q8_0,
+    GGML_TYPE_Q4_0,
+    GGML_TYPE_Q4_1,
+    GGML_TYPE_IQ4_NL,
+    GGML_TYPE_Q5_0,
+    GGML_TYPE_Q5_1,
+};
+
+static std::string get_all_cache_kv_types() {
+    std::ostringstream msg;
+    for (const auto &type : kv_cache_types) {
+        msg << ggml_type_name(type) << (&type == &kv_cache_types.back() ? "" : ", ");
+    }
+    return msg.str();
+}
+
+static ggml_type parse_cache_kv_type(const std::string &s) {
+    for (const auto &type : kv_cache_types) {
+        if (ggml_type_name(type) == s) {
+            return type;
+        }
+    }
+    throw std::runtime_error("Unsupported cache type: " + s);
+}
+
+static std::string get_builtin_chat_templates() {
+    std::vector<const char *> supported_tmpl;
+    int32_t res = llama_chat_builtin_templates(nullptr, 0);
+    supported_tmpl.resize(res);
+    llama_chat_builtin_templates(supported_tmpl.data(), supported_tmpl.size());
+
+    std::ostringstream msg;
+    for (const auto &tmpl : supported_tmpl) {
+        msg << tmpl << (&tmpl == &supported_tmpl.back() ? "" : ", ");
+    }
+    return msg.str();
+}
 
 static std::vector<ggml_backend_dev_t> parse_device_list(const std::string &value) {
     std::vector<ggml_backend_dev_t> devices;
@@ -407,6 +126,22 @@ static std::vector<ggml_backend_dev_t> parse_device_list(const std::string &valu
         devices.push_back(nullptr);
     }
     return devices;
+}
+
+static std::string get_builtin_sd_sampler_types() {
+    std::ostringstream msg;
+    for (int m = 0; m < N_SAMPLE_METHODS; m++) {
+        msg << std::string(sd_sample_method_to_argument(sample_method_t(m))) << (m == N_SAMPLE_METHODS - 1 ? "" : ", ");
+    }
+    return msg.str();
+}
+
+static std::string get_builtin_sd_schedulers() {
+    std::ostringstream msg;
+    for (int d = 0; d < N_SCHEDULES; d++) {
+        msg << std::string(sd_schedule_to_argument(schedule_t(d))) << (d == N_SCHEDULES - 1 ? "" : ", ");
+    }
+    return msg.str();
 }
 
 //
@@ -448,7 +183,311 @@ static typename std::enable_if<std::is_same<T, std::vector<ggml_backend_dev_t>>:
     }
 }
 
-static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bparams) {
+//
+// Usage
+//
+
+static void llama_box_params_print_usage(int, char **argv, const llama_box_params &params_) {
+    struct opt {
+        LLAMA_COMMON_ATTRIBUTE_FORMAT(4, 5)
+
+        opt(std::string tags, const char *args, const char *desc, ...)
+            : tags(std::move(tags)), args(args), desc(desc) {
+            va_list args_list;
+            va_start(args_list, desc);
+            char buffer[1024];
+            vsnprintf(buffer, sizeof(buffer), desc, args_list);
+            va_end(args_list);
+            this->desc = buffer;
+        }
+
+        opt(std::string grp)
+            : grp(std::move(grp)) {
+        }
+
+        std::string tags;
+        std::string args;
+        std::string desc;
+        std::string grp;
+    };
+
+    const auto &llm_params = params_.llm_params;
+    const auto &rpc_params = params_.rpc_params;
+    const auto &sd_params  = params_.sd_params;
+
+    std::string default_sampler_type_chars;
+    std::string default_sampler_type_names;
+    for (const auto &sampler : llm_params.sampling.samplers) {
+        default_sampler_type_chars += common_sampler_type_to_chr(sampler);
+        default_sampler_type_names += common_sampler_type_to_str(sampler);
+        default_sampler_type_names += (&sampler == &llm_params.sampling.samplers.back() ? "" : ";");
+    }
+
+    std::string default_dry_sequence_breaker_names;
+    for (const auto &breaker : llm_params.sampling.dry_sequence_breakers) {
+        default_dry_sequence_breaker_names += breaker;
+        default_dry_sequence_breaker_names += (&breaker == &llm_params.sampling.dry_sequence_breakers.back() ? "" : ";");
+    }
+
+    // clang-format off
+    std::vector<opt> opts;
+    // general //
+    opts.push_back({ "general" });
+    opts.push_back({ "general",                            "-h,    --help, --usage",                        "print usage and exit" });
+    opts.push_back({ "general",                            "       --version",                              "print version and exit" });
+    opts.push_back({ "general",                            "       --system-info",                          "print system info and exit" });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "general",                        "       --list-devices",                         "print list of available devices and exit" });
+    }
+    opts.push_back({ "general",                            "-v,    --verbose, --log-verbose",               "set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
+    opts.push_back({ "general",                            "-lv,   --verbosity, --log-verbosity V",         "set the verbosity threshold, messages with a higher verbosity will be ignored" });
+    opts.push_back({ "general",                            "       --log-colors",                           "enable colored logging" });
+    // general //
+    // server //
+    opts.push_back({ "server" });
+    opts.push_back({ "server",                             "       --host HOST",                            "ip address to listen (default: %s)", llm_params.hostname.c_str() });
+    opts.push_back({ "server",                             "       --port PORT",                            "port to listen (default: %d)", llm_params.port });
+    opts.push_back({ "server",                             "-to    --timeout N",                            "server read/write timeout in seconds (default: %d)", llm_params.timeout_read });
+    opts.push_back({ "server",                             "       --threads-http N",                       "number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
+    opts.push_back({ "server",                             "       --conn-idle N",                          "server connection idle in seconds (default: %d)", params_.conn_idle });
+    opts.push_back({ "server",                             "       --conn-keepalive N",                     "server connection keep-alive in seconds (default: %d)", params_.conn_keepalive });
+    opts.push_back({ "server",                             "-m,    --model FILE",                           "model path (default: %s)", DEFAULT_MODEL_PATH });
+    opts.push_back({ "server",                             "-a,    --alias NAME",                           "model name alias" });
+    opts.push_back({ "server",                             "       --lora FILE",                            "apply LoRA adapter (implies --no-mmap)" });
+    opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
+    opts.push_back({ "server",                             "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server",                         "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", llm_params.main_gpu });
+    }
+    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --infill",                               "enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --embeddings",                           "enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --images",                               "enable image endpoint (default: %s)", params_.endpoint_images ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --rerank",                               "enable reranking endpoint (default: %s)", llm_params.reranking ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --slots",                                "enable slots monitoring endpoint (default: %s)", llm_params.endpoint_slots ? "enabled" : "disabled" });
+    if (llama_supports_rpc()) {
+        opts.push_back({ "server",                         "       --rpc SERVERS",                          "comma separated list of RPC servers" });
+    }
+    opts.push_back({ "server",                             "       --no-warmup",                            "skip warming up the model with an empty run" });
+    // server // completion //
+    opts.push_back({ "server/completion" });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server/completion",              "-dev,  --device <dev1,dev2,...>",               "comma-separated list of devices to use for offloading (none = don't offload)\n"
+                                                                                                            "use --list-devices to see a list of available devices"});
+        opts.push_back({ "server/completion",              "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM" });
+        opts.push_back({ "server/completion",              "-sm,   --split-mode SPLIT_MODE",                "how to split the model across multiple GPUs, one of:\n"
+                                                                                                            "  - none: use one GPU only\n"
+                                                                                                            "  - layer (default): split layers and KV across GPUs\n"
+                                                                                                            "  - row: split rows across GPUs, store intermediate results and KV in --main-gpu" });
+        opts.push_back({ "server/completion",              "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
+    }
+    opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
+                                                                                                            "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
+    opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
+                                                                                                            "list of built-in templates:\n%s", get_builtin_chat_templates().c_str() });
+    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
+    opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "path to save slot kv cache (default: disabled)" });
+    opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", llm_params.slot_prompt_similarity });
+    opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
+                                                                                                           "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", params_.n_tps });
+    opts.push_back({ "server/completion",                  "-t,    --threads N",                            "number of threads to use during generation (default: %d)", llm_params.cpuparams.n_threads });
+#ifndef GGML_USE_OPENMP
+    opts.push_back({ "server/completion",                  "-C,    --cpu-mask M",                           "set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: \"\")"});
+    opts.push_back({ "server/completion",                  "-Cr,   --cpu-range lo-hi",                      "range of CPUs for affinity. Complements --cpu-mask"});
+    opts.push_back({ "server/completion",                  "       --cpu-strict <0|1>",                     "use strict CPU placement (default: %u)\n", (unsigned) llm_params.cpuparams.strict_cpu});
+    opts.push_back({ "server/completion",                  "       --prio N",                               "set process/thread priority (default: %d), one of:\n"
+                                                                                                            "  - 0-normal\n"
+                                                                                                            "  - 1-medium\n"
+                                                                                                            "  - 2-high\n"
+                                                                                                            "  - 3-realtime", llm_params.cpuparams.priority});
+    opts.push_back({ "server/completion",                  "       --poll <0...100>",                       "use polling level to wait for work (0 - no polling, default: %u)\n", (unsigned) llm_params.cpuparams.poll});
+#endif
+    opts.push_back({ "server/completion",                  "-tb,   --threads-batch N",                      "number of threads to use during batch and prompt processing (default: same as --threads)" });
+#ifndef GGML_USE_OPENMP
+    opts.push_back({ "server/completion",                  "-Cb,   --cpu-mask-batch M",                     "set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)"});
+    opts.push_back({ "server/completion",                  "-Crb,  --cpu-range-batch lo-hi",                "ranges of CPUs for affinity. Complements --cpu-mask-batch"});
+    opts.push_back({ "server/completion",                  "       --cpu-strict-batch <0|1>",               "use strict CPU placement (default: same as --cpu-strict)"});
+    opts.push_back({ "server/completion",                  "       --prio-batch N",                         "set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)"});
+    opts.push_back({ "server/completion",                  "       --poll-batch <0...100>",                 "use polling to wait for work (default: same as --poll"});
+#endif
+    opts.push_back({ "server/completion",                  "-c,    --ctx-size N",                           "size of the prompt context (default: %d, 0 = loaded from model)", llm_params.n_ctx });
+    opts.push_back({ "server/completion",                  "       --no-context-shift",                     "disables context shift on infinite text generation (default: %s)", llm_params.ctx_shift ? "disabled" : "enabled" });
+    opts.push_back({ "server/completion",                  "-n,    --predict N",                            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", llm_params.n_predict });
+    opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "logical maximum batch size (default: %d)", llm_params.n_batch });
+    opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "physical maximum batch size (default: %d)", llm_params.n_ubatch });
+    opts.push_back({ "server/completion",                  "       --keep N",                               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", llm_params.n_keep });
+    opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", llm_params.escape ? "true" : "false" });
+    opts.push_back({ "server/completion",                  "       --no-escape",                            "do not process escape sequences" });
+    opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
+    opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
+    opts.push_back({ "server/completion",                  "       --penalize-nl",                          "penalize newline tokens (default: %s)", llm_params.sampling.penalize_nl ? "true" : "false" });
+    opts.push_back({ "server/completion",                  "       --temp T",                               "temperature (default: %.1f)", (double)llm_params.sampling.temp });
+    opts.push_back({ "server/completion",                  "       --top-k N",                              "top-k sampling (default: %d, 0 = disabled)", llm_params.sampling.top_k });
+    opts.push_back({ "server/completion",                  "       --top-p P",                              "top-p sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
+    opts.push_back({ "server/completion",                  "       --min-p P",                              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.min_p });
+    opts.push_back({ "server/completion",                  "       --xtc-probability N",                    "xtc probability (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.xtc_probability });
+    opts.push_back({ "server/completion",                  "       --xtc-threshold N",                      "xtc threshold (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.xtc_threshold });
+    opts.push_back({ "server/completion",                  "       --typical P",                            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.typ_p });
+    opts.push_back({ "server/completion",                  "       --repeat-last-n N",                      "last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", llm_params.sampling.penalty_last_n });
+    opts.push_back({ "server/completion",                  "       --repeat-penalty N",                     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.penalty_repeat });
+    opts.push_back({ "server/completion",                  "       --presence-penalty N",                   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_present });
+    opts.push_back({ "server/completion",                  "       --frequency-penalty N",                  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_freq });
+    opts.push_back({ "server/completion",                  "       --dry-multiplier N",                     "set DRY sampling multiplier (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dry_multiplier });
+    opts.push_back({ "server/completion",                  "       --dry-base N",                           "set DRY sampling base value (default: %.2f)", (double)llm_params.sampling.dry_base });
+    opts.push_back({ "server/completion",                  "       --dry-allowed-length N",                 "set allowed length for DRY sampling (default: %d)", llm_params.sampling.dry_allowed_length });
+    opts.push_back({ "server/completion",                  "       --dry-penalty-last-n N",                 "set DRY penalty for the last n tokens (default: %d, 0 = disable, -1 = context size)", llm_params.sampling.dry_penalty_last_n });
+    opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", default_dry_sequence_breaker_names.c_str() });
+    opts.push_back({ "server/completion",                  "       --dynatemp-range N",                     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dynatemp_range });
+    opts.push_back({ "server/completion",                  "       --dynatemp-exp N",                       "dynamic temperature exponent (default: %.1f)", (double)llm_params.sampling.dynatemp_exponent });
+    opts.push_back({ "server/completion",                  "       --mirostat N",                           "use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", llm_params.sampling.mirostat });
+    opts.push_back({ "server/completion",                  "       --mirostat-lr N",                        "Mirostat learning rate, parameter eta (default: %.1f)", (double)llm_params.sampling.mirostat_eta });
+    opts.push_back({ "server/completion",                  "       --mirostat-ent N",                       "Mirostat target entropy, parameter tau (default: %.1f)", (double)llm_params.sampling.mirostat_tau });
+    opts.push_back({ "server/completion",                  "-l     --logit-bias TOKEN_ID(+/-)BIAS",         R"(modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello')" });
+    opts.push_back({ "server/completion",                  "       --grammar GRAMMAR",                      "BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '%s')", llm_params.sampling.grammar.c_str() });
+    opts.push_back({ "server/completion",                  "       --grammar-file FILE",                    "file to read grammar from" });
+    opts.push_back({ "server/completion",                  "-j,    --json-schema SCHEMA",                   "JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead" });
+    opts.push_back({ "server/completion",                  "       --rope-scaling {none,linear,yarn}",      "RoPE frequency scaling method, defaults to linear unless specified by the model" });
+    opts.push_back({ "server/completion",                  "       --rope-scale N",                         "RoPE context scaling factor, expands context by a factor of N" });
+    opts.push_back({ "server/completion",                  "       --rope-freq-base N",                     "RoPE base frequency, used by NTK-aware scaling (default: loaded from model)" });
+    opts.push_back({ "server/completion",                  "       --rope-freq-scale N",                    "RoPE frequency scaling factor, expands context by a factor of 1/N" });
+    opts.push_back({ "server/completion",                  "       --yarn-orig-ctx N",                      "YaRN: original context size of model (default: %d = model training context size)", llm_params.yarn_orig_ctx });
+    opts.push_back({ "server/completion",                  "       --yarn-ext-factor N",                    "YaRN: extrapolation mix factor (default: %.1f, 0.0 = full interpolation)", (double)llm_params.yarn_ext_factor });
+    opts.push_back({ "server/completion",                  "       --yarn-attn-factor N",                   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)llm_params.yarn_attn_factor });
+    opts.push_back({ "server/completion",                  "       --yarn-beta-fast N",                     "YaRN: low correction dim or beta (default: %.1f)", (double)llm_params.yarn_beta_fast });
+    opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN: high correction dim or alpha (default: %.1f)", (double)llm_params.yarn_beta_slow });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server/completion",              "-nkvo, --no-kv-offload",                        "disable KV offload" });
+    }
+    opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "disable caching prompt" });
+    opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
+    opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_k) });
+    opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_v) });
+    opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)llm_params.defrag_thold });
+    opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "number of parallel sequences to decode (default: %d)", llm_params.n_parallel });
+    opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "disable continuous batching" });
+    opts.push_back({ "server/completion",                  "       --mmproj FILE",                          "path to a multimodal projector file for LLaVA" });
+    if (llama_supports_mlock()) {
+        opts.push_back({ "server/completion",              "       --mlock",                                "force system to keep model in RAM rather than swapping or compressing" });
+    }
+    if (llama_supports_mmap()) {
+        opts.push_back({ "server/completion",              "       --no-mmap",                              "do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
+    }
+    opts.push_back({ "server/completion",                  "       --numa TYPE",                            "attempt optimizations that help on some NUMA systems\n"
+                                                                                                            "  - distribute: spread execution evenly over all nodes\n"
+                                                                                                            "  - isolate: only spawn threads on CPUs on the node that execution started on\n"
+                                                                                                            "  - numactl: use the CPU map provided by numactl\n"
+                                                                                                            "if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437" });
+    opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "add a control vector" });
+    opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "add a control vector with user defined scaling SCALE" });
+    opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "layer range to apply the control vector(s) to, start and end inclusive" });
+    opts.push_back({ "server/completion",                  "       --spm-infill",                           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", llm_params.spm_infill ? "enabled" : "disabled" });
+    opts.push_back({ "server/completion",                  "-sp,   --special",                              "special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
+    // server // completion //
+    // server // completion // speculative //
+    opts.push_back({ "server/completion/speculative" });
+    opts.push_back({ "server/completion/speculative",      "       --draft-max, --draft, --draft-n N",      "number of tokens to draft for speculative decoding (default: %d)", llm_params.speculative.n_max });
+    opts.push_back({ "server/completion/speculative",      "       --draft-min, --draft-n-min N",           "minimum number of draft tokens to use for speculative decoding (default: %d)", llm_params.speculative.n_min });
+    opts.push_back({ "server/completion/speculative",      "       --draft-p-min P",                        "minimum speculative decoding probability (greedy) (default: %.1f)", llm_params.speculative.p_min });
+    opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "draft model for speculative decoding (default: unused)" });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server/completion/speculative",  "-devd, --device-draft <dev1,dev2,...>",         "comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
+                                                                                                            "use --list-devices to see a list of available devices" });
+        opts.push_back({ "server/completion/speculative",  "-ngld, --gpu-layers-draft, --n-gpu-layers-draft N",
+                                                                                                            "number of layers to store in VRAM for the draft model" });
+    }
+    opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", params_.lookup_ngram_min });
+    opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "path to static lookup cache to use for lookup decoding (not updated by generation)" });
+    opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
+    // server // completion // speculative //
+    // server // embedding //
+    opts.push_back({ "server/embedding",                   "       --pooling",                              "pooling type for embeddings, use model default if unspecified" });
+    // server // embedding //
+    // server // images //
+    opts.push_back({ "server/images" });
+    opts.push_back({ "server/images",                      "       --image-max-batch N",                    "maximum batch count (default: %d)", sd_params.max_batch_count});
+    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.max_height});
+    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.max_width});
+    opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sd_params.guidance });
+    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sd_params.strength });
+    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sampler_types().c_str() });
+    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
+    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
+    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sd_params.slg_start });
+    opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
+                                                                                                            "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.slg_end });
+    opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, allowed values: %s (default: %s)", get_builtin_sd_schedulers().c_str(), sd_schedule_to_argument(sd_params.schedule) });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
+    }
+    opts.push_back({ "server/images",                      "       --image-clip-l-model PATH",              "path to the CLIP Large (clip-l) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-clip-g-model PATH",              "path to the CLIP Generic (clip-g) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-t5xxl-model PATH",               "path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included" });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server/images",                  "       --image-no-vae-model-offload",           "disable vae(taesd) model offload" });
+    }
+    opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sd_params.vae_tiling ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-no-vae-tiling",                  "disable vae decoder in tiles" });
+    opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sd_params.upscale_repeats });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "server/images",                  "       --image-no-control-net-model-offload",   "disable control-net model offload" });
+    }
+    opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sd_params.control_strength });
+    opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sd_params.control_canny ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-free-compute-memory-immediately",
+                                                                                                            "indicate to free compute memory immediately, which allow generating high resolution image (default: %s)", sd_params.free_compute_immediately ? "enabled" : "disabled" });
+    // server // images //
+    // server //
+    // rpc-server //
+    opts.push_back({ "rpc-server" });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-host HOST",                 "ip address to rpc server listen (default: %s)", rpc_params.hostname.c_str() });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "port to rpc server listen (default: %d, 0 = disabled)", rpc_params.port });
+    if (llama_supports_gpu_offload()) {
+        opts.push_back({ "rpc-server",                     "       --rpc-server-main-gpu N",                "the GPU VRAM to use for the rpc server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
+    }
+    opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
+    // rpc-server //
+
+    // clang-format on
+
+    printf("usage: %s [options]\n", argv[0]);
+
+    for (const auto &o : opts) {
+        if (!o.grp.empty()) {
+            printf("\n%s:\n\n", o.grp.c_str());
+            continue;
+        }
+        printf("  %-32s", o.args.c_str());
+        if (o.args.length() > 30) {
+            printf("\n%34s", "");
+        }
+
+        const auto desc = o.desc;
+        size_t start    = 0;
+        size_t end      = desc.find('\n');
+        while (end != std::string::npos) {
+            printf("%s\n%34s", desc.substr(start, end - start).c_str(), "");
+            start = end + 1;
+            end   = desc.find('\n', start);
+        }
+
+        printf("%s\n", desc.substr(start).c_str());
+    }
+    printf("\n");
+}
+
+//
+// Parse
+//
+
+static bool llama_box_params_parse(int argc, char **argv, llama_box_params &params_) {
     // load dynamic backends
     ggml_backend_load_all();
 
@@ -463,7 +502,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             // general //
 
             if (!strcmp(flag, "-h") || !strcmp(flag, "--help") || !strcmp(flag, "--usage")) {
-                llama_box_params_print_usage(argc, argv, bparams);
+                llama_box_params_print_usage(argc, argv, params_);
                 exit(0);
             }
 
@@ -498,7 +537,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") || !strcmp(flag, "--log-verbose")) {
-                bparams.llm_params.verbosity = INT_MAX;
+                params_.llm_params.verbosity = INT_MAX;
                 common_log_set_verbosity_thold(INT_MAX);
                 continue;
             }
@@ -507,9 +546,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--log-verbosity");
                 }
-                char *arg                   = argv[i++];
-                bparams.llm_params.verbosity = std::stoi(std::string(arg));
-                common_log_set_verbosity_thold(bparams.llm_params.verbosity);
+                char *arg                    = argv[i++];
+                params_.llm_params.verbosity = std::stoi(std::string(arg));
+                common_log_set_verbosity_thold(params_.llm_params.verbosity);
                 continue;
             }
 
@@ -526,8 +565,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--host");
                 }
-                char *arg                  = argv[i++];
-                bparams.llm_params.hostname = std::string(arg);
+                char *arg                   = argv[i++];
+                params_.llm_params.hostname = std::string(arg);
                 continue;
             }
 
@@ -535,9 +574,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--port");
                 }
-                char *arg              = argv[i++];
-                bparams.llm_params.port = std::stoi(std::string(arg));
-                if (bparams.llm_params.port < 0 || bparams.llm_params.port > 65535) {
+                char *arg               = argv[i++];
+                params_.llm_params.port = std::stoi(std::string(arg));
+                if (params_.llm_params.port < 0 || params_.llm_params.port > 65535) {
                     invalid("--port");
                 }
                 continue;
@@ -547,9 +586,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--timeout");
                 }
-                char *arg                       = argv[i++];
-                bparams.llm_params.timeout_read  = std::stoi(std::string(arg));
-                bparams.llm_params.timeout_write = bparams.llm_params.timeout_read;
+                char *arg                        = argv[i++];
+                params_.llm_params.timeout_read  = std::stoi(std::string(arg));
+                params_.llm_params.timeout_write = params_.llm_params.timeout_read;
                 continue;
             }
 
@@ -557,8 +596,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--threads-http");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.n_threads_http = std::stoi(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.n_threads_http = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -567,7 +606,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--conn-idle");
                 }
                 char *arg         = argv[i++];
-                bparams.conn_idle = std::stoi(std::string(arg));
+                params_.conn_idle = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -576,7 +615,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--conn-keepalive");
                 }
                 char *arg              = argv[i++];
-                bparams.conn_keepalive = std::stoi(std::string(arg));
+                params_.conn_keepalive = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -584,8 +623,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--model");
                 }
-                char *arg               = argv[i++];
-                bparams.llm_params.model = std::string(arg);
+                char *arg                = argv[i++];
+                params_.llm_params.model = std::string(arg);
                 continue;
             }
 
@@ -593,8 +632,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--alias");
                 }
-                char *arg                     = argv[i++];
-                bparams.llm_params.model_alias = std::string(arg);
+                char *arg                      = argv[i++];
+                params_.llm_params.model_alias = std::string(arg);
                 continue;
             }
 
@@ -603,7 +642,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--lora");
                 }
                 char *arg = argv[i++];
-                bparams.llm_params.lora_adapters.push_back({
+                params_.llm_params.lora_adapters.push_back({
                     std::string(arg),
                     1.0f,
                 });
@@ -619,7 +658,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--lora-scaled");
                 }
                 char *s = argv[i++];
-                bparams.llm_params.lora_adapters.push_back({
+                params_.llm_params.lora_adapters.push_back({
                     std::string(n),
                     std::stof(std::string(s)),
                 });
@@ -627,7 +666,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (!strcmp(flag, "--lora-init-without-apply")) {
-                bparams.llm_params.lora_init_without_apply = true;
+                params_.llm_params.lora_init_without_apply = true;
                 continue;
             }
 
@@ -635,8 +674,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--seed");
                 }
-                char *arg                       = argv[i++];
-                bparams.llm_params.sampling.seed = std::stoul(std::string(arg));
+                char *arg                        = argv[i++];
+                params_.llm_params.sampling.seed = std::stoul(std::string(arg));
                 continue;
             }
 
@@ -645,9 +684,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--main-gpu");
                     }
-                    char *arg                  = argv[i++];
-                    bparams.llm_params.main_gpu = std::stoi(std::string(arg));
-                    if (bparams.llm_params.main_gpu < 0 || bparams.llm_params.main_gpu >= int32_t(llama_max_devices())) {
+                    char *arg                   = argv[i++];
+                    params_.llm_params.main_gpu = std::stoi(std::string(arg));
+                    if (params_.llm_params.main_gpu < 0 || params_.llm_params.main_gpu >= int32_t(llama_max_devices())) {
                         invalid("--main-gpu");
                     }
                     continue;
@@ -655,37 +694,37 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
             }
 
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
-                bparams.llm_params.flash_attn = true;
+                params_.llm_params.flash_attn = true;
                 continue;
             }
 
             if (!strcmp(flag, "--metrics")) {
-                bparams.llm_params.endpoint_metrics = true;
+                params_.llm_params.endpoint_metrics = true;
                 continue;
             }
 
             if (!strcmp(flag, "--infill")) {
-                bparams.endpoint_infill = true;
+                params_.endpoint_infill = true;
                 continue;
             }
 
             if (!strcmp(flag, "--embedding") || !strcmp(flag, "--embeddings")) {
-                bparams.llm_params.embedding = true;
+                params_.llm_params.embedding = true;
                 continue;
             }
 
             if (!strcmp(flag, "--images")) {
-                bparams.endpoint_images = true;
+                params_.endpoint_images = true;
                 continue;
             }
 
             if (!strcmp(flag, "--reranking") || !strcmp(flag, "--rerank")) {
-                bparams.llm_params.reranking = true;
+                params_.llm_params.reranking = true;
                 continue;
             }
 
             if (!strcmp(flag, "--slots")) {
-                bparams.llm_params.endpoint_slots = true;
+                params_.llm_params.endpoint_slots = true;
                 continue;
             }
 
@@ -694,8 +733,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--rpc");
                     }
-                    char *arg                     = argv[i++];
-                    bparams.llm_params.rpc_servers = arg;
+                    char *arg                      = argv[i++];
+                    params_.llm_params.rpc_servers = arg;
                     continue;
                 }
             }
@@ -707,8 +746,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--device-draft");
                     }
-                    char *arg                             = argv[i++];
-                    bparams.llm_params.speculative.devices = parse_device_list(arg);
+                    char *arg                              = argv[i++];
+                    params_.llm_params.speculative.devices = parse_device_list(arg);
                     continue;
                 }
 
@@ -716,8 +755,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--gpu-layers");
                     }
-                    char *arg                      = argv[i++];
-                    bparams.llm_params.n_gpu_layers = std::stoi(arg);
+                    char *arg                       = argv[i++];
+                    params_.llm_params.n_gpu_layers = std::stoi(arg);
                     continue;
                 }
 
@@ -727,11 +766,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     }
                     char *arg = argv[i++];
                     if (!strcmp(arg, "none")) {
-                        bparams.llm_params.split_mode = LLAMA_SPLIT_MODE_NONE;
+                        params_.llm_params.split_mode = LLAMA_SPLIT_MODE_NONE;
                     } else if (!strcmp(arg, "layer")) {
-                        bparams.llm_params.split_mode = LLAMA_SPLIT_MODE_LAYER;
+                        params_.llm_params.split_mode = LLAMA_SPLIT_MODE_LAYER;
                     } else if (!strcmp(arg, "row")) {
-                        bparams.llm_params.split_mode = LLAMA_SPLIT_MODE_ROW;
+                        params_.llm_params.split_mode = LLAMA_SPLIT_MODE_ROW;
                     } else {
                         invalid("--split-mode");
                     }
@@ -752,9 +791,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     }
                     for (size_t j = 0; j < llama_max_devices(); ++j) {
                         if (j < split_arg.size()) {
-                            bparams.llm_params.tensor_split[j] = std::stof(split_arg[j]);
+                            params_.llm_params.tensor_split[j] = std::stof(split_arg[j]);
                         } else {
-                            bparams.llm_params.tensor_split[j] = 0.0f;
+                            params_.llm_params.tensor_split[j] = 0.0f;
                         }
                     }
                     continue;
@@ -766,7 +805,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--override-kv");
                 }
                 char *arg = argv[i++];
-                if (!string_parse_kv_override(arg, bparams.llm_params.kv_overrides)) {
+                if (!string_parse_kv_override(arg, params_.llm_params.kv_overrides)) {
                     invalid("--override-kv");
                 }
                 continue;
@@ -784,7 +823,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (p[p.size() - 1] != DIRECTORY_SEPARATOR) {
                     p += DIRECTORY_SEPARATOR;
                 }
-                bparams.llm_params.slot_save_path = p;
+                params_.llm_params.slot_save_path = p;
                 continue;
             }
 
@@ -800,8 +839,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (t.size() > 20 && !common_chat_verify_template(t)) {
                     invalid("--chat-template");
                 }
-                bparams.llm_params.enable_chat_template = true;
-                bparams.llm_params.chat_template        = t;
+                params_.llm_params.enable_chat_template = true;
+                params_.llm_params.chat_template        = t;
                 continue;
             }
 
@@ -819,8 +858,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (t.size() > 20 && !common_chat_verify_template(t)) {
                     invalid("--chat-template-file");
                 }
-                bparams.llm_params.enable_chat_template = true;
-                bparams.llm_params.chat_template        = t;
+                params_.llm_params.enable_chat_template = true;
+                params_.llm_params.chat_template        = t;
                 continue;
             }
 
@@ -828,8 +867,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--slot-prompt-similarity");
                 }
-                char *arg                                = argv[i++];
-                bparams.llm_params.slot_prompt_similarity = std::stof(std::string(arg));
+                char *arg                                 = argv[i++];
+                params_.llm_params.slot_prompt_similarity = std::stof(std::string(arg));
                 continue;
             }
 
@@ -838,7 +877,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--tokens-per-second");
                 }
                 char *arg     = argv[i++];
-                bparams.n_tps = std::stoi(std::string(arg));
+                params_.n_tps = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -846,10 +885,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--threads");
                 }
-                char *arg                             = argv[i++];
-                bparams.llm_params.cpuparams.n_threads = std::stoi(std::string(arg));
-                if (bparams.llm_params.cpuparams.n_threads <= 0) {
-                    bparams.llm_params.cpuparams.n_threads = cpu_get_num_math();
+                char *arg                              = argv[i++];
+                params_.llm_params.cpuparams.n_threads = std::stoi(std::string(arg));
+                if (params_.llm_params.cpuparams.n_threads <= 0) {
+                    params_.llm_params.cpuparams.n_threads = cpu_get_num_math();
                 }
                 continue;
             }
@@ -858,9 +897,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-mask");
                 }
-                char *arg                              = argv[i++];
-                bparams.llm_params.cpuparams.mask_valid = true;
-                if (!parse_cpu_mask(arg, bparams.llm_params.cpuparams.cpumask)) {
+                char *arg                               = argv[i++];
+                params_.llm_params.cpuparams.mask_valid = true;
+                if (!parse_cpu_mask(arg, params_.llm_params.cpuparams.cpumask)) {
                     invalid("--cpu-mask");
                 }
                 continue;
@@ -870,9 +909,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-range");
                 }
-                char *arg                              = argv[i++];
-                bparams.llm_params.cpuparams.mask_valid = true;
-                if (!parse_cpu_range(arg, bparams.llm_params.cpuparams.cpumask)) {
+                char *arg                               = argv[i++];
+                params_.llm_params.cpuparams.mask_valid = true;
+                if (!parse_cpu_range(arg, params_.llm_params.cpuparams.cpumask)) {
                     invalid("--cpu-range");
                 }
                 continue;
@@ -882,8 +921,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--prio");
                 }
-                char *arg                            = argv[i++];
-                bparams.llm_params.cpuparams.priority = (enum ggml_sched_priority)std::stoi(std::string(arg));
+                char *arg                             = argv[i++];
+                params_.llm_params.cpuparams.priority = (enum ggml_sched_priority)std::stoi(std::string(arg));
                 continue;
             }
 
@@ -891,8 +930,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-strict");
                 }
-                char *arg                              = argv[i++];
-                bparams.llm_params.cpuparams.strict_cpu = std::stoul(std::string(arg));
+                char *arg                               = argv[i++];
+                params_.llm_params.cpuparams.strict_cpu = std::stoul(std::string(arg));
                 continue;
             }
 
@@ -900,8 +939,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--poll");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.cpuparams.poll = std::stoul(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.cpuparams.poll = std::stoul(std::string(arg));
                 continue;
             }
 
@@ -909,10 +948,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--threads-batch");
                 }
-                char *arg                                   = argv[i++];
-                bparams.llm_params.cpuparams_batch.n_threads = std::stoi(std::string(arg));
-                if (bparams.llm_params.cpuparams_batch.n_threads <= 0) {
-                    bparams.llm_params.cpuparams_batch.n_threads = cpu_get_num_math();
+                char *arg                                    = argv[i++];
+                params_.llm_params.cpuparams_batch.n_threads = std::stoi(std::string(arg));
+                if (params_.llm_params.cpuparams_batch.n_threads <= 0) {
+                    params_.llm_params.cpuparams_batch.n_threads = cpu_get_num_math();
                 }
                 continue;
             }
@@ -921,9 +960,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-mask-batch");
                 }
-                char *arg                                    = argv[i++];
-                bparams.llm_params.cpuparams_batch.mask_valid = true;
-                if (!parse_cpu_mask(arg, bparams.llm_params.cpuparams_batch.cpumask)) {
+                char *arg                                     = argv[i++];
+                params_.llm_params.cpuparams_batch.mask_valid = true;
+                if (!parse_cpu_mask(arg, params_.llm_params.cpuparams_batch.cpumask)) {
                     invalid("--cpu-mask-batch");
                 }
                 continue;
@@ -933,9 +972,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-range-batch");
                 }
-                char *arg                                    = argv[i++];
-                bparams.llm_params.cpuparams_batch.mask_valid = true;
-                if (!parse_cpu_range(arg, bparams.llm_params.cpuparams_batch.cpumask)) {
+                char *arg                                     = argv[i++];
+                params_.llm_params.cpuparams_batch.mask_valid = true;
+                if (!parse_cpu_range(arg, params_.llm_params.cpuparams_batch.cpumask)) {
                     invalid("--cpu-range-batch");
                 }
                 continue;
@@ -945,8 +984,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--prio-batch");
                 }
-                char *arg                                  = argv[i++];
-                bparams.llm_params.cpuparams_batch.priority = (enum ggml_sched_priority)std::stoul(std::string(arg));
+                char *arg                                   = argv[i++];
+                params_.llm_params.cpuparams_batch.priority = (enum ggml_sched_priority)std::stoul(std::string(arg));
                 continue;
             }
 
@@ -954,8 +993,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cpu-strict-batch");
                 }
-                char *arg                                    = argv[i++];
-                bparams.llm_params.cpuparams_batch.strict_cpu = std::stoul(std::string(arg));
+                char *arg                                     = argv[i++];
+                params_.llm_params.cpuparams_batch.strict_cpu = std::stoul(std::string(arg));
                 continue;
             }
 
@@ -963,8 +1002,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--poll-batch");
                 }
-                char *arg                              = argv[i++];
-                bparams.llm_params.cpuparams_batch.poll = std::stoul(std::string(arg));
+                char *arg                               = argv[i++];
+                params_.llm_params.cpuparams_batch.poll = std::stoul(std::string(arg));
                 continue;
             }
 
@@ -972,13 +1011,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--ctx-size");
                 }
-                char *arg               = argv[i++];
-                bparams.llm_params.n_ctx = std::stoi(std::string(arg));
+                char *arg                = argv[i++];
+                params_.llm_params.n_ctx = std::stoi(std::string(arg));
                 continue;
             }
 
             if (!strcmp(flag, "--no-context-shift")) {
-                bparams.llm_params.ctx_shift = false;
+                params_.llm_params.ctx_shift = false;
                 continue;
             }
 
@@ -986,8 +1025,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--predict");
                 }
-                char *arg                   = argv[i++];
-                bparams.llm_params.n_predict = std::stoi(std::string(arg));
+                char *arg                    = argv[i++];
+                params_.llm_params.n_predict = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -995,8 +1034,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--batch-size");
                 }
-                char *arg                 = argv[i++];
-                bparams.llm_params.n_batch = std::stoi(std::string(arg));
+                char *arg                  = argv[i++];
+                params_.llm_params.n_batch = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1004,8 +1043,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--ubatch-size");
                 }
-                char *arg                  = argv[i++];
-                bparams.llm_params.n_ubatch = std::stoi(std::string(arg));
+                char *arg                   = argv[i++];
+                params_.llm_params.n_ubatch = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1013,18 +1052,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--keep");
                 }
-                char *arg                = argv[i++];
-                bparams.llm_params.n_keep = std::stoi(std::string(arg));
+                char *arg                 = argv[i++];
+                params_.llm_params.n_keep = std::stoi(std::string(arg));
                 continue;
             }
 
             if (!strcmp(flag, "-e") || !strcmp(flag, "--escape")) {
-                bparams.llm_params.escape = true;
+                params_.llm_params.escape = true;
                 continue;
             }
 
             if (!strcmp(flag, "--no-escape")) {
-                bparams.llm_params.escape = false;
+                params_.llm_params.escape = false;
                 continue;
             }
 
@@ -1032,9 +1071,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--samplers");
                 }
-                char *arg                           = argv[i++];
-                const auto sampler_names            = string_split<std::string>(arg, ';');
-                bparams.llm_params.sampling.samplers = common_sampler_types_from_names(sampler_names, true);
+                char *arg                            = argv[i++];
+                const auto sampler_names             = string_split<std::string>(arg, ';');
+                params_.llm_params.sampling.samplers = common_sampler_types_from_names(sampler_names, true);
                 continue;
             }
 
@@ -1042,13 +1081,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--sampling-seq");
                 }
-                char *arg                           = argv[i++];
-                bparams.llm_params.sampling.samplers = common_sampler_types_from_chars(arg);
+                char *arg                            = argv[i++];
+                params_.llm_params.sampling.samplers = common_sampler_types_from_chars(arg);
                 continue;
             }
 
             if (!strcmp(flag, "--penalize-nl")) {
-                bparams.llm_params.sampling.penalize_nl = true;
+                params_.llm_params.sampling.penalize_nl = true;
                 continue;
             }
 
@@ -1056,9 +1095,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--temp");
                 }
-                char *arg                       = argv[i++];
-                bparams.llm_params.sampling.temp = std::stof(std::string(arg));
-                bparams.llm_params.sampling.temp = std::max(bparams.llm_params.sampling.temp, 0.0f);
+                char *arg                        = argv[i++];
+                params_.llm_params.sampling.temp = std::stof(std::string(arg));
+                params_.llm_params.sampling.temp = std::max(params_.llm_params.sampling.temp, 0.0f);
                 continue;
             }
 
@@ -1066,8 +1105,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--top-k");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.sampling.top_k = std::stoi(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.sampling.top_k = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1075,8 +1114,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--top-p");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.sampling.top_p = std::stof(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.sampling.top_p = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1084,8 +1123,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--min-p");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.sampling.min_p = std::stof(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.sampling.min_p = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1093,8 +1132,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--xtc-probability");
                 }
-                char *arg                                  = argv[i++];
-                bparams.llm_params.sampling.xtc_probability = std::stof(std::string(arg));
+                char *arg                                   = argv[i++];
+                params_.llm_params.sampling.xtc_probability = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1102,8 +1141,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--xtc-threshold");
                 }
-                char *arg                                = argv[i++];
-                bparams.llm_params.sampling.xtc_threshold = std::stof(std::string(arg));
+                char *arg                                 = argv[i++];
+                params_.llm_params.sampling.xtc_threshold = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1111,8 +1150,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--typical");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.sampling.typ_p = std::stof(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.sampling.typ_p = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1120,9 +1159,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--repeat-last-n");
                 }
-                char *arg                                 = argv[i++];
-                bparams.llm_params.sampling.penalty_last_n = std::stoi(std::string(arg));
-                bparams.llm_params.sampling.n_prev         = std::max(bparams.llm_params.sampling.n_prev, bparams.llm_params.sampling.penalty_last_n);
+                char *arg                                  = argv[i++];
+                params_.llm_params.sampling.penalty_last_n = std::stoi(std::string(arg));
+                params_.llm_params.sampling.n_prev         = std::max(params_.llm_params.sampling.n_prev, params_.llm_params.sampling.penalty_last_n);
                 continue;
             }
 
@@ -1130,8 +1169,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--repeat-penalty");
                 }
-                char *arg                                 = argv[i++];
-                bparams.llm_params.sampling.penalty_repeat = std::stof(std::string(arg));
+                char *arg                                  = argv[i++];
+                params_.llm_params.sampling.penalty_repeat = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1139,8 +1178,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--presence-penalty");
                 }
-                char *arg                                  = argv[i++];
-                bparams.llm_params.sampling.penalty_present = std::stof(std::string(arg));
+                char *arg                                   = argv[i++];
+                params_.llm_params.sampling.penalty_present = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1148,8 +1187,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--frequency-penalty");
                 }
-                char *arg                               = argv[i++];
-                bparams.llm_params.sampling.penalty_freq = std::stof(std::string(arg));
+                char *arg                                = argv[i++];
+                params_.llm_params.sampling.penalty_freq = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1157,8 +1196,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-multiplier");
                 }
-                char *arg                                 = argv[i++];
-                bparams.llm_params.sampling.dry_multiplier = std::stof(std::string(arg));
+                char *arg                                  = argv[i++];
+                params_.llm_params.sampling.dry_multiplier = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1169,7 +1208,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg            = argv[i++];
                 float potential_base = std::stof(std::string(arg));
                 if (potential_base >= 1.0f) {
-                    bparams.llm_params.sampling.dry_multiplier = std::stof(std::string(arg));
+                    params_.llm_params.sampling.dry_multiplier = std::stof(std::string(arg));
                 }
                 continue;
             }
@@ -1178,8 +1217,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-allowed-length");
                 }
-                char *arg                                     = argv[i++];
-                bparams.llm_params.sampling.dry_allowed_length = std::stoi(std::string(arg));
+                char *arg                                      = argv[i++];
+                params_.llm_params.sampling.dry_allowed_length = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1187,8 +1226,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dry-penalty-last-n");
                 }
-                char *arg                                     = argv[i++];
-                bparams.llm_params.sampling.dry_penalty_last_n = std::stoi(std::string(arg));
+                char *arg                                      = argv[i++];
+                params_.llm_params.sampling.dry_penalty_last_n = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1199,15 +1238,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
                 static bool defaults_cleared = false;
                 if (!defaults_cleared) {
-                    bparams.llm_params.sampling.dry_sequence_breakers.clear();
+                    params_.llm_params.sampling.dry_sequence_breakers.clear();
                     defaults_cleared = true;
                 }
 
                 char *arg = argv[i++];
                 if (!strcmp(arg, "none")) {
-                    bparams.llm_params.sampling.dry_sequence_breakers.clear();
+                    params_.llm_params.sampling.dry_sequence_breakers.clear();
                 } else {
-                    bparams.llm_params.sampling.dry_sequence_breakers.emplace_back(arg);
+                    params_.llm_params.sampling.dry_sequence_breakers.emplace_back(arg);
                 }
                 continue;
             }
@@ -1216,8 +1255,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dynatemp-range");
                 }
-                char *arg                                 = argv[i++];
-                bparams.llm_params.sampling.dynatemp_range = std::stof(std::string(arg));
+                char *arg                                  = argv[i++];
+                params_.llm_params.sampling.dynatemp_range = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1225,8 +1264,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--dynatemp-exp");
                 }
-                char *arg                                    = argv[i++];
-                bparams.llm_params.sampling.dynatemp_exponent = std::stof(std::string(arg));
+                char *arg                                     = argv[i++];
+                params_.llm_params.sampling.dynatemp_exponent = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1234,8 +1273,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mirostat");
                 }
-                char *arg                           = argv[i++];
-                bparams.llm_params.sampling.mirostat = std::stoi(std::string(arg));
+                char *arg                            = argv[i++];
+                params_.llm_params.sampling.mirostat = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1243,8 +1282,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mirostat-lr");
                 }
-                char *arg                               = argv[i++];
-                bparams.llm_params.sampling.mirostat_eta = std::stof(std::string(arg));
+                char *arg                                = argv[i++];
+                params_.llm_params.sampling.mirostat_eta = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1252,8 +1291,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mirostat-ent");
                 }
-                char *arg                               = argv[i++];
-                bparams.llm_params.sampling.mirostat_tau = std::stof(std::string(arg));
+                char *arg                                = argv[i++];
+                params_.llm_params.sampling.mirostat_tau = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1268,7 +1307,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 std::string value;
                 if (ss >> key && ss >> sign && std::getline(ss, value) && (sign == '+' || sign == '-')) {
                     const float bias = std::stof(value) * ((sign == '-') ? -1.0f : 1.0f);
-                    bparams.llm_params.sampling.logit_bias.push_back({key, bias});
+                    params_.llm_params.sampling.logit_bias.push_back({key, bias});
                 } else {
                     invalid("--logit-bias");
                 }
@@ -1279,8 +1318,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--grammar");
                 }
-                char *arg                          = argv[i++];
-                bparams.llm_params.sampling.grammar = std::string(arg);
+                char *arg                           = argv[i++];
+                params_.llm_params.sampling.grammar = std::string(arg);
                 continue;
             }
 
@@ -1294,7 +1333,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--grammar-file");
                 }
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
-                          std::back_inserter(bparams.llm_params.sampling.grammar));
+                          std::back_inserter(params_.llm_params.sampling.grammar));
                 continue;
             }
 
@@ -1302,8 +1341,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--json-schema");
                 }
-                char *arg                          = argv[i++];
-                bparams.llm_params.sampling.grammar = json_schema_to_grammar(json::parse(std::string(arg)));
+                char *arg                           = argv[i++];
+                params_.llm_params.sampling.grammar = json_schema_to_grammar(json::parse(std::string(arg)));
                 continue;
             }
 
@@ -1314,11 +1353,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg = argv[i++];
                 std::string value(arg);
                 if (value == "none") {
-                    bparams.llm_params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_NONE;
+                    params_.llm_params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_NONE;
                 } else if (value == "linear") {
-                    bparams.llm_params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_LINEAR;
+                    params_.llm_params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_LINEAR;
                 } else if (value == "yarn") {
-                    bparams.llm_params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_YARN;
+                    params_.llm_params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_YARN;
                 } else {
                     invalid("--rope-scaling");
                 }
@@ -1329,8 +1368,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rope-scale");
                 }
-                char *arg                         = argv[i++];
-                bparams.llm_params.rope_freq_scale = 1.0f / std::stof(std::string(arg));
+                char *arg                          = argv[i++];
+                params_.llm_params.rope_freq_scale = 1.0f / std::stof(std::string(arg));
                 continue;
             }
 
@@ -1338,8 +1377,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rope-freq-base");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.rope_freq_base = std::stof(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.rope_freq_base = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1347,8 +1386,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rope-freq-scale");
                 }
-                char *arg                         = argv[i++];
-                bparams.llm_params.rope_freq_scale = std::stof(std::string(arg));
+                char *arg                          = argv[i++];
+                params_.llm_params.rope_freq_scale = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1356,8 +1395,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-orig-ctx");
                 }
-                char *arg                       = argv[i++];
-                bparams.llm_params.yarn_orig_ctx = std::stoi(std::string(arg));
+                char *arg                        = argv[i++];
+                params_.llm_params.yarn_orig_ctx = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1365,8 +1404,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-ext-factor");
                 }
-                char *arg                         = argv[i++];
-                bparams.llm_params.yarn_ext_factor = std::stof(std::string(arg));
+                char *arg                          = argv[i++];
+                params_.llm_params.yarn_ext_factor = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1374,8 +1413,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-attn-factor");
                 }
-                char *arg                          = argv[i++];
-                bparams.llm_params.yarn_attn_factor = std::stof(std::string(arg));
+                char *arg                           = argv[i++];
+                params_.llm_params.yarn_attn_factor = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1383,8 +1422,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-beta-fast");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.yarn_beta_fast = std::stof(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.yarn_beta_fast = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1392,18 +1431,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--yarn-beta-slow");
                 }
-                char *arg                        = argv[i++];
-                bparams.llm_params.yarn_beta_slow = std::stof(std::string(arg));
+                char *arg                         = argv[i++];
+                params_.llm_params.yarn_beta_slow = std::stof(std::string(arg));
                 continue;
             }
 
             if (!strcmp(flag, "-nkvo") || !strcmp(flag, "--no-kv-offload")) {
-                bparams.llm_params.no_kv_offload = true;
+                params_.llm_params.no_kv_offload = true;
                 continue;
             }
 
             if (!strcmp(flag, "--no-cache-prompt")) {
-                bparams.cache_prompt = false;
+                params_.cache_prompt = false;
                 continue;
             }
 
@@ -1411,10 +1450,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cache-reuse");
                 }
-                char *arg                       = argv[i++];
-                bparams.llm_params.n_cache_reuse = std::stoi(std::string(arg));
-                if (bparams.llm_params.n_cache_reuse > 0) {
-                    bparams.cache_prompt = true;
+                char *arg                        = argv[i++];
+                params_.llm_params.n_cache_reuse = std::stoi(std::string(arg));
+                if (params_.llm_params.n_cache_reuse > 0) {
+                    params_.cache_prompt = true;
                 }
                 continue;
             }
@@ -1423,8 +1462,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cache-type-k");
                 }
-                char *arg                      = argv[i++];
-                bparams.llm_params.cache_type_k = std::string(arg);
+                char *arg                       = argv[i++];
+                params_.llm_params.cache_type_k = parse_cache_kv_type(std::string(arg));
                 continue;
             }
 
@@ -1432,8 +1471,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--cache-type-v");
                 }
-                char *arg                      = argv[i++];
-                bparams.llm_params.cache_type_v = std::string(arg);
+                char *arg                       = argv[i++];
+                params_.llm_params.cache_type_v = parse_cache_kv_type(std::string(arg));
                 continue;
             }
 
@@ -1441,8 +1480,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--defrag-thold");
                 }
-                char *arg                      = argv[i++];
-                bparams.llm_params.defrag_thold = std::stof(std::string(arg));
+                char *arg                       = argv[i++];
+                params_.llm_params.defrag_thold = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1450,13 +1489,13 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--parallel");
                 }
-                char *arg                    = argv[i++];
-                bparams.llm_params.n_parallel = std::stoi(std::string(arg));
+                char *arg                     = argv[i++];
+                params_.llm_params.n_parallel = std::stoi(std::string(arg));
                 continue;
             }
 
             if (!strcmp(flag, "-nocb") || !strcmp(flag, "--no-cont-batching")) {
-                bparams.llm_params.cont_batching = false;
+                params_.llm_params.cont_batching = false;
                 continue;
             }
 
@@ -1464,21 +1503,21 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--mmproj");
                 }
-                char *arg                = argv[i++];
-                bparams.llm_params.mmproj = std::string(arg);
+                char *arg                 = argv[i++];
+                params_.llm_params.mmproj = std::string(arg);
                 continue;
             }
 
             if (llama_supports_mlock()) {
                 if (!strcmp(flag, "--mlock")) {
-                    bparams.llm_params.use_mlock = true;
+                    params_.llm_params.use_mlock = true;
                     continue;
                 }
             }
 
             if (llama_supports_mmap()) {
                 if (!strcmp(flag, "--no-mmap")) {
-                    bparams.llm_params.use_mmap = false;
+                    params_.llm_params.use_mmap = false;
                     continue;
                 }
             }
@@ -1490,11 +1529,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg = argv[i++];
                 std::string value(arg);
                 if (value == "distribute") {
-                    bparams.llm_params.numa = GGML_NUMA_STRATEGY_DISTRIBUTE;
+                    params_.llm_params.numa = GGML_NUMA_STRATEGY_DISTRIBUTE;
                 } else if (value == "isolate") {
-                    bparams.llm_params.numa = GGML_NUMA_STRATEGY_ISOLATE;
+                    params_.llm_params.numa = GGML_NUMA_STRATEGY_ISOLATE;
                 } else if (value == "numactl") {
-                    bparams.llm_params.numa = GGML_NUMA_STRATEGY_NUMACTL;
+                    params_.llm_params.numa = GGML_NUMA_STRATEGY_NUMACTL;
                 } else {
                     invalid("--numa");
                 }
@@ -1506,7 +1545,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--control-vector");
                 }
                 char *arg = argv[i++];
-                bparams.llm_params.control_vectors.push_back({1.0f, std::string(arg)});
+                params_.llm_params.control_vectors.push_back({1.0f, std::string(arg)});
                 continue;
             }
 
@@ -1519,7 +1558,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     invalid("--control-vector-scaled");
                 }
                 char *s = argv[i++];
-                bparams.llm_params.control_vectors.push_back({std::stof(std::string(s)), std::string(n)});
+                params_.llm_params.control_vectors.push_back({std::stof(std::string(s)), std::string(n)});
                 continue;
             }
 
@@ -1531,24 +1570,24 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     invalid("--control-vector-layer-range");
                 }
-                char *e                                      = argv[i++];
-                bparams.llm_params.control_vector_layer_start = std::stoi(std::string(s));
-                bparams.llm_params.control_vector_layer_end   = std::stoi(std::string(e));
+                char *e                                       = argv[i++];
+                params_.llm_params.control_vector_layer_start = std::stoi(std::string(s));
+                params_.llm_params.control_vector_layer_end   = std::stoi(std::string(e));
                 continue;
             }
 
             if (!strcmp(flag, "--no-warmup")) {
-                bparams.llm_params.warmup = false;
+                params_.llm_params.warmup = false;
                 continue;
             }
 
             if (!strcmp(flag, "--spm-infill")) {
-                bparams.llm_params.spm_infill = true;
+                params_.llm_params.spm_infill = true;
                 continue;
             }
 
             if (!strcmp(flag, "-sp") || !strcmp(flag, "--special")) {
-                bparams.llm_params.special = true;
+                params_.llm_params.special = true;
                 continue;
             }
 
@@ -1558,8 +1597,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--draft-max");
                 }
-                char *arg                           = argv[i++];
-                bparams.llm_params.speculative.n_max = std::stoi(std::string(arg));
+                char *arg                            = argv[i++];
+                params_.llm_params.speculative.n_max = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1567,8 +1606,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--draft-min");
                 }
-                char *arg                           = argv[i++];
-                bparams.llm_params.speculative.n_min = std::stoi(std::string(arg));
+                char *arg                            = argv[i++];
+                params_.llm_params.speculative.n_min = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1576,8 +1615,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--draft-p-min");
                 }
-                char *arg                           = argv[i++];
-                bparams.llm_params.speculative.p_min = std::stof(std::string(arg));
+                char *arg                            = argv[i++];
+                params_.llm_params.speculative.p_min = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1585,8 +1624,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--model-draft");
                 }
-                char *arg                           = argv[i++];
-                bparams.llm_params.speculative.model = std::string(arg);
+                char *arg                            = argv[i++];
+                params_.llm_params.speculative.model = std::string(arg);
                 continue;
             }
 
@@ -1595,8 +1634,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--device");
                     }
-                    char *arg                 = argv[i++];
-                    bparams.llm_params.devices = parse_device_list(arg);
+                    char *arg                  = argv[i++];
+                    params_.llm_params.devices = parse_device_list(arg);
                     continue;
                 }
 
@@ -1604,8 +1643,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--gpu-layers-draft");
                     }
-                    char *arg                                  = argv[i++];
-                    bparams.llm_params.speculative.n_gpu_layers = std::stoi(arg);
+                    char *arg                                   = argv[i++];
+                    params_.llm_params.speculative.n_gpu_layers = std::stoi(arg);
                     continue;
                 }
             }
@@ -1615,11 +1654,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     missing("--lookup-ngram-min");
                 }
                 char *arg                = argv[i++];
-                bparams.lookup_ngram_min = std::stoi(std::string(arg));
-                if (bparams.lookup_ngram_min < 1) {
+                params_.lookup_ngram_min = std::stoi(std::string(arg));
+                if (params_.lookup_ngram_min < 1) {
                     invalid("--lookup-ngram-min");
                 }
-                if (bparams.lookup_ngram_min > LLAMA_NGRAM_MAX) {
+                if (params_.lookup_ngram_min > LLAMA_NGRAM_MAX) {
                     invalid("--lookup-ngram-min");
                 }
                 continue;
@@ -1629,8 +1668,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--lookup-cache-static");
                 }
-                char *arg                             = argv[i++];
-                bparams.llm_params.lookup_cache_static = std::string(arg);
+                char *arg                              = argv[i++];
+                params_.llm_params.lookup_cache_static = std::string(arg);
                 continue;
             }
 
@@ -1638,8 +1677,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--lookup-cache-dynamic");
                 }
-                char *arg                              = argv[i++];
-                bparams.llm_params.lookup_cache_dynamic = std::string(arg);
+                char *arg                               = argv[i++];
+                params_.llm_params.lookup_cache_dynamic = std::string(arg);
                 continue;
             }
 
@@ -1652,15 +1691,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 char *arg = argv[i++];
                 std::string value(arg);
                 if (value == "none") {
-                    bparams.llm_params.pooling_type = LLAMA_POOLING_TYPE_NONE;
+                    params_.llm_params.pooling_type = LLAMA_POOLING_TYPE_NONE;
                 } else if (value == "mean") {
-                    bparams.llm_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+                    params_.llm_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
                 } else if (value == "cls") {
-                    bparams.llm_params.pooling_type = LLAMA_POOLING_TYPE_CLS;
+                    params_.llm_params.pooling_type = LLAMA_POOLING_TYPE_CLS;
                 } else if (value == "last") {
-                    bparams.llm_params.pooling_type = LLAMA_POOLING_TYPE_LAST;
+                    params_.llm_params.pooling_type = LLAMA_POOLING_TYPE_LAST;
                 } else if (value == "rank") {
-                    bparams.llm_params.pooling_type = LLAMA_POOLING_TYPE_RANK;
+                    params_.llm_params.pooling_type = LLAMA_POOLING_TYPE_RANK;
                 } else {
                     invalid("--pooling");
                 }
@@ -1673,9 +1712,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-max-batch");
                 }
-                char *arg                        = argv[i++];
-                bparams.sd_params.max_batch_count = std::stoi(std::string(arg));
-                if (bparams.sd_params.max_batch_count < 1) {
+                char *arg                         = argv[i++];
+                params_.sd_params.max_batch_count = std::stoi(std::string(arg));
+                if (params_.sd_params.max_batch_count < 1) {
                     invalid("--image-max-batch");
                 }
                 continue;
@@ -1685,12 +1724,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-max-height");
                 }
-                char *arg                   = argv[i++];
-                bparams.sd_params.max_height = std::stoi(std::string(arg));
-                if (bparams.sd_params.max_height < 256) {
+                char *arg                    = argv[i++];
+                params_.sd_params.max_height = std::stoi(std::string(arg));
+                if (params_.sd_params.max_height < 256) {
                     invalid("--image-max-height");
                 }
-                if (bparams.sd_params.max_height % 64 != 0) {
+                if (params_.sd_params.max_height % 64 != 0) {
                     invalid("--image-max-height");
                 }
                 continue;
@@ -1700,12 +1739,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-max-width");
                 }
-                char *arg                  = argv[i++];
-                bparams.sd_params.max_width = std::stoi(std::string(arg));
-                if (bparams.sd_params.max_width < 256) {
+                char *arg                   = argv[i++];
+                params_.sd_params.max_width = std::stoi(std::string(arg));
+                if (params_.sd_params.max_width < 256) {
                     invalid("--image-max-width");
                 }
-                if (bparams.sd_params.max_width % 64 != 0) {
+                if (params_.sd_params.max_width % 64 != 0) {
                     invalid("--image-max-width");
                 }
                 continue;
@@ -1715,9 +1754,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-guidance");
                 }
-                char *arg                 = argv[i++];
-                bparams.sd_params.guidance = std::stof(std::string(arg));
-                if (bparams.sd_params.guidance < 0.0f) {
+                char *arg                  = argv[i++];
+                params_.sd_params.guidance = std::stof(std::string(arg));
+                if (params_.sd_params.guidance < 0.0f) {
                     invalid("--image-guidance");
                 }
                 continue;
@@ -1727,9 +1766,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-strength");
                 }
-                char *arg                 = argv[i++];
-                bparams.sd_params.strength = std::stof(std::string(arg));
-                if (bparams.sd_params.strength < 0.0f || bparams.sd_params.strength > 1.0f) {
+                char *arg                  = argv[i++];
+                params_.sd_params.strength = std::stof(std::string(arg));
+                if (params_.sd_params.strength < 0.0f || params_.sd_params.strength > 1.0f) {
                     invalid("--image-strength");
                 }
                 continue;
@@ -1739,8 +1778,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-sampler");
                 }
-                char *arg                = argv[i++];
-                bparams.sd_params.sampler = sd_argument_to_sample_method(arg);
+                char *arg                 = argv[i++];
+                params_.sd_params.sampler = sd_argument_to_sample_method(arg);
                 continue;
             }
 
@@ -1748,9 +1787,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-sample-steps");
                 }
-                char *arg                     = argv[i++];
-                bparams.sd_params.sample_steps = std::stoi(std::string(arg));
-                if (bparams.sd_params.sample_steps < 1) {
+                char *arg                      = argv[i++];
+                params_.sd_params.sample_steps = std::stoi(std::string(arg));
+                if (params_.sd_params.sample_steps < 1) {
                     invalid("--image-sample-steps");
                 }
                 continue;
@@ -1760,9 +1799,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-cfg-scale");
                 }
-                char *arg                  = argv[i++];
-                bparams.sd_params.cfg_scale = std::stof(std::string(arg));
-                if (bparams.sd_params.cfg_scale < 1.0f) {
+                char *arg                   = argv[i++];
+                params_.sd_params.cfg_scale = std::stof(std::string(arg));
+                if (params_.sd_params.cfg_scale < 1.0f) {
                     invalid("--image-cfg-scale");
                 }
                 continue;
@@ -1772,9 +1811,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-slg-scale");
                 }
-                char *arg                  = argv[i++];
-                bparams.sd_params.slg_scale = std::stof(std::string(arg));
-                if (bparams.sd_params.slg_scale < 0.0f) {
+                char *arg                   = argv[i++];
+                params_.sd_params.slg_scale = std::stof(std::string(arg));
+                if (params_.sd_params.slg_scale < 0.0f) {
                     invalid("--image-slg-scale");
                 }
                 continue;
@@ -1791,11 +1830,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 }
                 static bool defaults_cleared = false;
                 if (!defaults_cleared) {
-                    bparams.sd_params.slg_skip_layers.clear();
+                    params_.sd_params.slg_skip_layers.clear();
                     defaults_cleared = true;
                 }
 
-                bparams.sd_params.slg_skip_layers.push_back(lyr);
+                params_.sd_params.slg_skip_layers.push_back(lyr);
                 continue;
             }
 
@@ -1803,9 +1842,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-slg-start");
                 }
-                char *arg                  = argv[i++];
-                bparams.sd_params.slg_start = std::stof(std::string(arg));
-                if (bparams.sd_params.slg_start < 0.0f) {
+                char *arg                   = argv[i++];
+                params_.sd_params.slg_start = std::stof(std::string(arg));
+                if (params_.sd_params.slg_start < 0.0f) {
                     invalid("--image-slg-start");
                 }
                 continue;
@@ -1815,9 +1854,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-slg-end");
                 }
-                char *arg                = argv[i++];
-                bparams.sd_params.slg_end = std::stof(std::string(arg));
-                if (bparams.sd_params.slg_end < 0.0f) {
+                char *arg                 = argv[i++];
+                params_.sd_params.slg_end = std::stof(std::string(arg));
+                if (params_.sd_params.slg_end < 0.0f) {
                     invalid("--image-slg-end");
                 }
                 continue;
@@ -1827,14 +1866,14 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-schedule");
                 }
-                char *arg                 = argv[i++];
-                bparams.sd_params.schedule = sd_argument_to_schedule(arg);
+                char *arg                  = argv[i++];
+                params_.sd_params.schedule = sd_argument_to_schedule(arg);
                 continue;
             }
 
             if (llama_supports_gpu_offload()) {
                 if (!strcmp(flag, "--image-no-text-encoder-model-offload")) {
-                    bparams.sd_params.text_encoder_model_offload = false;
+                    params_.sd_params.text_encoder_model_offload = false;
                     continue;
                 }
             }
@@ -1843,8 +1882,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-clip-l-model");
                 }
-                char *arg                     = argv[i++];
-                bparams.sd_params.clip_l_model = std::string(arg);
+                char *arg                      = argv[i++];
+                params_.sd_params.clip_l_model = std::string(arg);
                 continue;
             }
 
@@ -1852,8 +1891,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-clip-g-model");
                 }
-                char *arg                     = argv[i++];
-                bparams.sd_params.clip_g_model = std::string(arg);
+                char *arg                      = argv[i++];
+                params_.sd_params.clip_g_model = std::string(arg);
                 continue;
             }
 
@@ -1861,14 +1900,14 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-t5xxl-model");
                 }
-                char *arg                    = argv[i++];
-                bparams.sd_params.t5xxl_model = std::string(arg);
+                char *arg                     = argv[i++];
+                params_.sd_params.t5xxl_model = std::string(arg);
                 continue;
             }
 
             if (llama_supports_gpu_offload()) {
                 if (!strcmp(flag, "--image-no-vae-model-offload")) {
-                    bparams.sd_params.vae_model_offload = false;
+                    params_.sd_params.vae_model_offload = false;
                     continue;
                 }
             }
@@ -1877,18 +1916,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-vae-model");
                 }
-                char *arg                  = argv[i++];
-                bparams.sd_params.vae_model = std::string(arg);
+                char *arg                   = argv[i++];
+                params_.sd_params.vae_model = std::string(arg);
                 continue;
             }
 
             if (!strcmp(flag, "--image-vae-tiling")) {
-                bparams.sd_params.vae_tiling = true;
+                params_.sd_params.vae_tiling = true;
                 continue;
             }
 
             if (!strcmp(flag, "--image-no-vae-tiling")) {
-                bparams.sd_params.vae_tiling = false;
+                params_.sd_params.vae_tiling = false;
                 continue;
             }
 
@@ -1896,8 +1935,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-taesd-model");
                 }
-                char *arg                    = argv[i++];
-                bparams.sd_params.taesd_model = std::string(arg);
+                char *arg                     = argv[i++];
+                params_.sd_params.taesd_model = std::string(arg);
                 continue;
             }
 
@@ -1905,8 +1944,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-upscale-model");
                 }
-                char *arg                      = argv[i++];
-                bparams.sd_params.upscale_model = std::string(arg);
+                char *arg                       = argv[i++];
+                params_.sd_params.upscale_model = std::string(arg);
                 continue;
             }
 
@@ -1914,9 +1953,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-upscale-repeats");
                 }
-                char *arg                        = argv[i++];
-                bparams.sd_params.upscale_repeats = std::stoi(std::string(arg));
-                if (bparams.sd_params.upscale_repeats < 1) {
+                char *arg                         = argv[i++];
+                params_.sd_params.upscale_repeats = std::stoi(std::string(arg));
+                if (params_.sd_params.upscale_repeats < 1) {
                     invalid("--image-upscale-repeats");
                 }
                 continue;
@@ -1924,7 +1963,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
 
             if (llama_supports_gpu_offload()) {
                 if (!strcmp(flag, "--image-no-control-net-model-offload")) {
-                    bparams.sd_params.control_model_offload = false;
+                    params_.sd_params.control_model_offload = false;
                     continue;
                 }
             }
@@ -1933,8 +1972,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-control-net-model");
                 }
-                char *arg                          = argv[i++];
-                bparams.sd_params.control_net_model = std::string(arg);
+                char *arg                           = argv[i++];
+                params_.sd_params.control_net_model = std::string(arg);
                 continue;
             }
 
@@ -1942,21 +1981,21 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--image-control-strength");
                 }
-                char *arg                         = argv[i++];
-                bparams.sd_params.control_strength = std::stof(std::string(arg));
-                if (bparams.sd_params.control_strength < 0.0f || bparams.sd_params.control_strength > 1.0f) {
+                char *arg                          = argv[i++];
+                params_.sd_params.control_strength = std::stof(std::string(arg));
+                if (params_.sd_params.control_strength < 0.0f || params_.sd_params.control_strength > 1.0f) {
                     invalid("--image-control-strength");
                 }
                 continue;
             }
 
             if (!strcmp(flag, "--image-control-canny")) {
-                bparams.sd_params.control_canny = true;
+                params_.sd_params.control_canny = true;
                 continue;
             }
 
             if (!strcmp(flag, "--image-free-compute-memory-immediately")) {
-                bparams.sd_params.free_compute_immediately = true;
+                params_.sd_params.free_compute_immediately = true;
                 continue;
             }
 
@@ -1968,8 +2007,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rpc-server-host");
                 }
-                char *arg                  = argv[i++];
-                bparams.rpc_params.hostname = std::string(arg);
+                char *arg                   = argv[i++];
+                params_.rpc_params.hostname = std::string(arg);
                 continue;
             }
 
@@ -1977,9 +2016,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rpc-server-port");
                 }
-                char *arg              = argv[i++];
-                bparams.rpc_params.port = std::stoi(std::string(arg));
-                if (bparams.rpc_params.port < 0 || bparams.rpc_params.port > 65535) {
+                char *arg               = argv[i++];
+                params_.rpc_params.port = std::stoi(std::string(arg));
+                if (params_.rpc_params.port < 0 || params_.rpc_params.port > 65535) {
                     invalid("--rpc-server-port");
                 }
                 continue;
@@ -1990,9 +2029,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                     if (i == argc) {
                         missing("--rpc-server-main-gpu");
                     }
-                    char *arg                  = argv[i++];
-                    bparams.rpc_params.main_gpu = std::stoi(std::string(arg));
-                    if (bparams.rpc_params.main_gpu >= int32_t(llama_max_devices())) {
+                    char *arg                   = argv[i++];
+                    params_.rpc_params.main_gpu = std::stoi(std::string(arg));
+                    if (params_.rpc_params.main_gpu >= int32_t(llama_max_devices())) {
                         invalid("--rpc-server-main-gpu");
                     }
                     continue;
@@ -2003,8 +2042,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
                 if (i == argc) {
                     missing("--rpc-server-reserve-memory");
                 }
-                char *arg                        = argv[i++];
-                bparams.rpc_params.reserve_memory = std::stoul(std::string(arg)) << 20;
+                char *arg                         = argv[i++];
+                params_.rpc_params.reserve_memory = std::stoul(std::string(arg)) << 20;
                 continue;
             }
 
@@ -2018,64 +2057,66 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &bpar
     }
 
     // Retrieve params from environment variables
-    get_env("LLAMA_ARG_MODEL", bparams.llm_params.model);
-    get_env("LLAMA_ARG_MODEL_ALIAS", bparams.llm_params.model_alias);
-    get_env("LLAMA_ARG_THREADS", bparams.llm_params.cpuparams.n_threads);
-    get_env("LLAMA_ARG_CTX_SIZE", bparams.llm_params.n_ctx);
-    get_env("LLAMA_ARG_N_PARALLEL", bparams.llm_params.n_parallel);
-    get_env("LLAMA_ARG_BATCH", bparams.llm_params.n_batch);
-    get_env("LLAMA_ARG_UBATCH", bparams.llm_params.n_ubatch);
-    get_env("LLAMA_ARG_DEVICE", bparams.llm_params.devices);
-    get_env("LLAMA_ARG_N_GPU_LAYERS", bparams.llm_params.n_gpu_layers);
-    get_env("LLAMA_ARG_THREADS_HTTP", bparams.llm_params.n_threads_http);
-    get_env("LLAMA_ARG_CACHE_PROMPT", bparams.cache_prompt);
-    get_env("LLAMA_ARG_CACHE_REUSE", bparams.llm_params.n_cache_reuse);
-    get_env("LLAMA_ARG_CHAT_TEMPLATE", bparams.llm_params.chat_template);
-    get_env("LLAMA_ARG_N_PREDICT", bparams.llm_params.n_predict);
-    get_env("LLAMA_ARG_METRICS", bparams.llm_params.endpoint_metrics);
-    get_env("LLAMA_ARG_SLOTS", bparams.llm_params.endpoint_slots);
-    get_env("LLAMA_ARG_EMBEDDINGS", bparams.llm_params.embedding);
-    get_env("LLAMA_ARG_FLASH_ATTN", bparams.llm_params.flash_attn);
-    get_env("LLAMA_ARG_DEFRAG_THOLD", bparams.llm_params.defrag_thold);
-    get_env("LLAMA_ARG_CONT_BATCHING", bparams.llm_params.cont_batching);
-    get_env("LLAMA_ARG_HOST", bparams.llm_params.hostname);
-    get_env("LLAMA_ARG_PORT", bparams.llm_params.port);
-    get_env("LLAMA_ARG_DRAFT", bparams.llm_params.speculative.n_max);
-    get_env("LLAMA_ARG_MODEL_DRAFT", bparams.llm_params.speculative.model);
-    get_env("LLAMA_ARG_DEVICE_DRAFT", bparams.llm_params.speculative.devices);
-    get_env("LLAMA_ARG_N_GPU_LAYERS_DRAFT", bparams.llm_params.speculative.n_gpu_layers);
-    get_env("LLAMA_ARG_LOOKUP_NGRAM_MIN", bparams.lookup_ngram_min);
-    get_env("LLAMA_ARG_LOOKUP_CACHE_STATIC", bparams.llm_params.lookup_cache_static);
-    get_env("LLAMA_ARG_LOOKUP_CACHE_DYNAMIC", bparams.llm_params.lookup_cache_dynamic);
-    get_env("LLAMA_ARG_RPC_SERVER_HOST", bparams.rpc_params.hostname);
-    get_env("LLAMA_ARG_RPC_SERVER_PORT", bparams.rpc_params.port);
-    get_env("LLAMA_LOG_VERBOSITY", bparams.llm_params.verbosity);
+    get_env("LLAMA_ARG_MODEL", params_.llm_params.model);
+    get_env("LLAMA_ARG_MODEL_ALIAS", params_.llm_params.model_alias);
+    get_env("LLAMA_ARG_THREADS", params_.llm_params.cpuparams.n_threads);
+    get_env("LLAMA_ARG_CTX_SIZE", params_.llm_params.n_ctx);
+    get_env("LLAMA_ARG_N_PARALLEL", params_.llm_params.n_parallel);
+    get_env("LLAMA_ARG_BATCH", params_.llm_params.n_batch);
+    get_env("LLAMA_ARG_UBATCH", params_.llm_params.n_ubatch);
+    get_env("LLAMA_ARG_DEVICE", params_.llm_params.devices);
+    get_env("LLAMA_ARG_N_GPU_LAYERS", params_.llm_params.n_gpu_layers);
+    get_env("LLAMA_ARG_THREADS_HTTP", params_.llm_params.n_threads_http);
+    get_env("LLAMA_ARG_CACHE_PROMPT", params_.cache_prompt);
+    get_env("LLAMA_ARG_CACHE_REUSE", params_.llm_params.n_cache_reuse);
+    get_env("LLAMA_ARG_CHAT_TEMPLATE", params_.llm_params.chat_template);
+    get_env("LLAMA_ARG_N_PREDICT", params_.llm_params.n_predict);
+    get_env("LLAMA_ARG_METRICS", params_.llm_params.endpoint_metrics);
+    get_env("LLAMA_ARG_SLOTS", params_.llm_params.endpoint_slots);
+    get_env("LLAMA_ARG_EMBEDDINGS", params_.llm_params.embedding);
+    get_env("LLAMA_ARG_FLASH_ATTN", params_.llm_params.flash_attn);
+    get_env("LLAMA_ARG_DEFRAG_THOLD", params_.llm_params.defrag_thold);
+    get_env("LLAMA_ARG_CONT_BATCHING", params_.llm_params.cont_batching);
+    get_env("LLAMA_ARG_HOST", params_.llm_params.hostname);
+    get_env("LLAMA_ARG_PORT", params_.llm_params.port);
+    get_env("LLAMA_ARG_DRAFT_MAX", params_.llm_params.speculative.n_max);
+    get_env("LLAMA_ARG_DRAFT_MIN", params_.llm_params.speculative.n_min);
+    get_env("LLAMA_ARG_DRAFT_P_MIN", params_.llm_params.speculative.p_min);
+    get_env("LLAMA_ARG_MODEL_DRAFT", params_.llm_params.speculative.model);
+    get_env("LLAMA_ARG_DEVICE_DRAFT", params_.llm_params.speculative.devices);
+    get_env("LLAMA_ARG_N_GPU_LAYERS_DRAFT", params_.llm_params.speculative.n_gpu_layers);
+    get_env("LLAMA_ARG_LOOKUP_NGRAM_MIN", params_.lookup_ngram_min);
+    get_env("LLAMA_ARG_LOOKUP_CACHE_STATIC", params_.llm_params.lookup_cache_static);
+    get_env("LLAMA_ARG_LOOKUP_CACHE_DYNAMIC", params_.llm_params.lookup_cache_dynamic);
+    get_env("LLAMA_ARG_RPC_SERVER_HOST", params_.rpc_params.hostname);
+    get_env("LLAMA_ARG_RPC_SERVER_PORT", params_.rpc_params.port);
+    get_env("LLAMA_LOG_VERBOSITY", params_.llm_params.verbosity);
 
     // Postprocess params
-    postprocess_cpu_params(bparams.llm_params.cpuparams, nullptr);
-    postprocess_cpu_params(bparams.llm_params.cpuparams_batch, &bparams.llm_params.cpuparams);
-    postprocess_cpu_params(bparams.llm_params.speculative.cpuparams, &bparams.llm_params.cpuparams);
-    postprocess_cpu_params(bparams.llm_params.speculative.cpuparams_batch, &bparams.llm_params.cpuparams_batch);
-    if (!bparams.llm_params.devices.empty() && bparams.llm_params.speculative.devices.empty()) {
-        bparams.llm_params.speculative.devices = bparams.llm_params.devices;
+    postprocess_cpu_params(params_.llm_params.cpuparams, nullptr);
+    postprocess_cpu_params(params_.llm_params.cpuparams_batch, &params_.llm_params.cpuparams);
+    postprocess_cpu_params(params_.llm_params.speculative.cpuparams, &params_.llm_params.cpuparams);
+    postprocess_cpu_params(params_.llm_params.speculative.cpuparams_batch, &params_.llm_params.cpuparams_batch);
+    if (!params_.llm_params.devices.empty() && params_.llm_params.speculative.devices.empty()) {
+        params_.llm_params.speculative.devices = params_.llm_params.devices;
     }
 
-    if (!bparams.llm_params.kv_overrides.empty()) {
-        bparams.llm_params.kv_overrides.emplace_back();
-        bparams.llm_params.kv_overrides.back().key[0] = 0;
+    if (!params_.llm_params.kv_overrides.empty()) {
+        params_.llm_params.kv_overrides.emplace_back();
+        params_.llm_params.kv_overrides.back().key[0] = 0;
     }
 
-    if (bparams.endpoint_images) {
-        bparams.llm_params.enable_chat_template   = false;
-        bparams.sd_params.model                   = bparams.llm_params.model;
-        bparams.sd_params.model_alias             = bparams.llm_params.model_alias;
-        bparams.sd_params.seed                    = bparams.llm_params.sampling.seed;
-        bparams.sd_params.warmup                  = bparams.llm_params.warmup;
-        bparams.sd_params.flash_attn              = bparams.llm_params.flash_attn;
-        bparams.sd_params.n_threads               = bparams.llm_params.cpuparams.n_threads;
-        bparams.sd_params.main_gpu                = bparams.llm_params.main_gpu;
-        bparams.sd_params.lora_init_without_apply = bparams.llm_params.lora_init_without_apply;
-        bparams.sd_params.lora_adapters           = bparams.llm_params.lora_adapters;
+    if (params_.endpoint_images) {
+        params_.llm_params.enable_chat_template   = false;
+        params_.sd_params.model                   = params_.llm_params.model;
+        params_.sd_params.model_alias             = params_.llm_params.model_alias;
+        params_.sd_params.seed                    = params_.llm_params.sampling.seed;
+        params_.sd_params.warmup                  = params_.llm_params.warmup;
+        params_.sd_params.flash_attn              = params_.llm_params.flash_attn;
+        params_.sd_params.n_threads               = params_.llm_params.cpuparams.n_threads;
+        params_.sd_params.main_gpu                = params_.llm_params.main_gpu;
+        params_.sd_params.lora_init_without_apply = params_.llm_params.lora_init_without_apply;
+        params_.sd_params.lora_adapters           = params_.llm_params.lora_adapters;
     }
 
     return true;

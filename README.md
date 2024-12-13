@@ -223,7 +223,7 @@ server:
          --conn-idle N            server connection idle in seconds (default: 60)
          --conn-keepalive N       server connection keep-alive in seconds (default: 15)
   -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
-  -a,    --alias NAME             model name alias (default: unknown)
+  -a,    --alias NAME             model name alias
          --lora FILE              apply LoRA adapter (implies --no-mmap)
          --lora-scaled FILE SCALE 
                                   apply LoRA adapter with user defined scaling S (implies --no-mmap)
@@ -258,7 +258,8 @@ server/completion:
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
-                                  only commonly used templates are accepted: https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
+                                  list of built-in templates:
+                                  chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, exaone3, falcon, gemma, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, rwkv-world, vicuna, vicuna-orca, zephyr
          --chat-template-file FILE
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
          --slot-save-path PATH    path to save slot kv cache (default: disabled)
@@ -338,8 +339,8 @@ server/completion:
   -nkvo, --no-kv-offload          disable KV offload
          --no-cache-prompt        disable caching prompt
          --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting (default: 0)
-  -ctk,  --cache-type-k TYPE      KV cache data type for K (default: f16)
-  -ctv,  --cache-type-v TYPE      KV cache data type for V (default: f16)
+  -ctk,  --cache-type-k TYPE      KV cache data type for K, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
+  -ctv,  --cache-type-v TYPE      KV cache data type for V, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
   -np,   --parallel N             number of parallel sequences to decode (default: 1)
   -nocb, --no-cont-batching       disable continuous batching
@@ -386,7 +387,7 @@ server/images:
          --image-max-width N      image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
          --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
-         --image-sampler TYPE     sampler that will be used for generation, automatically retrieve the default value according to --model, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+         --image-sampler TYPE     sampler that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm
          --image-sample-steps N   number of sample steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
          --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
          --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
@@ -394,7 +395,7 @@ server/images:
          --image-slg-start N      the phase to enable SLG (default: 0.01)
          --image-slg-end N        the phase to disable SLG (default: 0.20)
                                   SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])
-         --image-schedule TYPE    denoiser sigma schedule, select from default;discrete;karras;exponential;ays;gits (default: default)
+         --image-schedule TYPE    denoiser sigma schedule, allowed values: default, discrete, karras, exponential, ays, gits (default: default)
          --image-no-text-encoder-model-offload
                                   disable text-encoder(clip-l/clip-g/t5xxl) model offload
          --image-clip-l-model PATH
@@ -460,7 +461,9 @@ Available environment variables (if the corresponding command-line option is not
 - `LLAMA_ARG_DEFRAG_THOLD`: equivalent to `-dt`, `--defrag-thold`.
 - `LLAMA_ARG_HOST`: equivalent to `--host`
 - `LLAMA_ARG_PORT`: equivalent to `--port`
-- `LLAMA_ARG_DRAFT`: equivalent to `--draft`
+- `LLAMA_ARG_DRAFT_MAX`: equivalent to `--draft-max`
+- `LLAMA_ARG_DRAFT_MIN`: equivalent to `--draft-min`
+- `LLAMA_ARG_DRAFT_P_MIN`: equivalent to `--draft-p-min`
 - `LLAMA_ARG_MODEL_DRAFT`: equivalent to `-md`, `--model-draft`.
 - `LLAMA_ARG_DEVICE_DRAFT`: equivalent to `-devd`, `--device-draft`.
 - `LLAMA_ARG_N_GPU_LAYERS_DRAFT`: equivalent to `-ngld`, `--gpu-layers-draft`.
