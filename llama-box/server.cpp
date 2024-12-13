@@ -2057,7 +2057,7 @@ struct server_context {
         bool chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false);
         if (!chat_vision) {
             // because llama_tokenize api is thread-safe, we can tokenize the prompt from HTTP thread
-            bool add_special                            = task_type != SERVER_TASK_TYPE_EMBEDDING && task_type != SERVER_TASK_TYPE_RERANK;
+            bool add_special                            = task_type != SERVER_TASK_TYPE_INFILL && task_type != SERVER_TASK_TYPE_RERANK;
             std::vector<llama_tokens> tokenized_prompts = tokenize_input_prompts(llm_ctx, data.at("prompt"), add_special, true);
             switch (task_type) {
                 case SERVER_TASK_TYPE_INFILL: {
