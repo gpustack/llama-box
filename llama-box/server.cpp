@@ -1216,6 +1216,7 @@ struct server_context {
             slot.oaicompat_image_generate = json_value(data, "__oaicompat_image_generate", false);
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
 
+            slot.params.sd_params                 = defaults.sd_params;
             slot.params.sd_params.seed            = json_value(data, "seed", sd_params.seed);
             slot.params.sd_params.height          = json_value(data, "height", 512);
             slot.params.sd_params.width           = json_value(data, "width", 512);
@@ -1225,6 +1226,10 @@ struct server_context {
             slot.params.sd_params.sample_steps    = json_value(data, "sample_steps", sd_params.sample_steps);
             slot.params.sd_params.negative_prompt = json_value(data, "negative_prompt", std::string(""));
             slot.params.sd_params.stream          = json_value(data, "stream", false);
+            if (data.contains("stream_options")) {
+                slot.params.sd_params.stream_preview        = json_value(data.at("stream_options"), "preview", false);
+                slot.params.sd_params.stream_preview_faster = json_value(data.at("stream_options"), "preview_faster", false);
+            }
 
             // get prompt
             slot.prompt_string = json_value(data, "prompt", std::string(""));
@@ -1365,6 +1370,7 @@ struct server_context {
         // slot.params.t_max_prompt_ms    = json_value(data, "t_max_prompt_ms",   -1); // TODO: implement
         slot.params.t_max_predict_ms = json_value(data, "t_max_predict_ms", -1);
 
+        slot.params.llm_params                    = defaults.llm_params;
         slot.params.llm_params.top_k              = json_value(data, "top_k", defaults.llm_params.top_k);
         slot.params.llm_params.top_p              = json_value(data, "top_p", defaults.llm_params.top_p);
         slot.params.llm_params.min_p              = json_value(data, "min_p", defaults.llm_params.min_p);
@@ -1991,22 +1997,24 @@ struct server_context {
         queue_results.send(res);
     }
 
-    void send_image(const server_slot &slot, const int32_t progressed_steps, const int32_t total_steps, const stablediffusion_generated_image &generated_image) {
+    void send_image(const server_slot &slot, const int32_t progressed_steps, const int32_t progress_steps, const stablediffusion_generated_image &generated_image) {
         server_task_result res;
         res.id    = slot.id_task;
         res.error = false;
-        res.stop  = progressed_steps == total_steps;
+        res.stop  = progressed_steps == progress_steps;
         res.data  = json{
              {"index", slot.index},
-             {"progress_steps", total_steps},
-             {"progress", float(progressed_steps) / float(total_steps) * 100},
+             {"progressed_steps", progressed_steps},
+             {"progress_steps", progress_steps},
+             {"progress", float(progressed_steps) / float(progress_steps) * 100},
              {"stop", res.stop},
              {"model", llm_params.model_alias},
         };
-
-        if (res.stop) {
+        if (generated_image.data != nullptr) {
             res.data["b64_json"] = base64_encode(generated_image.data, generated_image.size);
-            res.data["timings"]  = slot.get_formated_timings();
+        }
+        if (res.stop) {
+            res.data["timings"] = slot.get_formated_timings();
         }
 
         queue_results.send(res);
@@ -2485,14 +2493,19 @@ struct server_context {
                 auto progress = sd_ctx->progress_stream(slot.sdsstream);
                 SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
                 if (slot.params.sd_params.stream) {
+                    if (slot.params.sd_params.stream_preview_faster) {
+                        generated_image = sd_ctx->preview_image_stream(slot.sdsstream, true);
+                    } else if (slot.params.sd_params.stream_preview) {
+                        generated_image = sd_ctx->preview_image_stream(slot.sdsstream);
+                    }
                     send_image(slot, progress.first, progress.second + 1, generated_image);
                 }
                 if (goahead) {
                     continue;
                 }
 
-                slot.n_image_generated_steps = sd_ctx->progress_steps(slot.sdsstream);
-                generated_image              = sd_ctx->result_stream(slot.sdsstream);
+                slot.n_image_generated_steps = progress.second;
+                generated_image              = sd_ctx->result_image_stream(slot.sdsstream);
                 if (generated_image.data == nullptr) {
                     slot.release();
                     send_error(slot, "failed to get result image from generation stream", ERROR_TYPE_SERVER);
@@ -4509,6 +4522,12 @@ int main(int argc, char **argv) {
                     return;
                 }
             }
+            if (req.has_file("stream_options_preview")) {
+                request["stream_options_preview"] = req.get_file_value("stream_options_preview").content == "true";
+            }
+            if (req.has_file("stream_options_preview_faster")) {
+                request["stream_options_preview_faster"] = req.get_file_value("stream_options_preview_faster").content == "true";
+            }
             request = oaicompat_images_edits_request(ctx_server.sd_params, request);
         }
 
@@ -4565,7 +4584,7 @@ int main(int argc, char **argv) {
                         stops[json_value(result.data, "index", 0)] = true;
                     }
                     const bool all_stops = std::all_of(stops.begin(), stops.end(), [](bool stop) { return stop; });
-                    if (!result.stop || !chunk_result) {
+                    if (!result.data.contains("b64_json") || !chunk_result) {
                         json response = oaicompat_images_response(request, json::array({result.data}), true, result.stop, all_stops ? usages : std::vector<json>());
                         if (!server_sent_event(sink, "data", response)) {
                             LOG_WRN("srv             handle_images: rid %s | failed to send chunk data\n", rid.c_str());
@@ -4574,36 +4593,37 @@ int main(int argc, char **argv) {
                         }
                     } else {
                         // split the huge result into chunks
-                        std::string b64_json = result.data.at("b64_json").get<std::string>();
-                        int32_t total_steps  = result.data.at("progress_steps").get<int32_t>();
+                        std::string b64_json     = result.data.at("b64_json").get<std::string>();
+                        int32_t progressed_steps = result.data.at("progressed_steps").get<int32_t>();
+                        int32_t progress_steps   = result.data.at("progress_steps").get<int32_t>();
 
                         json chunk_index                = result.data.at("index");
                         json chunk_model                = result.data.at("model");
                         size_t chunk_sent               = 0;
                         size_t chunk_send               = b64_json.size() / chunk_size + 1;
                         float chunk_send_progress       = 0.0f;
-                        float chunk_send_progress_base  = float(total_steps - 1) / float(total_steps) * 100;
-                        float chunk_send_progress_scale = 1 - float(total_steps - 1) / float(total_steps);
+                        float chunk_send_progress_base  = float(progressed_steps - 1) / float(progress_steps);
+                        float chunk_send_progress_scale = 1 / float(progress_steps);
                         bool chunk_stop                 = false;
                         while (!chunk_stop) {
                             chunk_sent++;
-                            chunk_send_progress = chunk_send_progress_base + float(chunk_sent) / float(chunk_send) * 100 * chunk_send_progress_scale;
+                            chunk_send_progress = chunk_send_progress_base + float(chunk_sent) / float(chunk_send) * chunk_send_progress_scale;
                             chunk_stop          = chunk_sent == chunk_send;
                             json chunk_data     = {
                                 {"index", chunk_index},
-                                {"progress_steps", total_steps},
-                                {"progress", chunk_send_progress},
+                                {"progressed_steps", progressed_steps},
+                                {"progress_steps", progress_steps},
+                                {"progress", chunk_send_progress * 100},
                                 {"stop", chunk_stop},
                                 {"model", chunk_model},
                             };
                             if (chunk_stop) {
                                 chunk_data["b64_json"] = b64_json;
-                                chunk_data["timings"]  = result.data.at("timings");
                             } else {
                                 chunk_data["b64_json"] = b64_json.substr(0, chunk_size);
                                 b64_json               = b64_json.substr(chunk_size);
                             }
-                            json response = oaicompat_images_response(request, json::array({chunk_data}), true, chunk_stop, chunk_stop ? usages : std::vector<json>());
+                            json response = oaicompat_images_response(request, json::array({chunk_data}), true, chunk_stop && result.stop, chunk_stop && result.stop ? usages : std::vector<json>());
                             if (!server_sent_event(sink, "data", response)) {
                                 LOG_WRN("srv             handle_images: rid %s | failed to send chunk data\n", rid.c_str());
                                 sink.done();

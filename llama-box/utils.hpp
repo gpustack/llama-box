@@ -1093,7 +1093,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     }
 
     // Handle "stream" & "stream_options" field
-    // "stream_options": {"include_usage": bool, "chunk_result": bool}
+    // "stream_options": {"include_usage": bool, "chunk_result": bool, "chunk_size": int, "preview": bool}
     if (json_value(body, "stream", false)) {
         llama_params["stream"] = true;
         if (!body.contains("stream_options")) {
@@ -1107,6 +1107,12 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                 if (json_value(llama_params["stream_options"], "chunk_result", false)) {
                     llama_params["stream_options"]["chunk_result"] = true;
                     llama_params["stream_options"]["chunk_size"]   = json_value(llama_params["stream_options"], "chunk_size", 4096);
+                }
+                if (json_value(llama_params["stream_options"], "preview", false)) {
+                    llama_params["stream_options"]["preview"] = true;
+                }
+                if (json_value(llama_params["stream_options"], "preview_faster", false)) {
+                    llama_params["stream_options"]["preview_faster"] = true;
                 }
             } else {
                 throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
@@ -1217,13 +1223,19 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     }
 
     // Handle "stream" & "stream_options" field
-    // "stream_options": {"include_usage": bool, "chunk_result": bool}
+    // "stream_options": {"include_usage": bool, "chunk_result": bool, "chunk_size": int, "preview": bool}
     if (json_value(body, "stream", false)) {
         llama_params["stream"]         = true;
         llama_params["stream_options"] = json{{"include_usage", json_value(body, "stream_options_include_usage", true)}};
         if (json_value(body, "stream_options_chunk_result", false)) {
             llama_params["stream_options"]["chunk_result"] = true;
             llama_params["stream_options"]["chunk_size"]   = json_value(body, "stream_options_chunk_size", 4096);
+        }
+        if (json_value(body, "stream_options_preview", false)) {
+            llama_params["stream_options"]["preview"] = true;
+        }
+        if (json_value(body, "stream_options_preview_faster", false)) {
+            llama_params["stream_options"]["preview_faster"] = true;
         }
     }
 
@@ -1234,6 +1246,7 @@ static json oaicompat_images_response(const json &request, const json &result, c
     json data = json::array();
     for (auto &ret : result) {
         json item = json{
+            {"progressed_steps", ret.at("progressed_steps")},
             {"progress", ret.at("progress")},
             {"index", ret.at("index")},
         };

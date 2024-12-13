@@ -65,6 +65,8 @@ struct stablediffusion_sampler_params {
     int sample_steps        = 20;
     std::string negative_prompt;
     bool stream                 = false;
+    bool stream_preview         = false;
+    bool stream_preview_faster  = false;
     uint8_t *init_img_buffer    = nullptr;
     uint8_t *control_img_buffer = nullptr;
 };
@@ -93,9 +95,9 @@ class stablediffusion_context {
     void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
     stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_sampler_params sparams);
     bool sample_stream(stablediffusion_sampling_stream *stream);
-    int progress_steps(stablediffusion_sampling_stream *stream);
     std::pair<int, int> progress_stream(stablediffusion_sampling_stream *stream);
-    stablediffusion_generated_image result_stream(stablediffusion_sampling_stream *stream);
+    stablediffusion_generated_image preview_image_stream(stablediffusion_sampling_stream *stream, bool faster = false);
+    stablediffusion_generated_image result_image_stream(stablediffusion_sampling_stream *stream);
 
   private:
     sd_ctx_t *sd_ctx             = nullptr;
@@ -254,14 +256,6 @@ bool stablediffusion_context::sample_stream(stablediffusion_sampling_stream *str
     return sd_sampling_stream_sample(sd_ctx, stream->stream);
 }
 
-int stablediffusion_context::progress_steps(stablediffusion_sampling_stream *stream) {
-    if (stream == nullptr) {
-        return 0;
-    }
-
-    return sd_sampling_stream_steps(stream->stream);
-}
-
 std::pair<int, int> stablediffusion_context::progress_stream(stablediffusion_sampling_stream *stream) {
     if (stream == nullptr) {
         return {0, 1};
@@ -270,7 +264,38 @@ std::pair<int, int> stablediffusion_context::progress_stream(stablediffusion_sam
     return {sd_sampling_stream_sampled_steps(stream->stream), sd_sampling_stream_steps(stream->stream)};
 }
 
-stablediffusion_generated_image stablediffusion_context::result_stream(stablediffusion_sampling_stream *stream) {
+stablediffusion_generated_image stablediffusion_context::preview_image_stream(stablediffusion_sampling_stream *stream, bool faster) {
+    if (stream == nullptr) {
+        return stablediffusion_generated_image{0, nullptr};
+    }
+
+    sd_image_t img;
+    if (faster) {
+        img = sd_sampling_stream_get_faster_preview_image(sd_ctx, stream->stream);
+    } else {
+        img = sd_sampling_stream_get_preview_image(sd_ctx, stream->stream);
+    }
+    if (img.data == nullptr) {
+        return stablediffusion_generated_image{0, nullptr};
+    }
+
+    int size            = 0;
+    unsigned char *data = stbi_write_png_to_mem(
+        (stbi_uc *)img.data,
+        0,
+        (int)img.width,
+        (int)img.height,
+        (int)img.channel,
+        &size,
+        nullptr);
+    if (data == nullptr || size <= 0) {
+        return stablediffusion_generated_image{0, nullptr};
+    }
+
+    return stablediffusion_generated_image{size, data};
+}
+
+stablediffusion_generated_image stablediffusion_context::result_image_stream(stablediffusion_sampling_stream *stream) {
     if (stream == nullptr) {
         return stablediffusion_generated_image{0, nullptr};
     }
@@ -382,7 +407,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         wparams.sample_steps                    = 1;
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);
-        stablediffusion_generated_image img = sc->result_stream(stream);
+        stablediffusion_generated_image img = sc->result_image_stream(stream);
         if (img.data != nullptr) {
             stbi_image_free(img.data);
         }

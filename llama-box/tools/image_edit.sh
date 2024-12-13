@@ -6,6 +6,8 @@
 # SPDX-License-Identifier: MIT
 #
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 LOG_FILE=${LOG_FILE:-/dev/null}
 
 API_URL="${API_URL:-http://127.0.0.1:8080}"
@@ -35,6 +37,7 @@ SAMPLE_STEPS="${SAMPLE_STEPS:-"10"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
 parse() {
+    TIME="${1:-$(date +%s)}"
     echo "A: ${LINE}" >>"${LOG_FILE}"
     if [[ ! "${LINE}" = data:* ]]; then
         if [[ "${LINE}" =~ error:.* ]]; then
@@ -52,28 +55,36 @@ parse() {
         echo "Error: ${LINE}"
         return 1
     fi
-    RESULT_JSON="/tmp/image_edit_$(date +%s).json"
+    RESULT_JSON="/tmp/image_edit_${TIME}.json"
     printf "%s" "${LINE}" >"${RESULT_JSON}"
     printf "%i: %3.2f%%...\r" "$(jq -cr ".data[0] | .index" "${RESULT_JSON}")" "$(jq -cr ".data[0] | .progress" "${RESULT_JSON}")"
     if [[ "$(jq -cr ".data[0] | .b64_json" "${RESULT_JSON}")" == "null" ]]; then
         return 0
     fi
-    printf "\n"
-    set +e
-    RESULT_PNG="/tmp/image_edit_$(date +%s).png"
-    if command -v gbase64 >/dev/null; then
-        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" | gbase64 -d >"${RESULT_PNG}"
+    RESULT_PNG_IDX="$(jq -cr ".data[0] | .index" "${RESULT_JSON}")"
+    RESULT_PNG_PROGRESSED_STEPS="$(jq -cr ".data[0] | .progressed_steps" "${RESULT_JSON}")"
+    RESULT_PNG_B64="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}_${RESULT_PNG_PROGRESSED_STEPS}.png.b64"
+    if [[ ! -f "${RESULT_PNG_B64}" ]]; then
+        touch "${RESULT_PNG_B64}"
+        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >"${RESULT_PNG_B64}"
     else
-        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" | base64 -d >"${RESULT_PNG}"
+        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >>"${RESULT_PNG_B64}"
     fi
-    echo "Generated image: ${RESULT_PNG}"
+    set +e
+    RESULT_PNG="/tmp/image_edit_${TIME}_${RESULT_PNG_IDX}.png"
+    if command -v gbase64 >/dev/null; then
+        gbase64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
+    else
+        base64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
+    fi
     if [[ "$(uname -s)" =~ Darwin ]]; then
-        if command -v feh >/dev/null; then
-            feh "${RESULT_PNG}"
-        elif command -v open >/dev/null; then
-            open "${RESULT_PNG}"
-        fi
+        osascript "${ROOT_DIR}/image_view.scpt" "image_edit_${TIME}_${RESULT_PNG_IDX}.png" "file://${RESULT_PNG}" >/dev/null 2>&1
     fi
+    if [[ "$(jq -cr ".data[0] | .finish_reason" "${RESULT_JSON}")" != "stop" ]]; then
+        return 0
+    fi
+    printf "\n"
+    echo "Generated image: ${RESULT_PNG}"
     set -e
     USAGE="$(jq -cr '.usage' "${RESULT_JSON}")"
     if [[ "${USAGE}" != "null" ]]; then
@@ -154,11 +165,12 @@ image_edit() {
 
     START_TIME=$(date +%s)
 
+    TIME=$(date +%s)
     set -e
     if [[ "${SAMPLER}" != "null" ]]; then
         if [[ -n "${MASK}" ]]; then
             while IFS= read -r LINE; do
-                if ! parse; then
+                if ! parse "${TIME}"; then
                     break
                 fi
             done < <(curl \
@@ -181,7 +193,7 @@ image_edit() {
                 --form "stream=true")
         else
             while IFS= read -r LINE; do
-                if ! parse; then
+                if ! parse "${TIME}"; then
                     break
                 fi
             done < <(curl \
@@ -204,7 +216,7 @@ image_edit() {
         fi
     elif [[ -n "${MASK}" ]]; then
         while IFS= read -r LINE; do
-            if ! parse; then
+            if ! parse "${TIME}"; then
                 break
             fi
         done < <(curl \
@@ -222,7 +234,7 @@ image_edit() {
             --form "stream=true")
     else
         while IFS= read -r LINE; do
-            if ! parse; then
+            if ! parse "${TIME}"; then
                 break
             fi
         done < <(curl \

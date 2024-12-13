@@ -6,6 +6,8 @@
 # SPDX-License-Identifier: MIT
 #
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 LOG_FILE=${LOG_FILE:-/dev/null}
 
 API_URL="${API_URL:-http://127.0.0.1:8080}"
@@ -26,6 +28,7 @@ RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
 STYLE="${STYLE:-"null"}"
+PREVIEW_FASTER="${PREVIEW_FASTER:-"false"}"
 SAMPLER="${SAMPLER:-"null"}"
 SCHEDULE="${SCHEDULE:-"default"}"
 SEED="${SEED:-"null"}"
@@ -59,15 +62,14 @@ parse() {
         return 0
     fi
     RESULT_PNG_IDX="$(jq -cr ".data[0] | .index" "${RESULT_JSON}")"
-    RESULT_PNG_B64="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}.png.b64"
+    RESULT_PNG_PROGRESSED_STEPS="$(jq -cr ".data[0] | .progressed_steps" "${RESULT_JSON}")"
+    RESULT_PNG_B64="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}_${RESULT_PNG_PROGRESSED_STEPS}.png.b64"
     if [[ ! -f "${RESULT_PNG_B64}" ]]; then
         touch "${RESULT_PNG_B64}"
+        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >"${RESULT_PNG_B64}"
+    else
+        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >>"${RESULT_PNG_B64}"
     fi
-    jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >>"${RESULT_PNG_B64}"
-    if [[ "$(jq -cr ".data[0] | .finish_reason" "${RESULT_JSON}")" != "stop" ]]; then
-        return 0
-    fi
-    printf "\n"
     set +e
     RESULT_PNG="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}.png"
     if command -v gbase64 >/dev/null; then
@@ -75,14 +77,14 @@ parse() {
     else
         base64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
     fi
-    echo "Generated image: ${RESULT_PNG}"
     if [[ "$(uname -s)" =~ Darwin ]]; then
-        if command -v feh >/dev/null; then
-            feh "${RESULT_PNG}"
-        elif command -v open >/dev/null; then
-            open "${RESULT_PNG}"
-        fi
+        osascript "${ROOT_DIR}/image_view.scpt" "image_generate_${TIME}_${RESULT_PNG_IDX}.png" "file://${RESULT_PNG}" >/dev/null 2>&1
     fi
+    if [[ "$(jq -cr ".data[0] | .finish_reason" "${RESULT_JSON}")" != "stop" ]]; then
+        return 0
+    fi
+    printf "\n"
+    echo "Generated image: ${RESULT_PNG}"
     set -e
     USAGE="$(jq -cr '.usage' "${RESULT_JSON}")"
     if [[ "${USAGE}" != "null" ]]; then
@@ -115,6 +117,7 @@ image_generate() {
             --argjson cfg_scale "${CFG_SCALE}" \
             --argjson sample_steps "${SAMPLE_STEPS}" \
             --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
+            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -127,8 +130,8 @@ image_generate() {
                   negative_prompt: $negative_prompt,
                   stream: true,
                   stream_options: {
-                    chunk_result: true,
-                    chunk_size: 65536
+                    preview: true,
+                    preview_faster: $preview_faster
                   }
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
@@ -138,6 +141,7 @@ image_generate() {
             --argjson size "\"${SIZE}\"" \
             --argjson quality "\"${QUALITY}\"" \
             --argjson style "\"${STYLE}\"" \
+            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -146,8 +150,8 @@ image_generate() {
                   style: $style,
                   stream: true,
                   stream_options: {
-                    chunk_result: true,
-                    chunk_size: 65536
+                    preview: true,
+                    preview_faster: $preview_faster
                   }
                 } * .')"
     else
@@ -156,6 +160,7 @@ image_generate() {
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
             --argjson quality "\"${QUALITY}\"" \
+            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -163,13 +168,13 @@ image_generate() {
                   quality: $quality,
                   stream: true,
                   stream_options: {
-                    chunk_result: true,
-                    chunk_size: 65536
+                    preview: true,
+                    preview_faster: $preview_faster
                   }
                 } * .')"
     fi
     echo "Q: ${DATA}" >>"${LOG_FILE}"
-    echo "${DATA}" > /tmp/request.json
+    echo "${DATA}" >/tmp/request.json
 
     START_TIME=$(date +%s)
 
@@ -188,7 +193,7 @@ image_generate() {
         --data @/tmp/request.json)
     set +e
 
-    #    rm -f /tmp/image_generate_*.json
+    rm -f /tmp/image_generate_*.json
     printf "\n"
 }
 
@@ -200,6 +205,7 @@ echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "STYLE             : ${STYLE} // ONE OF [natural, vivid]"
+echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "SCHEDULE          : ${SCHEDULE} // AVAILABLE FOR SAMPLER, ONE OF [default, discrete, karras, exponential, ays, gits]"
 echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"

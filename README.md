@@ -659,9 +659,11 @@ The available endpoints for the LLaMA Box server mode are:
         "quality": "standard",
         "stream": true,
         "stream_options": {
-          "include_usage": true, // return usage information
-          "chunk_result": true,  // split the final image b64_json into chunks to avoid browser caching
-          "chunk_size": 4096     // split the final image b64_json into chunks with the given size, default 4k
+          "include_usage": true,  // return usage information
+          "chunk_result": true,   // split the final image b64_json into chunks to avoid browser caching
+          "chunk_size": 4096,     // split the final image b64_json into chunks with the given size, default 4k
+          "preview": true,        // enable preview mode
+          "preview_faster": 4096  // enable faster preview mode
         }
       }
       
@@ -683,17 +685,19 @@ The available endpoints for the LLaMA Box server mode are:
         "response_format": "b64_json",
         "size": "512x512",
         "prompt": "A lovely cat",
-        "sampler": "euler",      // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
-        "schedule": "default",   // optional, select from default;discrete;karras;exponential;ays;gits
-        "seed": null,            // optional, random seed
-        "cfg_scale": 4.5,        // optional, for sampler, the scale of classifier-free guidance in the output phase
-        "sample_steps": 20,      // optional, number of sample steps
-        "negative_prompt": "",   // optional, negative prompt
+        "sampler": "euler",       // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+        "schedule": "default",    // optional, select from default;discrete;karras;exponential;ays;gits
+        "seed": null,             // optional, random seed
+        "cfg_scale": 4.5,         // optional, for sampler, the scale of classifier-free guidance in the output phase
+        "sample_steps": 20,       // optional, number of sample steps
+        "negative_prompt": "",    // optional, negative prompt
         "stream": true,
         "stream_options": {
-          "include_usage": true, // return usage information
-          "chunk_result": true,  // split the final image b64_json into chunks to avoid browser caching
-          "chunk_size": 4096     // split the final image b64_json into chunks with the given size, default 4k
+          "include_usage": true,  // return usage information
+          "chunk_result": true,   // split the final image b64_json into chunks to avoid browser caching
+          "chunk_size": 4096,     // split the final image b64_json into chunks with the given size, default 4k
+          "preview": true,        // enable preview mode
+          "preview_faster": 4096  // enable faster preview mode
         }
       }
       
@@ -718,12 +722,14 @@ The available endpoints for the LLaMA Box server mode are:
       size=512x512
       prompt="A lovely cat"
       quality=standard
-      image=...                         // required
-      mask=...                          // optional
+      image=...                          // required
+      mask=...                           // optional
       stream=true
-      stream_options_include_usage=true // return usage information
-      stream_options_chunk_result=true  // split the final image b64_json into chunks to avoid browser caching
-      stream_options_chunk_size=4096    // split the final image b64_json into chunks with the given size, default 4k
+      stream_options_include_usage=true  // return usage information
+      stream_options_chunk_result=true   // split the final image b64_json into chunks to avoid browser caching
+      stream_options_chunk_size=4096     // split the final image b64_json into chunks with the given size, default 4k
+      stream_options_preview=true        // enable preview mode
+      stream_options_preview_faster=true // enable faster preview mode
       
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
@@ -744,18 +750,20 @@ The available endpoints for the LLaMA Box server mode are:
       response_format=b64_json
       size=512x512
       prompt="A lovely cat"
-      image=...                         // required
-      mask=...                          // optional
-      sampler=euler                     // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
-      schedule=default                  // optional, select from default;discrete;karras;exponential;ays;gits
-      seed=null                         // optional, random seed
-      cfg_scale=4.5                     // optional, for sampler, the scale of classifier-free guidance in the output phase
-      sample_steps=20                   // optional, number of sample steps
-      negative_prompt=""                // optional, negative prompt
+      image=...                          // required
+      mask=...                           // optional
+      sampler=euler                      // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+      schedule=default                   // optional, select from default;discrete;karras;exponential;ays;gits
+      seed=null                          // optional, random seed
+      cfg_scale=4.5                      // optional, for sampler, the scale of classifier-free guidance in the output phase
+      sample_steps=20                    // optional, number of sample steps
+      negative_prompt=""                 // optional, negative prompt
       stream=true
-      stream_options_include_usage=true // return usage information
-      stream_options_chunk_result=true  // split the final image b64_json into chunks to avoid browser caching
-      stream_options_chunk_size=4096    // split the final image b64_json into chunks with the given size, default 4k
+      stream_options_include_usage=true  // return usage information
+      stream_options_chunk_result=true   // split the final image b64_json into chunks to avoid browser caching
+      stream_options_chunk_size=4096     // split the final image b64_json into chunks with the given size, default 4k
+      stream_options_preview=true        // enable preview mode
+      stream_options_preview_faster=true // enable faster preview mode
 
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
