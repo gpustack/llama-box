@@ -28,6 +28,7 @@ RESPONSE_FORMAT="b64_json"
 SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
 STYLE="${STYLE:-"null"}"
+PREVIEW="${PREVIEW:-"true"}"
 PREVIEW_FASTER="${PREVIEW_FASTER:-"false"}"
 SAMPLER="${SAMPLER:-"null"}"
 SCHEDULE="${SCHEDULE:-"default"}"
@@ -117,6 +118,7 @@ image_generate() {
             --argjson cfg_scale "${CFG_SCALE}" \
             --argjson sample_steps "${SAMPLE_STEPS}" \
             --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
+            --argjson preview "${PREVIEW}" \
             --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
@@ -130,7 +132,7 @@ image_generate() {
                   negative_prompt: $negative_prompt,
                   stream: true,
                   stream_options: {
-                    preview: true,
+                    preview: $preview,
                     preview_faster: $preview_faster
                   }
                 } * .')"
@@ -141,6 +143,7 @@ image_generate() {
             --argjson size "\"${SIZE}\"" \
             --argjson quality "\"${QUALITY}\"" \
             --argjson style "\"${STYLE}\"" \
+            --argjson preview "${PREVIEW}" \
             --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
@@ -150,7 +153,7 @@ image_generate() {
                   style: $style,
                   stream: true,
                   stream_options: {
-                    preview: true,
+                    preview: $preview,
                     preview_faster: $preview_faster
                   }
                 } * .')"
@@ -160,6 +163,7 @@ image_generate() {
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
             --argjson quality "\"${QUALITY}\"" \
+            --argjson preview "${PREVIEW}" \
             --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
@@ -168,7 +172,7 @@ image_generate() {
                   quality: $quality,
                   stream: true,
                   stream_options: {
-                    preview: true,
+                    preview: $preview,
                     preview_faster: $preview_faster
                   }
                 } * .')"
@@ -205,6 +209,7 @@ echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
 echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "STYLE             : ${STYLE} // ONE OF [natural, vivid]"
+echo "PREVIEW           : ${PREVIEW}"
 echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "SCHEDULE          : ${SCHEDULE} // AVAILABLE FOR SAMPLER, ONE OF [default, discrete, karras, exponential, ays, gits]"
