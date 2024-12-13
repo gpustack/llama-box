@@ -663,7 +663,7 @@ The available endpoints for the LLaMA Box server mode are:
           "chunk_result": true,   // split the final image b64_json into chunks to avoid browser caching
           "chunk_size": 4096,     // split the final image b64_json into chunks with the given size, default 4k
           "preview": true,        // enable preview mode
-          "preview_faster": 4096  // enable faster preview mode
+          "preview_faster": true  // enable faster preview mode
         }
       }
       
@@ -697,7 +697,7 @@ The available endpoints for the LLaMA Box server mode are:
           "chunk_result": true,   // split the final image b64_json into chunks to avoid browser caching
           "chunk_size": 4096,     // split the final image b64_json into chunks with the given size, default 4k
           "preview": true,        // enable preview mode
-          "preview_faster": 4096  // enable faster preview mode
+          "preview_faster": true  // enable faster preview mode
         }
       }
       
