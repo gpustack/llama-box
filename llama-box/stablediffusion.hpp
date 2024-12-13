@@ -13,21 +13,32 @@
 #include "stable-diffusion.cpp/model.h"
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
-struct stablediffusion_params {
-    int max_batch_count              = 4;
-    int max_height                   = 1024;
-    int max_width                    = 1024;
+struct stablediffusion_params_sampling {
+    int64_t seed                     = LLAMA_DEFAULT_SEED;
+    int height                       = 1024;
+    int width                        = 1024;
     float guidance                   = 3.5f;
     float strength                   = 0.75f;
     sample_method_t sampler          = N_SAMPLE_METHODS;
     int sample_steps                 = 0;
-    float cfg_scale                  = 0.0f;
+    float cfg_scale                  = 4.5f;
     float slg_scale                  = 0.0f;
     std::vector<int> slg_skip_layers = {7, 8, 9};
     float slg_start                  = 0.01;
     float slg_end                    = 0.2;
     schedule_t schedule              = DEFAULT;
-    bool text_encoder_model_offload  = true;
+    std::string negative_prompt;
+    float control_strength      = 0.9f;
+    bool control_canny          = false;
+    uint8_t *control_img_buffer = nullptr;
+    uint8_t *init_img_buffer    = nullptr;
+    uint8_t *mask_img_buffer    = nullptr;
+};
+
+struct stablediffusion_params {
+    int max_batch_count = 4;
+    stablediffusion_params_sampling sampling;
+    bool text_encoder_model_offload = true;
     std::string clip_l_model;
     std::string clip_g_model;
     std::string t5xxl_model;
@@ -39,8 +50,6 @@ struct stablediffusion_params {
     int upscale_repeats        = 1;
     bool control_model_offload = true;
     std::string control_net_model;
-    float control_strength        = 0.9f;
-    bool control_canny            = false;
     bool free_compute_immediately = false;
 
     // inherited from common_params
@@ -53,22 +62,6 @@ struct stablediffusion_params {
     int main_gpu                                        = 0;
     bool lora_init_without_apply                        = false;
     std::vector<common_lora_adapter_info> lora_adapters = {};
-};
-
-struct stablediffusion_sampler_params {
-    int64_t seed            = LLAMA_DEFAULT_SEED;
-    int height              = 512;
-    int width               = 512;
-    sample_method_t sampler = EULER_A;
-    schedule_t schedule     = DEFAULT;
-    float cfg_scale         = 4.5f;
-    int sample_steps        = 20;
-    std::string negative_prompt;
-    bool stream                 = false;
-    bool stream_preview         = false;
-    bool stream_preview_faster  = false;
-    uint8_t *init_img_buffer    = nullptr;
-    uint8_t *control_img_buffer = nullptr;
 };
 
 struct stablediffusion_sampling_stream {
@@ -93,7 +86,7 @@ class stablediffusion_context {
     float get_default_cfg_scale();
     float get_default_slg_scale();
     void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
-    stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_sampler_params sparams);
+    stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_params_sampling sparams);
     bool sample_stream(stablediffusion_sampling_stream *stream);
     std::pair<int, int> progress_stream(stablediffusion_sampling_stream *stream);
     stablediffusion_generated_image preview_image_stream(stablediffusion_sampling_stream *stream, bool faster = false);
@@ -175,7 +168,7 @@ void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_con
     sd_lora_adapters_apply(sd_ctx, lora_adapters);
 }
 
-stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const char *prompt, stablediffusion_sampler_params sparams) {
+stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const char *prompt, stablediffusion_params_sampling sparams) {
     int clip_skip = -1;
     switch (sd_get_version(sd_ctx)) {
         case VERSION_SD1:
@@ -194,7 +187,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
 
     sd_sampling_stream_t *stream = nullptr;
     if (sparams.init_img_buffer != nullptr) {
-        sd_image_t init_img = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.init_img_buffer};
+        auto init_img = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.init_img_buffer};
         if (sparams.control_img_buffer != nullptr) {
             control_img = new sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.control_img_buffer};
         }
@@ -205,21 +198,21 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.negative_prompt.c_str(),
             clip_skip,
             sparams.cfg_scale,
-            params.guidance,
+            sparams.guidance,
             sparams.width,
             sparams.height,
             sparams.sampler,
             sparams.schedule,
             sparams.sample_steps,
-            params.strength,
+            sparams.strength,
             seed,
             control_img,
-            params.control_strength,
-            params.slg_skip_layers.data(),
-            params.slg_skip_layers.size(),
-            params.slg_scale,
-            params.slg_start,
-            params.slg_end);
+            sparams.control_strength,
+            sparams.slg_skip_layers.data(),
+            sparams.slg_skip_layers.size(),
+            sparams.slg_scale,
+            sparams.slg_start,
+            sparams.slg_end);
     } else {
         stream = txt2img_stream(
             sd_ctx,
@@ -227,7 +220,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.negative_prompt.c_str(),
             clip_skip,
             sparams.cfg_scale,
-            params.guidance,
+            sparams.guidance,
             sparams.width,
             sparams.height,
             sparams.sampler,
@@ -235,12 +228,12 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.sample_steps,
             seed,
             control_img,
-            params.control_strength,
-            params.slg_skip_layers.data(),
-            params.slg_skip_layers.size(),
-            params.slg_scale,
-            params.slg_start,
-            params.slg_end);
+            sparams.control_strength,
+            sparams.slg_skip_layers.data(),
+            sparams.slg_skip_layers.size(),
+            sparams.slg_scale,
+            sparams.slg_start,
+            sparams.slg_end);
     }
 
     return new stablediffusion_sampling_stream{
@@ -340,7 +333,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     std::string embed_dir;
     std::string stacked_id_embed_dir;
     std::string lora_model_dir;
-    sd_type_t wtype              = sd_type_t(GGML_TYPE_COUNT);
+    auto wtype                   = sd_type_t(GGML_TYPE_COUNT);
     rng_type_t rng_type          = CUDA_RNG;
     bool vae_decode_only         = false;
     bool free_params_immediately = false;
@@ -364,7 +357,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         params.n_threads,
         wtype,
         rng_type,
-        params.schedule,
+        params.sampling.schedule,
         !params.text_encoder_model_offload,
         !params.control_model_offload,
         !params.vae_model_offload,
@@ -397,14 +390,8 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     if (params.warmup) {
         LOG_WRN("%s: warming up the model with an empty run - please wait ... (--no-warmup to disable)\n", __func__);
 
-        stablediffusion_sampler_params wparams  = {};
-        wparams.seed                            = LLAMA_DEFAULT_SEED;
-        wparams.height                          = params.max_height;
-        wparams.width                           = params.max_width;
-        wparams.sampler                         = EULER;
-        wparams.schedule                        = DEFAULT;
-        wparams.cfg_scale                       = 1.0f;
-        wparams.sample_steps                    = 1;
+        stablediffusion_params_sampling wparams = params.sampling;
+        wparams.sample_steps                    = 1; // sample only one step
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);
         stablediffusion_generated_image img = sc->result_image_stream(stream);

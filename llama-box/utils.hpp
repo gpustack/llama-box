@@ -1021,12 +1021,12 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
-        llama_params["sampler"]      = params.sampler;
-        llama_params["schedule"]     = params.schedule;
-        llama_params["sample_steps"] = params.sample_steps;
-        llama_params["cfg_scale"]    = params.cfg_scale;
+        llama_params["sampler"]      = params.sampling.sampler;
+        llama_params["schedule"]     = params.sampling.schedule;
+        llama_params["sample_steps"] = params.sampling.sample_steps;
+        llama_params["cfg_scale"]    = params.sampling.cfg_scale;
         if (quality == "hd") {
-            llama_params["sample_steps"]    = params.sample_steps + 2;
+            llama_params["sample_steps"]    = params.sampling.sample_steps + 2;
             llama_params["negative_prompt"] = "low quality";
         }
         if (body.contains("style")) {
@@ -1049,15 +1049,20 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
             }
         }
     } else {
-        std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
-        std::string schedule_str        = json_value(body, "schedule", std::string("default"));
-        llama_params["schedule"]        = sd_argument_to_schedule(schedule_str.c_str());
-        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.cfg_scale);
-        llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
-        llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
-        if (body.contains("seed")) {
-            llama_params["seed"] = body.at("seed");
+        std::string sampler_str  = json_value(body, "sampler", std::string("euler_a"));
+        llama_params["sampler"]  = sd_argument_to_sample_method(sampler_str.c_str());
+        std::string schedule_str = json_value(body, "schedule", std::string("default"));
+        llama_params["schedule"] = sd_argument_to_schedule(schedule_str.c_str());
+
+        // Copy remaining properties to llama_params
+        // This allows user to use stable-diffusion.cpp-specific params like "slg_scale", ... via OAI
+        // endpoint. See "launch_slot_with_task()" for a complete list of params supported by stable-diffusion.cpp
+        for (const auto &item : body.items()) {
+            const std::string &key = item.key();
+            if (key == "n" || key == "size" || llama_params.contains(key)) {
+                continue;
+            }
+            llama_params[item.key()] = item.value();
         }
     }
 
@@ -1073,11 +1078,11 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (width < 256 || height < 256) {
             throw std::runtime_error("Illegal param: width and height must be at least 256");
         }
-        if (width > params.max_width) {
-            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.max_width));
+        if (width > params.sampling.width) {
+            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.sampling.width));
         }
-        if (height > params.max_height) {
-            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.max_height));
+        if (height > params.sampling.height) {
+            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.sampling.height));
         }
         if (width % 64 != 0 || height % 64 != 0) {
             throw std::runtime_error("Illegal param: width and height must be multiples of 64");
@@ -1104,16 +1109,6 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                 if (!llama_params["stream_options"].contains("include_usage")) {
                     llama_params["stream_options"]["include_usage"] = true;
                 }
-                if (json_value(llama_params["stream_options"], "chunk_result", false)) {
-                    llama_params["stream_options"]["chunk_result"] = true;
-                    llama_params["stream_options"]["chunk_size"]   = json_value(llama_params["stream_options"], "chunk_size", 4096);
-                }
-                if (json_value(llama_params["stream_options"], "preview", false)) {
-                    llama_params["stream_options"]["preview"] = true;
-                }
-                if (json_value(llama_params["stream_options"], "preview_faster", false)) {
-                    llama_params["stream_options"]["preview_faster"] = true;
-                }
             } else {
                 throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
             }
@@ -1133,6 +1128,9 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         body_cp["image"] = "...";
         if (body_cp.contains("mask")) {
             body_cp["mask"] = "...";
+        }
+        if (body_cp.contains("control")) {
+            body_cp["control"] = "...";
         }
         SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
@@ -1173,24 +1171,29 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
-        llama_params["sampler"]      = params.sampler;
-        llama_params["schedule"]     = params.schedule;
-        llama_params["sample_steps"] = params.sample_steps;
-        llama_params["cfg_scale"]    = params.cfg_scale;
+        llama_params["sampler"]      = params.sampling.sampler;
+        llama_params["schedule"]     = params.sampling.schedule;
+        llama_params["sample_steps"] = params.sampling.sample_steps;
+        llama_params["cfg_scale"]    = params.sampling.cfg_scale;
         if (quality == "hd") {
-            llama_params["sample_steps"]    = params.sample_steps + 2;
+            llama_params["sample_steps"]    = params.sampling.sample_steps + 2;
             llama_params["negative_prompt"] = "low quality";
         }
     } else {
-        std::string sampler_str         = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"]         = sd_argument_to_sample_method(sampler_str.c_str());
-        std::string schedule_str        = json_value(body, "schedule", std::string("default"));
-        llama_params["schedule"]        = sd_argument_to_schedule(schedule_str.c_str());
-        llama_params["cfg_scale"]       = json_value(body, "cfg_scale", params.cfg_scale);
-        llama_params["sample_steps"]    = json_value(body, "sample_steps", params.sample_steps);
-        llama_params["negative_prompt"] = json_value(body, "negative_prompt", std::string(""));
-        if (body.contains("seed")) {
-            llama_params["seed"] = body.at("seed");
+        std::string sampler_str  = json_value(body, "sampler", std::string("euler_a"));
+        llama_params["sampler"]  = sd_argument_to_sample_method(sampler_str.c_str());
+        std::string schedule_str = json_value(body, "schedule", std::string("default"));
+        llama_params["schedule"] = sd_argument_to_schedule(schedule_str.c_str());
+
+        // Copy remaining properties to llama_params
+        // This allows user to use stable-diffusion.cpp-specific params like "slg_scale", ... via OAI
+        // endpoint. See "launch_slot_with_task()" for a complete list of params supported by stable-diffusion.cpp
+        for (const auto &item : body.items()) {
+            const std::string &key = item.key();
+            if (key == "n" || key == "size" || llama_params.contains(key)) {
+                continue;
+            }
+            llama_params[item.key()] = item.value();
         }
     }
 
@@ -1206,11 +1209,11 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         if (width < 256 || height < 256) {
             throw std::runtime_error("Illegal param: width and height must be at least 256");
         }
-        if (width > params.max_width) {
-            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.max_width));
+        if (width > params.sampling.width) {
+            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.sampling.width));
         }
-        if (height > params.max_height) {
-            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.max_height));
+        if (height > params.sampling.height) {
+            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.sampling.height));
         }
         llama_params["width"]  = width;
         llama_params["height"] = height;
@@ -1225,17 +1228,18 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     // Handle "stream" & "stream_options" field
     // "stream_options": {"include_usage": bool, "chunk_result": bool, "chunk_size": int, "preview": bool}
     if (json_value(body, "stream", false)) {
-        llama_params["stream"]         = true;
-        llama_params["stream_options"] = json{{"include_usage", json_value(body, "stream_options_include_usage", true)}};
-        if (json_value(body, "stream_options_chunk_result", false)) {
-            llama_params["stream_options"]["chunk_result"] = true;
-            llama_params["stream_options"]["chunk_size"]   = json_value(body, "stream_options_chunk_size", 4096);
-        }
-        if (json_value(body, "stream_options_preview", false)) {
-            llama_params["stream_options"]["preview"] = true;
-        }
-        if (json_value(body, "stream_options_preview_faster", false)) {
-            llama_params["stream_options"]["preview_faster"] = true;
+        llama_params["stream"] = true;
+        if (!body.contains("stream_options")) {
+            llama_params["stream_options"] = json{{"include_usage", true}};
+        } else {
+            if (body.at("stream_options").is_object()) {
+                llama_params["stream_options"] = body.at("stream_options");
+                if (!llama_params["stream_options"].contains("include_usage")) {
+                    llama_params["stream_options"]["include_usage"] = true;
+                }
+            } else {
+                throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+            }
         }
     }
 

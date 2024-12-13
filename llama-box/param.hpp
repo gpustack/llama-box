@@ -407,19 +407,19 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // images //
     opts.push_back({ "server/images" });
     opts.push_back({ "server/images",                      "       --image-max-batch N",                    "maximum batch count (default: %d)", sd_params.max_batch_count});
-    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.max_height});
-    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.max_width});
-    opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sd_params.guidance });
-    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sd_params.strength });
+    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.height});
+    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.width});
+    opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sd_params.sampling.guidance });
+    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sd_params.sampling.strength });
     opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sampler_types().c_str() });
     opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
     opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
-    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sd_params.slg_start });
+    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sd_params.sampling.slg_start });
     opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
-                                                                                                            "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.slg_end });
-    opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, allowed values: %s (default: %s)", get_builtin_sd_schedulers().c_str(), sd_schedule_to_argument(sd_params.schedule) });
+                                                                                                            "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.sampling.slg_end });
+    opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, allowed values: %s (default: %s)", get_builtin_sd_schedulers().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule) });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
     }
@@ -439,8 +439,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
         opts.push_back({ "server/images",                  "       --image-no-control-net-model-offload",   "disable control-net model offload" });
     }
     opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sd_params.control_strength });
-    opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sd_params.control_canny ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sd_params.sampling.control_strength });
+    opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sd_params.sampling.control_canny ? "enabled" : "disabled" });
     opts.push_back({ "server/images",                      "       --image-free-compute-memory-immediately",
                                                                                                             "indicate to free compute memory immediately, which allow generating high resolution image (default: %s)", sd_params.free_compute_immediately ? "enabled" : "disabled" });
     // server // images //
@@ -1724,12 +1724,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-max-height");
                 }
-                char *arg                    = argv[i++];
-                params_.sd_params.max_height = std::stoi(std::string(arg));
-                if (params_.sd_params.max_height < 256) {
+                char *arg                         = argv[i++];
+                params_.sd_params.sampling.height = std::stoi(std::string(arg));
+                if (params_.sd_params.sampling.height < 256) {
                     invalid("--image-max-height");
                 }
-                if (params_.sd_params.max_height % 64 != 0) {
+                if (params_.sd_params.sampling.height % 64 != 0) {
                     invalid("--image-max-height");
                 }
                 continue;
@@ -1739,12 +1739,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-max-width");
                 }
-                char *arg                   = argv[i++];
-                params_.sd_params.max_width = std::stoi(std::string(arg));
-                if (params_.sd_params.max_width < 256) {
+                char *arg                        = argv[i++];
+                params_.sd_params.sampling.width = std::stoi(std::string(arg));
+                if (params_.sd_params.sampling.width < 256) {
                     invalid("--image-max-width");
                 }
-                if (params_.sd_params.max_width % 64 != 0) {
+                if (params_.sd_params.sampling.width % 64 != 0) {
                     invalid("--image-max-width");
                 }
                 continue;
@@ -1754,9 +1754,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-guidance");
                 }
-                char *arg                  = argv[i++];
-                params_.sd_params.guidance = std::stof(std::string(arg));
-                if (params_.sd_params.guidance < 0.0f) {
+                char *arg                           = argv[i++];
+                params_.sd_params.sampling.guidance = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.guidance < 0.0f) {
                     invalid("--image-guidance");
                 }
                 continue;
@@ -1766,9 +1766,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-strength");
                 }
-                char *arg                  = argv[i++];
-                params_.sd_params.strength = std::stof(std::string(arg));
-                if (params_.sd_params.strength < 0.0f || params_.sd_params.strength > 1.0f) {
+                char *arg                           = argv[i++];
+                params_.sd_params.sampling.strength = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.strength < 0.0f || params_.sd_params.sampling.strength > 1.0f) {
                     invalid("--image-strength");
                 }
                 continue;
@@ -1778,8 +1778,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-sampler");
                 }
-                char *arg                 = argv[i++];
-                params_.sd_params.sampler = sd_argument_to_sample_method(arg);
+                char *arg                          = argv[i++];
+                params_.sd_params.sampling.sampler = sd_argument_to_sample_method(arg);
                 continue;
             }
 
@@ -1787,9 +1787,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-sample-steps");
                 }
-                char *arg                      = argv[i++];
-                params_.sd_params.sample_steps = std::stoi(std::string(arg));
-                if (params_.sd_params.sample_steps < 1) {
+                char *arg                               = argv[i++];
+                params_.sd_params.sampling.sample_steps = std::stoi(std::string(arg));
+                if (params_.sd_params.sampling.sample_steps < 1) {
                     invalid("--image-sample-steps");
                 }
                 continue;
@@ -1799,9 +1799,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-cfg-scale");
                 }
-                char *arg                   = argv[i++];
-                params_.sd_params.cfg_scale = std::stof(std::string(arg));
-                if (params_.sd_params.cfg_scale < 1.0f) {
+                char *arg                            = argv[i++];
+                params_.sd_params.sampling.cfg_scale = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.cfg_scale < 1.0f) {
                     invalid("--image-cfg-scale");
                 }
                 continue;
@@ -1811,9 +1811,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-slg-scale");
                 }
-                char *arg                   = argv[i++];
-                params_.sd_params.slg_scale = std::stof(std::string(arg));
-                if (params_.sd_params.slg_scale < 0.0f) {
+                char *arg                            = argv[i++];
+                params_.sd_params.sampling.slg_scale = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.slg_scale < 0.0f) {
                     invalid("--image-slg-scale");
                 }
                 continue;
@@ -1830,11 +1830,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 static bool defaults_cleared = false;
                 if (!defaults_cleared) {
-                    params_.sd_params.slg_skip_layers.clear();
+                    params_.sd_params.sampling.slg_skip_layers.clear();
                     defaults_cleared = true;
                 }
 
-                params_.sd_params.slg_skip_layers.push_back(lyr);
+                params_.sd_params.sampling.slg_skip_layers.push_back(lyr);
                 continue;
             }
 
@@ -1842,9 +1842,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-slg-start");
                 }
-                char *arg                   = argv[i++];
-                params_.sd_params.slg_start = std::stof(std::string(arg));
-                if (params_.sd_params.slg_start < 0.0f) {
+                char *arg                            = argv[i++];
+                params_.sd_params.sampling.slg_start = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.slg_start < 0.0f) {
                     invalid("--image-slg-start");
                 }
                 continue;
@@ -1854,9 +1854,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-slg-end");
                 }
-                char *arg                 = argv[i++];
-                params_.sd_params.slg_end = std::stof(std::string(arg));
-                if (params_.sd_params.slg_end < 0.0f) {
+                char *arg                          = argv[i++];
+                params_.sd_params.sampling.slg_end = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.slg_end < 0.0f) {
                     invalid("--image-slg-end");
                 }
                 continue;
@@ -1866,8 +1866,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-schedule");
                 }
-                char *arg                  = argv[i++];
-                params_.sd_params.schedule = sd_argument_to_schedule(arg);
+                char *arg                           = argv[i++];
+                params_.sd_params.sampling.schedule = sd_argument_to_schedule(arg);
                 continue;
             }
 
@@ -1981,16 +1981,16 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--image-control-strength");
                 }
-                char *arg                          = argv[i++];
-                params_.sd_params.control_strength = std::stof(std::string(arg));
-                if (params_.sd_params.control_strength < 0.0f || params_.sd_params.control_strength > 1.0f) {
+                char *arg                                   = argv[i++];
+                params_.sd_params.sampling.control_strength = std::stof(std::string(arg));
+                if (params_.sd_params.sampling.control_strength < 0.0f || params_.sd_params.sampling.control_strength > 1.0f) {
                     invalid("--image-control-strength");
                 }
                 continue;
             }
 
             if (!strcmp(flag, "--image-control-canny")) {
-                params_.sd_params.control_canny = true;
+                params_.sd_params.sampling.control_canny = true;
                 continue;
             }
 

@@ -29,6 +29,8 @@ SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
 IMAGE="${IMAGE:-""}"
 MASK="${MASK:-""}"
+PREVIEW="${PREVIEW:-"true"}"
+PREVIEW_FASTER="${PREVIEW_FASTER:-"false"}"
 SAMPLER="${SAMPLER:-"null"}"
 SCHEDULE="${SCHEDULE:-"default"}"
 SEED="${SEED:-"null"}"
@@ -129,6 +131,8 @@ image_edit() {
             --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
             --argjson image "\"${IMAGE}\"" \
             --argjson mask "\"${MASK}\"" \
+            --argjson preview "${PREVIEW}" \
+            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -141,7 +145,11 @@ image_edit() {
                   negative_prompt: $negative_prompt,
                   image: $image,
                   mask: $mask,
-                  stream: true
+                  stream: true,
+                  stream_options_preview: $preview,
+                  stream_options_preview_faster: $preview_faster,
+                  stream_options_chunk_result: true,
+                  stream_options_chunk_size: 1048576
                 } * .')"
     else
         DATA="$(echo -n "${DATA}" | jq -cr \
@@ -151,6 +159,8 @@ image_edit() {
             --argjson quality "\"${QUALITY}\"" \
             --argjson image "\"${IMAGE}\"" \
             --argjson mask "\"${MASK}\"" \
+            --argjson preview "${PREVIEW}" \
+            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -158,7 +168,11 @@ image_edit() {
                   quality: $quality,
                   image: $image,
                   mask: $mask,
-                  stream: true
+                  stream: true,
+                  stream_options_preview: $preview,
+                  stream_options_preview_faster: $preview_faster,
+                  stream_options_chunk_result: true,
+                  stream_options_chunk_size: 1048576
                 } * .')"
     fi
     echo "Q: ${DATA}" >>"${LOG_FILE}"
@@ -190,7 +204,11 @@ image_edit() {
                 --form "negative_prompt=${NEGATIVE_PROMPT}" \
                 --form "image=@${IMAGE}" \
                 --form "mask=@${MASK}" \
-                --form "stream=true")
+                --form "stream=true" \
+                --form "stream_options_preview=${PREVIEW}" \
+                --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
+                --form "stream_options_chunk_result=true" \
+                --form "stream_options_chunk_size=1048576")
         else
             while IFS= read -r LINE; do
                 if ! parse "${TIME}"; then
@@ -212,7 +230,11 @@ image_edit() {
                 --form "sample_steps=${SAMPLE_STEPS}" \
                 --form "negative_prompt=${NEGATIVE_PROMPT}" \
                 --form "image=@${IMAGE}" \
-                --form "stream=true")
+                --form "stream=true" \
+                --form "stream_options_preview=${PREVIEW}" \
+                --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
+                --form "stream_options_chunk_result=true" \
+                --form "stream_options_chunk_size=1048576")
         fi
     elif [[ -n "${MASK}" ]]; then
         while IFS= read -r LINE; do
@@ -231,7 +253,11 @@ image_edit() {
             --form "quality=${QUALITY}" \
             --form "image=@${IMAGE}" \
             --form "mask=@${MASK}" \
-            --form "stream=true")
+            --form "stream=true" \
+            --form "stream_options_preview=${PREVIEW}" \
+            --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
+            --form "stream_options_chunk_result=true" \
+            --form "stream_options_chunk_size=1048576")
     else
         while IFS= read -r LINE; do
             if ! parse "${TIME}"; then
@@ -248,7 +274,11 @@ image_edit() {
             --form "size=${SIZE}" \
             --form "quality=${QUALITY}" \
             --form "image=@${IMAGE}" \
-            --form "stream=true")
+            --form "stream=true" \
+            --form "stream_options_preview=${PREVIEW}" \
+            --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
+            --form "stream_options_chunk_result=true" \
+            --form "stream_options_chunk_size=1048576")
     fi
     set +e
 
@@ -265,6 +295,8 @@ echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "IMAGE             : ${IMAGE}"
 echo "MASK              : ${MASK}"
+echo "PREVIEW           : ${PREVIEW}"
+echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "SCHEDULE          : ${SCHEDULE} // AVAILABLE FOR SAMPLER, ONE OF [default, discrete, karras, exponential, ays, gits]"
 echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"

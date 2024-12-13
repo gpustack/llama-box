@@ -168,7 +168,10 @@ struct slot_params {
     bool stream = true;
 
     /* STABLE DIFFUSION */
-    struct stablediffusion_sampler_params sd_params;
+
+    bool stream_preview_faster = false;
+    bool stream_preview        = false;
+    struct stablediffusion_params_sampling sd_params;
 
     /* LLAMA */
 
@@ -289,6 +292,10 @@ struct server_slot {
             if (params.sd_params.control_img_buffer != nullptr) {
                 stbi_image_free(params.sd_params.control_img_buffer);
                 params.sd_params.control_img_buffer = nullptr;
+            }
+            if (params.sd_params.mask_img_buffer != nullptr) {
+                stbi_image_free(params.sd_params.mask_img_buffer);
+                params.sd_params.mask_img_buffer = nullptr;
             }
             if (sdsstream != nullptr) {
                 sd_sampling_stream_free(sdsstream->stream);
@@ -891,17 +898,17 @@ struct server_context {
                 return false;
             }
 
-            if (sd_params.sampler >= N_SAMPLE_METHODS) {
-                sd_params.sampler = sd_ctx->get_default_sample_method();
+            if (sd_params.sampling.sampler >= N_SAMPLE_METHODS) {
+                sd_params.sampling.sampler = sd_ctx->get_default_sample_method();
             }
-            if (sd_params.sample_steps <= 0) {
-                sd_params.sample_steps = sd_ctx->get_default_sample_steps();
+            if (sd_params.sampling.sample_steps <= 0) {
+                sd_params.sampling.sample_steps = sd_ctx->get_default_sample_steps();
             }
-            if (sd_params.cfg_scale <= 0.0f) {
-                sd_params.cfg_scale = sd_ctx->get_default_cfg_scale();
+            if (sd_params.sampling.cfg_scale <= 0.0f) {
+                sd_params.sampling.cfg_scale = sd_ctx->get_default_cfg_scale();
             }
-            if (sd_params.slg_scale <= 0.0f) {
-                sd_params.slg_scale = sd_ctx->get_default_slg_scale();
+            if (sd_params.sampling.slg_scale <= 0.0f) {
+                sd_params.sampling.slg_scale = sd_ctx->get_default_slg_scale();
             }
             for (const auto &la : sd_params.lora_adapters) {
                 common_lora_adapter_container loaded_la;
@@ -913,10 +920,10 @@ struct server_context {
             SRV_INF("seed: %d, flash attn: %s, sampler: %s, steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
                     sd_params.seed,
                     sd_params.flash_attn ? "true" : "false",
-                    sd_sample_method_to_argument(sd_params.sampler),
-                    sd_params.sample_steps,
-                    sd_params.cfg_scale,
-                    sd_params.slg_scale);
+                    sd_sample_method_to_argument(sd_params.sampling.sampler),
+                    sd_params.sampling.sample_steps,
+                    sd_params.sampling.cfg_scale,
+                    sd_params.sampling.slg_scale);
 
             return true;
         }
@@ -1206,6 +1213,7 @@ struct server_context {
         // sampling parameter defaults are loaded from the global server context (but individual requests can still override them)
         slot_params defaults;
         defaults.llm_params = llm_params.sampling;
+        defaults.sd_params  = sd_params.sampling;
 
         const json &data = task.data;
 
@@ -1216,79 +1224,65 @@ struct server_context {
             slot.oaicompat_image_generate = json_value(data, "__oaicompat_image_generate", false);
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
 
-            slot.params.sd_params                 = defaults.sd_params;
-            slot.params.sd_params.seed            = json_value(data, "seed", sd_params.seed);
-            slot.params.sd_params.height          = json_value(data, "height", 512);
-            slot.params.sd_params.width           = json_value(data, "width", 512);
-            slot.params.sd_params.sampler         = json_value(data, "sampler", sd_params.sampler);
-            slot.params.sd_params.schedule        = json_value(data, "schedule", sd_params.schedule);
-            slot.params.sd_params.cfg_scale       = json_value(data, "cfg_scale", sd_params.cfg_scale);
-            slot.params.sd_params.sample_steps    = json_value(data, "sample_steps", sd_params.sample_steps);
-            slot.params.sd_params.negative_prompt = json_value(data, "negative_prompt", std::string(""));
-            slot.params.sd_params.stream          = json_value(data, "stream", false);
+            slot.params.stream = json_value(data, "stream", false);
             if (data.contains("stream_options")) {
-                slot.params.sd_params.stream_preview        = json_value(data.at("stream_options"), "preview", false);
-                slot.params.sd_params.stream_preview_faster = json_value(data.at("stream_options"), "preview_faster", false);
+                slot.params.stream_preview        = json_value(data.at("stream_options"), "preview", false);
+                slot.params.stream_preview_faster = json_value(data.at("stream_options"), "preview_faster", false);
             }
+
+            slot.params.sd_params                  = defaults.sd_params;
+            slot.params.sd_params.seed             = json_value(data, "seed", sd_params.seed);
+            slot.params.sd_params.height           = json_value(data, "height", defaults.sd_params.height);
+            slot.params.sd_params.width            = json_value(data, "width", defaults.sd_params.width);
+            slot.params.sd_params.guidance         = json_value(data, "guidance", defaults.sd_params.guidance);
+            slot.params.sd_params.strength         = json_value(data, "strength", defaults.sd_params.strength);
+            slot.params.sd_params.sampler          = json_value(data, "sampler", defaults.sd_params.sampler);
+            slot.params.sd_params.sample_steps     = json_value(data, "sample_steps", defaults.sd_params.sample_steps);
+            slot.params.sd_params.cfg_scale        = json_value(data, "cfg_scale", defaults.sd_params.cfg_scale);
+            slot.params.sd_params.slg_scale        = json_value(data, "slg_scale", defaults.sd_params.slg_scale);
+            slot.params.sd_params.slg_skip_layers  = json_value(data, "slg_skip_layers", defaults.sd_params.slg_skip_layers);
+            slot.params.sd_params.slg_start        = json_value(data, "slg_start", defaults.sd_params.slg_start);
+            slot.params.sd_params.slg_end          = json_value(data, "slg_end", defaults.sd_params.slg_end);
+            slot.params.sd_params.schedule         = json_value(data, "schedule", defaults.sd_params.schedule);
+            slot.params.sd_params.control_strength = json_value(data, "control_strength", defaults.sd_params.control_strength);
+            slot.params.sd_params.control_canny    = json_value(data, "control_strength", defaults.sd_params.control_canny);
+            slot.params.sd_params.negative_prompt  = json_value(data, "negative_prompt", std::string(""));
 
             // get prompt
             slot.prompt_string = json_value(data, "prompt", std::string(""));
 
             // get image
             if (slot.oaicompat_image_edit) {
-                int c                       = 0;
-                int w                       = 0;
-                int h                       = 0;
                 uint8_t *control_img_buffer = nullptr;
-                if (!sd_params.control_net_model.empty() && data.contains("mask")) {
+                if (data.contains("control")) {
+                    int cc           = 0;
+                    int cw           = 0;
+                    int ch           = 0;
                     auto control_img = data.at("mask").get<std::string>();
-                    SLT_INF(slot, "loading mask: %zu\n", control_img.length());
-                    control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &w, &h, &c, 3);
+                    SLT_INF(slot, "loading control: %zu\n", control_img.length());
+                    control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &cw, &ch, &cc, 3);
                     if (control_img_buffer == nullptr) {
                         auto reason = stbi_failure_reason();
-                        SLT_ERR(slot, "failed to load mask: %s\n", reason);
-                        send_error(task, "failed to load mask", ERROR_TYPE_INVALID_REQUEST);
+                        SLT_ERR(slot, "failed to load control: %s\n", reason);
+                        send_error(task, "failed to load control", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
-                    if (c < 3) {
-                        stbi_image_free(control_img_buffer);
-                        send_error(task, "mask must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
+                    if (cw <= 0 || ch <= 0) {
+                        send_error(task, "control width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
-                    if (w <= 0 || h <= 0) {
-                        stbi_image_free(control_img_buffer);
-                        send_error(task, "mask width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
-                        return false;
-                    }
-                    if (w != slot.params.sd_params.width || h != slot.params.sd_params.height) {
-                        LOG_INF("image dimensions do not match, resizing image\n");
-                        int rw                    = slot.params.sd_params.width;
-                        int rh                    = slot.params.sd_params.height;
-                        auto *resized_mask_buffer = (uint8_t *)malloc(rw * rh * 3);
-                        if (resized_mask_buffer == nullptr) {
-                            stbi_image_free(control_img_buffer);
-                            send_error(task, "failed to create resized mask buffer", ERROR_TYPE_INVALID_REQUEST);
-                            return false;
-                        }
-                        if (!stbir_resize(control_img_buffer, w, h, 0,
-                                          resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
-                                          3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
-                                          STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
-                                          STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                          STBIR_COLORSPACE_SRGB, nullptr)) {
-                            auto reason = stbi_failure_reason();
-                            SLT_ERR(slot, "failed to load mask: %s\n", reason);
-                            stbi_image_free(control_img_buffer);
-                            send_error(task, "failed to resize mask", ERROR_TYPE_INVALID_REQUEST);
-                            return false;
-                        }
-                        stbi_image_free(control_img_buffer);
-                        control_img_buffer = resized_mask_buffer;
-                    }
+                    SLT_WRN(slot, "control changes width and height from %dx%d to %dx%d\n", slot.params.sd_params.width, slot.params.sd_params.height, cw, ch);
+                    slot.params.sd_params.height = ch;
+                    slot.params.sd_params.width  = cw;
                 }
-                auto init_img = data.at("image").get<std::string>();
+
+                uint8_t *init_img_buffer = nullptr;
+                int ic                   = 0;
+                int iw                   = 0;
+                int ih                   = 0;
+                auto init_img            = data.at("image").get<std::string>();
                 SLT_INF(slot, "loading image: %zu\n", init_img.length());
-                uint8_t *init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &w, &h, &c, 3);
+                init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &iw, &ih, &ic, 3);
                 if (init_img_buffer == nullptr) {
                     if (control_img_buffer != nullptr) {
                         stbi_image_free(control_img_buffer);
@@ -1298,7 +1292,7 @@ struct server_context {
                     send_error(task, "failed to load image", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
-                if (c < 3) {
+                if (ic < 3) {
                     if (control_img_buffer != nullptr) {
                         stbi_image_free(control_img_buffer);
                     }
@@ -1306,7 +1300,7 @@ struct server_context {
                     send_error(task, "image must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
-                if (w <= 0 || h <= 0) {
+                if (iw <= 0 || ih <= 0) {
                     if (control_img_buffer != nullptr) {
                         stbi_image_free(control_img_buffer);
                     }
@@ -1314,7 +1308,7 @@ struct server_context {
                     send_error(task, "image width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
-                if (w != slot.params.sd_params.width || h != slot.params.sd_params.height) {
+                if (iw != slot.params.sd_params.width || ih != slot.params.sd_params.height) {
                     LOG_INF("image dimensions do not match, resizing image\n");
                     int rw                     = slot.params.sd_params.width;
                     int rh                     = slot.params.sd_params.height;
@@ -1327,7 +1321,7 @@ struct server_context {
                         send_error(task, "failed to create resized image buffer", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
-                    if (!stbir_resize(init_img_buffer, w, h, 0,
+                    if (!stbir_resize(init_img_buffer, iw, ih, 0,
                                       resized_image_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
                                       3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
                                       STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
@@ -1345,8 +1339,57 @@ struct server_context {
                     stbi_image_free(init_img_buffer);
                     init_img_buffer = resized_image_buffer;
                 }
+
+                uint8_t *mask_img_buffer = nullptr;
+                if (data.contains("mask")) {
+                    int mc        = 0;
+                    int mw        = 0;
+                    int mh        = 0;
+                    auto mask_img = data.at("mask").get<std::string>();
+                    SLT_INF(slot, "loading mask: %zu\n", mask_img.length());
+                    mask_img_buffer = stbi_load_from_memory((const stbi_uc *)mask_img.c_str(), (int)mask_img.length(), &mw, &mh, &mc, 3);
+                    if (mask_img_buffer == nullptr) {
+                        if (control_img_buffer != nullptr) {
+                            stbi_image_free(control_img_buffer);
+                        }
+                        stbi_image_free(init_img_buffer);
+                        auto reason = stbi_failure_reason();
+                        SLT_ERR(slot, "failed to load mask: %s\n", reason);
+                        send_error(task, "failed to load mask", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
+                    if (mc < 3) {
+                        if (control_img_buffer != nullptr) {
+                            stbi_image_free(control_img_buffer);
+                        }
+                        stbi_image_free(init_img_buffer);
+                        stbi_image_free(mask_img_buffer);
+                        send_error(task, "mask must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
+                    if (mw <= 0 || mh <= 0) {
+                        if (control_img_buffer != nullptr) {
+                            stbi_image_free(control_img_buffer);
+                        }
+                        stbi_image_free(init_img_buffer);
+                        stbi_image_free(mask_img_buffer);
+                        send_error(task, "mask width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
+                    if (mw != slot.params.sd_params.width || mh != slot.params.sd_params.height) {
+                        if (control_img_buffer != nullptr) {
+                            stbi_image_free(control_img_buffer);
+                        }
+                        stbi_image_free(init_img_buffer);
+                        stbi_image_free(mask_img_buffer);
+                        send_error(task, "mask size doesn't match image", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
+                }
+
                 slot.params.sd_params.control_img_buffer = control_img_buffer;
                 slot.params.sd_params.init_img_buffer    = init_img_buffer;
+                slot.params.sd_params.mask_img_buffer    = mask_img_buffer;
             }
 
             slot.state = SLOT_STATE_STARTED;
@@ -1764,15 +1807,19 @@ struct server_context {
                 {"seed", slot.params.llm_params.seed},
                 {"seed_cur", slot.params.sd_params.seed},
                 {"max_batch_count", sd_params.max_batch_count},
-                {"max_height", sd_params.max_height},
-                {"max_width", sd_params.max_width},
+                {"max_height", sd_params.sampling.height},
+                {"max_width", sd_params.sampling.width},
                 {"height", slot.params.sd_params.height},
                 {"width", slot.params.sd_params.width},
-                {"guidance", sd_params.guidance},
+                {"guidance", slot.params.sd_params.guidance},
                 {"sampler", sd_sample_method_to_argument(slot.params.sd_params.sampler)},
                 {"cfg_scale", slot.params.sd_params.cfg_scale},
+                {"slg_scale", slot.params.sd_params.slg_scale},
+                {"slg_skip_layers", slot.params.sd_params.slg_skip_layers},
+                {"slg_start", slot.params.sd_params.slg_start},
+                {"slg_end", slot.params.sd_params.slg_end},
                 {"sample_steps", slot.params.sd_params.sample_steps},
-                {"schedule", sd_schedule_to_argument(sd_params.schedule)},
+                {"schedule", sd_schedule_to_argument(slot.params.sd_params.schedule)},
                 {"clip_l_model", sd_params.clip_l_model},
                 {"clip_g_model", sd_params.clip_g_model},
                 {"t5xxl_model", sd_params.t5xxl_model},
@@ -1782,8 +1829,8 @@ struct server_context {
                 {"upscale_model", sd_params.upscale_model},
                 {"upscale_repeats", sd_params.upscale_repeats},
                 {"control_net_model", sd_params.control_net_model},
-                {"control_strength", sd_params.control_strength},
-                {"control_canny", sd_params.control_canny},
+                {"control_strength", slot.params.sd_params.control_strength},
+                {"control_canny", slot.params.sd_params.control_canny},
             };
         }
 
@@ -2492,10 +2539,10 @@ struct server_context {
                 size_t t1     = ggml_time_us();
                 auto progress = sd_ctx->progress_stream(slot.sdsstream);
                 SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
-                if (slot.params.sd_params.stream) {
-                    if (slot.params.sd_params.stream_preview_faster) {
+                if (slot.params.stream) {
+                    if (slot.params.stream_preview_faster) {
                         generated_image = sd_ctx->preview_image_stream(slot.sdsstream, true);
-                    } else if (slot.params.sd_params.stream_preview) {
+                    } else if (slot.params.stream_preview) {
                         generated_image = sd_ctx->preview_image_stream(slot.sdsstream);
                     }
                     send_image(slot, progress.first, progress.second + 1, generated_image);
@@ -3215,9 +3262,9 @@ struct server_context {
 
         if (sd_ctx != nullptr) {
             return json{
-                {"schedule", sd_schedule_to_argument(sd_params.schedule)},
-                {"max_height", sd_params.max_height},
-                {"max_width", sd_params.max_width},
+                {"schedule", sd_schedule_to_argument(sd_params.sampling.schedule)},
+                {"max_height", sd_params.sampling.height},
+                {"max_width", sd_params.sampling.width},
                 {"max_batch_count", sd_params.max_batch_count},
             };
         }
@@ -4461,6 +4508,9 @@ int main(int argc, char **argv) {
             if (req.has_file("mask")) {
                 request["mask"] = req.get_file_value("mask").content;
             }
+            if (req.has_file("control")) {
+                request["control"] = req.get_file_value("control").content;
+            }
             if (req.has_file("model")) {
                 request["model"] = req.get_file_value("model").content;
             }
@@ -4475,13 +4525,29 @@ int main(int argc, char **argv) {
                     return;
                 }
             }
+            if (req.has_file("guidance")) {
+                try {
+                    request["guidance"] = std::stof(req.get_file_value("guidance").content);
+                } catch (const std::exception &) {
+                    res_error(res, format_error_response("\"guidance\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                    return;
+                }
+            }
+            if (req.has_file("strength")) {
+                try {
+                    request["strength"] = std::stof(req.get_file_value("strength").content);
+                } catch (const std::exception &) {
+                    res_error(res, format_error_response("\"strength\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                    return;
+                }
+            }
             if (req.has_file("sampler")) {
                 request["sampler"] = req.get_file_value("sampler").content;
-                if (req.has_file("cfg_scale")) {
+                if (req.has_file("seed")) {
                     try {
-                        request["cfg_scale"] = std::stof(req.get_file_value("cfg_scale").content);
+                        request["seed"] = std::stoi(req.get_file_value("seed").content);
                     } catch (const std::exception &) {
-                        res_error(res, format_error_response("\"cfg_scale\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                        res_error(res, format_error_response("\"seed\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
                         return;
                     }
                 }
@@ -4493,40 +4559,83 @@ int main(int argc, char **argv) {
                         return;
                     }
                 }
-                if (req.has_file("negative_sampler")) {
-                    request["negative_sampler"] = req.get_file_value("negative_sampler").content;
-                }
-                if (req.has_file("seed")) {
+                if (req.has_file("cfg_scale")) {
                     try {
-                        request["seed"] = std::stoi(req.get_file_value("seed").content);
+                        request["cfg_scale"] = std::stof(req.get_file_value("cfg_scale").content);
                     } catch (const std::exception &) {
-                        res_error(res, format_error_response("\"seed\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                        res_error(res, format_error_response("\"cfg_scale\" must be a float", ERROR_TYPE_INVALID_REQUEST));
                         return;
                     }
+                }
+                if (req.has_file("slg_scale")) {
+                    try {
+                        request["slg_scale"] = std::stof(req.get_file_value("slg_scale").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"slg_scale\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
+                }
+                // TODO slg_skip_layers
+                if (req.has_file("slg_start")) {
+                    try {
+                        request["slg_start"] = std::stof(req.get_file_value("slg_start").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"slg_start\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
+                }
+                if (req.has_file("slg_end")) {
+                    try {
+                        request["slg_end"] = std::stof(req.get_file_value("slg_end").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"slg_end\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
+                }
+                if (req.has_file("schedule")) {
+                    request["schedule"] = req.get_file_value("schedule").content;
+                }
+                if (req.has_file("control_strength")) {
+                    try {
+                        request["control_strength"] = std::stof(req.get_file_value("control_strength").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"control_strength\" must be a float", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
+                }
+                if (req.has_file("control_canny")) {
+                    request["control_canny"] = req.get_file_value("control_canny").content == "true";
+                }
+                if (req.has_file("negative_sampler")) {
+                    request["negative_sampler"] = req.get_file_value("negative_sampler").content;
                 }
             }
             if (req.has_file("stream")) {
                 request["stream"] = req.get_file_value("stream").content == "true";
-            }
-            if (req.has_file("stream_options_include_usage")) {
-                request["stream_options_include_usage"] = req.get_file_value("stream_options_include_usage").content == "true";
-            }
-            if (req.has_file("stream_options_chunk_result")) {
-                request["stream_options_chunk_result"] = req.get_file_value("stream_options_chunk_result").content == "true";
-            }
-            if (req.has_file("stream_options_chunk_size")) {
-                try {
-                    request["stream_options_chunk_size"] = std::stoi(req.get_file_value("stream_options_chunk_size").content);
-                } catch (const std::exception &) {
-                    res_error(res, format_error_response("\"stream_options_chunk_size\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
-                    return;
+                if (req.has_file("stream_options_include_usage")) {
+                    request["stream_options"] = json{{"include_usage", req.get_file_value("stream_options_include_usage").content == "true"}};
+                } else {
+                    request["stream_options"] = json{{"include_usage", true}};
                 }
             }
-            if (req.has_file("stream_options_preview")) {
-                request["stream_options_preview"] = req.get_file_value("stream_options_preview").content == "true";
-            }
-            if (req.has_file("stream_options_preview_faster")) {
-                request["stream_options_preview_faster"] = req.get_file_value("stream_options_preview_faster").content == "true";
+            if (json_value(request["stream_options"], "include_usage", false)) {
+                if (req.has_file("stream_options_chunk_result")) {
+                    request["stream_options"]["chunk_result"] = req.get_file_value("stream_options_chunk_result").content == "true";
+                }
+                if (req.has_file("stream_options_chunk_size")) {
+                    try {
+                        request["stream_options"]["chunk_size"] = std::stoi(req.get_file_value("stream_options_chunk_size").content);
+                    } catch (const std::exception &) {
+                        res_error(res, format_error_response("\"stream_options_chunk_size\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                        return;
+                    }
+                }
+                if (req.has_file("stream_options_preview")) {
+                    request["stream_options"]["preview"] = req.get_file_value("stream_options_preview").content == "true";
+                }
+                if (req.has_file("stream_options_preview_faster")) {
+                    request["stream_options"]["preview_faster"] = req.get_file_value("stream_options_preview_faster").content == "true";
+                }
             }
             request = oaicompat_images_edits_request(ctx_server.sd_params, request);
         }
