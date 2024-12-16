@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index d7c94352..63e5febe 100644
+index ba28c07c..28bd260a 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -44,17 +44,7 @@
@@ -22,7 +22,7 @@ index d7c94352..63e5febe 100644
  //#define CLIP_DEBUG_FUNCTIONS
  
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index 4ca53a0b..924ad064 100644
+index 16f30c56..c74d8c66 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -11,17 +11,7 @@
@@ -44,7 +44,7 @@ index 4ca53a0b..924ad064 100644
  
  // RGB uint8 image
  struct clip_image_u8 {
-@@ -366,7 +356,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -377,7 +367,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
      const int64_t t_img_enc_end_us = ggml_time_us();
      float t_img_enc_ms = (t_img_enc_end_us - t_img_enc_start_us) / 1000.0;
  

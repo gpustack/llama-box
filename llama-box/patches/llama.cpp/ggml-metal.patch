@@ -12,10 +12,10 @@ index 669c1f84..f5d1892c 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 34fe5778..13103351 100644
+index 28f590f9..53efe9e9 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -2062,7 +2062,21 @@ static void ggml_metal_encode_node(
+@@ -2072,7 +2072,21 @@ static void ggml_metal_encode_node(
  
                  // find the break-even point where the matrix-matrix kernel becomes more efficient compared
                  // to the matrix-vector kernel
@@ -38,7 +38,7 @@ index 34fe5778..13103351 100644
  
                  // first try to use small-batch mat-mv kernels
                  // these should be efficient for BS [2, ~8]
-@@ -2071,20 +2085,8 @@ static void ggml_metal_encode_node(
+@@ -2081,20 +2095,8 @@ static void ggml_metal_encode_node(
                       (
                        (
                         src0t == GGML_TYPE_F16  || // TODO: helper function
@@ -60,7 +60,7 @@ index 34fe5778..13103351 100644
                       )
                      )
                     ) {
-@@ -2096,7 +2098,7 @@ static void ggml_metal_encode_node(
+@@ -2106,7 +2108,7 @@ static void ggml_metal_encode_node(
                      //       my current hypothesis is that the work grid is not evenly divisible for different nsg
                      //       values and there can be some tail effects when nsg is high. need to confirm this
                      //
@@ -69,7 +69,7 @@ index 34fe5778..13103351 100644
                      const int nxpsg  = ne11 < 3 ? 16 : 8; // num threads along row per simdgroup
                      const int nypsg  = 32/nxpsg;          // num threads along col per simdgroup (i.e. a simdgroup processes that many src0 rows at a time)
                      const int r0ptg  = nypsg*nsg;         // num src0 rows per threadgroup
-@@ -2921,7 +2923,7 @@ static void ggml_metal_encode_node(
+@@ -2931,7 +2933,7 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
@@ -78,7 +78,7 @@ index 34fe5778..13103351 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -4869,4 +4871,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+@@ -4881,4 +4883,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
      return &g_ggml_backend_metal_reg;
  }
  
