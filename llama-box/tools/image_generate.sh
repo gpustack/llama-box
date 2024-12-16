@@ -33,6 +33,7 @@ PREVIEW_FASTER="${PREVIEW_FASTER:-"false"}"
 SAMPLER="${SAMPLER:-"null"}"
 SCHEDULE="${SCHEDULE:-"default"}"
 SEED="${SEED:-"null"}"
+GUIDANCE="${GUIDANCE:-"3.5"}"
 CFG_SCALE="${CFG_SCALE:-"4.5"}"
 SAMPLE_STEPS="${SAMPLE_STEPS:-"10"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
@@ -115,6 +116,7 @@ image_generate() {
             --argjson sampler "\"${SAMPLER}\"" \
             --argjson schedule "\"${SCHEDULE}\"" \
             --argjson seed "${SEED}" \
+            --argjson guidance "${GUIDANCE}" \
             --argjson cfg_scale "${CFG_SCALE}" \
             --argjson sample_steps "${SAMPLE_STEPS}" \
             --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
@@ -127,6 +129,7 @@ image_generate() {
                   sampler: $sampler,
                   schedule: $schedule,
                   seed: $seed,
+                  guidance: $guidance,
                   cfg_scale: $cfg_scale,
                   sample_steps: $sample_steps,
                   negative_prompt: $negative_prompt,
@@ -214,6 +217,7 @@ echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
 echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
 echo "SCHEDULE          : ${SCHEDULE} // AVAILABLE FOR SAMPLER, ONE OF [default, discrete, karras, exponential, ays, gits]"
 echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"
+echo "GUIDANCE          : ${GUIDANCE} // AVAILABLE FOR SAMPLER"
 echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
 echo "SAMPLE_STEPS      : ${SAMPLE_STEPS} // AVAILABLE FOR SAMPLER"
 echo "NEGATIVE_PROMPT   : ${NEGATIVE_PROMPT} // AVAILABLE FOR SAMPLER"

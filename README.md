@@ -688,6 +688,7 @@ The available endpoints for the LLaMA Box server mode are:
         "sampler": "euler",       // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
         "schedule": "default",    // optional, select from default;discrete;karras;exponential;ays;gits
         "seed": null,             // optional, random seed
+        "guidance": 3.5,          // optional, unconditional guidance value
         "cfg_scale": 4.5,         // optional, for sampler, the scale of classifier-free guidance in the output phase
         "sample_steps": 20,       // optional, number of sample steps
         "negative_prompt": "",    // optional, negative prompt
@@ -755,6 +756,8 @@ The available endpoints for the LLaMA Box server mode are:
       sampler=euler                      // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
       schedule=default                   // optional, select from default;discrete;karras;exponential;ays;gits
       seed=null                          // optional, random seed
+      guidance=3.5                       // optional, unconditional guidance value
+      strength=0.75                      // optional, for sampler, the strength of noising/unnoising
       cfg_scale=4.5                      // optional, for sampler, the scale of classifier-free guidance in the output phase
       sample_steps=20                    // optional, number of sample steps
       negative_prompt=""                 // optional, negative prompt
