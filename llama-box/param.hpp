@@ -322,7 +322,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --no-escape",                            "do not process escape sequences" });
     opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
     opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
-    opts.push_back({ "server/completion",                  "       --penalize-nl",                          "penalize newline tokens (default: %s)", llm_params.sampling.penalize_nl ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --temp T",                               "temperature (default: %.1f)", (double)llm_params.sampling.temp });
     opts.push_back({ "server/completion",                  "       --top-k N",                              "top-k sampling (default: %d, 0 = disabled)", llm_params.sampling.top_k });
     opts.push_back({ "server/completion",                  "       --top-p P",                              "top-p sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
@@ -1086,11 +1085,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (!strcmp(flag, "--penalize-nl")) {
-                params_.llm_params.sampling.penalize_nl = true;
-                continue;
-            }
-
             if (!strcmp(flag, "--temp")) {
                 if (i == argc) {
                     missing("--temp");
@@ -1161,7 +1155,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                                  = argv[i++];
                 params_.llm_params.sampling.penalty_last_n = std::stoi(std::string(arg));
-                params_.llm_params.sampling.n_prev         = std::max(params_.llm_params.sampling.n_prev, params_.llm_params.sampling.penalty_last_n);
+                if (params_.llm_params.sampling.penalty_last_n < -1) {
+                    invalid("--repeat-last-n");
+                }
+                params_.llm_params.sampling.n_prev = std::max(params_.llm_params.sampling.n_prev, params_.llm_params.sampling.penalty_last_n);
                 continue;
             }
 
@@ -1228,6 +1225,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                                      = argv[i++];
                 params_.llm_params.sampling.dry_penalty_last_n = std::stoi(std::string(arg));
+                if (params_.llm_params.sampling.dry_penalty_last_n < -1) {
+                    invalid("--dry-penalty-last-n");
+                }
                 continue;
             }
 

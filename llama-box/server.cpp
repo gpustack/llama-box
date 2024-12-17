@@ -144,15 +144,6 @@ struct server_task {
     server_task(server_task_type type)
         : type(type) {
     }
-
-    // utility function
-    static std::unordered_set<int> get_list_id(const std::vector<server_task> &tasks) {
-        std::unordered_set<int> ids(tasks.size());
-        for (const auto &task : tasks) {
-            ids.insert(task.id);
-        }
-        return ids;
-    }
 };
 
 struct server_task_result {
@@ -1443,12 +1434,26 @@ struct server_context {
         slot.params.llm_params.mirostat           = json_value(data, "mirostat", defaults.llm_params.mirostat);
         slot.params.llm_params.mirostat_tau       = json_value(data, "mirostat_tau", defaults.llm_params.mirostat_tau);
         slot.params.llm_params.mirostat_eta       = json_value(data, "mirostat_eta", defaults.llm_params.mirostat_eta);
-        slot.params.llm_params.penalize_nl        = json_value(data, "penalize_nl", defaults.llm_params.penalize_nl);
         slot.params.llm_params.seed               = json_value(data, "seed", defaults.llm_params.seed);
         slot.params.llm_params.n_probs            = json_value(data, "n_probs", defaults.llm_params.n_probs);
         slot.params.llm_params.min_keep           = json_value(data, "min_keep", defaults.llm_params.min_keep);
 
         // process "llm_params" parameters
+        if (slot.params.llm_params.penalty_last_n < -1) {
+            send_error(task, "Illegal param: repeat_last_n must be >= -1", ERROR_TYPE_INVALID_REQUEST);
+            return false;
+        }
+        if (slot.params.llm_params.dry_penalty_last_n < -1) {
+            send_error(task, "Illegal param: dry_penalty_last_n must be >= -1", ERROR_TYPE_INVALID_REQUEST);
+            return false;
+        }
+        if (slot.params.llm_params.penalty_last_n == -1) {
+            // note: should be the slot's context and not the full context, but it's ok
+            slot.params.llm_params.penalty_last_n = llama_n_ctx(llm_ctx);
+        }
+        if (slot.params.llm_params.dry_penalty_last_n == -1) {
+            slot.params.llm_params.dry_penalty_last_n = llama_n_ctx(llm_ctx);
+        }
         if (slot.params.llm_params.dry_base < 1.0f) {
             slot.params.llm_params.dry_base = defaults.llm_params.dry_base;
         }
@@ -1490,7 +1495,7 @@ struct server_context {
         {
             slot.params.llm_params.logit_bias.clear();
 
-            if (json_value(data, "ignore_eos", false)) {
+            if (json_value(data, "ignore_eos", false) && llama_token_eos(llm_model) != LLAMA_TOKEN_NULL) {
                 slot.params.llm_params.logit_bias.push_back({llama_token_eos(llm_model), -INFINITY});
             }
 
@@ -1867,7 +1872,6 @@ struct server_context {
             {"mirostat", slot.params.llm_params.mirostat},
             {"mirostat_tau", slot.params.llm_params.mirostat_tau},
             {"mirostat_eta", slot.params.llm_params.mirostat_eta},
-            {"penalize_nl", slot.params.llm_params.penalize_nl},
             {"stop", slot.params.antiprompt},
             {"max_tokens", slot.params.n_predict}, // User configured n_predict
             {"n_keep", slot.params.n_keep},
