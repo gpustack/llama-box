@@ -1,5 +1,5 @@
 diff --git a/include/llama.h b/include/llama.h
-index c67988a3..61689e74 100644
+index efbb27d2..68d7f0d9 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -906,6 +906,7 @@ extern "C" {
@@ -11,7 +11,7 @@ index c67988a3..61689e74 100644
      LLAMA_API bool llama_add_bos_token(const struct llama_model * model);
      LLAMA_API bool llama_add_eos_token(const struct llama_model * model);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 8c9aaf5a..b1d66e2b 100644
+index e38e5985..0eccdf27 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1688,6 +1688,10 @@ llama_token llama_token_pad_impl(const struct llama_vocab & vocab) {
