@@ -493,24 +493,28 @@ The available endpoints for the LLaMA Box server mode are:
 
 - **GET** `/metrics`: Returns the Prometheus compatible metrics of the LLaMA Box.
     + This endpoint is only available if the `--metrics` flag is enabled.
-    + `llamacpp:prompt_tokens_total`: (Counter) Number of prompt tokens processed.
-    + `llamacpp:prompt_seconds_total`: (Counter) Prompt process time.
-    + `llamacpp:tokens_predicted_total`: (Counter) Number of generation tokens processed.
-    + `llamacpp:tokens_predicted_seconds_total`: (Counter) Predict process time.
-    + `llamacpp:tokens_drafted_total`: (Counter) Number of speculative decoding tokens processed.
-    + `llamacpp:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted.
-    + `llamacpp:n_decode_total`: (Counter) Total number of llama_decode() calls.
-    + `llamacpp:n_busy_slots_per_decode`: (Counter) Average number of busy slots per llama_decode() call.
-    + `llamacpp:prompt_tokens_seconds`: (Gauge) Average prompt throughput in tokens/s.
-    + `llamacpp:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
-    + `llamacpp:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
-    + `llamacpp:kv_cache_tokens`: (Gauge) KV-cache tokens.
-    + `llamacpp:requests_processing`: (Gauge) Number of request processing.
-    + `llamacpp:requests_deferred`: (Gauge) Number of request deferred.
+    + `llamabox:image_process_seconds_total`: (Counter) Image process time.
+    + `llamabox:image_generate_seconds_total`: (Counter) Image generate time.
+    + `llamabox:image_generate_steps_total`: (Counter) Number of image generate steps.
+    + `llamabox:prompt_tokens_total`: (Counter) Number of prompt tokens processed.
+    + `llamabox:prompt_seconds_total`: (Counter) Prompt process time.
+    + `llamabox:tokens_predicted_total`: (Counter) Number of generation tokens processed.
+    + `llamabox:tokens_predicted_seconds_total`: (Counter) Predict process time.
+    + `llamabox:tokens_drafted_total`: (Counter) Number of speculative decoding tokens processed.
+    + `llamabox:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted.
+    + `llamabox:n_decode_total`: (Counter) Total number of llama_decode() calls.
+    + `llamabox:n_busy_slots_per_decode`: (Counter) Average number of busy slots per llama_decode() call.
+    + `llamabox:image_steps_seconds`: (Gauge) Average image generation throughput in steps/s.
+    + `llamabox:prompt_tokens_seconds`: (Gauge) Average prompt throughput in tokens/s.
+    + `llamabox:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
+    + `llamabox:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
+    + `llamabox:kv_cache_tokens`: (Gauge) KV-cache tokens.
+    + `llamabox:requests_processing`: (Gauge) Number of request processing.
+    + `llamabox:requests_deferred`: (Gauge) Number of request deferred.
 
     ```
     RESPONSE : (text/plain)
-    # HELP llamacpp:prompt_tokens_total Number of prompt tokens processed.
+    # HELP llamabox:prompt_tokens_total Number of prompt tokens processed.
     ....
     ```
 

@@ -3812,9 +3812,9 @@ int main(int argc, char **argv) {
                     const std::string help = metric_def.at("help");
 
                     auto value = json_value(metric_def, "value", 0.);
-                    metrics << "# HELP llamacpp:" << name << " " << help << "\n"
-                            << "# TYPE llamacpp:" << name << " " << type << "\n"
-                            << "llamacpp:" << name << " " << value << "\n";
+                    metrics << "# HELP llamabox:" << name << " " << help << "\n"
+                            << "# TYPE llamabox:" << name << " " << type << "\n"
+                            << "llamabox:" << name << " " << value << "\n";
                 }
             }
         }
