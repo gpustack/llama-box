@@ -36,6 +36,7 @@ enum stop_type {
     STOP_TYPE_EOS,
     STOP_TYPE_WORD,
     STOP_TYPE_LIMIT,
+    STOP_TYPE_TOOL,
 };
 
 static inline std::string format_stop_type(const enum stop_type type) {
@@ -45,6 +46,8 @@ static inline std::string format_stop_type(const enum stop_type type) {
             return "stop";
         case STOP_TYPE_LIMIT:
             return "length";
+        case STOP_TYPE_TOOL:
+            return "tool_calls";
         default:
             return "";
     }
@@ -216,6 +219,7 @@ struct server_slot {
 
     bool oaicompat_completion             = false;
     bool oaicompat_completion_chat        = false;
+    bool oaicompat_completion_chat_tool   = false;
     bool oaicompat_completion_chat_vision = false;
 
     // generating
@@ -268,6 +272,9 @@ struct server_slot {
 
     // mrope position
     llama_pos st_pos_id = 0;
+
+    // tool calls
+    std::vector<json> generated_tool_calls;
 
     void reset() {
         SLT_DBG(*this, "%s", "\n");
@@ -339,6 +346,8 @@ struct server_slot {
         lookup_ngram_min = 0;
 
         st_pos_id = 0;
+
+        generated_tool_calls.clear();
     }
 
     bool is_non_causal() const {
@@ -1403,6 +1412,7 @@ struct server_context {
 
         slot.oaicompat_completion             = json_value(data, "__oaicompat_completion", false);
         slot.oaicompat_completion_chat        = json_value(data, "__oaicompat_completion_chat", false);
+        slot.oaicompat_completion_chat_tool   = json_value(data, "__oaicompat_completion_chat_tool", false);
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && llm_ctx_clip != nullptr;
 
         slot.params.stream    = json_value(data, "stream", false);
@@ -1697,6 +1707,41 @@ struct server_context {
                 send_text = stop_pos == std::string::npos;
             }
 
+            std::string tool_call_start = "<tool_call>";
+            std::string tool_call_end   = "</tool_call>";
+            bool has_tool_call_id       = false;
+            if (send_text && slot.oaicompat_completion_chat_tool) {
+                bool has_tool_call = false;
+                size_t start_pos;
+                if (str_test.length() <= tool_call_start.length()) {
+                    send_text = false;
+                } else if (starts_with(str_test, tool_call_start)) {
+                    send_text     = false;
+                    has_tool_call = true;
+                } else {
+                    send_text = true;
+                }
+                if (has_tool_call && ends_with(str_test, tool_call_end)) {
+                    std::string function_str = str_test.substr(tool_call_start.length(), str_test.length() - tool_call_start.length() - tool_call_end.length());
+                    try {
+                        json function  = json::parse(function_str);
+                        json tool_call = json{
+                            {"type", "function"},
+                            {"function", function},
+                        };
+                        if (!has_tool_call_id) {
+                            tool_call["id"] = gen_callid();
+                        }
+                        slot.generated_tool_calls.push_back(tool_call);
+                        result.text_to_send = slot.generated_text.substr(pos, stop_pos);
+                        slot.n_sent_text += result.text_to_send.size();
+                    } catch (const std::exception &e) {
+                        SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
+                        send_text = true;
+                    }
+                }
+            }
+
             // check if there is any token to predict
             if (send_text) {
                 // no send the stop word in the response
@@ -1706,7 +1751,7 @@ struct server_context {
             }
 
             slot.add_token(result);
-            if (slot.params.stream) {
+            if (send_text && slot.params.stream) {
                 send_partial_completion(slot, result);
             }
         }
@@ -1784,7 +1829,7 @@ struct server_context {
         // check the EOT
         for (auto i = int(result.toks.size()) - 1; i >= 0; --i) {
             if (llama_token_is_eog(llm_model, result.toks[i])) {
-                slot.stop           = STOP_TYPE_EOS;
+                slot.stop           = slot.generated_tool_calls.empty() ? STOP_TYPE_EOS : STOP_TYPE_TOOL;
                 slot.has_next_token = false;
 
                 SLT_DBG(slot, "%s", "stopped by EOS\n");
@@ -1943,7 +1988,6 @@ struct server_context {
         res.error = false;
         res.stop  = true;
         res.data  = json{
-             {"content", !slot.params.stream ? slot.generated_text : ""},
              {"id_slot", slot.id},
              {"index", slot.index},
              {"stop", true},
@@ -1958,6 +2002,11 @@ struct server_context {
              {"stopping_word", slot.stopping_word},
              {"timings", slot.get_formated_timings()},
         };
+        if (slot.generated_tool_calls.empty()) {
+            res.data["content"] = !slot.params.stream ? slot.generated_text : "";
+        } else {
+            res.data["tool_calls"] = slot.generated_tool_calls;
+        }
 
         if (slot.params.llm_params.n_probs > 0) {
             std::vector<completion_token_output> probs;
@@ -3437,7 +3486,8 @@ struct server_context {
     }
 
     bool need_mrope() const {
-        return llm_ctx_clip != nullptr && clip_is_qwen2vl(llm_ctx_clip);
+        // NB(thxCode): llama_needs_mrope is a patch.
+        return llm_model != nullptr && llama_needs_mrope(llm_model);
     }
 };
 

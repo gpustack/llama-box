@@ -16,7 +16,7 @@
 
 #include "stablediffusion.hpp"
 
-#define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo-0613"
+#define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo"
 
 #define SLT_INF(slot, fmt, ...)                                                                                                                 \
     if (common_log_verbosity_thold > 2) {                                                                                                       \
@@ -310,12 +310,10 @@ static llama_tokens format_infill(const llama_context *ctx, const json &input_pr
 }
 
 // Format given chat. If tmpl is empty, we take the template from model metadata
-inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages) {
+inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages, const std::vector<json> &functions) {
     std::vector<common_chat_msg> chat;
-
     for (const auto &curr_msg : messages) {
         std::string role = json_value(curr_msg, "role", std::string(""));
-
         std::string content;
         if (curr_msg.contains("content")) {
             if (curr_msg["content"].is_string()) {
@@ -342,17 +340,28 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
                     content += "\n<image>";
                 }
             } else {
-                throw std::runtime_error("Invalid 'content' type (ref: "
-                                         "https://github.com/ggerganov/llama.cpp/issues/8367)");
+                throw std::runtime_error("Invalid 'content' type (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
             }
         } else {
             throw std::runtime_error("Missing 'content' (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
         }
-
         chat.push_back({role, content});
     }
 
-    return common_chat_apply_template(model, tmpl, chat, true);
+    // NB(thxCode): common_chat_func is a patch.
+    std::vector<common_chat_func> func;
+    for (const auto &curr_func : functions) {
+        std::string name = json_value(curr_func, "name", std::string(""));
+        if (name.empty()) {
+            throw std::runtime_error("Missing 'name' in 'function'");
+        }
+        std::string description = json_value(curr_func, "description", std::string(""));
+        std::string parameters  = curr_func.dump(-1, ' ', false, json::error_handler_t::replace);
+        func.push_back({name, description, parameters});
+    }
+
+    // NB(thxCode): common_chat_apply_template is a patch.
+    return common_chat_apply_template(model, tmpl, chat, func, true);
 }
 
 //
@@ -469,15 +478,20 @@ static std::string gen_chatcmplid() {
 }
 
 static std::string gen_cmplid() {
-    std::stringstream cmplid;
-    cmplid << "cmpl-" << random_string();
+    return "cmpl-" + random_string();
+}
 
-    return cmplid.str();
+static std::string gen_callid() {
+    return "call-" + random_string();
 }
 
 //
 // other common utils
 //
+
+static bool starts_with(const std::string &str, const std::string &prefix) {
+    return str.size() >= prefix.size() && 0 == str.compare(0, prefix.size(), prefix);
+}
 
 static bool ends_with(const std::string &str, const std::string &suffix) {
     return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
@@ -649,6 +663,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     llama_params["__oaicompat"]                        = true;
     llama_params["__oaicompat_completion"]             = true;
     llama_params["__oaicompat_completion_chat"]        = chat;
+    llama_params["__oaicompat_completion_chat_tool"]   = false;
     llama_params["__oaicompat_completion_chat_vision"] = false;
 
     // Handle default field
@@ -657,8 +672,50 @@ static json oaicompat_completions_request(const struct common_params &params, co
     llama_params["temperature"]       = json_value(body, "temperature", 1.0f);
     llama_params["top_p"]             = json_value(body, "top_p", 1.0f);
 
-    // Handle "max_tokens" field
-    llama_params["n_predict"] = json_value(body, "max_tokens", -1);
+    // Handle "tools" and "tool_choice" field
+    llama_params["function_call"] = "none";
+    if (body.contains("tools") && !body.contains("functions")) {
+        const json &tools = body.at("tools");
+        if (!tools.is_array()) {
+            throw std::runtime_error("Illegal param: \"tools\" must be an array");
+        }
+        json functions = json::array();
+        for (const auto &tool : tools) {
+            if (!tool.contains("function")) {
+                continue;
+            }
+            functions.push_back(tool.at("function"));
+        }
+        if (!functions.empty()) {
+            llama_params["functions"]     = functions;
+            llama_params["function_call"] = "auto";
+        }
+    } else if (body.contains("functions")) {
+        const json &functions = body.at("functions");
+        if (!functions.is_array()) {
+            throw std::runtime_error("Illegal param: \"functions\" must be an array");
+        }
+        if (!functions.empty()) {
+            llama_params["functions"]     = functions;
+            llama_params["function_call"] = "auto";
+        }
+    }
+    if (body.contains("tool_choice") && !body.contains("function_call")) {
+        const json &tool_choice = body.at("tool_choice");
+        if (tool_choice.is_object() && tool_choice.contains("function")) {
+            llama_params["function_call"] = tool_choice.at("function");
+        } else if (tool_choice.is_string()) {
+            llama_params["function_call"] = tool_choice;
+        } else {
+            throw std::runtime_error(R"(Illegal param: "tool_choice" must be a string or an object)");
+        }
+    } else if (body.contains("function_call")) {
+        const json &function_call = body.at("function_call");
+        if (!function_call.is_string() && !function_call.is_object()) {
+            throw std::runtime_error(R"(Illegal param: "function_call" must be a string or an object)");
+        }
+        llama_params["function_call"] = function_call;
+    }
 
     // Apply chat template to the list of messages
     if (chat) {
@@ -675,7 +732,28 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 }
             }
         }
-        llama_params["prompt"] = format_chat(model, chat_template, messages);
+
+        json functions = json::array();
+        if (llama_params.at("function_call").is_object()) {
+            const std::string func_name = llama_params.at("function_call").at("name").get<std::string>();
+            for (const auto &func : llama_params.at("functions")) {
+                if (func.at("name").get<std::string>() == func_name) {
+                    functions.push_back(func);
+                    break;
+                }
+            }
+        } else if (llama_params.at("function_call").get<std::string>() != "none") {
+            functions = llama_params.at("functions");
+        }
+        if (!functions.empty()) {
+            llama_params["__oaicompat_completion_chat_tool"] = true;
+        }
+
+        const std::string prompt = format_chat(model, chat_template, messages, functions);
+        if (common_log_verbosity_thold > 2) {
+            SRV_INF("rid %s | formatted prompt\n%s\n", rid.c_str(), prompt.c_str());
+        }
+        llama_params["prompt"] = prompt;
         if (chat_vision) {
             llama_params["__oaicompat_completion_chat_vision"] = true;
             // Extract the image messages,
@@ -712,6 +790,9 @@ static json oaicompat_completions_request(const struct common_params &params, co
     } else {
         throw std::runtime_error("Illegal param: missing required field: prompt");
     }
+
+    // Handle "max_tokens" field
+    llama_params["n_predict"] = json_value(body, "max_tokens", -1);
 
     // Handle "stop" field
     if (body.contains("stop") && body.at("stop").is_string()) {
@@ -754,14 +835,6 @@ static json oaicompat_completions_request(const struct common_params &params, co
         }
     }
 
-    // Params supported by OAI but unsupported by llama.cpp
-    static const std::vector<std::string> unsupported_params{"tools", "tool_choice"};
-    for (auto &param : unsupported_params) {
-        if (body.contains(param)) {
-            throw std::runtime_error("Unsupported param: " + param);
-        }
-    }
-
     // Copy remaining properties to llama_params
     // This allows user to use llama.cpp-specific params like "mirostat", ... via OAI
     // endpoint. See "launch_slot_with_task()" for a complete list of params supported by llama.cpp
@@ -769,7 +842,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
         // Exception: if "n_predict" is present, we overwrite the value specified earlier by
         // "max_tokens"
         const std::string &key = item.key();
-        if (key == "messages" || (llama_params.contains(key) && key != "n_predict")) {
+        if (key == "messages" || key == "tools" || key == "tool_choice" || (llama_params.contains(key) && key != "n_predict")) {
             continue;
         }
         llama_params[item.key()] = item.value();
@@ -820,59 +893,36 @@ static json oaicompat_completions_response(const json &request, const json &resu
     bool finish = false;
     for (const json &ret : result) {
         std::string finish_reason = json_value(ret, "stop_type", std::string(""));
-        finish                    = !finish_reason.empty();
         std::string content       = json_value(ret, "content", std::string(""));
+        json tool_calls           = json_value(ret, "tool_calls", json::array());
         int index                 = json_value(ret, "index", 0);
+        finish                    = !finish_reason.empty();
 
-        json choice;
+        json choice = json{{"index", index}};
+        if (!finish) {
+            choice["finish_reason"] = nullptr;
+        } else {
+            choice["finish_reason"] = finish_reason;
+        }
         if (chat) {
+            json delta_message = json{{"content", content}};
+            if (!tool_calls.empty()) {
+                if (content.empty()) {
+                    delta_message["content"] = nullptr;
+                }
+                delta_message["tool_calls"] = tool_calls;
+            }
             if (streaming) {
-                res["object"] = "chat.completion.chunk";
-                if (!finish) {
-                    choice = json{
-                        {"finish_reason", nullptr},
-                        {"index", index},
-                        {"delta", json{{"content", content}}},
-                    };
-                } else {
-                    // finished
-                    choice = json{
-                        {"finish_reason", finish_reason},
-                        {"index", index},
-                        {"delta", json::object()},
-                    };
-                }
+                res["object"]   = "chat.completion.chunk";
+                choice["delta"] = delta_message;
             } else {
-                res["object"] = "chat.completion";
-                if (!finish) {
-                    choice = json{
-                        {"finish_reason", nullptr},
-                        {"index", index},
-                        {"message", json{{"content", content}, {"role", "assistant"}}},
-                    };
-                } else {
-                    choice = json{
-                        {"finish_reason", finish_reason},
-                        {"index", index},
-                        {"message", json{{"content", content}, {"role", "assistant"}}},
-                    };
-                }
+                res["object"]         = "chat.completion";
+                delta_message["role"] = "assistant";
+                choice["message"]     = delta_message;
             }
         } else {
-            res["object"] = "text_completion";
-            if (!finish) {
-                choice = json{
-                    {"finish_reason", nullptr},
-                    {"index", index},
-                    {"text", content},
-                };
-            } else {
-                choice = json{
-                    {"finish_reason", finish_reason},
-                    {"index", index},
-                    {"text", content},
-                };
-            }
+            res["object"]  = "text_completion";
+            choice["text"] = content;
         }
 
         bool logprobs = ret.contains("completion_probabilities");

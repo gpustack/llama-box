@@ -21,9 +21,12 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
-      - LLaVA 1.5/1.6 and variants
-      - Mini CPM V2.5/V2.6
-      - Qwen2-VL
+        - LLaVA Series
+        - MiniCPM VL Series
+        - Qwen2 VL Series
+    + Support [OpenAI Function calling API](https://platform.openai.com/docs/guides/function-calling).
+        - Qwen2 Series
+        - Hermes Series
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
   see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
@@ -99,6 +102,17 @@ LLaMA Box supports the following platforms.
 
     $ # or use the chat.sh tool
     $ ./llama-box/tools/chat.sh @/tmp/data.json
+    ```
+
+- Chat with function calling via [Qwen/Qwen2.5-0.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) model.
+  Use GGUF files
+  from [Qwen/Qwen2.5-0.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/tree/main?show_file_info=qwen2.5-0.5b-instruct-fp16.gguf).
+
+    ```shell
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/Qwen/Qwen2-0.5B-Instruct-GGUF/qwen2-0_5b-instruct-fp16.gguf
+
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen2.5", "messages": [{"role":"user","content":"What is the weather like in Paris today?"}], "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}}}]}'
     ```
 
 - Image generation via [Stable Diffusion 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
