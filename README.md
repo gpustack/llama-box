@@ -21,6 +21,9 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
+      - LLaVA 1.5/1.6 and variants
+      - Mini CPM V2.5/V2.6
+      - Qwen2-VL
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
   see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
@@ -81,16 +84,16 @@ LLaMA Box supports the following platforms.
     $ ./llama-box/tools/chat.sh "Introduce Beijing in 50 words."
     ```
 
-- Chat completion with vision explanation via [LLaVA-Phi-3-Mini](https://huggingface.co/xtuner/llava-phi-3-mini-hf)
+- Chat completion with vision explanation via [Qwen2-VL-2B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct)
   model. Use GGUF files
-  from [xtuner/llava-phi-3-mini-gguf](https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main?show_file_info=llava-phi-3-mini-f16.gguf).
+  from [bartowski/Qwen2-VL-2B-Instruct-GGUF](https://huggingface.co/bartowski/Qwen2-VL-2B-Instruct-GGUF/tree/main?show_file_info=Qwen2-VL-2B-Instruct-Q4_0.gguf).
 
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-f16.gguf --mmproj ~/.cache/lm-studio/models/xtuner/llava-phi-3-mini-gguf/llava-phi-3-mini-mmproj-f16.gguf
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/bartowski/Qwen2-VL-2B-Instruct-GGUF/Qwen2-VL-2B-Instruct-Q4_0.gguf --mmproj ~/.cache/lm-studio/models/bartowski/Qwen2-VL-2B-Instruct-GGUF/mmproj-Qwen2-VL-2B-Instruct-f32.gguf
 
     $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://raw.githubusercontent.com/haotian-liu/LLaVA/main/llava/serve/examples/extreme_ironing.jpg --output - | base64)")"; \
-      echo "{\"model\": \"llava-phi-3\", \"temperature\": 0.1, \"stop\": [\"<|end|>\"], \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
+      echo "{\"model\": \"qwen2-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
 
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
 

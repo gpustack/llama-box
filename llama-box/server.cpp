@@ -275,6 +275,9 @@ struct server_slot {
     // tps rate limit
     token_bucket *token_bkt = nullptr;
 
+    // mrope position
+    llama_pos st_pos_id = 0;
+
     void reset() {
         SLT_DBG(*this, "%s", "\n");
 
@@ -343,6 +346,8 @@ struct server_slot {
         }
 
         lookup_ngram_min = 0;
+
+        st_pos_id = 0;
     }
 
     bool is_non_causal() const {
@@ -936,7 +941,8 @@ struct server_context {
                 SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
                 llm_params.n_ctx = 2048;
             }
-            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ 1);
+            // NB(thxCode): clip_model_load is a patch.
+            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ 1, llm_params.n_gpu_layers);
             if (llm_ctx_clip == nullptr) {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.c_str());
                 return false;
@@ -1118,8 +1124,11 @@ struct server_context {
         // tokens note that n_batch can be > n_ctx (e.g. for non-causal
         // attention models such as BERT where the KV cache is not used)
         if (llm_ctx != nullptr) {
-            const auto n_batch = int32_t(llama_n_batch(llm_ctx));
-            batch              = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
+            auto n_batch = int32_t(llama_n_batch(llm_ctx));
+            if (need_mrope()) {
+                n_batch *= 4;
+            }
+            batch = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
             if (llm_ctx_draft != nullptr) {
                 batch_draft = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
             }
@@ -2627,18 +2636,29 @@ struct server_context {
             }
 
             slot.i_batch = batch.n_tokens;
-
-            int32_t slot_npast = slot.n_past;
-            slot_npast += slot.n_drafted_accepted;
-
-            common_batch_add(batch, slot.sampled[slot.sampled.size() - 1], slot_npast, {slot.id}, true);
-            if (!slot.sampled_draft.empty()) {
-                for (const llama_token &tok : slot.sampled_draft) {
-                    common_batch_add(batch, tok, slot_npast + 1, {slot.id}, true);
-                    slot_npast += 1;
+            if (need_mrope()) {
+                int32_t st_pos_id = slot.st_pos_id;
+                st_pos_id += slot.n_drafted_accepted;
+                common_batch_add_with_mrope(batch, slot.sampled[slot.sampled.size() - 1], st_pos_id, 1, {slot.id}, true);
+                if (!slot.sampled_draft.empty()) {
+                    for (const llama_token &tok : slot.sampled_draft) {
+                        common_batch_add_with_mrope(batch, tok, st_pos_id + 1, 1, {slot.id}, true);
+                        st_pos_id += 1;
+                    }
+                }
+                slot.st_pos_id++;
+            } else {
+                int32_t slot_npast = slot.n_past;
+                slot_npast += slot.n_drafted_accepted;
+                common_batch_add(batch, slot.sampled[slot.sampled.size() - 1], slot_npast, {slot.id}, true);
+                if (!slot.sampled_draft.empty()) {
+                    for (const llama_token &tok : slot.sampled_draft) {
+                        common_batch_add(batch, tok, slot_npast + 1, {slot.id}, true);
+                        slot_npast += 1;
+                    }
                 }
             }
-            slot.n_past += 1;
+            slot.n_past++;
 
             if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
                 for (const llama_token &tok : slot.sampled) {
@@ -2651,7 +2671,10 @@ struct server_context {
         }
 
         // process in chunks of params.n_batch
-        auto n_batch  = int32_t(llama_n_batch(llm_ctx));
+        auto n_batch = int32_t(llama_n_batch(llm_ctx));
+        if (need_mrope()) {
+            n_batch *= 4;
+        }
         auto n_ubatch = int32_t(llama_n_ubatch(llm_ctx));
 
         // track if this is an embedding or non-embedding batch
@@ -2681,6 +2704,7 @@ struct server_context {
                         slot.t_start_generation     = 0;
                         slot.n_past                 = 0;
                         slot.n_past_mmd             = 0;
+                        slot.st_pos_id              = 0;
                         slot.n_prompt_tokens        = int32_t(prompt_tokens.size());
                         slot.state                  = SLOT_STATE_PROCESSING_PROMPT;
 
@@ -2750,7 +2774,8 @@ struct server_context {
                             if (cache_prompt && !slot.oaicompat_completion_chat_vision && !slot.cache_tokens.empty()) {
                                 // reuse any previously computed tokens that are
                                 // common with the new prompt
-                                slot.n_past = int32_t(common_lcp(slot.cache_tokens, prompt_tokens));
+                                slot.n_past    = int32_t(common_lcp(slot.cache_tokens, prompt_tokens));
+                                slot.st_pos_id = slot.n_past;
 
                                 // reuse chunks from the cached prompt by shifting their KV cache in the new position
                                 if (llm_params.n_cache_reuse > 0 && slot.n_past > 0) {
@@ -2805,6 +2830,7 @@ struct server_context {
                             SLT_DBG(slot, "need to evaluate at least 1 token to generate logits, n_past = %d, n_prompt_tokens = %d\n", slot.n_past, slot.n_prompt_tokens);
 
                             slot.n_past--;
+                            slot.st_pos_id--;
                         }
 
                         slot.n_prompt_tokens_processed = 0;
@@ -2834,6 +2860,7 @@ struct server_context {
                         // there is no common part left
                         slot.n_past     = 0;
                         slot.n_past_mmd = 0;
+                        slot.st_pos_id  = 0;
                     }
                     if (llm_ctx_draft != nullptr) {
                         if (!llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, slot_npast, -1)) {
@@ -2848,12 +2875,21 @@ struct server_context {
                     }
 
                     // add prompt tokens for processing in the current batch
+                    const int32_t n_eval = std::min(slot.n_prompt_tokens - slot.n_past, n_batch - batch.n_tokens);
                     while (slot.n_past < slot.n_prompt_tokens && batch.n_tokens < n_batch) {
                         const int32_t idx = slot.n_past - slot.n_past_mmd;
 
-                        common_batch_add(batch, prompt_tokens[idx], slot.n_past, {slot.id}, false);
-                        if (llm_ctx_draft != nullptr) {
-                            common_batch_add(batch_draft, prompt_tokens[idx], slot.n_past, {slot.id}, false);
+                        if (need_mrope()) {
+                            common_batch_add_with_mrope(batch, prompt_tokens[idx], slot.st_pos_id, n_eval, {slot.id}, false);
+                            if (llm_ctx_draft != nullptr) {
+                                common_batch_add_with_mrope(batch_draft, prompt_tokens[idx], slot.st_pos_id, n_eval, {slot.id}, false);
+                            }
+                            slot.st_pos_id++;
+                        } else {
+                            common_batch_add(batch, prompt_tokens[idx], slot.n_past, {slot.id}, false);
+                            if (llm_ctx_draft != nullptr) {
+                                common_batch_add(batch_draft, prompt_tokens[idx], slot.n_past, {slot.id}, false);
+                            }
                         }
 
                         if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
@@ -2920,7 +2956,7 @@ struct server_context {
                 n_tokens,
                 batch.token + i,
                 nullptr,
-                batch.pos + i,
+                batch.pos + (need_mrope() ? 4 * i : i),
                 batch.n_seq_id + i,
                 batch.seq_id + i,
                 batch.logits + i,
@@ -2959,7 +2995,7 @@ struct server_context {
                     n_draft_tokens,
                     batch_draft.token + i,
                     nullptr,
-                    batch_draft.pos + i,
+                    batch_draft.pos + (need_mrope() ? 4 * i : i),
                     batch_draft.n_seq_id + i,
                     batch_draft.seq_id + i,
                     batch_draft.logits + i,
@@ -3099,18 +3135,45 @@ struct server_context {
 
     bool preprocess_multi_modal_data_text(server_slot &slot, int32_t n_batch, const std::string text, const bool add_bos) const {
         llama_tokens tokens = common_tokenize(llm_ctx, text, add_bos, true);
-        SLT_INF(slot, "processing text tokens: %zu\n", tokens.size());
+        const auto n_tokens = int32_t(tokens.size());
+        SLT_INF(slot, "processing text tokens: %d\n", n_tokens);
         if (common_log_verbosity_thold > 2) {
             for (const llama_token &token : tokens) {
                 SLT_INF(slot, "processing text tokens | %6d -> '%s'\n", token, common_token_to_piece(llm_ctx, token).c_str());
             }
             SLT_INF(slot, "%s", "processing text tokens\n");
         }
-        for (size_t j = 0; j < tokens.size(); j += n_batch) {
-            int32_t n_eval                           = std::min(n_batch, int32_t(tokens.size() - j));
-            llama_text_token_batch_wrapper batch_txt = llama_text_token_batch_wrapper((tokens.data() + j), n_eval, slot.n_past, slot.id);
+
+        if (clip_is_qwen2vl(llm_ctx_clip)) {
+            for (int32_t j = 0; j < n_tokens; j += n_batch) {
+                int32_t n_eval = std::min(n_batch, int32_t(n_tokens - j));
+                std::vector<llama_pos> batch_txt_mrope_pos;
+                {
+                    batch_txt_mrope_pos.resize(n_eval * 4);
+                    std::fill(batch_txt_mrope_pos.begin(), batch_txt_mrope_pos.end(), 0);
+                    for (int i = 0; i < n_eval * 3; i++) {
+                        batch_txt_mrope_pos[i] = slot.st_pos_id + (i % n_eval);
+                    }
+                }
+                qwen2vl_text_token_batch_wrapper batch_txt = qwen2vl_text_token_batch_wrapper((tokens.data() + j), n_eval, batch_txt_mrope_pos.data(), slot.id);
+                if (llama_decode(llm_ctx, batch_txt.batch)) {
+                    SLT_ERR(slot, "%s", "failed to decode text");
+                    return false;
+                }
+                slot.n_past += n_eval;
+                slot.st_pos_id += n_eval;
+                slot.n_prompt_tokens += n_eval;
+                slot.n_prompt_tokens_processed += n_eval;
+            }
+            slot.prompt_tokens.insert(slot.prompt_tokens.end(), tokens.begin(), tokens.end());
+            return true;
+        }
+
+        for (int32_t j = 0; j < n_tokens; j += n_batch) {
+            int32_t n_eval                           = std::min(n_batch, int32_t(n_tokens - j));
+            llava_text_token_batch_wrapper batch_txt = llava_text_token_batch_wrapper((tokens.data() + j), n_eval, slot.n_past, slot.id);
             if (llama_decode(llm_ctx, batch_txt.batch)) {
-                SLT_ERR(slot, "%s", "Failed to decode text");
+                SLT_ERR(slot, "%s", "failed to decode text");
                 return false;
             }
             slot.n_past += n_eval;
@@ -3122,10 +3185,71 @@ struct server_context {
     }
 
     bool preprocess_multi_modal_data_image(server_slot &slot, int32_t n_batch, const llava_image_embed *img_embd) const {
-        int n_embd                 = llama_n_embd(llama_get_model(llm_ctx));
-        auto llama_decode_img_embd = [&](const llava_image_embed *img_embd) {
-            for (int32_t j = 0; j < img_embd->n_image_pos; j += n_batch) {
-                const int32_t n_eval                      = std::min(n_batch, img_embd->n_image_pos - j);
+        const int32_t n_embd   = llama_n_embd(llama_get_model(llm_ctx));
+        const int32_t n_tokens = img_embd->n_image_pos;
+        SLT_INF(slot, "processing image tokens: %d\n", n_tokens);
+
+        if (clip_is_qwen2vl(llm_ctx_clip)) {
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|vision_start|>"), false)) {
+                return false;
+            }
+
+            auto qwen2vl_decode_img_embd = [&](const llava_image_embed *img_embd, const std::vector<llama_pos> &img_mrope_pos) {
+                for (int32_t j = 0; j < n_tokens; j += n_batch) {
+                    const int32_t n_eval = std::min(n_batch, n_tokens - j);
+                    std::vector<llama_pos> batch_img_mrope_pos;
+                    {
+                        batch_img_mrope_pos.resize(img_mrope_pos.size());
+                        std::fill(batch_img_mrope_pos.begin(), batch_img_mrope_pos.end(), 0);
+                        memcpy(batch_img_mrope_pos.data(), &img_mrope_pos[j], n_eval * sizeof(llama_pos));
+                        memcpy(&batch_img_mrope_pos[n_eval * 1], &img_mrope_pos[n_tokens * 1 + j], n_eval * sizeof(llama_pos));
+                        memcpy(&batch_img_mrope_pos[n_eval * 2], &img_mrope_pos[n_tokens * 2 + j], n_eval * sizeof(llama_pos));
+                        memcpy(&batch_img_mrope_pos[n_eval * 3], &img_mrope_pos[n_tokens * 3 + j], n_eval * sizeof(llama_pos));
+                    }
+                    qwen2vl_image_embed_batch_wrapper batch_img = qwen2vl_image_embed_batch_wrapper((img_embd->embed + j * n_embd), n_eval, batch_img_mrope_pos.data(), slot.id);
+                    if (llama_decode(llm_ctx, batch_img.batch)) {
+                        return false;
+                    }
+                    slot.n_past += n_eval;
+                    slot.n_past_mmd += n_eval;
+                    slot.n_prompt_tokens += n_eval;
+                    slot.n_prompt_tokens_processed += n_eval;
+                }
+                return true;
+            };
+
+            std::vector<llama_pos> img_mrope_pos;
+            {
+                struct clip_image_size *img_size = clip_get_load_image_size(llm_ctx_clip);
+                const int32_t ps                 = clip_patch_size(llm_ctx_clip) * 2;
+                const int ph                     = img_size->height / ps + (img_size->height % ps > 0);
+                const int pw                     = img_size->width / ps + (img_size->width % ps > 0);
+                img_mrope_pos.resize(n_tokens * 4);
+                for (int32_t y = 0; y < ph; y++) {
+                    for (int32_t x = 0; x < pw; x++) {
+                        int i                           = y * pw + x;
+                        img_mrope_pos[i]                = slot.st_pos_id;
+                        img_mrope_pos[i + n_tokens * 1] = slot.st_pos_id + y;
+                        img_mrope_pos[i + n_tokens * 2] = slot.st_pos_id + x;
+                        img_mrope_pos[i + n_tokens * 3] = 0;
+                    }
+                }
+                slot.st_pos_id += std::max(ph, pw);
+            }
+            if (!qwen2vl_decode_img_embd(img_embd, img_mrope_pos)) {
+                SLT_ERR(slot, "%s", "failed to decode image");
+                return false;
+            }
+
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|vision_end|>"), false)) {
+                return false;
+            }
+            return true;
+        }
+
+        auto llava_decode_img_embd = [&](const llava_image_embed *img_embd) {
+            for (int32_t j = 0; j < n_tokens; j += n_batch) {
+                const int32_t n_eval                      = std::min(n_batch, n_tokens - j);
                 llava_image_embed_batch_wrapper batch_img = llava_image_embed_batch_wrapper((img_embd->embed + j * n_embd), n_eval, slot.n_past, slot.id);
                 if (llama_decode(llm_ctx, batch_img.batch)) {
                     return false;
@@ -3138,65 +3262,64 @@ struct server_context {
             return true;
         };
 
-        SLT_INF(slot, "processing image tokens: %d\n", img_embd->n_image_pos);
-        if (clip_is_minicpmv(llm_ctx_clip) == 0) {
-            if (!llama_decode_img_embd(img_embd)) {
-                SLT_ERR(slot, "%s", "Failed to decode image");
+        if (clip_is_minicpmv(llm_ctx_clip) != 0) {
+            int idx                         = 0;
+            auto slice_minicpmv_image_embed = [&](const llava_image_embed *img_embd) {
+                auto *embed = (float *)malloc(clip_embd_nbytes(llm_ctx_clip));
+                std::memcpy(embed, img_embd->embed + (idx++) * clip_n_patches(llm_ctx_clip) * clip_n_mmproj_embd(llm_ctx_clip), clip_embd_nbytes(llm_ctx_clip));
+
+                auto *slice_embed        = (llava_image_embed *)malloc(sizeof(llava_image_embed));
+                slice_embed->embed       = embed;
+                slice_embed->n_image_pos = clip_n_patches(llm_ctx_clip);
+                return slice_embed;
+            };
+
+            size_t n_img_embd = n_tokens / clip_n_patches(llm_ctx_clip);
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
                 return false;
+            }
+            llava_image_embed *img_embd_sliced = slice_minicpmv_image_embed(img_embd);
+            bool decoded                       = llava_decode_img_embd(img_embd_sliced);
+            llava_image_embed_free(img_embd_sliced);
+            if (!decoded) {
+                SLT_ERR(slot, "%s", "failed to decode sliced image");
+                return false;
+            }
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
+                return false;
+            }
+            if (n_img_embd > 1) {
+                size_t n_img_embd_col = clip_uhd_num_image_embeds_col(llm_ctx_clip);
+                if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<slice>"), false)) {
+                    return false;
+                }
+                for (size_t i = 0; i < (n_img_embd - 1) / n_img_embd_col; ++i) {
+                    for (size_t j = 0; j < n_img_embd_col; ++j) {
+                        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
+                            return false;
+                        }
+                        img_embd_sliced = slice_minicpmv_image_embed(img_embd);
+                        decoded         = llava_decode_img_embd(img_embd_sliced);
+                        llava_image_embed_free(img_embd_sliced);
+                        if (!decoded) {
+                            SLT_ERR(slot, "%s", "failed to decode sliced image");
+                            return false;
+                        }
+                        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
+                            return false;
+                        }
+                    }
+                }
+                if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</slice>"), false)) {
+                    return false;
+                }
             }
             return true;
         }
 
-        int idx                      = 0;
-        auto slice_llava_image_embed = [&](const llava_image_embed *img_embd) {
-            auto *embed = (float *)malloc(clip_embd_nbytes(llm_ctx_clip));
-            std::memcpy(embed, img_embd->embed + (idx++) * clip_n_patches(llm_ctx_clip) * clip_n_mmproj_embd(llm_ctx_clip), clip_embd_nbytes(llm_ctx_clip));
-
-            auto *slice_embed        = (llava_image_embed *)malloc(sizeof(llava_image_embed));
-            slice_embed->embed       = embed;
-            slice_embed->n_image_pos = clip_n_patches(llm_ctx_clip);
-            return slice_embed;
-        };
-
-        size_t n_img_embd = img_embd->n_image_pos / clip_n_patches(llm_ctx_clip);
-        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
+        if (!llava_decode_img_embd(img_embd)) {
+            SLT_ERR(slot, "%s", "failed to decode image");
             return false;
-        }
-        llava_image_embed *img_embd_sliced = slice_llava_image_embed(img_embd);
-        bool img_embd_sliced_decoded       = llama_decode_img_embd(img_embd_sliced);
-        llava_image_embed_free(img_embd_sliced);
-        if (!img_embd_sliced_decoded) {
-            SLT_ERR(slot, "%s", "Failed to decode sliced image");
-            return false;
-        }
-        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
-            return false;
-        }
-        if (n_img_embd > 1) {
-            size_t n_img_embd_col = clip_uhd_num_image_embeds_col(llm_ctx_clip);
-            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<slice>"), false)) {
-                return false;
-            }
-            for (size_t i = 0; i < (n_img_embd - 1) / n_img_embd_col; ++i) {
-                for (size_t j = 0; j < n_img_embd_col; ++j) {
-                    if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
-                        return false;
-                    }
-                    img_embd_sliced         = slice_llava_image_embed(img_embd);
-                    img_embd_sliced_decoded = llama_decode_img_embd(img_embd_sliced);
-                    llava_image_embed_free(img_embd_sliced);
-                    if (!img_embd_sliced_decoded) {
-                        SLT_ERR(slot, "%s", "Failed to decode sliced image");
-                        return false;
-                    }
-                    if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
-                        return false;
-                    }
-                }
-            }
-            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</slice>"), false)) {
-                return false;
-            }
         }
         return true;
     }
@@ -3232,11 +3355,11 @@ struct server_context {
                 SLT_ERR(slot, "%s", "failed to embed image\n");
                 return false;
             }
-            if (!preprocess_multi_modal_data_image(slot, n_batch, img_embd)) {
-                llava_image_embed_free(img_embd);
+            bool processed = preprocess_multi_modal_data_image(slot, n_batch, img_embd);
+            llava_image_embed_free(img_embd);
+            if (!processed) {
                 return false;
             }
-            llava_image_embed_free(img_embd);
 
             prompt_string = prompt_string.substr(image_pos + image_sign.length());
             image_pos     = prompt_string.find(image_sign);
@@ -3292,7 +3415,7 @@ struct server_context {
     }
 
     bool support_completion_only() const {
-        // llama_supports_embedding_only is a patch.
+        // NB(thxCode): llama_supports_embedding_only is a patch.
         return llm_ctx != nullptr && !llama_supports_embedding_only(llm_ctx);
     }
 
@@ -3301,11 +3424,16 @@ struct server_context {
     }
 
     bool support_embedding_only() const {
+        // NB(thxCode): llama_supports_embedding_only is a patch.
         return llm_ctx != nullptr && llama_supports_embedding_only(llm_ctx);
     }
 
     bool support_image() const {
         return sd_ctx != nullptr;
+    }
+
+    bool need_mrope() const {
+        return llm_ctx_clip != nullptr && clip_is_qwen2vl(llm_ctx_clip);
     }
 };
 

@@ -1344,8 +1344,11 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
             throw std::runtime_error("Illegal param: documents must be an array of strings or objects with a 'text' field");
         }
     }
-    prompt.push_back(query);                                                                    // Add the query again for reranking
-    prompt.push_back(common_token_to_piece(ctx, llama_token_unk(llama_get_model(ctx)), false)); // Add an empty string for reranking
+    // Add the query again for reranking
+    prompt.push_back(query);
+    // Add an empty string for reranking
+    // NB(thxCode): llama_token_unk is a patch.
+    prompt.push_back(common_token_to_piece(ctx, llama_token_unk(llama_get_model(ctx)), false));
     llama_params["prompt"] = prompt;
 
     // Handle "top_n" field
@@ -1491,7 +1494,7 @@ static bool is_valid_utf8(const std::string &str) {
     return true;
 }
 
-struct llama_text_token_batch_wrapper {
+struct llava_text_token_batch_wrapper {
     std::vector<llama_pos> pos;
     std::vector<int32_t> n_seq_id;
     std::vector<llama_seq_id> seq_id_0;
@@ -1499,7 +1502,7 @@ struct llama_text_token_batch_wrapper {
     std::vector<int8_t> logits;
     llama_batch batch;
 
-    llama_text_token_batch_wrapper(llama_token *token, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
+    llava_text_token_batch_wrapper(llama_token *token, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
         pos.resize(n_tokens);
         n_seq_id.resize(n_tokens);
         seq_ids.resize(n_tokens + 1);
@@ -1558,3 +1561,89 @@ struct llava_image_embed_batch_wrapper {
         }
     }
 };
+
+struct qwen2vl_text_token_batch_wrapper {
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id> seq_id_0;
+    std::vector<llama_seq_id *> seq_ids;
+    std::vector<int8_t> logits;
+    llama_batch batch;
+
+    qwen2vl_text_token_batch_wrapper(llama_token *token, int32_t n_tokens, llama_pos *pos, llama_seq_id seq_id) {
+        n_seq_id.resize(n_tokens);
+        seq_ids.resize(n_tokens + 1);
+        logits.resize(n_tokens);
+        seq_id_0.resize(1);
+        seq_id_0[0]       = seq_id;
+        seq_ids[n_tokens] = nullptr;
+        batch             = {
+            /*n_tokens       =*/n_tokens,
+            /*tokens         =*/token,
+            /*embd           =*/nullptr,
+            /*pos            =*/pos,
+            /*n_seq_id       =*/n_seq_id.data(),
+            /*seq_id         =*/seq_ids.data(),
+            /*logits         =*/logits.data(),
+        };
+        for (int i = 0; i < n_tokens; i++) {
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i]   = seq_id_0.data();
+            batch.logits[i]   = false;
+        }
+    }
+};
+
+struct qwen2vl_image_embed_batch_wrapper {
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id> seq_id_0;
+    std::vector<llama_seq_id *> seq_ids;
+    std::vector<int8_t> logits;
+    llama_batch batch;
+
+    qwen2vl_image_embed_batch_wrapper(float *embd, int32_t n_tokens, llama_pos *pos, llama_seq_id seq_id) {
+        n_seq_id.resize(n_tokens);
+        seq_ids.resize(n_tokens + 1);
+        logits.resize(n_tokens);
+        seq_id_0.resize(1);
+        seq_id_0[0]       = seq_id;
+        seq_ids[n_tokens] = nullptr;
+        batch             = {
+            /*n_tokens       =*/n_tokens,
+            /*tokens         =*/nullptr,
+            /*embd           =*/embd,
+            /*pos            =*/pos,
+            /*n_seq_id       =*/n_seq_id.data(),
+            /*seq_id         =*/seq_ids.data(),
+            /*logits         =*/logits.data(),
+        };
+        for (int i = 0; i < n_tokens; i++) {
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i]   = seq_id_0.data();
+            batch.logits[i]   = false;
+        }
+    }
+};
+
+void common_batch_add_with_mrope(
+    struct llama_batch &batch,
+    llama_token id,
+    llama_pos st_pos_id,
+    int32_t n_eval,
+    const std::vector<llama_seq_id> &seq_ids,
+    bool logits) {
+    GGML_ASSERT(batch.seq_id[batch.n_tokens] && "llama_batch size exceeded");
+
+    batch.token[batch.n_tokens] = id;
+    for (int i = 0; i < 4; i++) {
+        if (i == 3) {
+            st_pos_id = 0;
+        }
+        batch.pos[batch.n_tokens + n_eval * i] = st_pos_id;
+    }
+    batch.n_seq_id[batch.n_tokens] = seq_ids.size();
+    for (size_t j = 0; j < seq_ids.size(); ++j) {
+        batch.seq_id[batch.n_tokens][j] = seq_ids[j];
+    }
+    batch.logits[batch.n_tokens] = logits;
+    batch.n_tokens++;
+}

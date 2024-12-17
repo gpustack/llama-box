@@ -1,0 +1,27 @@
+diff --git a/include/llama.h b/include/llama.h
+index c67988a3..ea9e96d9 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -445,6 +445,7 @@ extern "C" {
+     LLAMA_API int32_t llama_n_embd     (const struct llama_model * model);
+     LLAMA_API int32_t llama_n_layer    (const struct llama_model * model);
+     LLAMA_API int32_t llama_n_head     (const struct llama_model * model);
++    LLAMA_API int32_t llama_needs_mrope(const struct llama_model * model);
+ 
+     LLAMA_API const struct llama_model * llama_get_model(const struct llama_context * ctx);
+ 
+diff --git a/src/llama.cpp b/src/llama.cpp
+index 8b799e0e..e7f7dafb 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -20361,6 +20361,10 @@ int32_t llama_n_head(const struct llama_model * model) {
+     return model->hparams.n_head();
+ }
+ 
++int32_t llama_needs_mrope(const struct llama_model * model) {
++    return std::all_of(model->hparams.rope_sections, model->hparams.rope_sections + 3, [](const int32_t & x) { return x > 0; });
++}
++
+ const struct llama_model * llama_get_model(const struct llama_context * ctx) {
+     return &ctx->model;
+ }
