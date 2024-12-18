@@ -158,7 +158,7 @@ index efbb27d2..19031e22 100644
                                    char * buf,
                                 int32_t   length);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 8b799e0e..ade86b46 100644
+index b7b04a41..a742db1b 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -22274,12 +22274,52 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {

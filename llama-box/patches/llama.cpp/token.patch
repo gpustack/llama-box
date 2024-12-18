@@ -38,7 +38,7 @@ index 4bb16d2e..528f0291 100644
  llama_token llama_token_prefix_impl(const struct llama_vocab & vocab);
  llama_token llama_token_middle_impl(const struct llama_vocab & vocab);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 8b799e0e..22d2f51f 100644
+index b7b04a41..eb01c6b6 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -22089,6 +22089,10 @@ llama_token llama_token_pad(const struct llama_model * model) {
