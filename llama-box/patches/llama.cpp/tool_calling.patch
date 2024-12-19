@@ -1,13 +1,13 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index c0c98232..106b6f78 100644
+index c0c98232..88df2921 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -1613,27 +1613,33 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
+@@ -1613,27 +1613,34 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
  
  bool common_chat_verify_template(const std::string & tmpl) {
      llama_chat_message chat[] = {{"user", "test"}};
 -    int res = llama_chat_apply_template(nullptr, tmpl.c_str(), chat, 1, true, nullptr, 0);
-+    int res = llama_chat_apply_template(nullptr, tmpl.c_str(), chat, 1, nullptr, 0, true, nullptr, 0);
++    int res = llama_chat_apply_template(nullptr, tmpl.c_str(), chat, 1, nullptr, 0, false, true, nullptr, 0);
      return res >= 0;
  }
  
@@ -15,6 +15,7 @@ index c0c98232..106b6f78 100644
          const std::string & tmpl,
          const std::vector<common_chat_msg> & msgs,
 +        const std::vector<common_chat_func> & funcs,
++        bool req_func,
          bool add_ass) {
      int alloc_size = 0;
      bool fallback = false; // indicate if we must fallback to default chatml
@@ -35,47 +36,47 @@ index c0c98232..106b6f78 100644
  
      // run the first time to get the total output length
 -    int32_t res = llama_chat_apply_template(model, ptr_tmpl, chat.data(), chat.size(), add_ass, buf.data(), buf.size());
-+    int32_t res = llama_chat_apply_template(model, ptr_tmpl, chat.data(), chat.size(), func.data(), func.size(), add_ass, buf.data(), buf.size());
++    int32_t res = llama_chat_apply_template(model, ptr_tmpl, chat.data(), chat.size(), func.data(), func.size(), req_func, add_ass, buf.data(), buf.size());
  
      // error: chat template is not supported
      if (res < 0) {
-@@ -1643,7 +1649,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1643,7 +1650,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
              throw std::runtime_error("this custom template is not supported");
          } else {
              // If the built-in template is not supported, we default to chatml
 -            res = llama_chat_apply_template(nullptr, "chatml", chat.data(), chat.size(), add_ass, buf.data(), buf.size());
-+            res = llama_chat_apply_template(nullptr, "chatml", chat.data(), chat.size(), func.data(), func.size(), add_ass, buf.data(), buf.size());
++            res = llama_chat_apply_template(nullptr, "chatml", chat.data(), chat.size(), func.data(), func.size(), req_func, add_ass, buf.data(), buf.size());
              fallback = true;
          }
      }
-@@ -1654,7 +1660,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1654,7 +1661,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
          res = llama_chat_apply_template(
              fallback ? nullptr : model,
              fallback ? "chatml" : ptr_tmpl,
 -            chat.data(), chat.size(), add_ass, buf.data(), buf.size());
-+            chat.data(), chat.size(), func.data(), func.size(), add_ass, buf.data(), buf.size());
++            chat.data(), chat.size(), func.data(), func.size(), req_func, add_ass, buf.data(), buf.size());
      }
  
      std::string formatted_chat(buf.data(), res);
-@@ -1667,7 +1673,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1667,7 +1674,7 @@ std::string common_chat_format_single(const struct llama_model * model,
          const common_chat_msg & new_msg,
          bool add_ass) {
      std::ostringstream ss;
 -    auto fmt_past_msg = past_msg.empty() ? "" : common_chat_apply_template(model, tmpl, past_msg, false);
-+    auto fmt_past_msg = past_msg.empty() ? "" : common_chat_apply_template(model, tmpl, past_msg, {}, false);
++    auto fmt_past_msg = past_msg.empty() ? "" : common_chat_apply_template(model, tmpl, past_msg, {}, false, false);
      std::vector<common_chat_msg> chat_new(past_msg);
      // if the past_msg ends with a newline, we must preserve it in the formatted version
      if (add_ass && !fmt_past_msg.empty() && fmt_past_msg.back() == '\n') {
-@@ -1675,7 +1681,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1675,7 +1682,7 @@ std::string common_chat_format_single(const struct llama_model * model,
      };
      // format chat with new_msg
      chat_new.push_back(new_msg);
 -    auto fmt_new_msg = common_chat_apply_template(model, tmpl, chat_new, add_ass);
-+    auto fmt_new_msg = common_chat_apply_template(model, tmpl, chat_new, {}, add_ass);
++    auto fmt_new_msg = common_chat_apply_template(model, tmpl, chat_new, {}, false, add_ass);
      // get the diff part
      ss << fmt_new_msg.substr(fmt_past_msg.size(), fmt_new_msg.size() - fmt_past_msg.size());
      return ss.str();
-@@ -1684,12 +1690,16 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1684,12 +1691,16 @@ std::string common_chat_format_single(const struct llama_model * model,
  std::string common_chat_format_example(const struct llama_model * model,
          const std::string & tmpl) {
      std::vector<common_chat_msg> msgs = {
@@ -93,12 +94,12 @@ index c0c98232..106b6f78 100644
 +        {"get_temperature", "Return the temperature according to the location.", "{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}}}"},
      };
 -    return common_chat_apply_template(model, tmpl, msgs, true);
-+    return common_chat_apply_template(model, tmpl, msgs, funcs, true);
++    return common_chat_apply_template(model, tmpl, msgs, funcs, false, true);
  }
  
  //
 diff --git a/common/common.h b/common/common.h
-index 5f556c24..45cb8bae 100644
+index 5f556c24..4de51e8d 100644
 --- a/common/common.h
 +++ b/common/common.h
 @@ -560,6 +560,13 @@ struct common_chat_msg {
@@ -115,16 +116,17 @@ index 5f556c24..45cb8bae 100644
  // Check if the template supplied via "--chat-template" is supported or not. Returns true if it's valid
  bool common_chat_verify_template(const std::string & tmpl);
  
-@@ -569,6 +576,7 @@ bool common_chat_verify_template(const std::string & tmpl);
+@@ -569,6 +576,8 @@ bool common_chat_verify_template(const std::string & tmpl);
  std::string common_chat_apply_template(const struct llama_model * model,
          const std::string & tmpl,
          const std::vector<common_chat_msg> & chat,
 +        const std::vector<common_chat_func> & tools,
++        bool req_func,
          bool add_ass);
  
  // Format single message, while taking into account the position of that message in chat history
 diff --git a/include/llama.h b/include/llama.h
-index efbb27d2..19031e22 100644
+index efbb27d2..ea3b3feb 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -383,6 +383,11 @@ extern "C" {
@@ -148,29 +150,40 @@ index efbb27d2..19031e22 100644
      /// @param add_ass Whether to end the prompt with the token(s) that indicate the start of an assistant message.
      /// @param buf A buffer to hold the output formatted prompt. The recommended alloc size is 2 * (total number of characters of all messages)
      /// @param length The size of the allocated buffer
-@@ -991,6 +998,8 @@ extern "C" {
+@@ -991,6 +998,9 @@ extern "C" {
                              const char * tmpl,
         const struct llama_chat_message * chat,
                                  size_t   n_msg,
 +      const struct llama_chat_function * func,
 +                                size_t   n_func,
++                                  bool   req_func,
                                    bool   add_ass,
                                    char * buf,
                                 int32_t   length);
+@@ -998,6 +1008,9 @@ extern "C" {
+     // Get list of built-in chat templates
+     LLAMA_API int32_t llama_chat_builtin_templates(const char ** output, size_t len);
+ 
++    // Get chat template alias
++    LLAMA_API const char * llama_chat_template_alias(const char * tmpl);
++
+     //
+     // Sampling API
+     //
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b7b04a41..a742db1b 100644
+index b7b04a41..d291a13d 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -22274,12 +22274,52 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -22274,12 +22274,60 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
  static int32_t llama_chat_apply_template_internal(
      const llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
+-    std::string & dest, bool add_ass) {
 +    const std::vector<const llama_chat_function * > & func,
-     std::string & dest, bool add_ass) {
++    std::string & dest, bool req_func, bool add_ass) {
      // Taken from the research: https://github.com/ggerganov/llama.cpp/issues/5527
      std::stringstream ss;
      if (tmpl == LLM_CHAT_TEMPLATE_CHATML) {
-         // chatml template
 +        if (!func.empty()) {
 +            const llama_chat_message *root_msg = nullptr;
 +            for (const auto *message: chat) {
@@ -187,19 +200,28 @@ index b7b04a41..a742db1b 100644
 +                ss << "You are a helpful assistant.\n";
 +            }
 +            ss << "# Tools\n";
-+            ss << "You may call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n";
++            if (req_func) {
++                ss << "You MUST call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n";
++            } else {
++                ss << "You CAN call functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n";
++            }
 +            ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
 +            ss << "<tools>\n";
 +            for (const auto & fn : func) {
 +                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}\n";
 +            }
 +            ss << "</tools>\n";
-+            ss << "Use the following pydantic model json schema for each tool call you will make: {\"properties\": {\"arguments\": {\"title\": \"Arguments\", \"type\": \"object\"}, \"name\": {\"title\": \"Name\", \"type\": \"string\"}}, \"required\": [\"arguments\", \"name\"], \"title\": \"FunctionCall\", \"type\": \"object\"} For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags as follows:\n";
++            if (req_func) {
++                ss << "MUST use the following pydantic model json schema for each tool call you will make: {\"properties\": {\"arguments\": {\"title\": \"Arguments\", \"type\": \"object\"}, \"name\": {\"title\": \"Name\", \"type\": \"string\"}}, \"required\": [\"arguments\", \"name\"], \"title\": \"FunctionCall\", \"type\": \"object\"} For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags as follows:\n";
++            } else {
++                ss << "When you do not involve complex calculations, you SHOULD response directly in localized natural language without any tool calls. ";
++                ss << "Otherwise, MUST use the following pydantic model json schema for each tool call you will make: {\"properties\": {\"arguments\": {\"title\": \"Arguments\", \"type\": \"object\"}, \"name\": {\"title\": \"Name\", \"type\": \"string\"}}, \"required\": [\"arguments\", \"name\"], \"title\": \"FunctionCall\", \"type\": \"object\"} For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags as follows:\n";
++            }
 +            ss << "<tool_call>\n";
 +            ss << "{\"name\": <function-name>, \"arguments\": <args-json-object>}\n";
 +            ss << "</tool_call>" << "<|im_end|>\n";
 +        }
-+
+         // chatml template
          for (auto message : chat) {
 +            if (!func.empty()) {
 +                std::string role(message->role);
@@ -214,16 +236,235 @@ index b7b04a41..a742db1b 100644
              ss << "<|im_start|>" << message->role << "\n" << message->content << "<|im_end|>\n";
          }
          if (add_ass) {
-@@ -22627,6 +22667,8 @@ int32_t llama_chat_apply_template(
+@@ -22288,15 +22336,52 @@ static int32_t llama_chat_apply_template_internal(
+     } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
+         // Official mistral 'v7' template
+         // See: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411#basic-instruct-template-v7
++        // See: https://github.com/mistralai/mistral-common/releases/tag/v1.5.0
++        if (!func.empty()) {
++            const llama_chat_message *root_msg = nullptr;
++            for (const auto *message: chat) {
++                std::string role(message->role);
++                if (role == "system") {
++                    root_msg = message;
++                    break;
++                }
++            }
++            ss << "[AVAILABLE_TOOLS] " << "[";
++            for (const auto & fn : func) {
++                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << ((fn == func.back()) ? "" : ",");
++            }
++            ss << "]" << "[/AVAILABLE_TOOLS]";
++            if (root_msg) {
++                ss << "[SYSTEM_PROMPT] " << root_msg->content;
++            } else {
++                ss << "[SYSTEM_PROMPT] " << "You are a helpful assistant. ";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions. ";
++            } else {
++                ss << "You CAN call functions to assist with the user query. Don't make assumptions about what values to plug into functions. ";
++            }
++            ss << "[/SYSTEM_PROMPT]";
++        }
+         for (auto message : chat) {
+             std::string role(message->role);
+             std::string content(message->content);
+             if (role == "system") {
++                if (!func.empty()) {
++                    continue;
++                }
+                 ss << "[SYSTEM_PROMPT] " << content << "[/SYSTEM_PROMPT]";
+             } else if (role == "user") {
+                 ss << "[INST] " << content << "[/INST]";
+             }
+             else {
++                if (!func.empty() && role == "tool") {
++                    ss << "[TOOL_RESULTS] ";
++                    ss << message->content;
++                    ss << "[/TOOL_RESULTS]";
++                    continue;
++                }
+                 ss << " " << content << "</s>";
+             }
+         }
+@@ -22305,10 +22390,39 @@ static int32_t llama_chat_apply_template_internal(
+             || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN) {
+         // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/chat_templates.md
+         // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/templates.md
++        // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/tool_calling.md
+         std::string leading_space = tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V1 ? " " : "";
+         std::string trailing_space = tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN ? "" : " ";
+         bool trim_assistant_message = tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3;
+         bool is_inside_turn = false;
++        if (!func.empty()) {
++            const llama_chat_message *root_msg = nullptr;
++            for (const auto *message: chat) {
++                std::string role(message->role);
++                if (role == "system") {
++                    root_msg = message;
++                    break;
++                }
++            }
++            ss << leading_space << "[AVAILABLE_TOOLS]" << trailing_space << "[";
++            for (const auto & fn : func) {
++                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << ((fn == func.back()) ? "" : ",");
++            }
++            ss << "]" << leading_space << "[/AVAILABLE_TOOLS]";
++            ss << leading_space << "[INST]" << trailing_space;
++            is_inside_turn = true;
++            if (root_msg) {
++                ss << root_msg->content << "\n\n";
++            } else {
++                ss << "You are a helpful assistant.\n\n";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n\n";
++            } else {
++                ss << "You CAN call functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n\n";
++            }
++        }
+         for (auto message : chat) {
+             if (!is_inside_turn) {
+                 ss << leading_space << "[INST]" << trailing_space;
+@@ -22317,10 +22431,19 @@ static int32_t llama_chat_apply_template_internal(
+             std::string role(message->role);
+             std::string content(message->content);
+             if (role == "system") {
++                if (!func.empty()) {
++                    continue;
++                }
+                 ss << content << "\n\n";
+             } else if (role == "user") {
+                 ss << content << leading_space << "[/INST]";
+             } else {
++                if (!func.empty() && role == "tool") {
++                    ss << leading_space << "[TOOL_RESULTS]" << trailing_space;
++                    ss << message->content;
++                    ss << leading_space << "[/TOOL_RESULTS]";
++                    continue;
++                }
+                 ss << trailing_space << (trim_assistant_message ? trim(content) : content) << "</s>";
+                 is_inside_turn = false;
+             }
+@@ -22495,9 +22618,51 @@ static int32_t llama_chat_apply_template_internal(
+             ss << "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>";
+         }
+     } else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3) {
++        if (!func.empty()) {
++            const llama_chat_message *root_msg = nullptr;
++            for (const auto *message: chat) {
++                std::string role(message->role);
++                if (role == "system") {
++                    root_msg = message;
++                    break;
++                }
++            }
++            ss << "<|start_header_id|>system<|end_header_id|>\n\n";
++            if (root_msg) {
++                ss << trim(root_msg->content) << "\n\n";
++            } else {
++                ss << "You are a helpful assistant.\n\n";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
++            } else {
++                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
++            }
++            ss << "You are provided with following function signatures:\n";
++            for (const auto & fn : func) {
++                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << (fn == func.back() ? "\n\n": "\n");
++            }
++            if (req_func) {
++                ss << "You MUST response in the format {\"name\": function name, \"arguments\": dictionary of argument name and its value}, and do not use variables.\n";
++            } else {
++                ss << "When you do not involve complex calculations, you SHOULD response directly in localized natural language without any tool calls. ";
++                ss << "Otherwise, you MUST response in the format {\"name\": function name, \"arguments\": dictionary of argument name and its value}, and do not use variables.\n";
++            }
++            ss << "<|eot_id|>";
++        }
+         // Llama 3
+         for (auto message : chat) {
+             std::string role(message->role);
++            if (!func.empty()) {
++                if (role == "system") {
++                    continue;
++                }
++                if (role == "tool") {
++                    ss << "<|start_header_id|>ipython<|end_header_id|>\n\n" << message->content << "<|eot_id|>";
++                    continue;
++                }
++            }
+             ss << "<|start_header_id|>" << role << "<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
+         }
+         if (add_ass) {
+@@ -22576,9 +22741,52 @@ static int32_t llama_chat_apply_template_internal(
+             }
+         }
+     } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
++        if (!func.empty()) {
++            const llama_chat_message *root_msg = nullptr;
++            for (const auto *message: chat) {
++                std::string role(message->role);
++                if (role == "system") {
++                    root_msg = message;
++                    break;
++                }
++            }
++            ss << "<|start_of_role|>system<|end_of_role|>";
++            if (root_msg) {
++                ss << trim(root_msg->content) << " ";
++            } else {
++                ss << "You are a helpful assistant. ";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more following functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
++            } else {
++                ss << "You CAN call following functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
++            }
++            if (req_func) {
++                ss << "You MUST response with <|tool_call|> followed by a JSON list of tool used as follows:\n";
++            } else {
++                ss << "When you do not involve complex calculations, you SHOULD response directly in localized natural language without any tool calls. ";
++                ss << "Otherwise, you response with <|tool_call|> followed by a JSON list of tool used as follows:\n";
++            }
++            ss << "<|tool_call|>[{\"name\": <function-name-1>, \"arguments\": <args-json-object>}]";
++            ss << "<|start_of_role|>tools<|end_of_role|>[";
++            for (const auto & fn : func) {
++                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << ((fn == func.back()) ? "" : ",");
++            }
++            ss << "]<|end_of_text|>\n";
++        }
+         // IBM Granite template
+         for (const auto & message : chat) {
+             std::string role(message->role);
++            if (!func.empty()) {
++                if (role == "system") {
++                    continue;
++                }
++                if (role == "tool") {
++                    ss << "<|start_of_role|>tool_response<|end_of_role|>" << message->content << "<|end_of_text|>\n";
++                    continue;
++                }
++            }
+             ss << "<|start_of_role|>" << role << "<|end_of_role|>";
+             if (role == "assistant_tool_call") {
+                 ss << "<|tool_call|>";
+@@ -22627,6 +22835,9 @@ int32_t llama_chat_apply_template(
                                const char * tmpl,
           const struct llama_chat_message * chat,
                                    size_t   n_msg,
 +        const struct llama_chat_function * func,
 +                                  size_t   n_func,
++                                    bool   req_func,
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -22652,12 +22694,19 @@ int32_t llama_chat_apply_template(
+@@ -22652,12 +22863,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  
@@ -240,7 +481,25 @@ index b7b04a41..a742db1b 100644
          return -1;
      }
 -    int32_t res = llama_chat_apply_template_internal(detected_tmpl, chat_vec, formatted_chat, add_ass);
-+    int32_t res = llama_chat_apply_template_internal(detected_tmpl, chat_vec, func_vec, formatted_chat, add_ass);
++    int32_t res = llama_chat_apply_template_internal(detected_tmpl, chat_vec, func_vec, formatted_chat, req_func, add_ass);
      if (res < 0) {
          return res;
      }
+@@ -22676,6 +22894,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
+     return (int32_t) LLM_CHAT_TEMPLATES.size();
+ }
+ 
++const char * llama_chat_template_alias(const char * tmpl) {
++    llm_chat_template t = llama_chat_detect_template(std::string(tmpl));
++    for (const auto & it : LLM_CHAT_TEMPLATES) {
++        if (it.second != t) {
++            continue;
++        }
++        return it.first.c_str();
++    }
++    return "unknown";
++}
++
+ //
+ // sampling
+ //

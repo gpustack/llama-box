@@ -26,6 +26,9 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - Qwen2 VL Series
     + Support [OpenAI Function calling API](https://platform.openai.com/docs/guides/function-calling).
         - Qwen2 Series
+        - LLaMA3 Series
+        - Granite Series
+        - Mistral Series
         - Hermes Series
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),

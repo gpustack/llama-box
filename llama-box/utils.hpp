@@ -310,7 +310,7 @@ static llama_tokens format_infill(const llama_context *ctx, const json &input_pr
 }
 
 // Format given chat. If tmpl is empty, we take the template from model metadata
-inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages, const std::vector<json> &functions) {
+inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages, const std::vector<json> &functions, const std::string& functions_call_mode) {
     std::vector<common_chat_msg> chat;
     for (const auto &curr_msg : messages) {
         std::string role = json_value(curr_msg, "role", std::string(""));
@@ -361,7 +361,7 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
     }
 
     // NB(thxCode): common_chat_apply_template is a patch.
-    return common_chat_apply_template(model, tmpl, chat, func, true);
+    return common_chat_apply_template(model, tmpl, chat, func, !functions.empty() && functions_call_mode == "required", true);
 }
 
 //
@@ -641,8 +641,7 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model,
-                                          const std::string &chat_template) {
+static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model, const bool chat) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -656,7 +655,6 @@ static json oaicompat_completions_request(const struct common_params &params, co
         SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
-    bool chat = !chat_template.empty();
     json llama_params;
 
     // Annotations for OAI compatibility
@@ -734,22 +732,25 @@ static json oaicompat_completions_request(const struct common_params &params, co
         }
 
         json functions = json::array();
+        std::string functions_call_mode = "none";
         if (llama_params.at("function_call").is_object()) {
             const std::string func_name = llama_params.at("function_call").at("name").get<std::string>();
             for (const auto &func : llama_params.at("functions")) {
                 if (func.at("name").get<std::string>() == func_name) {
                     functions.push_back(func);
+                    functions_call_mode = "required";
                     break;
                 }
             }
         } else if (llama_params.at("function_call").get<std::string>() != "none") {
             functions = llama_params.at("functions");
+            functions_call_mode = llama_params.at("function_call").get<std::string>();
         }
         if (!functions.empty()) {
             llama_params["__oaicompat_completion_chat_tool"] = true;
         }
 
-        const std::string prompt = format_chat(model, chat_template, messages, functions);
+        const std::string prompt = format_chat(model, params.chat_template, messages, functions, functions_call_mode);
         if (common_log_verbosity_thold > 2) {
             SRV_INF("rid %s | formatted prompt\n%s\n", rid.c_str(), prompt.c_str());
         }

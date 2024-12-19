@@ -31,6 +31,12 @@
 
 using json = nlohmann::json;
 
+enum tool_call_parser_type {
+    TOOL_CALL_PARSER_TYPE_NONE,
+    TOOL_CALL_PARSER_TYPE_STRING,
+    TOOL_CALL_PARSER_TYPE_TOKEN,
+};
+
 enum stop_type {
     STOP_TYPE_NONE,
     STOP_TYPE_EOS,
@@ -274,6 +280,8 @@ struct server_slot {
     llama_pos st_pos_id = 0;
 
     // tool calls
+    tool_call_parser_type tool_call_parser = TOOL_CALL_PARSER_TYPE_NONE;
+    bool parallel_tool_calls               = true;
     std::vector<json> generated_tool_calls;
 
     void reset() {
@@ -347,6 +355,8 @@ struct server_slot {
 
         st_pos_id = 0;
 
+        tool_call_parser    = TOOL_CALL_PARSER_TYPE_NONE;
+        parallel_tool_calls = true;
         generated_tool_calls.clear();
     }
 
@@ -843,6 +853,17 @@ struct server_context {
     ggml_threadpool *threadpool       = nullptr;
     ggml_threadpool *threadpool_batch = nullptr;
 
+    // tool calls
+    std::string chat_template_alias = "chatml";
+    bool support_tool_calls         = false;
+    bool tool_call_id_generate      = true;
+    std::string tool_call_start     = "<tool_call>";
+    llama_token tool_call_start_tok = LLAMA_TOKEN_NULL;
+    bool tool_call_start_trim       = true;
+    std::string tool_call_end       = "</tool_call>";
+    llama_token tool_call_end_tok   = LLAMA_TOKEN_NULL;
+    bool tool_call_end_trim         = true;
+
     ~server_context() {
         lora_adapters.clear();
 
@@ -1079,6 +1100,64 @@ struct server_context {
             llama_attach_threadpool(llm_ctx, threadpool, threadpool_batch);
             if (llm_ctx_draft != nullptr) {
                 llama_attach_threadpool(llm_ctx_draft, threadpool, threadpool_batch);
+            }
+        }
+
+        // chat template
+        {
+            if (llm_params.enable_chat_template) {
+                // if a custom chat template is not supplied, we will use the one that comes
+                // with the model (if any)
+                bool built_in_chat_template = false;
+                if (llm_params.chat_template.empty()) {
+                    llm_params.chat_template = load_chat_template();
+                    built_in_chat_template   = true;
+                }
+                if (llm_params.chat_template.size() <= 20) {
+                    for (char &c : llm_params.chat_template) {
+                        c = char(std::tolower(c));
+                    }
+                }
+                // NB(thxCode): llama_chat_template_alias is a patch.
+                chat_template_alias = llama_chat_template_alias(llm_params.chat_template.c_str());
+                if (chat_template_alias == "chatml") {
+                    // <tool_call>
+                    // {"name":"","arguments":{}}
+                    // </tool_call>
+                    support_tool_calls = true;
+                } else if (starts_with(chat_template_alias, "mistral-")) {
+                    // [TOOL_CALLS][{"name":"","arguments":{}}]
+                    support_tool_calls   = true;
+                    tool_call_start      = "[{\"";
+                    tool_call_start_tok  = 9; // [TOOL_CALLS]
+                    tool_call_start_trim = false;
+                    tool_call_end        = "}]";
+                    tool_call_end_tok    = llama_token_eos(llm_model);
+                    tool_call_end_trim   = false;
+                } else if (chat_template_alias == "llama3") {
+                    // {"name":"","arguments":{}}
+                    support_tool_calls   = true;
+                    tool_call_start      = "{\"";
+                    tool_call_start_trim = false;
+                    tool_call_end        = "}}";
+                    tool_call_end_trim   = false;
+                } else if (chat_template_alias == "granite") {
+                    // <|tool_call|>[{"name":"","arguments":{}}]
+                    support_tool_calls   = true;
+                    tool_call_start      = "[{\"";
+                    tool_call_start_tok  = 49154; // <|tool_call|>
+                    tool_call_start_trim = false;
+                    tool_call_end        = "}]";
+                    tool_call_end_tok    = llama_token_eos(llm_model);
+                    tool_call_end_trim   = false;
+                }
+                SRV_INF("chat template, built_in: %d, alias: %s, tool call: %s, example:\n%s\n",
+                        built_in_chat_template,
+                        chat_template_alias.c_str(),
+                        support_tool_calls ? "supported" : "unsupported",
+                        common_chat_format_example(llm_model, llm_params.chat_template).c_str());
+            } else {
+                SRV_INF("%s", "chat template is disabled\n");
             }
         }
 
@@ -1412,7 +1491,7 @@ struct server_context {
 
         slot.oaicompat_completion             = json_value(data, "__oaicompat_completion", false);
         slot.oaicompat_completion_chat        = json_value(data, "__oaicompat_completion_chat", false);
-        slot.oaicompat_completion_chat_tool   = json_value(data, "__oaicompat_completion_chat_tool", false);
+        slot.oaicompat_completion_chat_tool   = json_value(data, "__oaicompat_completion_chat_tool", false) && support_tool_calls;
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && llm_ctx_clip != nullptr;
 
         slot.params.stream    = json_value(data, "stream", false);
@@ -1650,6 +1729,10 @@ struct server_context {
             }
         }
 
+        {
+            slot.parallel_tool_calls = json_value(data, "parallel_tool_calls", true);
+        }
+
         slot.state = SLOT_STATE_STARTED;
 
         SLT_INF(slot, "processing task, max_tps = %s\n", slot.token_bkt ? std::to_string(slot.token_bkt->capacity).c_str() : "N/A");
@@ -1707,37 +1790,85 @@ struct server_context {
                 send_text = stop_pos == std::string::npos;
             }
 
-            std::string tool_call_start = "<tool_call>";
-            std::string tool_call_end   = "</tool_call>";
-            bool has_tool_call_id       = false;
             if (send_text && slot.oaicompat_completion_chat_tool) {
-                bool has_tool_call = false;
-                size_t start_pos;
-                if (str_test.length() <= tool_call_start.length()) {
-                    send_text = false;
-                } else if (starts_with(str_test, tool_call_start)) {
-                    send_text     = false;
-                    has_tool_call = true;
-                } else {
-                    send_text = true;
-                }
-                if (has_tool_call && ends_with(str_test, tool_call_end)) {
-                    std::string function_str = str_test.substr(tool_call_start.length(), str_test.length() - tool_call_start.length() - tool_call_end.length());
-                    try {
-                        json function  = json::parse(function_str);
-                        json tool_call = json{
-                            {"type", "function"},
-                            {"function", function},
-                        };
-                        if (!has_tool_call_id) {
-                            tool_call["id"] = gen_callid();
+                if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_NONE) {
+                    if (str_test.length() <= tool_call_start.length()) {
+                        send_text = false;
+                        if (tool_call_start_tok != LLAMA_TOKEN_NULL) {
+                            for (const llama_token &tok : result.toks) {
+                                if (tok == tool_call_start_tok) {
+                                    slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_TOKEN;
+                                    break;
+                                }
+                            }
                         }
-                        slot.generated_tool_calls.push_back(tool_call);
-                        result.text_to_send = slot.generated_text.substr(pos, stop_pos);
-                        slot.n_sent_text += result.text_to_send.size();
-                    } catch (const std::exception &e) {
-                        SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
-                        send_text = true;
+                    } else if (starts_with(str_test, tool_call_start)) {
+                        send_text             = false;
+                        slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_STRING;
+                    }
+                } else if (slot.tool_call_parser != TOOL_CALL_PARSER_TYPE_NONE) {
+                    send_text = false;
+                    std::string functions_str;
+                    if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_STRING && ends_with(str_test, tool_call_end)) {
+                        functions_str = str_test;
+                        if (tool_call_start_trim) {
+                            functions_str = functions_str.substr(tool_call_start.length());
+                        }
+                        if (tool_call_end_trim) {
+                            functions_str = functions_str.substr(0, functions_str.length() - tool_call_end.length());
+                        }
+                    } else if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_TOKEN && tool_call_end_tok != LLAMA_TOKEN_NULL) {
+                        for (auto i = int(result.toks.size()) - 1; i >= 0; --i) {
+                            if (result.toks[i] == tool_call_end_tok) {
+                                functions_str = str_test;
+                                break;
+                            }
+                        }
+                    }
+                    if (!functions_str.empty()) {
+                        slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_NONE;
+                        try {
+                            auto append_tool_calls = [&](json &function) {
+                                if (!function.is_object()) {
+                                    throw std::runtime_error("function is an object");
+                                }
+                                if (!function.contains("name")) {
+                                    throw std::runtime_error("function does not contain \"name\" field");
+                                }
+                                if (!function.contains("arguments")) {
+                                    throw std::runtime_error("function does not contain \"arguments\" field");
+                                }
+                                if (!function.at("arguments").is_string()) {
+                                    function["arguments"] = function.at("arguments").dump(-1, ' ', false, json::error_handler_t::replace);
+                                }
+                                json tool_call = json{
+                                    {"type", "function"},
+                                    {"function", function},
+                                };
+                                if (tool_call_id_generate) {
+                                    tool_call["id"] = gen_callid();
+                                }
+                                slot.generated_tool_calls.push_back(tool_call);
+                            };
+                            json functions = json::parse(functions_str);
+                            if (functions.is_array()) {
+                                for (auto &function : functions) {
+                                    append_tool_calls(function);
+                                }
+                            } else {
+                                append_tool_calls(functions);
+                            }
+                            if (!slot.parallel_tool_calls) {
+                                slot.stop           = STOP_TYPE_TOOL;
+                                slot.has_next_token = false;
+                            }
+                            // TODO(thxCode): duplicate code for now, will refactor later
+                            result.text_to_send = slot.generated_text.substr(pos, stop_pos);
+                            slot.n_sent_text += result.text_to_send.size();
+                        } catch (const std::exception &e) {
+                            SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
+                            send_text = true;
+                        }
                     }
                 }
             }
@@ -3832,7 +3963,7 @@ int main(int argc, char **argv) {
                         {
                             {"name", "kv_cache_usage_ratio"},
                             {"help", "KV-cache usage. 1 means 100 percent usage."},
-                            {"value", 1. * kv_cache_used_cells / llm_params.n_ctx},
+                            {"value", 1. * kv_cache_used_cells / ctx_server.llm_params.n_ctx},
                         },
                         {
                             {"name", "kv_cache_tokens"},
@@ -3876,8 +4007,8 @@ int main(int argc, char **argv) {
     const auto handle_props = [&](const httplib::Request &, httplib::Response &res) {
         const json response{
             {"default_generation_settings", ctx_server.default_generation_settings_for_props},
-            {"total_slots", llm_params.n_parallel},
-            {"chat_template", llm_params.chat_template.c_str()},
+            {"total_slots", ctx_server.llm_params.n_parallel},
+            {"chat_template", ctx_server.llm_params.chat_template.c_str()},
         };
         res_ok(res, response);
     };
@@ -3984,7 +4115,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("Invalid filename", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        std::string filepath = llm_params.slot_save_path + filename;
+        std::string filepath = ctx_server.llm_params.slot_save_path + filename;
 
         // construct task
         server_task task(SERVER_TASK_TYPE_SLOT_SAVE);
@@ -4016,7 +4147,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("Invalid filename", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        std::string filepath = llm_params.slot_save_path + filename;
+        std::string filepath = ctx_server.llm_params.slot_save_path + filename;
 
         // construct task
         server_task task(SERVER_TASK_TYPE_SLOT_RESTORE);
@@ -4075,7 +4206,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        if (id_slot < 0 || id_slot >= llm_params.n_parallel) {
+        if (id_slot < 0 || id_slot >= ctx_server.llm_params.n_parallel) {
             res_error(res, format_error_response("Invalid slot ID", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
@@ -4287,7 +4418,7 @@ int main(int argc, char **argv) {
                 "data",
                 {
                     {
-                        {"id", llm_params.model_alias},
+                        {"id", ctx_server.llm_params.model_alias},
                         {"object", "model"},
                         {"created", std::time(nullptr)},
                         {"owned_by", "llama-box"},
@@ -4338,7 +4469,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, std::string());
+            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false);
         }
 
         // construct task
@@ -4466,7 +4597,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, llm_params.chat_template);
+        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true);
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);
@@ -5044,23 +5175,6 @@ int main(int argc, char **argv) {
         return 1;
     }
     state.store(SERVER_STATE_READY);
-
-    if (llm_params.enable_chat_template) {
-        // if a custom chat template is not supplied, we will use the one that comes
-        // with the model (if any)
-        bool built_in_chat_template = false;
-        if (llm_params.chat_template.empty()) {
-            llm_params.chat_template = ctx_server.load_chat_template();
-            built_in_chat_template   = true;
-        }
-        if (llm_params.chat_template.size() <= 20) {
-            for (char &c : llm_params.chat_template) {
-                c = char(std::tolower(c));
-            }
-        }
-        SRV_INF("chat template, built_in: %d, chat_example:\n%s\n",
-                built_in_chat_template, common_chat_format_example(ctx_server.llm_model, llm_params.chat_template).c_str());
-    }
 
     ctx_server.queue_tasks.on_new_task(
         std::bind(&server_context::process_single_task, &ctx_server, std::placeholders::_1));
