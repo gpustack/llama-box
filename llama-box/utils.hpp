@@ -310,7 +310,7 @@ static llama_tokens format_infill(const llama_context *ctx, const json &input_pr
 }
 
 // Format given chat. If tmpl is empty, we take the template from model metadata
-inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages, const std::vector<json> &functions, const std::string& functions_call_mode) {
+inline std::string format_chat(const struct llama_model *model, const std::string &tmpl, const std::vector<json> &messages, const std::vector<json> &functions, const std::string &functions_call_mode) {
     std::vector<common_chat_msg> chat;
     for (const auto &curr_msg : messages) {
         std::string role = json_value(curr_msg, "role", std::string(""));
@@ -340,10 +340,37 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
                     content += "\n<image>";
                 }
             } else {
-                throw std::runtime_error("Invalid 'content' type (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
+                throw std::runtime_error("Invalid 'content' field");
+            }
+        } else if (curr_msg.contains("tool_calls")) {
+            role += "_tool_call";
+            if (curr_msg["tool_calls"].is_array()) {
+                for (const json &part : curr_msg["tool_calls"]) {
+                    if (!part.contains("type") || part.at("type") != "function") {
+                        continue;
+                    }
+                    if (!part.contains("function") || !part.at("function").is_object()) {
+                        continue;
+                    }
+                    const json &func = part.at("function");
+                    if (!func.contains("name") || !func.at("name").is_string()) {
+                        continue;
+                    }
+                    if (!func.contains("arguments") || !func.at("arguments").is_string()) {
+                        continue;
+                    }
+                    std::string name       = func.at("name").get<std::string>();
+                    std::string arguments = func.at("arguments").get<std::string>();
+                    if (!content.empty()) {
+                        content += "\n";
+                    }
+                    content += "{\"name\":\"" + name + "\",\"arguments\":" + arguments + "}";
+                }
+            } else {
+                throw std::runtime_error("Invalid 'tool_calls' field");
             }
         } else {
-            throw std::runtime_error("Missing 'content' (ref: https://github.com/ggerganov/llama.cpp/issues/8367)");
+            throw std::runtime_error("Missing 'content' or 'tool_calls' in 'messages' item");
         }
         chat.push_back({role, content});
     }
@@ -641,7 +668,7 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model, const bool chat) {
+static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model, const bool chat, const bool chat_tool_support) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -672,47 +699,51 @@ static json oaicompat_completions_request(const struct common_params &params, co
 
     // Handle "tools" and "tool_choice" field
     llama_params["function_call"] = "none";
-    if (body.contains("tools") && !body.contains("functions")) {
-        const json &tools = body.at("tools");
-        if (!tools.is_array()) {
-            throw std::runtime_error("Illegal param: \"tools\" must be an array");
-        }
-        json functions = json::array();
-        for (const auto &tool : tools) {
-            if (!tool.contains("function")) {
-                continue;
+    if (chat && chat_tool_support) {
+        // "tools" and "functions"
+        if (body.contains("tools") && !body.contains("functions")) {
+            const json &tools = body.at("tools");
+            if (!tools.is_array()) {
+                throw std::runtime_error("Illegal param: \"tools\" must be an array");
             }
-            functions.push_back(tool.at("function"));
+            json functions = json::array();
+            for (const auto &tool : tools) {
+                if (!tool.contains("function")) {
+                    continue;
+                }
+                functions.push_back(tool.at("function"));
+            }
+            if (!functions.empty()) {
+                llama_params["functions"]     = functions;
+                llama_params["function_call"] = "auto";
+            }
+        } else if (body.contains("functions")) {
+            const json &functions = body.at("functions");
+            if (!functions.is_array()) {
+                throw std::runtime_error("Illegal param: \"functions\" must be an array");
+            }
+            if (!functions.empty()) {
+                llama_params["functions"]     = functions;
+                llama_params["function_call"] = "auto";
+            }
         }
-        if (!functions.empty()) {
-            llama_params["functions"]     = functions;
-            llama_params["function_call"] = "auto";
+        // "tool_choice" and "function_call"
+        if (body.contains("tool_choice") && !body.contains("function_call")) {
+            const json &tool_choice = body.at("tool_choice");
+            if (tool_choice.is_object() && tool_choice.contains("function")) {
+                llama_params["function_call"] = tool_choice.at("function");
+            } else if (tool_choice.is_string()) {
+                llama_params["function_call"] = tool_choice;
+            } else {
+                throw std::runtime_error(R"(Illegal param: "tool_choice" must be a string or an object)");
+            }
+        } else if (body.contains("function_call")) {
+            const json &function_call = body.at("function_call");
+            if (!function_call.is_string() && !function_call.is_object()) {
+                throw std::runtime_error(R"(Illegal param: "function_call" must be a string or an object)");
+            }
+            llama_params["function_call"] = function_call;
         }
-    } else if (body.contains("functions")) {
-        const json &functions = body.at("functions");
-        if (!functions.is_array()) {
-            throw std::runtime_error("Illegal param: \"functions\" must be an array");
-        }
-        if (!functions.empty()) {
-            llama_params["functions"]     = functions;
-            llama_params["function_call"] = "auto";
-        }
-    }
-    if (body.contains("tool_choice") && !body.contains("function_call")) {
-        const json &tool_choice = body.at("tool_choice");
-        if (tool_choice.is_object() && tool_choice.contains("function")) {
-            llama_params["function_call"] = tool_choice.at("function");
-        } else if (tool_choice.is_string()) {
-            llama_params["function_call"] = tool_choice;
-        } else {
-            throw std::runtime_error(R"(Illegal param: "tool_choice" must be a string or an object)");
-        }
-    } else if (body.contains("function_call")) {
-        const json &function_call = body.at("function_call");
-        if (!function_call.is_string() && !function_call.is_object()) {
-            throw std::runtime_error(R"(Illegal param: "function_call" must be a string or an object)");
-        }
-        llama_params["function_call"] = function_call;
     }
 
     // Apply chat template to the list of messages
@@ -731,7 +762,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
             }
         }
 
-        json functions = json::array();
+        json functions                  = json::array();
         std::string functions_call_mode = "none";
         if (llama_params.at("function_call").is_object()) {
             const std::string func_name = llama_params.at("function_call").at("name").get<std::string>();
@@ -743,7 +774,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 }
             }
         } else if (llama_params.at("function_call").get<std::string>() != "none") {
-            functions = llama_params.at("functions");
+            functions           = llama_params.at("functions");
             functions_call_mode = llama_params.at("function_call").get<std::string>();
         }
         if (!functions.empty()) {

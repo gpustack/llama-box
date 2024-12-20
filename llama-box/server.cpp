@@ -1867,7 +1867,7 @@ struct server_context {
                             slot.n_sent_text += result.text_to_send.size();
                         } catch (const std::exception &e) {
                             SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
-                            send_text = true;
+                            send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size()-1]);
                         }
                     }
                 }
@@ -4469,7 +4469,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false);
+            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false, false);
         }
 
         // construct task
@@ -4597,7 +4597,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true);
+        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true, ctx_server.support_tool_calls);
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);

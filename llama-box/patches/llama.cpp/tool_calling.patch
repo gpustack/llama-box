@@ -171,10 +171,10 @@ index efbb27d2..ea3b3feb 100644
      // Sampling API
      //
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b7b04a41..d291a13d 100644
+index b7b04a41..43f86573 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -22274,12 +22274,60 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -22274,12 +22274,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
  static int32_t llama_chat_apply_template_internal(
      const llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
@@ -195,30 +195,30 @@ index b7b04a41..d291a13d 100644
 +            }
 +            ss << "<|im_start|>system\n";
 +            if (root_msg) {
-+                ss << root_msg->content << "\n";
++                ss << root_msg->content << "\n\n";
 +            } else {
-+                ss << "You are a helpful assistant.\n";
++                ss << "You are a helpful assistant.\n\n";
 +            }
-+            ss << "# Tools\n";
++            ss << "# Tools\n\n";
 +            if (req_func) {
-+                ss << "You MUST call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n";
++                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
 +            } else {
-+                ss << "You CAN call functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n";
++                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
 +            }
 +            ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
 +            ss << "<tools>\n";
 +            for (const auto & fn : func) {
 +                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}\n";
 +            }
-+            ss << "</tools>\n";
++            ss << "</tools>\n\n";
 +            if (req_func) {
-+                ss << "MUST use the following pydantic model json schema for each tool call you will make: {\"properties\": {\"arguments\": {\"title\": \"Arguments\", \"type\": \"object\"}, \"name\": {\"title\": \"Name\", \"type\": \"string\"}}, \"required\": [\"arguments\", \"name\"], \"title\": \"FunctionCall\", \"type\": \"object\"} For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags as follows:\n";
++                ss << "For each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
 +            } else {
-+                ss << "When you do not involve complex calculations, you SHOULD response directly in localized natural language without any tool calls. ";
-+                ss << "Otherwise, MUST use the following pydantic model json schema for each tool call you will make: {\"properties\": {\"arguments\": {\"title\": \"Arguments\", \"type\": \"object\"}, \"name\": {\"title\": \"Name\", \"type\": \"string\"}}, \"required\": [\"arguments\", \"name\"], \"title\": \"FunctionCall\", \"type\": \"object\"} For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags as follows:\n";
++                ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
++                ss << "Otherwise, for each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
 +            }
 +            ss << "<tool_call>\n";
-+            ss << "{\"name\": <function-name>, \"arguments\": <args-json-object>}\n";
++            ss << "{\"name\": <function-name>, \"arguments\": <arguments-json-object>}\n";
 +            ss << "</tool_call>" << "<|im_end|>\n";
 +        }
          // chatml template
@@ -226,6 +226,11 @@ index b7b04a41..d291a13d 100644
 +            if (!func.empty()) {
 +                std::string role(message->role);
 +                if (role == "system") {
++                    continue;
++                }
++                if (role == "assistant_tool_call") {
++                    ss << "<|im_start|>assistant\n";
++                    ss << "<tool_call>\n" << message->content << "\n</tool_call>" << "<|im_end|>\n";
 +                    continue;
 +                }
 +                if (role == "tool") {
@@ -236,7 +241,7 @@ index b7b04a41..d291a13d 100644
              ss << "<|im_start|>" << message->role << "\n" << message->content << "<|im_end|>\n";
          }
          if (add_ass) {
-@@ -22288,15 +22336,52 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22288,15 +22341,59 @@ static int32_t llama_chat_apply_template_internal(
      } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
          // Official mistral 'v7' template
          // See: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411#basic-instruct-template-v7
@@ -262,9 +267,11 @@ index b7b04a41..d291a13d 100644
 +                ss << "[SYSTEM_PROMPT] " << "You are a helpful assistant. ";
 +            }
 +            if (req_func) {
-+                ss << "You MUST call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions. ";
++                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
 +            } else {
-+                ss << "You CAN call functions to assist with the user query. Don't make assumptions about what values to plug into functions. ";
++                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
++                ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
++                ss << "Otherwise, try to call functions to assist with the user query. ";
 +            }
 +            ss << "[/SYSTEM_PROMPT]";
 +        }
@@ -280,16 +287,21 @@ index b7b04a41..d291a13d 100644
                  ss << "[INST] " << content << "[/INST]";
              }
              else {
-+                if (!func.empty() && role == "tool") {
-+                    ss << "[TOOL_RESULTS] ";
-+                    ss << message->content;
-+                    ss << "[/TOOL_RESULTS]";
-+                    continue;
++                if (!func.empty()) {
++                    if (role == "assistant_tool_call") {
++                        ss << "[TOOL_CALLS] ";
++                        ss << "[" << message->content << "]</s>";
++                        continue;
++                    }
++                    if (role == "tool") {
++                        ss << "[TOOL_RESULTS] " << message->content << "[/TOOL_RESULTS]";
++                        continue;
++                    }
 +                }
                  ss << " " << content << "</s>";
              }
          }
-@@ -22305,10 +22390,39 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22305,10 +22402,41 @@ static int32_t llama_chat_apply_template_internal(
              || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN) {
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/chat_templates.md
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/templates.md
@@ -321,15 +333,17 @@ index b7b04a41..d291a13d 100644
 +                ss << "You are a helpful assistant.\n\n";
 +            }
 +            if (req_func) {
-+                ss << "You MUST call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n\n";
++                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
 +            } else {
-+                ss << "You CAN call functions to assist with the user query. Don't make assumptions about what values to plug into functions.\n\n";
++                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
++                ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
++                ss << "Otherwise, try to call functions to assist with the user query.\n\n";
 +            }
 +        }
          for (auto message : chat) {
              if (!is_inside_turn) {
                  ss << leading_space << "[INST]" << trailing_space;
-@@ -22317,10 +22431,19 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22317,10 +22445,26 @@ static int32_t llama_chat_apply_template_internal(
              std::string role(message->role);
              std::string content(message->content);
              if (role == "system") {
@@ -340,16 +354,23 @@ index b7b04a41..d291a13d 100644
              } else if (role == "user") {
                  ss << content << leading_space << "[/INST]";
              } else {
-+                if (!func.empty() && role == "tool") {
-+                    ss << leading_space << "[TOOL_RESULTS]" << trailing_space;
-+                    ss << message->content;
-+                    ss << leading_space << "[/TOOL_RESULTS]";
-+                    continue;
++                if (!func.empty()) {
++                    if (role == "assistant_tool_call") {
++                        ss << leading_space << "[TOOL_CALLS]" << trailing_space;
++                        ss << "[" << message->content << "]</s>";
++                        continue;
++                    }
++                    if (role == "tool") {
++                        ss << leading_space << "[TOOL_RESULTS]" << trailing_space;
++                        ss << message->content;
++                        ss << leading_space << "[/TOOL_RESULTS]";
++                        continue;
++                    }
 +                }
                  ss << trailing_space << (trim_assistant_message ? trim(content) : content) << "</s>";
                  is_inside_turn = false;
              }
-@@ -22495,9 +22618,51 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22495,9 +22639,61 @@ static int32_t llama_chat_apply_template_internal(
              ss << "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>";
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3) {
@@ -369,20 +390,9 @@ index b7b04a41..d291a13d 100644
 +                ss << "You are a helpful assistant.\n\n";
 +            }
 +            if (req_func) {
-+                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
++                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.";
 +            } else {
-+                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
-+            }
-+            ss << "You are provided with following function signatures:\n";
-+            for (const auto & fn : func) {
-+                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
-+                ss << (fn == func.back() ? "\n\n": "\n");
-+            }
-+            if (req_func) {
-+                ss << "You MUST response in the format {\"name\": function name, \"arguments\": dictionary of argument name and its value}, and do not use variables.\n";
-+            } else {
-+                ss << "When you do not involve complex calculations, you SHOULD response directly in localized natural language without any tool calls. ";
-+                ss << "Otherwise, you MUST response in the format {\"name\": function name, \"arguments\": dictionary of argument name and its value}, and do not use variables.\n";
++                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions.";
 +            }
 +            ss << "<|eot_id|>";
 +        }
@@ -393,15 +403,36 @@ index b7b04a41..d291a13d 100644
 +                if (role == "system") {
 +                    continue;
 +                }
++                if (role == "assistant_tool_call") {
++                    ss << "<|start_header_id|>assistant<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
++                    continue;
++                }
 +                if (role == "tool") {
-+                    ss << "<|start_header_id|>ipython<|end_header_id|>\n\n" << message->content << "<|eot_id|>";
++                    ss << "<|start_header_id|>ipython<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
++                    continue;
++                }
++                if (role == "user" && message == chat.back()) {
++                    ss << "<|start_header_id|>user<|end_header_id|>\n\n";
++                    ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
++                    ss << "<tools>\n";
++                    for (const auto & fn : func) {
++                        ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}\n";
++                    }
++                    ss << "</tools>\n\n";
++                    if (req_func) {
++                        ss << "For each function call, return a JSON object with function name and arguments in the format {\"name\": <function-name>, \"arguments\": <arguments-json-object>}.\n";
++                    } else {
++                        ss << "When you can reply with your internal knowledge, reply directly without any function call. ";
++                        ss << "Otherwise, for each function call, return a JSON object with function name and arguments in the format {\"name\": <function-name>, \"arguments\": <arguments-json-object>}.\n";
++                    }
++                    ss << trim(message->content) << "<|eot_id|>";
 +                    continue;
 +                }
 +            }
              ss << "<|start_header_id|>" << role << "<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
          }
          if (add_ass) {
-@@ -22576,9 +22741,52 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22576,9 +22772,57 @@ static int32_t llama_chat_apply_template_internal(
              }
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
@@ -414,36 +445,41 @@ index b7b04a41..d291a13d 100644
 +                    break;
 +                }
 +            }
-+            ss << "<|start_of_role|>system<|end_of_role|>";
-+            if (root_msg) {
-+                ss << trim(root_msg->content) << " ";
-+            } else {
-+                ss << "You are a helpful assistant. ";
-+            }
-+            if (req_func) {
-+                ss << "You MUST call one or more following functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
-+            } else {
-+                ss << "You CAN call following functions to assist with the user query. Do not make assumptions about what values to plug into functions. ";
-+            }
-+            if (req_func) {
-+                ss << "You MUST response with <|tool_call|> followed by a JSON list of tool used as follows:\n";
-+            } else {
-+                ss << "When you do not involve complex calculations, you SHOULD response directly in localized natural language without any tool calls. ";
-+                ss << "Otherwise, you response with <|tool_call|> followed by a JSON list of tool used as follows:\n";
-+            }
-+            ss << "<|tool_call|>[{\"name\": <function-name-1>, \"arguments\": <args-json-object>}]";
 +            ss << "<|start_of_role|>tools<|end_of_role|>[";
 +            for (const auto & fn : func) {
 +                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
 +                ss << ((fn == func.back()) ? "" : ",");
 +            }
 +            ss << "]<|end_of_text|>\n";
++            ss << "<|start_of_role|>system<|end_of_role|>";
++            if (root_msg) {
++                ss << trim(root_msg->content) << " ";
++            } else {
++                ss << "You are a helpful assistant with tool calling capabilities. ";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more tools to assist with the user query. Do not make assumptions about what values to plug into tools. ";
++            } else {
++                ss << "You CAN call tools to assist with the user query. Do not make assumptions about what values to plug into tools. ";
++            }
++            if (req_func) {
++                ss << "For each tool call, return <|tool_call|> followed by a JSON list of tool used as follows: ";
++            } else {
++                ss << "When you can reply with your internal knowledge, reply directly without any tool calls. ";
++                ss << "Otherwise, for each tool call, return <|tool_call|> followed by a JSON list of tool used as follows: ";
++            }
++            ss << "<|tool_call|>[{\"name\": <function-name>, \"arguments\": <arguments-json-object>}]";
++            ss << "<|end_of_text|>\n";
 +        }
          // IBM Granite template
          for (const auto & message : chat) {
              std::string role(message->role);
 +            if (!func.empty()) {
 +                if (role == "system") {
++                    continue;
++                }
++                if (role == "assistant_tool_call") {
++                    ss << "<|start_of_role|>assistant<|start_of_role|><|tool_call|>" << message->content << "<|end_of_text|>\n";
 +                    continue;
 +                }
 +                if (role == "tool") {
@@ -454,7 +490,7 @@ index b7b04a41..d291a13d 100644
              ss << "<|start_of_role|>" << role << "<|end_of_role|>";
              if (role == "assistant_tool_call") {
                  ss << "<|tool_call|>";
-@@ -22627,6 +22835,9 @@ int32_t llama_chat_apply_template(
+@@ -22627,6 +22871,9 @@ int32_t llama_chat_apply_template(
                                const char * tmpl,
           const struct llama_chat_message * chat,
                                    size_t   n_msg,
@@ -464,7 +500,7 @@ index b7b04a41..d291a13d 100644
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -22652,12 +22863,19 @@ int32_t llama_chat_apply_template(
+@@ -22652,12 +22899,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  
@@ -485,7 +521,7 @@ index b7b04a41..d291a13d 100644
      if (res < 0) {
          return res;
      }
-@@ -22676,6 +22894,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
+@@ -22676,6 +22930,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
      return (int32_t) LLM_CHAT_TEMPLATES.size();
  }
  
