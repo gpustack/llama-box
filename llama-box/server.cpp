@@ -489,7 +489,7 @@ struct server_slot {
         return stop_pos;
     }
 
-    void push_token_into_result(llama_token tok, completion_token_output &result) {
+    void push_token_into_result(llama_context *llm_ctx, int32_t tok_idx, llama_token tok, completion_token_output &result) {
         if (lookup_ngram_min > 0) {
             prompt_tokens.push_back(tok);
             common_ngram_cache_update(ctx_ngram_cache, lookup_ngram_min, LLAMA_NGRAM_MAX, prompt_tokens, 1, false);
@@ -498,14 +498,20 @@ struct server_slot {
         result.toks.push_back(tok);
 
         if (params.llm_params.n_probs > 0) {
-            result.probss.emplace_back();
-            const auto last_idx                 = int32_t(result.probss.size() - 1);
-            const llama_token_data_array *cur_p = common_sampler_get_candidates(smpl);
-            for (size_t i = 0; i < (size_t)params.llm_params.n_probs; ++i) {
-                result.probss[last_idx].push_back({
-                    cur_p->data[i].id,
-                    i >= cur_p->size ? 0.0f : cur_p->data[i].p,
-                });
+            const std::vector<llama_token_data> cur = get_token_probabilities(llm_ctx, tok_idx);
+            const size_t n_vocab                    = llama_n_vocab(llama_get_model(llm_ctx));
+            const size_t n_probs                    = params.llm_params.n_probs;
+            // set probability for sampled token
+            for (size_t i = 0; i < n_vocab; i++) {
+                if (cur[i].id == tok) {
+                    result.probs.push_back(cur[i].p);
+                    break;
+                }
+            }
+            // set probability for top n_probs tokens
+            result.top_probs.emplace_back();
+            for (size_t i = 0; i < std::min(n_vocab, n_probs); i++) {
+                result.top_probs[result.top_probs.size() - 1].push_back({cur[i].id, cur[i].p});
             }
         }
     }
@@ -1766,26 +1772,7 @@ struct server_context {
         slot.has_next_token = true;
 
         // check if there is incomplete UTF-8 character at the end
-        bool incomplete = false;
-        for (unsigned i = 1; i < 5 && i <= slot.generated_text.size(); ++i) {
-            unsigned char c = slot.generated_text[slot.generated_text.size() - i];
-            if ((c & 0xC0) == 0x80) {
-                // continuation byte: 10xxxxxx
-                continue;
-            }
-            if ((c & 0xE0) == 0xC0) {
-                // 2-byte character: 110xxxxx ...
-                incomplete = i < 2;
-            } else if ((c & 0xF0) == 0xE0) {
-                // 3-byte character: 1110xxxx ...
-                incomplete = i < 3;
-            } else if ((c & 0xF8) == 0xF0) {
-                // 4-byte character: 11110xxx ...
-                incomplete = i < 4;
-            }
-            // else 1-byte character or invalid byte
-            break;
-        }
+        bool incomplete = validate_utf8(slot.generated_text) < slot.generated_text.size();
 
         // search stop word and delete it
         if (!incomplete) {
@@ -1805,7 +1792,7 @@ struct server_context {
 
             if (send_text && slot.oaicompat_completion_chat_tool) {
                 if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_NONE) {
-                    if (str_test.length() <= tool_call_start.length()) {
+                    if (str_test.length() < tool_call_start.length()) {
                         send_text = false;
                         if (tool_call_start_tok != LLAMA_TOKEN_NULL) {
                             for (const llama_token &tok : result.toks) {
@@ -1880,10 +1867,14 @@ struct server_context {
                             slot.n_sent_text += result.text_to_send.size();
                         } catch (const std::exception &e) {
                             SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
-                            send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1]);
                         }
                     }
                 }
+            }
+
+            // check if the last token is EOG
+            if (!send_text) {
+                send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1]);
             }
 
             // check if there is any token to predict
@@ -2152,7 +2143,7 @@ struct server_context {
             res.data["tool_calls"] = slot.generated_tool_calls;
         }
 
-        if (slot.params.llm_params.n_probs > 0) {
+        if (!slot.params.stream && slot.params.llm_params.n_probs > 0) {
             std::vector<completion_token_output> probs;
             if (!slot.params.stream && slot.stop == STOP_TYPE_WORD) {
                 const llama_tokens stop_word_toks = common_tokenize(llm_ctx, slot.stopping_word, false);
@@ -3227,16 +3218,14 @@ struct server_context {
 
                 completion_token_output result;
                 if (!slot.sampled_draft.empty()) {
-                    llama_token tok;
                     auto sz_draft = int32_t(slot.sampled_draft.size());
                     // +1 to allow for the last token to be generated
                     for (int32_t j = 0; j < sz_draft + 1; ++j) {
                         // greedy verification only
-                        bool accept       = false;
-                        tok               = common_sampler_sample(slot.smpl, llm_ctx, slot.i_batch - i + j);
-                        const auto *cur_p = common_sampler_get_candidates(slot.smpl);
+                        bool accept     = false;
+                        int32_t tok_idx = slot.i_batch - i + j;
+                        llama_token tok = common_sampler_sample(slot.smpl, llm_ctx, tok_idx);
                         common_sampler_accept(slot.smpl, tok, true);
-                        slot.push_token_into_result(tok, result);
                         if (j < sz_draft && tok == slot.sampled_draft[j]) {
                             accept = true;
                         }
@@ -3244,12 +3233,14 @@ struct server_context {
                         if (!accept) {
                             break;
                         }
+                        slot.push_token_into_result(llm_ctx, tok_idx, tok, result);
                         slot.n_drafted_accepted += 1;
                     }
                 } else {
-                    llama_token tok = common_sampler_sample(slot.smpl, llm_ctx, slot.i_batch - i);
+                    int32_t tok_idx = slot.i_batch - i;
+                    llama_token tok = common_sampler_sample(slot.smpl, llm_ctx, tok_idx);
                     common_sampler_accept(slot.smpl, tok, true);
-                    slot.push_token_into_result(tok, result);
+                    slot.push_token_into_result(llm_ctx, tok_idx, tok, result);
                     slot.n_decoded += 1;
                 }
 
