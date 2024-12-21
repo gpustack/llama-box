@@ -116,6 +116,9 @@ LLaMA Box supports the following platforms.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/Qwen/Qwen2-0.5B-Instruct-GGUF/qwen2-0_5b-instruct-fp16.gguf
 
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen2.5", "messages": [{"role":"user","content":"What is the weather like in Paris today?"}], "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}}}]}'
+    
+    $ # or use the chat.sh tool
+    $ TOOLS_WITH=true ./llama-box/tools/chat.sh "What is the weather like in Paris today?"
     ```
 
 - Image generation via [Stable Diffusion 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)

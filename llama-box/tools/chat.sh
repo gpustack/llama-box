@@ -192,7 +192,7 @@ chat_completion() {
     done
 }
 
-if [[ "${DISABLED_TOOLS:-"false"}" == "true" ]]; then
+if [[ "${TOOLS_WITH:-"false"}" == "false" ]]; then
     TOOLNAMES=()
     TOOLS=()
 fi
