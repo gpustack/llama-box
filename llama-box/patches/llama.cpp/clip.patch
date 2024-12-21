@@ -1,7 +1,52 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 463b7c86..c6ffc241 100644
+index 3cd0d2fa..4c34e10a 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
+@@ -8,25 +8,25 @@
+ #include "ggml-alloc.h"
+ #include "ggml-backend.h"
+ 
+-//#ifdef GGML_USE_CUDA
+-//#include "ggml-cuda.h"
+-//#endif
+-//
+-//#ifdef GGML_USE_SYCL
+-//#include "ggml-sycl.h"
+-//#endif
+-//
+-//#ifdef GGML_USE_METAL
+-//#include "ggml-metal.h"
+-//#endif
+-//
+-//#ifdef GGML_USE_CANN
+-//#include "ggml-cann.h"
+-//#endif
+-//
+-//#ifdef GGML_USE_VULKAN
+-//#include "ggml-vulkan.h"
+-//#endif
++#ifdef GGML_USE_CUDA
++#include "ggml-cuda.h"
++#endif
++
++#ifdef GGML_USE_SYCL
++#include "ggml-sycl.h"
++#endif
++
++#ifdef GGML_USE_METAL
++#include "ggml-metal.h"
++#endif
++
++#ifdef GGML_USE_CANN
++#include "ggml-cann.h"
++#endif
++
++#ifdef GGML_USE_VULKAN
++#include "ggml-vulkan.h"
++#endif
+ 
+ #define STB_IMAGE_IMPLEMENTATION
+ #include "stb_image.h"
 @@ -44,17 +44,7 @@
  #include <cinttypes>
  #include <limits>
@@ -26,21 +71,66 @@ index 463b7c86..c6ffc241 100644
  
  // read and create ggml_context containing the tensors and their data
 -struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
-+struct clip_ctx * clip_model_load(const char * fname, int verbosity, int32_t ngl) {
++struct clip_ctx * clip_model_load(const char * fname, const int verbosity, int32_t ngl) {
      struct ggml_context * meta = NULL;
  
      struct gguf_init_params params = {
-@@ -1228,6 +1218,9 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
- #endif
+@@ -1222,34 +1212,40 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         }
+     }
  
- #ifdef GGML_USE_METAL
+-//#ifdef GGML_USE_CUDA
+-//    new_clip->backend = ggml_backend_cuda_init(0);
+-//    LOG_INF("%s: CLIP using CUDA backend\n", __func__);
+-//#endif
+-//
+-//#ifdef GGML_USE_METAL
+-//    new_clip->backend = ggml_backend_metal_init();
+-//    LOG_INF("%s: CLIP using Metal backend\n", __func__);
+-//#endif
+-//
+-//#ifdef GGML_USE_CANN
+-//    new_clip->backend = ggml_backend_cann_init(0);
+-//    LOG_INF("%s: CLIP using CANN backend\n", __func__);
+-//#endif
+-//
+-//#ifdef GGML_USE_VULKAN
+-//    new_clip->backend = ggml_backend_vk_init(0);
+-//    LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
+-//#endif
+-//
+-//#ifdef GGML_USE_SYCL
+-//    new_clip->backend = ggml_backend_sycl_init(0);
+-//    LOG_INF("%s: CLIP using SYCL backend\n", __func__);
+-//#endif
++#ifdef GGML_USE_CUDA
++    new_clip->backend = ggml_backend_cuda_init(0);
++    LOG_INF("%s: CLIP using CUDA backend\n", __func__);
++#endif
++
++#ifdef GGML_USE_METAL
 +    if (ngl < 0) {
 +        ngl = 999;
 +    }
-     new_clip->backend = ggml_backend_metal_init();
-     LOG_INF("%s: CLIP using Metal backend\n", __func__);
- #endif
-@@ -1250,6 +1243,9 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
++    new_clip->backend = ggml_backend_metal_init();
++    LOG_INF("%s: CLIP using Metal backend\n", __func__);
++#endif
++
++#ifdef GGML_USE_CANN
++    new_clip->backend = ggml_backend_cann_init(0);
++    LOG_INF("%s: CLIP using CANN backend\n", __func__);
++#endif
++
++#ifdef GGML_USE_VULKAN
++    new_clip->backend = ggml_backend_vk_init(0);
++    LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
++#endif
++
++#ifdef GGML_USE_SYCL
++    new_clip->backend = ggml_backend_sycl_init(0);
++    LOG_INF("%s: CLIP using SYCL backend\n", __func__);
++#endif
+ 
      if (!new_clip->backend) {
          new_clip->backend = ggml_backend_cpu_init();
          LOG_INF("%s: CLIP using CPU backend\n", __func__);
