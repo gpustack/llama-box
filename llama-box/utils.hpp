@@ -359,7 +359,7 @@ inline std::string format_chat(const struct llama_model *model, const std::strin
                     if (!func.contains("arguments") || !func.at("arguments").is_string()) {
                         continue;
                     }
-                    std::string name       = func.at("name").get<std::string>();
+                    std::string name      = func.at("name").get<std::string>();
                     std::string arguments = func.at("arguments").get<std::string>();
                     if (!content.empty()) {
                         content += "\n";

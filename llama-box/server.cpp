@@ -2177,9 +2177,9 @@ struct server_context {
 
         const int n_embd = llama_n_embd(llm_model);
 
-        std::vector<float> embd_res(n_embd, 0.0f);
+        std::vector<float> embedding(n_embd, 0.0f);
 
-        for (int i = 0; i < batch_view.n_tokens; ++i) {
+        for (int i = batch_view.n_tokens - 1; i >= 0; i--) {
             if (!batch_view.logits[i] || batch_view.seq_id[i][0] != slot.id) {
                 continue;
             }
@@ -2190,26 +2190,21 @@ struct server_context {
             }
 
             if (embd == nullptr) {
-                SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n",
-                        batch.token[i], batch.seq_id[i][0]);
-
-                res.data = json{
-                    {"embedding", std::vector<float>(n_embd, 0.0f)},
-                    {"index", slot.index},
-                };
-
-                continue;
+                SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n", batch.token[i], batch.seq_id[i][0]);
+                break;
             }
 
-            common_embd_normalize(embd, embd_res.data(), n_embd);
-
-            res.data = json{
-                {"embedding", embd_res},
-                {"index", slot.index},
-            };
+            // normalize only when there is pooling
+            common_embd_normalize(embd, embedding.data(), n_embd, 2);
+            break;
         }
 
-        res.data["tokens_evaluated"] = slot.n_prompt_tokens;
+        res.data = json{
+            {"index", slot.index},
+            {"embedding", embedding},
+            {"tokens_evaluated", slot.n_prompt_tokens},
+        };
+
         queue_results.send(res);
     }
 
@@ -2219,7 +2214,9 @@ struct server_context {
         res.error = false;
         res.stop  = true;
 
-        for (int i = 0; i < batch_view.n_tokens; ++i) {
+        float score = -1e6;
+
+        for (int i = batch_view.n_tokens - 1; i >= 0; i--) {
             if (!batch_view.logits[i] || batch_view.seq_id[i][0] != slot.id) {
                 continue;
             }
@@ -2231,22 +2228,19 @@ struct server_context {
 
             if (embd == nullptr) {
                 SLT_ERR(slot, "failed to get embeddings, token = %d, seq_id = %d\n", batch_view.token[i], batch_view.seq_id[i][0]);
-
-                res.data = json{
-                    {"index", slot.index},
-                    {"score", -1e6},
-                };
-
-                continue;
+                break;
             }
 
-            res.data = json{
-                {"index", slot.index},
-                {"score", embd[0]},
-            };
+            score = embd[0];
+            break;
         }
 
-        res.data["tokens_evaluated"] = slot.n_prompt_tokens;
+        res.data = json{
+            {"index", slot.index},
+            {"score", score},
+            {"tokens_evaluated", slot.n_prompt_tokens},
+        };
+
         queue_results.send(res);
     }
 
@@ -3073,19 +3067,20 @@ struct server_context {
 
                     // add prompt tokens for processing in the current batch
                     const int32_t n_eval = std::min(slot.n_prompt_tokens - slot.n_past, n_batch - batch.n_tokens);
+                    const bool need_embd = slot.task_type == SERVER_TASK_TYPE_EMBEDDING && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
                     while (slot.n_past < slot.n_prompt_tokens && batch.n_tokens < n_batch) {
                         const int32_t idx = slot.n_past - slot.n_past_mmd;
 
                         if (need_mrope()) {
-                            common_batch_add_with_mrope(batch, prompt_tokens[idx], slot.st_pos_id, n_eval, {slot.id}, false);
+                            common_batch_add_with_mrope(batch, prompt_tokens[idx], slot.st_pos_id, n_eval, {slot.id}, need_embd);
                             if (llm_ctx_draft != nullptr) {
-                                common_batch_add_with_mrope(batch_draft, prompt_tokens[idx], slot.st_pos_id, n_eval, {slot.id}, false);
+                                common_batch_add_with_mrope(batch_draft, prompt_tokens[idx], slot.st_pos_id, n_eval, {slot.id}, need_embd);
                             }
                             slot.st_pos_id++;
                         } else {
-                            common_batch_add(batch, prompt_tokens[idx], slot.n_past, {slot.id}, false);
+                            common_batch_add(batch, prompt_tokens[idx], slot.n_past, {slot.id}, need_embd);
                             if (llm_ctx_draft != nullptr) {
-                                common_batch_add(batch_draft, prompt_tokens[idx], slot.n_past, {slot.id}, false);
+                                common_batch_add(batch_draft, prompt_tokens[idx], slot.n_past, {slot.id}, need_embd);
                             }
                         }
 
