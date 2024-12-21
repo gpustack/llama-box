@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 05d3ba76..fe467e1d 100644
+index 20be9291..cfbfb179 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -1613,27 +1613,34 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
+@@ -1614,27 +1614,34 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
  
  bool common_chat_verify_template(const std::string & tmpl) {
      llama_chat_message chat[] = {{"user", "test"}};
@@ -40,7 +40,7 @@ index 05d3ba76..fe467e1d 100644
  
      // error: chat template is not supported
      if (res < 0) {
-@@ -1643,7 +1650,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1644,7 +1651,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
              throw std::runtime_error("this custom template is not supported");
          } else {
              // If the built-in template is not supported, we default to chatml
@@ -49,7 +49,7 @@ index 05d3ba76..fe467e1d 100644
              fallback = true;
          }
      }
-@@ -1654,7 +1661,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1655,7 +1662,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
          res = llama_chat_apply_template(
              fallback ? nullptr : model,
              fallback ? "chatml" : ptr_tmpl,
@@ -58,7 +58,7 @@ index 05d3ba76..fe467e1d 100644
      }
  
      std::string formatted_chat(buf.data(), res);
-@@ -1667,7 +1674,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1668,7 +1675,7 @@ std::string common_chat_format_single(const struct llama_model * model,
          const common_chat_msg & new_msg,
          bool add_ass) {
      std::ostringstream ss;
@@ -67,7 +67,7 @@ index 05d3ba76..fe467e1d 100644
      std::vector<common_chat_msg> chat_new(past_msg);
      // if the past_msg ends with a newline, we must preserve it in the formatted version
      if (add_ass && !fmt_past_msg.empty() && fmt_past_msg.back() == '\n') {
-@@ -1675,7 +1682,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1676,7 +1683,7 @@ std::string common_chat_format_single(const struct llama_model * model,
      };
      // format chat with new_msg
      chat_new.push_back(new_msg);
@@ -76,7 +76,7 @@ index 05d3ba76..fe467e1d 100644
      // get the diff part
      ss << fmt_new_msg.substr(fmt_past_msg.size(), fmt_new_msg.size() - fmt_past_msg.size());
      return ss.str();
-@@ -1684,12 +1691,16 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1685,12 +1692,16 @@ std::string common_chat_format_single(const struct llama_model * model,
  std::string common_chat_format_example(const struct llama_model * model,
          const std::string & tmpl) {
      std::vector<common_chat_msg> msgs = {
@@ -99,10 +99,10 @@ index 05d3ba76..fe467e1d 100644
  
  //
 diff --git a/common/common.h b/common/common.h
-index ec0e49f6..9f647554 100644
+index 1d2bd932..3f350c46 100644
 --- a/common/common.h
 +++ b/common/common.h
-@@ -560,6 +560,13 @@ struct common_chat_msg {
+@@ -571,6 +571,13 @@ struct common_chat_msg {
      std::string content;
  };
  
@@ -116,7 +116,7 @@ index ec0e49f6..9f647554 100644
  // Check if the template supplied via "--chat-template" is supported or not. Returns true if it's valid
  bool common_chat_verify_template(const std::string & tmpl);
  
-@@ -569,6 +576,8 @@ bool common_chat_verify_template(const std::string & tmpl);
+@@ -580,6 +587,8 @@ bool common_chat_verify_template(const std::string & tmpl);
  std::string common_chat_apply_template(const struct llama_model * model,
          const std::string & tmpl,
          const std::vector<common_chat_msg> & chat,
@@ -126,7 +126,7 @@ index ec0e49f6..9f647554 100644
  
  // Format single message, while taking into account the position of that message in chat history
 diff --git a/include/llama.h b/include/llama.h
-index efbb27d2..ea3b3feb 100644
+index a4abf395..1af8c141 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -383,6 +383,11 @@ extern "C" {
@@ -141,7 +141,7 @@ index efbb27d2..ea3b3feb 100644
  
      // lora adapter
      struct llama_lora_adapter;
-@@ -982,6 +987,8 @@ extern "C" {
+@@ -979,6 +984,8 @@ extern "C" {
      /// @param tmpl A Jinja template to use for this chat. If this is nullptr, the model’s default chat template will be used instead.
      /// @param chat Pointer to a list of multiple llama_chat_message
      /// @param n_msg Number of llama_chat_message in this chat
@@ -150,7 +150,7 @@ index efbb27d2..ea3b3feb 100644
      /// @param add_ass Whether to end the prompt with the token(s) that indicate the start of an assistant message.
      /// @param buf A buffer to hold the output formatted prompt. The recommended alloc size is 2 * (total number of characters of all messages)
      /// @param length The size of the allocated buffer
-@@ -991,6 +998,9 @@ extern "C" {
+@@ -988,6 +995,9 @@ extern "C" {
                              const char * tmpl,
         const struct llama_chat_message * chat,
                                  size_t   n_msg,
@@ -160,7 +160,7 @@ index efbb27d2..ea3b3feb 100644
                                    bool   add_ass,
                                    char * buf,
                                 int32_t   length);
-@@ -998,6 +1008,9 @@ extern "C" {
+@@ -995,6 +1005,9 @@ extern "C" {
      // Get list of built-in chat templates
      LLAMA_API int32_t llama_chat_builtin_templates(const char ** output, size_t len);
  
@@ -171,10 +171,10 @@ index efbb27d2..ea3b3feb 100644
      // Sampling API
      //
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b7b04a41..43f86573 100644
+index b442781a..41b04123 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -22274,12 +22274,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -22670,12 +22670,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
  static int32_t llama_chat_apply_template_internal(
      const llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
@@ -241,7 +241,7 @@ index b7b04a41..43f86573 100644
              ss << "<|im_start|>" << message->role << "\n" << message->content << "<|im_end|>\n";
          }
          if (add_ass) {
-@@ -22288,15 +22341,59 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22684,15 +22737,59 @@ static int32_t llama_chat_apply_template_internal(
      } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
          // Official mistral 'v7' template
          // See: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411#basic-instruct-template-v7
@@ -301,7 +301,7 @@ index b7b04a41..43f86573 100644
                  ss << " " << content << "</s>";
              }
          }
-@@ -22305,10 +22402,41 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22701,10 +22798,41 @@ static int32_t llama_chat_apply_template_internal(
              || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN) {
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/chat_templates.md
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/templates.md
@@ -343,7 +343,7 @@ index b7b04a41..43f86573 100644
          for (auto message : chat) {
              if (!is_inside_turn) {
                  ss << leading_space << "[INST]" << trailing_space;
-@@ -22317,10 +22445,26 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22713,10 +22841,26 @@ static int32_t llama_chat_apply_template_internal(
              std::string role(message->role);
              std::string content(message->content);
              if (role == "system") {
@@ -370,7 +370,7 @@ index b7b04a41..43f86573 100644
                  ss << trailing_space << (trim_assistant_message ? trim(content) : content) << "</s>";
                  is_inside_turn = false;
              }
-@@ -22495,9 +22639,61 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22891,9 +23035,61 @@ static int32_t llama_chat_apply_template_internal(
              ss << "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>";
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3) {
@@ -432,7 +432,7 @@ index b7b04a41..43f86573 100644
              ss << "<|start_header_id|>" << role << "<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
          }
          if (add_ass) {
-@@ -22576,9 +22772,57 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22972,9 +23168,57 @@ static int32_t llama_chat_apply_template_internal(
              }
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
@@ -490,7 +490,7 @@ index b7b04a41..43f86573 100644
              ss << "<|start_of_role|>" << role << "<|end_of_role|>";
              if (role == "assistant_tool_call") {
                  ss << "<|tool_call|>";
-@@ -22627,6 +22871,9 @@ int32_t llama_chat_apply_template(
+@@ -23023,6 +23267,9 @@ int32_t llama_chat_apply_template(
                                const char * tmpl,
           const struct llama_chat_message * chat,
                                    size_t   n_msg,
@@ -500,7 +500,7 @@ index b7b04a41..43f86573 100644
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -22652,12 +22899,19 @@ int32_t llama_chat_apply_template(
+@@ -23048,12 +23295,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  
@@ -521,7 +521,7 @@ index b7b04a41..43f86573 100644
      if (res < 0) {
          return res;
      }
-@@ -22676,6 +22930,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
+@@ -23072,6 +23326,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
      return (int32_t) LLM_CHAT_TEMPLATES.size();
  }
  

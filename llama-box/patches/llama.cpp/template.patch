@@ -1,8 +1,8 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b7b04a41..9c923330 100644
+index b442781a..32ffa125 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -1630,6 +1630,9 @@ enum llm_chat_template {
+@@ -1691,6 +1691,9 @@ enum llm_chat_template {
      LLM_CHAT_TEMPLATE_RWKV_WORLD,
      LLM_CHAT_TEMPLATE_GRANITE,
      LLM_CHAT_TEMPLATE_GIGACHAT,
@@ -12,7 +12,7 @@ index b7b04a41..9c923330 100644
      LLM_CHAT_TEMPLATE_UNKNOWN,
  };
  
-@@ -1662,6 +1665,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
+@@ -1723,6 +1726,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
      { "rwkv-world",        LLM_CHAT_TEMPLATE_RWKV_WORLD        },
      { "granite",           LLM_CHAT_TEMPLATE_GRANITE           },
      { "gigachat",          LLM_CHAT_TEMPLATE_GIGACHAT          },
@@ -22,7 +22,7 @@ index b7b04a41..9c923330 100644
  };
  
  static llm_arch llm_arch_from_string(const std::string & name) {
-@@ -22265,6 +22271,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -22661,6 +22667,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
          return LLM_CHAT_TEMPLATE_GRANITE;
      } else if (tmpl_contains("message['role'] + additional_special_tokens[0] + message['content'] + additional_special_tokens[1]")) {
          return LLM_CHAT_TEMPLATE_GIGACHAT;
@@ -31,7 +31,7 @@ index b7b04a41..9c923330 100644
      }
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
-@@ -22614,6 +22622,61 @@ static int32_t llama_chat_apply_template_internal(
+@@ -23010,6 +23018,61 @@ static int32_t llama_chat_apply_template_internal(
          if (add_ass) {
              ss << "assistant<|role_sep|>";
          }

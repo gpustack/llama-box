@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index ba28c07c..6c4cecd6 100644
+index 463b7c86..c6ffc241 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -44,17 +44,7 @@
