@@ -192,6 +192,11 @@ chat_completion() {
     done
 }
 
+if [[ "${DISABLED_TOOLS:-"false"}" == "true" ]]; then
+    TOOLNAMES=()
+    TOOLS=()
+fi
+
 echo "====================================================="
 echo "LOG_FILE          : ${LOG_FILE}"
 echo "API_URL           : ${API_URL}"

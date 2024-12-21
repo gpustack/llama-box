@@ -171,21 +171,22 @@ struct slot_params {
 
     bool stream_preview_faster = false;
     bool stream_preview        = false;
+
     struct stablediffusion_params_sampling sd_params;
 
     /* LLAMA */
 
-    int32_t n_keep    = 0;  // number of tokens to keep from initial prompt
-    int32_t n_discard = 0;  // number of tokens after n_keep that may be discarded when shifting context, 0 defaults to half
-    int32_t n_predict = -1; // new tokens to predict
-    int32_t n_indent  = 0;  // mininum line indentation for the generated text in number of whitespace characters
-
+    bool return_tokens       = false;
+    int32_t n_predict        = -1; // new tokens to predict
+    int32_t n_indent         = 0;  // mininum line indentation for the generated text in number of whitespace characters
+    int32_t n_keep           = 0;  // number of tokens to keep from initial prompt
+    int32_t n_discard        = 0;  // number of tokens after n_keep that may be discarded when shifting context, 0 defaults to half
     int64_t t_max_prompt_ms  = -1; // TODO: implement
     int64_t t_max_predict_ms = -1; // if positive, limit the generation phase to this time limit
 
-    std::vector<std::string> antiprompt;
-
     struct common_params_sampling llm_params;
+
+    std::vector<std::string> antiprompt;
 };
 
 struct server_slot {
@@ -242,6 +243,7 @@ struct server_slot {
 
     // output
     std::string generated_text;
+    llama_tokens generated_tokens;
     llama_tokens cache_tokens;
     std::vector<completion_token_output> generated_token_probs;
     bool has_next_token = true;
@@ -319,15 +321,18 @@ struct server_slot {
         n_prompt_tokens           = 0;
         n_prompt_tokens_processed = 0;
         last_nl_pos               = 0;
-        generated_text            = "";
-        has_new_line              = false;
-        truncated                 = false;
-        stop                      = STOP_TYPE_NONE;
-        stopping_word             = "";
-        n_past                    = 0;
-        n_past_mmd                = 0;
-        n_sent_text               = 0;
-        n_sent_token_probs        = 0;
+
+        generated_text = "";
+        generated_text.clear();
+
+        has_new_line       = false;
+        truncated          = false;
+        stop               = STOP_TYPE_NONE;
+        stopping_word      = "";
+        n_past             = 0;
+        n_past_mmd         = 0;
+        n_sent_text        = 0;
+        n_sent_token_probs = 0;
 
         if (smpl != nullptr) {
             common_sampler_free(smpl);
@@ -1494,11 +1499,13 @@ struct server_context {
         slot.oaicompat_completion_chat_tool   = json_value(data, "__oaicompat_completion_chat_tool", false) && support_tool_calls;
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && llm_ctx_clip != nullptr;
 
-        slot.params.stream    = json_value(data, "stream", false);
-        slot.params.n_predict = json_value(data, "n_predict", llm_params.n_predict);
-        slot.params.n_indent  = json_value(data, "n_indent", 0);
-        slot.params.n_keep    = json_value(data, "n_keep", llm_params.n_keep);
-        slot.params.n_discard = json_value(data, "n_discard", 0);
+        slot.params.stream = json_value(data, "stream", false);
+
+        slot.params.return_tokens = json_value(data, "return_tokens", false);
+        slot.params.n_predict     = json_value(data, "n_predict", llm_params.n_predict);
+        slot.params.n_indent      = json_value(data, "n_indent", 0);
+        slot.params.n_keep        = json_value(data, "n_keep", llm_params.n_keep);
+        slot.params.n_discard     = json_value(data, "n_discard", 0);
         // slot.params.t_max_prompt_ms    = json_value(data, "t_max_prompt_ms",   -1); // TODO: implement
         slot.params.t_max_predict_ms = json_value(data, "t_max_predict_ms", -1);
 
@@ -1751,6 +1758,11 @@ struct server_context {
 
         // search stop word and delete it
         slot.generated_text += token_str;
+        if (slot.params.return_tokens) {
+            for (const llama_token &tok : result.toks) {
+                slot.generated_tokens.push_back(tok);
+            }
+        }
         slot.has_next_token = true;
 
         // check if there is incomplete UTF-8 character at the end
@@ -1775,6 +1787,7 @@ struct server_context {
             break;
         }
 
+        // search stop word and delete it
         if (!incomplete) {
             size_t pos = std::min(slot.n_sent_text, slot.generated_text.size());
 
@@ -1867,7 +1880,7 @@ struct server_context {
                             slot.n_sent_text += result.text_to_send.size();
                         } catch (const std::exception &e) {
                             SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
-                            send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size()-1]);
+                            send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1]);
                         }
                     }
                 }
@@ -1958,25 +1971,23 @@ struct server_context {
         }
 
         // check the EOT
-        for (auto i = int(result.toks.size()) - 1; i >= 0; --i) {
-            if (llama_token_is_eog(llm_model, result.toks[i])) {
-                slot.stop           = slot.generated_tool_calls.empty() ? STOP_TYPE_EOS : STOP_TYPE_TOOL;
-                slot.has_next_token = false;
+        if (llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1])) {
+            slot.stop           = slot.generated_tool_calls.empty() ? STOP_TYPE_EOS : STOP_TYPE_TOOL;
+            slot.has_next_token = false;
 
-                SLT_DBG(slot, "%s", "stopped by EOS\n");
-                break;
-            }
+            SLT_DBG(slot, "%s", "stopped by EOS\n");
         }
 
         int32_t n_ctx_train = llama_n_ctx_train(llm_model);
         if (slot.params.n_predict < 1 && slot.n_predict < 1 && slot.n_prompt_tokens + slot.n_decoded >= n_ctx_train) {
+            slot.truncated      = true;
+            slot.stop           = STOP_TYPE_LIMIT;
+            slot.has_next_token = false; // stop prediction
+
             SLT_WRN(slot,
                     "n_predict (%d) is set for infinite generation, "
                     "limiting generated tokens to n_ctx_train (%d) to avoid EOS-less generation infinite loop\n",
                     slot.params.n_predict, n_ctx_train);
-            slot.truncated      = true;
-            slot.stop           = STOP_TYPE_LIMIT;
-            slot.has_next_token = false; // stop prediction
         }
 
         return slot.has_next_token; // continue
@@ -2089,6 +2100,7 @@ struct server_context {
         res.stop  = false;
         res.data  = json{
              {"content", tkn.text_to_send},
+             {"tokens", tkn.toks},
              {"id_slot", slot.id},
              {"index", slot.index},
              {"stop", false},
@@ -2135,6 +2147,7 @@ struct server_context {
         };
         if (slot.generated_tool_calls.empty()) {
             res.data["content"] = !slot.params.stream ? slot.generated_text : "";
+            res.data["tokens"]  = !slot.params.stream ? slot.generated_tokens : llama_tokens{};
         } else {
             res.data["tool_calls"] = slot.generated_tool_calls;
         }

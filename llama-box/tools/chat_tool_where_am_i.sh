@@ -10,15 +10,15 @@ function where_am_i() {
     ARGS="${1}"
     ID="${2}"
 
-    LOCATION="$(curl -s https://wttr.in/?format="%l")"
+    CITY="$(curl -s https://wttr.in/?format="%l")"
 
-    MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"city\\\":\\\"${LOCATION}\\\"}\",\"tool_call_id\":\"${ID}\"}"
+    MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"city\\\":\\\"${CITY}\\\"}\",\"tool_call_id\":\"${ID}\"}"
     echo "${MESSAGE}"
 }
 
 function register_tool_where_am_i() {
     TOOLNAMES+=("get_location")
-    TOOLS+=("{\"type\":\"function\",\"function\":{\"name\":\"where_am_i\",\"description\":\"Get the city where I work.\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}}")
+    TOOLS+=("{\"type\":\"function\",\"function\":{\"name\":\"where_am_i\",\"description\":\"Get the city where I am living or working.\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}}")
 }
 
 register_tool_where_am_i
