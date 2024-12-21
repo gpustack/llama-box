@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index c0c98232..88df2921 100644
+index 05d3ba76..fe467e1d 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -1613,27 +1613,34 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
@@ -99,7 +99,7 @@ index c0c98232..88df2921 100644
  
  //
 diff --git a/common/common.h b/common/common.h
-index 5f556c24..4de51e8d 100644
+index ec0e49f6..9f647554 100644
 --- a/common/common.h
 +++ b/common/common.h
 @@ -560,6 +560,13 @@ struct common_chat_msg {
