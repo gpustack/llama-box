@@ -977,14 +977,23 @@ jobs:
           key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}\build
+            ${{ github.workspace }}\.cache
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install ccache ninja curl -y
       - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+          cmake ${{ matrix.arch == 'arm64' && '-G "Ninja Multi-Config"'|| '' }} -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_NATIVE=off `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX2=on' || '' }} `
@@ -992,7 +1001,7 @@ jobs:
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- /m:${env:NUMBER_OF_PROCESSORS}
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
           if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
