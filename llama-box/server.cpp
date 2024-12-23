@@ -935,11 +935,11 @@ struct server_context {
                 return false;
             }
 
-            if (sd_params.sampling.sampler >= N_SAMPLE_METHODS) {
-                sd_params.sampling.sampler = sd_ctx->get_default_sample_method();
+            if (sd_params.sampling.sample_method >= N_SAMPLE_METHODS) {
+                sd_params.sampling.sample_method = sd_ctx->get_default_sample_method();
             }
-            if (sd_params.sampling.sample_steps <= 0) {
-                sd_params.sampling.sample_steps = sd_ctx->get_default_sample_steps();
+            if (sd_params.sampling.sampling_steps <= 0) {
+                sd_params.sampling.sampling_steps = sd_ctx->get_default_sampling_steps();
             }
             if (sd_params.sampling.cfg_scale <= 0.0f) {
                 sd_params.sampling.cfg_scale = sd_ctx->get_default_cfg_scale();
@@ -954,11 +954,12 @@ struct server_context {
                 lora_adapters.push_back(loaded_la);
             }
 
-            SRV_INF("seed: %d, flash attn: %s, sampler: %s, steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
+            SRV_INF("seed: %d, flash attn: %s, schedule method: %s, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
                     sd_params.seed,
                     sd_params.flash_attn ? "true" : "false",
-                    sd_sample_method_to_argument(sd_params.sampling.sampler),
-                    sd_params.sampling.sample_steps,
+                    sd_schedule_to_argument(sd_params.sampling.schedule_method),
+                    sd_sample_method_to_argument(sd_params.sampling.sample_method),
+                    sd_params.sampling.sampling_steps,
                     sd_params.sampling.cfg_scale,
                     sd_params.sampling.slg_scale);
 
@@ -1335,14 +1336,14 @@ struct server_context {
             slot.params.sd_params.width            = json_value(data, "width", defaults.sd_params.width);
             slot.params.sd_params.guidance         = json_value(data, "guidance", defaults.sd_params.guidance);
             slot.params.sd_params.strength         = json_value(data, "strength", defaults.sd_params.strength);
-            slot.params.sd_params.sampler          = json_value(data, "sampler", defaults.sd_params.sampler);
-            slot.params.sd_params.sample_steps     = json_value(data, "sample_steps", defaults.sd_params.sample_steps);
+            slot.params.sd_params.sample_method    = json_value(data, "sample_method", defaults.sd_params.sample_method);
+            slot.params.sd_params.sampling_steps   = json_value(data, "sampling_steps", defaults.sd_params.sampling_steps);
             slot.params.sd_params.cfg_scale        = json_value(data, "cfg_scale", defaults.sd_params.cfg_scale);
             slot.params.sd_params.slg_scale        = json_value(data, "slg_scale", defaults.sd_params.slg_scale);
             slot.params.sd_params.slg_skip_layers  = json_value(data, "slg_skip_layers", defaults.sd_params.slg_skip_layers);
             slot.params.sd_params.slg_start        = json_value(data, "slg_start", defaults.sd_params.slg_start);
             slot.params.sd_params.slg_end          = json_value(data, "slg_end", defaults.sd_params.slg_end);
-            slot.params.sd_params.schedule         = json_value(data, "schedule", defaults.sd_params.schedule);
+            slot.params.sd_params.schedule_method  = json_value(data, "schedule_method", defaults.sd_params.schedule_method);
             slot.params.sd_params.control_strength = json_value(data, "control_strength", defaults.sd_params.control_strength);
             slot.params.sd_params.control_canny    = json_value(data, "control_strength", defaults.sd_params.control_canny);
             slot.params.sd_params.negative_prompt  = json_value(data, "negative_prompt", std::string(""));
@@ -1493,7 +1494,13 @@ struct server_context {
 
             slot.state = SLOT_STATE_STARTED;
 
-            SLT_INF(slot, "%s", "processing task\n");
+            SLT_INF(slot, "processing task, seed: %d, schedule method: %s, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
+                    slot.params.sd_params.seed,
+                    sd_schedule_to_argument(slot.params.sd_params.schedule_method),
+                    sd_sample_method_to_argument(slot.params.sd_params.sample_method),
+                    slot.params.sd_params.sampling_steps,
+                    slot.params.sd_params.cfg_scale,
+                    slot.params.sd_params.slg_scale);
 
             return true;
         }
@@ -2001,8 +2008,8 @@ struct server_context {
 
         if (sd_ctx != nullptr) {
             return json{
-                {"model", llm_params.model_alias},
-                {"seed", slot.params.llm_params.seed},
+                {"model", sd_params.model_alias},
+                {"seed", sd_params.seed},
                 {"seed_cur", slot.params.sd_params.seed},
                 {"max_batch_count", sd_params.max_batch_count},
                 {"max_height", sd_params.sampling.height},
@@ -2010,14 +2017,14 @@ struct server_context {
                 {"height", slot.params.sd_params.height},
                 {"width", slot.params.sd_params.width},
                 {"guidance", slot.params.sd_params.guidance},
-                {"sampler", sd_sample_method_to_argument(slot.params.sd_params.sampler)},
+                {"sample_method", sd_sample_method_to_argument(slot.params.sd_params.sample_method)},
+                {"sampling_steps", slot.params.sd_params.sampling_steps},
                 {"cfg_scale", slot.params.sd_params.cfg_scale},
                 {"slg_scale", slot.params.sd_params.slg_scale},
                 {"slg_skip_layers", slot.params.sd_params.slg_skip_layers},
                 {"slg_start", slot.params.sd_params.slg_start},
                 {"slg_end", slot.params.sd_params.slg_end},
-                {"sample_steps", slot.params.sd_params.sample_steps},
-                {"schedule", sd_schedule_to_argument(slot.params.sd_params.schedule)},
+                {"schedule_method", sd_schedule_to_argument(slot.params.sd_params.schedule_method)},
                 {"clip_l_model", sd_params.clip_l_model},
                 {"clip_g_model", sd_params.clip_g_model},
                 {"t5xxl_model", sd_params.t5xxl_model},
@@ -3582,7 +3589,9 @@ struct server_context {
 
         if (sd_ctx != nullptr) {
             return json{
-                {"schedule", sd_schedule_to_argument(sd_params.sampling.schedule)},
+                {"sample_method", sd_sample_method_to_argument(sd_params.sampling.sample_method)},
+                {"sampling_steps", sd_params.sampling.sampling_steps},
+                {"schedule_method", sd_schedule_to_argument(sd_params.sampling.schedule_method)},
                 {"max_height", sd_params.sampling.height},
                 {"max_width", sd_params.sampling.width},
                 {"max_batch_count", sd_params.max_batch_count},
@@ -4867,8 +4876,12 @@ int main(int argc, char **argv) {
                     return;
                 }
             }
-            if (req.has_file("sampler")) {
-                request["sampler"] = req.get_file_value("sampler").content;
+            if (req.has_file("sample_method") || req.has_file("sampler")) {
+                if (req.has_file("sample_method")) {
+                    request["sample_method"] = req.get_file_value("sample_method").content;
+                } else {
+                    request["sample_method"] = req.get_file_value("sampler").content;
+                }
                 if (req.has_file("seed")) {
                     try {
                         request["seed"] = std::stoi(req.get_file_value("seed").content);
@@ -4877,13 +4890,15 @@ int main(int argc, char **argv) {
                         return;
                     }
                 }
-                if (req.has_file("sample_steps")) {
-                    try {
-                        request["sample_steps"] = std::stoi(req.get_file_value("sample_steps").content);
-                    } catch (const std::exception &) {
-                        res_error(res, format_error_response("\"sample_steps\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
-                        return;
+                try {
+                    if (req.has_file("sampling_steps")) {
+                        request["sampling_steps"] = std::stoi(req.get_file_value("sampling_steps").content);
+                    } else if (req.has_file("sample_steps")) {
+                        request["sampling_steps"] = std::stoi(req.get_file_value("sample_steps").content);
                     }
+                } catch (const std::exception &) {
+                    res_error(res, format_error_response("\"sampling_steps\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                    return;
                 }
                 if (req.has_file("cfg_scale")) {
                     try {
@@ -4918,8 +4933,10 @@ int main(int argc, char **argv) {
                         return;
                     }
                 }
-                if (req.has_file("schedule")) {
-                    request["schedule"] = req.get_file_value("schedule").content;
+                if (req.has_file("schedule_method")) {
+                    request["schedule_method"] = req.get_file_value("schedule_method").content;
+                } else if (req.has_file("schedule")) {
+                    request["schedule_method"] = req.get_file_value("schedule").content;
                 }
                 if (req.has_file("control_strength")) {
                     try {

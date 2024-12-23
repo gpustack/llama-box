@@ -1143,17 +1143,17 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     }
 
     // Handle "sampler" and "cfg_scale" fields
-    if (!body.contains("sampler")) {
+    if (!body.contains("sampler") && !body.contains("sample_method")) {
         std::string quality = json_value(body, "quality", std::string("standard"));
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
-        llama_params["sampler"]      = params.sampling.sampler;
-        llama_params["schedule"]     = params.sampling.schedule;
-        llama_params["sample_steps"] = params.sampling.sample_steps;
-        llama_params["cfg_scale"]    = params.sampling.cfg_scale;
+        llama_params["sample_method"]   = params.sampling.sample_method;
+        llama_params["sampling_steps"]  = params.sampling.sampling_steps;
+        llama_params["schedule_method"] = params.sampling.schedule_method;
+        llama_params["cfg_scale"]       = params.sampling.cfg_scale;
         if (quality == "hd") {
-            llama_params["sample_steps"]    = params.sampling.sample_steps + 2;
+            llama_params["sampling_steps"]  = params.sampling.sampling_steps + 2;
             llama_params["negative_prompt"] = "low quality";
         }
         if (body.contains("style")) {
@@ -1176,17 +1176,41 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
             }
         }
     } else {
-        std::string sampler_str  = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"]  = sd_argument_to_sample_method(sampler_str.c_str());
-        std::string schedule_str = json_value(body, "schedule", std::string("default"));
-        llama_params["schedule"] = sd_argument_to_schedule(schedule_str.c_str());
+        std::string sample_method_str = "euler_a";
+        if (body.contains("sample_method")) {
+            sample_method_str = body.at("sample_method").get<std::string>();
+        } else if (body.contains("sampler")) {
+            sample_method_str = body.at("sampler").get<std::string>();
+        }
+        llama_params["sample_method"] = sd_argument_to_sample_method(sample_method_str.c_str());
+        int sampling_steps            = 10;
+        if (body.contains("sampling_steps")) {
+            sampling_steps = json_value(body, "sampling_steps", 10);
+        } else if (body.contains("sample_steps")) {
+            sampling_steps = json_value(body, "sample_steps", 10);
+        }
+        llama_params["sampling_steps"]  = sampling_steps;
+        std::string schedule_method_str = "default";
+        if (body.contains("schedule_method")) {
+            schedule_method_str = body.at("schedule_method").get<std::string>();
+        } else if (body.contains("scheduler")) {
+            schedule_method_str = body.at("scheduler").get<std::string>();
+        } else if (body.contains("schedule")) {
+            schedule_method_str = body.at("schedule").get<std::string>();
+        }
+        llama_params["schedule_method"] = sd_argument_to_schedule(schedule_method_str.c_str());
 
         // Copy remaining properties to llama_params
         // This allows user to use stable-diffusion.cpp-specific params like "slg_scale", ... via OAI
         // endpoint. See "launch_slot_with_task()" for a complete list of params supported by stable-diffusion.cpp
         for (const auto &item : body.items()) {
             const std::string &key = item.key();
-            if (key == "n" || key == "size" || llama_params.contains(key)) {
+            if (key == "n" ||
+                key == "size" ||
+                key == "sampler" ||
+                key == "sample_steps" ||
+                key == "schedule" || key == "scheduler" ||
+                llama_params.contains(key)) {
                 continue;
             }
             llama_params[item.key()] = item.value();
@@ -1293,31 +1317,55 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     }
 
     // Handle "sampler" and "cfg_scale" fields
-    if (!body.contains("sampler")) {
+    if (!body.contains("sampler") && !body.contains("sample_method")) {
         std::string quality = json_value(body, "quality", std::string("standard"));
         if (quality != "null" && quality != "hd" && quality != "standard") {
             throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
         }
-        llama_params["sampler"]      = params.sampling.sampler;
-        llama_params["schedule"]     = params.sampling.schedule;
-        llama_params["sample_steps"] = params.sampling.sample_steps;
-        llama_params["cfg_scale"]    = params.sampling.cfg_scale;
+        llama_params["sample_method"]   = params.sampling.sample_method;
+        llama_params["sampling_steps"]  = params.sampling.sampling_steps;
+        llama_params["schedule_method"] = params.sampling.schedule_method;
+        llama_params["cfg_scale"]       = params.sampling.cfg_scale;
         if (quality == "hd") {
-            llama_params["sample_steps"]    = params.sampling.sample_steps + 2;
+            llama_params["sampling_steps"]  = params.sampling.sampling_steps + 2;
             llama_params["negative_prompt"] = "low quality";
         }
     } else {
-        std::string sampler_str  = json_value(body, "sampler", std::string("euler_a"));
-        llama_params["sampler"]  = sd_argument_to_sample_method(sampler_str.c_str());
-        std::string schedule_str = json_value(body, "schedule", std::string("default"));
-        llama_params["schedule"] = sd_argument_to_schedule(schedule_str.c_str());
+        std::string sample_method_str = "euler_a";
+        if (body.contains("sample_method")) {
+            sample_method_str = body.at("sample_method").get<std::string>();
+        } else if (body.contains("sampler")) {
+            sample_method_str = body.at("sampler").get<std::string>();
+        }
+        llama_params["sample_method"] = sd_argument_to_sample_method(sample_method_str.c_str());
+        int sampling_steps            = 10;
+        if (body.contains("sampling_steps")) {
+            sampling_steps = json_value(body, "sampling_steps", 10);
+        } else if (body.contains("sample_steps")) {
+            sampling_steps = json_value(body, "sample_steps", 10);
+        }
+        llama_params["sampling_steps"]  = sampling_steps;
+        std::string schedule_method_str = "default";
+        if (body.contains("schedule_method")) {
+            schedule_method_str = body.at("schedule_method").get<std::string>();
+        } else if (body.contains("scheduler")) {
+            schedule_method_str = body.at("scheduler").get<std::string>();
+        } else if (body.contains("schedule")) {
+            schedule_method_str = body.at("schedule").get<std::string>();
+        }
+        llama_params["schedule_method"] = sd_argument_to_schedule(schedule_method_str.c_str());
 
         // Copy remaining properties to llama_params
         // This allows user to use stable-diffusion.cpp-specific params like "slg_scale", ... via OAI
         // endpoint. See "launch_slot_with_task()" for a complete list of params supported by stable-diffusion.cpp
         for (const auto &item : body.items()) {
             const std::string &key = item.key();
-            if (key == "n" || key == "size" || llama_params.contains(key)) {
+            if (key == "n" ||
+                key == "size" ||
+                key == "sampler" ||
+                key == "sample_steps" ||
+                key == "schedule" || key == "scheduler" ||
+                llama_params.contains(key)) {
                 continue;
             }
             llama_params[item.key()] = item.value();

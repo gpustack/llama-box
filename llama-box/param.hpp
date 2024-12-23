@@ -128,7 +128,7 @@ static std::vector<ggml_backend_dev_t> parse_device_list(const std::string &valu
     return devices;
 }
 
-static std::string get_builtin_sd_sampler_types() {
+static std::string get_builtin_sd_sample_methods() {
     std::ostringstream msg;
     for (int m = 0; m < N_SAMPLE_METHODS; m++) {
         msg << std::string(sd_sample_method_to_argument(sample_method_t(m))) << (m == N_SAMPLE_METHODS - 1 ? "" : ", ");
@@ -136,7 +136,7 @@ static std::string get_builtin_sd_sampler_types() {
     return msg.str();
 }
 
-static std::string get_builtin_sd_schedulers() {
+static std::string get_builtin_sd_schedule_method() {
     std::ostringstream msg;
     for (int d = 0; d < N_SCHEDULES; d++) {
         msg << std::string(sd_schedule_to_argument(schedule_t(d))) << (d == N_SCHEDULES - 1 ? "" : ", ");
@@ -410,15 +410,18 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sd_params.sampling.guidance });
     opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sd_params.sampling.strength });
-    opts.push_back({ "server/images",                      "       --image-sampler TYPE",                   "sampler that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sampler_types().c_str() });
-    opts.push_back({ "server/images",                      "       --image-sample-steps N",                 "number of sample steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
+    opts.push_back({ "server/images",                      "       --image-sample-method, --image-sampler TYPE",
+                                                                                                            "sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sample_methods().c_str() });
+    opts.push_back({ "server/images",                      "       --image-sampling-steps, --image-sample-steps N",
+                                                                                                            "number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
     opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
     opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sd_params.sampling.slg_start });
     opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
                                                                                                             "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.sampling.slg_end });
-    opts.push_back({ "server/images",                      "       --image-schedule TYPE",                  "denoiser sigma schedule, allowed values: %s (default: %s)", get_builtin_sd_schedulers().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule) });
+    opts.push_back({ "server/images",                      "       --image-schedule-method, --image-schedule TYPE",
+                                                                                                            "denoiser sigma schedule method, allowed values: %s (default: %s)", get_builtin_sd_schedule_method().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule_method) });
     if (llama_supports_gpu_offload()) {
         opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
     }
@@ -1774,22 +1777,22 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (!strcmp(flag, "--image-sampler")) {
+            if (!strcmp(flag, "--image-sample-method") || !strcmp(flag, "--image-sampler")) {
                 if (i == argc) {
-                    missing("--image-sampler");
+                    missing("--image-sample-method");
                 }
-                char *arg                          = argv[i++];
-                params_.sd_params.sampling.sampler = sd_argument_to_sample_method(arg);
+                char *arg                                = argv[i++];
+                params_.sd_params.sampling.sample_method = sd_argument_to_sample_method(arg);
                 continue;
             }
 
-            if (!strcmp(flag, "--image-sample-steps")) {
+            if (!strcmp(flag, "--image-sampling-steps") || !strcmp(flag, "--image-sample-steps")) {
                 if (i == argc) {
-                    missing("--image-sample-steps");
+                    missing("--image-sampling-steps");
                 }
-                char *arg                               = argv[i++];
-                params_.sd_params.sampling.sample_steps = std::stoi(std::string(arg));
-                if (params_.sd_params.sampling.sample_steps < 1) {
+                char *arg                                 = argv[i++];
+                params_.sd_params.sampling.sampling_steps = std::stoi(std::string(arg));
+                if (params_.sd_params.sampling.sampling_steps < 1) {
                     invalid("--image-sample-steps");
                 }
                 continue;
@@ -1862,12 +1865,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (!strcmp(flag, "--image-schedule")) {
+            if (!strcmp(flag, "--image-schedule-method") || !strcmp(flag, "--image-schedule")) {
                 if (i == argc) {
-                    missing("--image-schedule");
+                    missing("--image-schedule-method");
                 }
-                char *arg                           = argv[i++];
-                params_.sd_params.sampling.schedule = sd_argument_to_schedule(arg);
+                char *arg                                  = argv[i++];
+                params_.sd_params.sampling.schedule_method = sd_argument_to_schedule(arg);
                 continue;
             }
 

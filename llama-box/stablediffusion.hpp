@@ -14,19 +14,19 @@
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 struct stablediffusion_params_sampling {
-    int64_t seed                     = LLAMA_DEFAULT_SEED;
+    uint32_t seed                    = LLAMA_DEFAULT_SEED;
     int height                       = 1024;
     int width                        = 1024;
     float guidance                   = 3.5f;
     float strength                   = 0.75f;
-    sample_method_t sampler          = N_SAMPLE_METHODS;
-    int sample_steps                 = 0;
+    sample_method_t sample_method    = N_SAMPLE_METHODS;
+    int sampling_steps               = 0;
     float cfg_scale                  = 4.5f;
     float slg_scale                  = 0.0f;
     std::vector<int> slg_skip_layers = {7, 8, 9};
     float slg_start                  = 0.01;
     float slg_end                    = 0.2;
-    schedule_t schedule              = DEFAULT;
+    schedule_t schedule_method       = DEFAULT;
     std::string negative_prompt;
     float control_strength      = 0.9f;
     bool control_canny          = false;
@@ -82,7 +82,7 @@ class stablediffusion_context {
     ~stablediffusion_context();
 
     sample_method_t get_default_sample_method();
-    int get_default_sample_steps();
+    int get_default_sampling_steps();
     float get_default_cfg_scale();
     float get_default_slg_scale();
     void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
@@ -124,7 +124,7 @@ sample_method_t stablediffusion_context::get_default_sample_method() {
     }
 }
 
-int stablediffusion_context::get_default_sample_steps() {
+int stablediffusion_context::get_default_sampling_steps() {
     switch (sd_get_version(sd_ctx)) {
         case VERSION_SD1:
         case VERSION_SD2:
@@ -201,9 +201,9 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.guidance,
             sparams.width,
             sparams.height,
-            sparams.sampler,
-            sparams.schedule,
-            sparams.sample_steps,
+            sparams.sample_method,
+            sparams.schedule_method,
+            sparams.sampling_steps,
             sparams.strength,
             seed,
             control_img,
@@ -223,9 +223,9 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.guidance,
             sparams.width,
             sparams.height,
-            sparams.sampler,
-            sparams.schedule,
-            sparams.sample_steps,
+            sparams.sample_method,
+            sparams.schedule_method,
+            sparams.sampling_steps,
             seed,
             control_img,
             sparams.control_strength,
@@ -357,7 +357,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         params.n_threads,
         wtype,
         rng_type,
-        params.sampling.schedule,
+        params.sampling.schedule_method,
         !params.text_encoder_model_offload,
         !params.control_model_offload,
         !params.vae_model_offload,
@@ -391,7 +391,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         LOG_WRN("%s: warming up the model with an empty run - please wait ... (--no-warmup to disable)\n", __func__);
 
         stablediffusion_params_sampling wparams = params.sampling;
-        wparams.sample_steps                    = 1; // sample only one step
+        wparams.sampling_steps                  = 1; // sample only once
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);
         stablediffusion_generated_image img = sc->result_image_stream(stream);

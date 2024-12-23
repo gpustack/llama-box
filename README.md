@@ -409,15 +409,18 @@ server/images:
          --image-max-width N      image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
          --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
-         --image-sampler TYPE     sampler that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm
-         --image-sample-steps N   number of sample steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
+         --image-sample-method, --image-sampler TYPE
+                                  sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm
+         --image-sampling-steps, --image-sample-steps N
+                                  number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
          --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
          --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
          --image-slg-skip-layer   the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)
          --image-slg-start N      the phase to enable SLG (default: 0.01)
          --image-slg-end N        the phase to disable SLG (default: 0.20)
                                   SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])
-         --image-schedule TYPE    denoiser sigma schedule, allowed values: default, discrete, karras, exponential, ays, gits (default: default)
+         --image-schedule-method, --image-schedule TYPE
+                                  denoiser sigma schedule method, allowed values: default, discrete, karras, exponential, ays, gits (default: default)
          --image-no-text-encoder-model-offload
                                   disable text-encoder(clip-l/clip-g/t5xxl) model offload
          --image-clip-l-model PATH
@@ -711,20 +714,20 @@ The available endpoints for the LLaMA Box server mode are:
         "response_format": "b64_json",
         "size": "512x512",
         "prompt": "A lovely cat",
-        "sampler": "euler",       // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
-        "schedule": "default",    // optional, select from default;discrete;karras;exponential;ays;gits
-        "seed": null,             // optional, random seed
-        "guidance": 3.5,          // optional, unconditional guidance value
-        "cfg_scale": 4.5,         // optional, for sampler, the scale of classifier-free guidance in the output phase
-        "sample_steps": 20,       // optional, number of sample steps
-        "negative_prompt": "",    // optional, negative prompt
+        "sample_method": "euler",        // required, alias "sampler", select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+        "sampling_steps": 20,            // optional, alias "sample_steps", number of sampling steps
+        "schedule_method": "default",    // optional, alias "schedule", select from default;discrete;karras;exponential;ays;gits
+        "seed": null,                    // optional, random seed
+        "guidance": 3.5,                 // optional, unconditional guidance value
+        "cfg_scale": 4.5,                // optional, the scale of classifier-free guidance in the output phase
+        "negative_prompt": "",           // optional, negative prompt
         "stream": true,
         "stream_options": {
-          "include_usage": true,  // return usage information
-          "chunk_result": true,   // split the final image b64_json into chunks to avoid browser caching
-          "chunk_size": 4096,     // split the final image b64_json into chunks with the given size, default 4k
-          "preview": true,        // enable preview mode
-          "preview_faster": true  // enable faster preview mode
+          "include_usage": true,         // return usage information
+          "chunk_result": true,          // split the final image b64_json into chunks to avoid browser caching
+          "chunk_size": 4096,            // split the final image b64_json into chunks with the given size, default 4k
+          "preview": true,               // enable preview mode
+          "preview_faster": true         // enable faster preview mode
         }
       }
       
@@ -779,13 +782,13 @@ The available endpoints for the LLaMA Box server mode are:
       prompt="A lovely cat"
       image=...                          // required
       mask=...                           // optional
-      sampler=euler                      // required, select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
-      schedule=default                   // optional, select from default;discrete;karras;exponential;ays;gits
+      sample_method=euler                // required, alias "sampler", select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+      sampling_steps=20                  // optional, alias "sample_steps", number of sampling steps
+      schedule_method=default            // optional, alias "schedule", select from default;discrete;karras;exponential;ays;gits
       seed=null                          // optional, random seed
       guidance=3.5                       // optional, unconditional guidance value
-      strength=0.75                      // optional, for sampler, the strength of noising/unnoising
-      cfg_scale=4.5                      // optional, for sampler, the scale of classifier-free guidance in the output phase
-      sample_steps=20                    // optional, number of sample steps
+      strength=0.75                      // optional, the strength of noising/unnoising
+      cfg_scale=4.5                      // optional, the scale of classifier-free guidance in the output phase
       negative_prompt=""                 // optional, negative prompt
       stream=true
       stream_options_include_usage=true  // return usage information

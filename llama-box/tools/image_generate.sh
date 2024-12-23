@@ -29,13 +29,13 @@ SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
 STYLE="${STYLE:-"null"}"
 PREVIEW="${PREVIEW:-"true"}"
-PREVIEW_FASTER="${PREVIEW_FASTER:-"false"}"
-SAMPLER="${SAMPLER:-"null"}"
-SCHEDULE="${SCHEDULE:-"default"}"
+PREVIEW_FASTER="${PREVIEW_FASTER:-"true"}"
+SAMPLE_METHOD="${SAMPLE_METHOD:-"null"}"
+SAMPLING_STEPS="${SAMPLING_STEPS:-"10"}"
+SCHEDULE_METHOD="${SCHEDULE_METHOD:-"default"}"
 SEED="${SEED:-"null"}"
 GUIDANCE="${GUIDANCE:-"3.5"}"
 CFG_SCALE="${CFG_SCALE:-"4.5"}"
-SAMPLE_STEPS="${SAMPLE_STEPS:-"10"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
 
 parse() {
@@ -108,17 +108,17 @@ image_generate() {
     else
         DATA="{\"prompt\":\"${PROMPT}\"}"
     fi
-    if [[ "${SAMPLER}" != "null" ]]; then
+    if [[ "${SAMPLE_METHOD}" != "null" ]]; then
         DATA="$(echo -n "${DATA}" | jq -cr \
             --argjson n "${N}" \
             --argjson response_format "\"${RESPONSE_FORMAT}\"" \
             --argjson size "\"${SIZE}\"" \
-            --argjson sampler "\"${SAMPLER}\"" \
-            --argjson schedule "\"${SCHEDULE}\"" \
+            --argjson sample_method "\"${SAMPLE_METHOD}\"" \
+            --argjson sampling_steps "${SAMPLING_STEPS}" \
+            --argjson schedule_method "\"${SCHEDULE_METHOD}\"" \
             --argjson seed "${SEED}" \
             --argjson guidance "${GUIDANCE}" \
             --argjson cfg_scale "${CFG_SCALE}" \
-            --argjson sample_steps "${SAMPLE_STEPS}" \
             --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
             --argjson preview "${PREVIEW}" \
             --argjson preview_faster "${PREVIEW_FASTER}" \
@@ -126,12 +126,12 @@ image_generate() {
                   n: $n,
                   response_format: $response_format,
                   size: $size,
-                  sampler: $sampler,
-                  schedule: $schedule,
+                  sample_method: $sample_method,
+                  sampling_steps: $sampling_steps,
+                  schedule_method: $schedule_method,
                   seed: $seed,
                   guidance: $guidance,
                   cfg_scale: $cfg_scale,
-                  sample_steps: $sample_steps,
                   negative_prompt: $negative_prompt,
                   stream: true,
                   stream_options: {
@@ -214,13 +214,13 @@ echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "STYLE             : ${STYLE} // ONE OF [natural, vivid]"
 echo "PREVIEW           : ${PREVIEW}"
 echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
-echo "SAMPLER           : ${SAMPLER} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
-echo "SCHEDULE          : ${SCHEDULE} // AVAILABLE FOR SAMPLER, ONE OF [default, discrete, karras, exponential, ays, gits]"
-echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLER"
-echo "GUIDANCE          : ${GUIDANCE} // AVAILABLE FOR SAMPLER"
-echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLER"
-echo "SAMPLE_STEPS      : ${SAMPLE_STEPS} // AVAILABLE FOR SAMPLER"
-echo "NEGATIVE_PROMPT   : ${NEGATIVE_PROMPT} // AVAILABLE FOR SAMPLER"
+echo "SAMPLE_METHOD     : ${SAMPLE_METHOD} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm]"
+echo "SAMPLING_STEPS    : ${SAMPLING_STEPS} // AVAILABLE FOR SAMPLE_METHOD"
+echo "SCHEDULE_METHOD   : ${SCHEDULE_METHOD} // AVAILABLE FOR SAMPLE_METHOD, ONE OF [default, discrete, karras, exponential, ays, gits]"
+echo "SEED              : ${SEED} // AVAILABLE FOR SAMPLE_METHOD"
+echo "GUIDANCE          : ${GUIDANCE} // AVAILABLE FOR SAMPLE_METHOD"
+echo "CFG_SCALE         : ${CFG_SCALE} // AVAILABLE FOR SAMPLE_METHOD"
+echo "NEGATIVE_PROMPT   : ${NEGATIVE_PROMPT} // AVAILABLE FOR SAMPLE_METHOD"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then
@@ -235,7 +235,7 @@ if [[ "${#@}" -ge 1 ]]; then
     image_generate "${*}"
 else
     while true; do
-        read -r -e -p "> " QUESTION
-        image_generate "${QUESTION}"
+        read -r -e -p "> " PROMPT
+        image_generate "${PROMPT}"
     done
 fi
