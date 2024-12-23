@@ -282,7 +282,7 @@ server/completion:
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
                                   list of built-in templates:
-                                  chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, exaone3, falcon, gemma, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, rwkv-world, vicuna, vicuna-orca, zephyr
+                                  chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, exaone3, falcon, falcon3, gemma, gigachat, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, rwkv-world, vicuna, vicuna-orca, zephyr
          --chat-template-file FILE
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
          --slot-save-path PATH    path to save slot kv cache (default: disabled)
@@ -318,9 +318,8 @@ server/completion:
          --keep N                 number of tokens to keep from the initial prompt (default: 0, -1 = all)
   -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --no-escape              do not process escape sequences
-         --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';' (default: dry;top_k;typ_p;top_p;min_p;xtc;temperature)
-         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: dkypmxt)
-         --penalize-nl            penalize newline tokens (default: false)
+         --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_k;typ_p;top_p;min_p;xtc;temperature)
+         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: edkypmxt)
          --temp T                 temperature (default: 0.8)
          --top-k N                top-k sampling (default: 40, 0 = disabled)
          --top-p P                top-p sampling (default: 0.9, 1.0 = disabled)

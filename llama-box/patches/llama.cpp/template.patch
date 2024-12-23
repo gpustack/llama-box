@@ -1,39 +1,39 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b442781a..32ffa125 100644
+index 4d41602f..cf2a7922 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -1691,6 +1691,9 @@ enum llm_chat_template {
+@@ -1720,6 +1720,9 @@ enum llm_chat_template {
      LLM_CHAT_TEMPLATE_RWKV_WORLD,
      LLM_CHAT_TEMPLATE_GRANITE,
      LLM_CHAT_TEMPLATE_GIGACHAT,
 +    LLM_CHAT_TEMPLATE_FALCON,
 +    LLM_CHAT_TEMPLATE_LLAVA,
 +    LLM_CHAT_TEMPLATE_LLAVA_MISTRAL,
+     LLM_CHAT_TEMPLATE_MEGREZ,
      LLM_CHAT_TEMPLATE_UNKNOWN,
  };
- 
-@@ -1723,6 +1726,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
-     { "rwkv-world",        LLM_CHAT_TEMPLATE_RWKV_WORLD        },
+@@ -1755,6 +1758,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
      { "granite",           LLM_CHAT_TEMPLATE_GRANITE           },
      { "gigachat",          LLM_CHAT_TEMPLATE_GIGACHAT          },
+     { "megrez",            LLM_CHAT_TEMPLATE_MEGREZ            },
 +    { "falcon",            LLM_CHAT_TEMPLATE_FALCON            },
 +    { "llava",             LLM_CHAT_TEMPLATE_LLAVA             },
 +    { "llava-mistral",     LLM_CHAT_TEMPLATE_LLAVA_MISTRAL     },
  };
  
  static llm_arch llm_arch_from_string(const std::string & name) {
-@@ -22661,6 +22667,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
-         return LLM_CHAT_TEMPLATE_GRANITE;
-     } else if (tmpl_contains("message['role'] + additional_special_tokens[0] + message['content'] + additional_special_tokens[1]")) {
+@@ -22938,6 +22944,8 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
          return LLM_CHAT_TEMPLATE_GIGACHAT;
+     } else if (tmpl_contains("<|role_start|>")) {
+         return LLM_CHAT_TEMPLATE_MEGREZ;
 +    }  else if ((tmpl_contains("Falcon:") && tmpl_contains("message['content']"))) {
 +        return LLM_CHAT_TEMPLATE_FALCON;
      }
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
-@@ -23010,6 +23018,61 @@ static int32_t llama_chat_apply_template_internal(
+@@ -23306,6 +23314,61 @@ static int32_t llama_chat_apply_template_internal(
          if (add_ass) {
-             ss << "assistant<|role_sep|>";
+             ss << "<|role_start|>assistant<|role_end|>";
          }
 +    } else if (tmpl == LLM_CHAT_TEMPLATE_FALCON) {
 +        // Falcon

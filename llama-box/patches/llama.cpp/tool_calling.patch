@@ -171,10 +171,10 @@ index a4abf395..1af8c141 100644
      // Sampling API
      //
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b442781a..41b04123 100644
+index 4d41602f..649aa4c5 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -22670,12 +22670,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -22947,12 +22947,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
  static int32_t llama_chat_apply_template_internal(
      const llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
@@ -241,7 +241,7 @@ index b442781a..41b04123 100644
              ss << "<|im_start|>" << message->role << "\n" << message->content << "<|im_end|>\n";
          }
          if (add_ass) {
-@@ -22684,15 +22737,59 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22961,15 +23014,59 @@ static int32_t llama_chat_apply_template_internal(
      } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
          // Official mistral 'v7' template
          // See: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411#basic-instruct-template-v7
@@ -301,7 +301,7 @@ index b442781a..41b04123 100644
                  ss << " " << content << "</s>";
              }
          }
-@@ -22701,10 +22798,41 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22978,10 +23075,41 @@ static int32_t llama_chat_apply_template_internal(
              || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN) {
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/chat_templates.md
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/templates.md
@@ -343,7 +343,7 @@ index b442781a..41b04123 100644
          for (auto message : chat) {
              if (!is_inside_turn) {
                  ss << leading_space << "[INST]" << trailing_space;
-@@ -22713,10 +22841,26 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22990,10 +23118,26 @@ static int32_t llama_chat_apply_template_internal(
              std::string role(message->role);
              std::string content(message->content);
              if (role == "system") {
@@ -370,7 +370,7 @@ index b442781a..41b04123 100644
                  ss << trailing_space << (trim_assistant_message ? trim(content) : content) << "</s>";
                  is_inside_turn = false;
              }
-@@ -22891,9 +23035,61 @@ static int32_t llama_chat_apply_template_internal(
+@@ -23177,9 +23321,61 @@ static int32_t llama_chat_apply_template_internal(
              ss << "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>";
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3) {
@@ -432,7 +432,7 @@ index b442781a..41b04123 100644
              ss << "<|start_header_id|>" << role << "<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
          }
          if (add_ass) {
-@@ -22972,9 +23168,57 @@ static int32_t llama_chat_apply_template_internal(
+@@ -23258,9 +23454,57 @@ static int32_t llama_chat_apply_template_internal(
              }
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
@@ -490,7 +490,7 @@ index b442781a..41b04123 100644
              ss << "<|start_of_role|>" << role << "<|end_of_role|>";
              if (role == "assistant_tool_call") {
                  ss << "<|tool_call|>";
-@@ -23023,6 +23267,9 @@ int32_t llama_chat_apply_template(
+@@ -23319,6 +23563,9 @@ int32_t llama_chat_apply_template(
                                const char * tmpl,
           const struct llama_chat_message * chat,
                                    size_t   n_msg,
@@ -500,7 +500,7 @@ index b442781a..41b04123 100644
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -23048,12 +23295,19 @@ int32_t llama_chat_apply_template(
+@@ -23344,12 +23591,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  
@@ -521,7 +521,7 @@ index b442781a..41b04123 100644
      if (res < 0) {
          return res;
      }
-@@ -23072,6 +23326,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
+@@ -23368,6 +23622,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
      return (int32_t) LLM_CHAT_TEMPLATES.size();
  }
  

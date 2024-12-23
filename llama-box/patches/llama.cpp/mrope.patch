@@ -11,10 +11,10 @@ index a4abf395..da6bbb10 100644
      LLAMA_API const struct llama_model * llama_get_model(const struct llama_context * ctx);
  
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b442781a..268ea4e2 100644
+index 4d41602f..25e216ee 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -20767,6 +20767,10 @@ int32_t llama_n_head(const struct llama_model * model) {
+@@ -21039,6 +21039,10 @@ int32_t llama_n_head(const struct llama_model * model) {
      return model->hparams.n_head();
  }
  

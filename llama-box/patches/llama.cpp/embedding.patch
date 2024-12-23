@@ -11,10 +11,10 @@ index a4abf395..e03a11de 100644
      LLAMA_API int32_t llama_n_vocab    (const struct llama_model * model);
      LLAMA_API int32_t llama_n_ctx_train(const struct llama_model * model);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index b442781a..7096a486 100644
+index 4d41602f..400ee5f2 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -20431,9 +20431,17 @@ struct llama_context * llama_new_context_with_model(
+@@ -20703,9 +20703,17 @@ struct llama_context * llama_new_context_with_model(
  
      // this is necessary due to kv_self.n being padded later during inference
      cparams.n_ctx            = GGML_PAD(cparams.n_ctx, llama_kv_cache_get_padding(cparams));
@@ -32,7 +32,7 @@ index b442781a..7096a486 100644
  
      // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
      // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
-@@ -20444,6 +20452,10 @@ struct llama_context * llama_new_context_with_model(
+@@ -20716,6 +20724,10 @@ struct llama_context * llama_new_context_with_model(
      }
  
      cparams.n_ubatch         = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
@@ -43,7 +43,7 @@ index b442781a..7096a486 100644
  
      cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
                                 hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
-@@ -20743,6 +20755,10 @@ uint32_t llama_n_seq_max(const struct llama_context * ctx) {
+@@ -21015,6 +21027,10 @@ uint32_t llama_n_seq_max(const struct llama_context * ctx) {
      return ctx->kv_self.size;
  }
  
