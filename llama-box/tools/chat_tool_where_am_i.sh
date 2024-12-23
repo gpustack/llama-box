@@ -10,9 +10,13 @@ function where_am_i() {
     ARGS="${1}"
     ID="${2}"
 
-    CITY="$(curl -s https://wttr.in/?format="%l")"
+    RESPONSE="$(curl -s https://wttr.in/?format="%l")"
+    if [[ -z "${RESPONSE}" ]]; then
+        MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"error\\\":\\\"City not found.\\\"}\",\"tool_call_id\":\"${ID}\"}"
+    else
+        MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"city\\\":\\\"${RESPONSE}\\\"}\",\"tool_call_id\":\"${ID}\"}"
+    fi
 
-    MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"city\\\":\\\"${CITY}\\\"}\",\"tool_call_id\":\"${ID}\"}"
     echo "${MESSAGE}"
 }
 

@@ -171,11 +171,14 @@ index a4abf395..1af8c141 100644
      // Sampling API
      //
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 4d41602f..ee1bf508 100644
+index 4d41602f..e30f40f5 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -22947,12 +22947,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+@@ -22945,14 +22945,107 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
+ // Simple version of "llama_apply_chat_template" that only works with strings
+ // This function uses heuristic checks to determine commonly used template. It is not a jinja parser.
  static int32_t llama_chat_apply_template_internal(
++    const llm_arch arch,
      const llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 -    std::string & dest, bool add_ass) {
@@ -199,27 +202,52 @@ index 4d41602f..ee1bf508 100644
 +            } else {
 +                ss << "You are a helpful assistant.\n\n";
 +            }
-+            ss << "# Tools\n\n";
++            if (arch == LLM_ARCH_QWEN2VL) {
++                ss << "## Tools\n\n";
++            } else {
++                ss << "# Tools\n\n";
++            }
 +            if (req_func) {
 +                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
 +            } else {
 +                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n\n";
 +            }
-+            ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
-+            ss << "<tools>\n";
-+            for (const auto & fn : func) {
-+                ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}\n";
-+            }
-+            ss << "</tools>\n\n";
-+            if (req_func) {
-+                ss << "For each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++            if (arch == LLM_ARCH_QWEN2VL) {
++                ss << "You are provided with following function tools:\n\n";
++                for (const auto & fn : func) {
++                    ss << "### " << fn->name << "\n\n";
++                    ss << fn->name << ": " << fn->description << " Parameters: " << fn->parameters << "Format the arguments as a JSON object.\n\n";
++                }
++                if (req_func) {
++                    ss << "For each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++                } else {
++                    ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
++                    ss << "Otherwise, for each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++                }
++                ss << "<tool_call>\n";
++                ss << "{\"name\": The name of the function to use, \"arguments\": The input of the function, must be a JSON object in compact format}\n";
++                ss << "</tool_call>\n";
++                ss << "<tool_result>\n";
++                ss << "The function results.\n";
++                ss << "</tool_result>\n";
++                ss << "Reply based on the function results." << "<|im_end|>\n";
 +            } else {
-+                ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
-+                ss << "Otherwise, for each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++                ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
++                ss << "<tools>\n";
++                for (const auto & fn : func) {
++                    ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}\n";
++                }
++                ss << "</tools>\n\n";
++                if (req_func) {
++                    ss << "For each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++                } else {
++                    ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
++                    ss << "Otherwise, for each function call, return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++                }
++                ss << "<tool_call>\n";
++                ss << "{\"name\": <function-name>, \"arguments\": <arguments-json-object>}\n";
++                ss << "</tool_call>" << "<|im_end|>\n";
 +            }
-+            ss << "<tool_call>\n";
-+            ss << "{\"name\": <function-name>, \"arguments\": <arguments-json-object>}\n";
-+            ss << "</tool_call>" << "<|im_end|>\n";
 +        }
          // chatml template
          for (auto message : chat) {
@@ -230,18 +258,32 @@ index 4d41602f..ee1bf508 100644
 +                }
 +                if (role == "assistant_tool_call") {
 +                    ss << "<|im_start|>assistant\n";
-+                    ss << "<tool_call>\n" << message->content << "\n</tool_call>" << "<|im_end|>\n";
++                    ss << "<tool_call>\n" << message->content << "\n</tool_call>";
++                    if (arch == LLM_ARCH_QWEN2VL) {
++                        ss << "\n";
++                    } else {
++                        ss << "<|im_end|>\n";
++                    }
 +                    continue;
 +                }
 +                if (role == "tool") {
-+                    ss << "<|im_start|>user\n" << message->content << "<|im_end|>\n";
++                    if (arch == LLM_ARCH_QWEN2VL) {
++                        ss << "<tool_result>\n" << message->content << "\n</tool_result>\n";
++                        add_ass = message != chat.back();
++                    } else {
++                        ss << "<|im_start|>user\n" << message->content << "<|im_end|>\n";
++                    }
++                    continue;
++                }
++                if (role == "assistant" && arch == LLM_ARCH_QWEN2VL) {
++                    ss << message->content << "<|im_end|>\n";
 +                    continue;
 +                }
 +            }
              ss << "<|im_start|>" << message->role << "\n" << message->content << "<|im_end|>\n";
          }
          if (add_ass) {
-@@ -22961,15 +23014,59 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22961,15 +23054,59 @@ static int32_t llama_chat_apply_template_internal(
      } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
          // Official mistral 'v7' template
          // See: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411#basic-instruct-template-v7
@@ -301,7 +343,7 @@ index 4d41602f..ee1bf508 100644
                  ss << " " << content << "</s>";
              }
          }
-@@ -22978,10 +23075,41 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22978,10 +23115,41 @@ static int32_t llama_chat_apply_template_internal(
              || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN) {
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/chat_templates.md
          // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/templates.md
@@ -343,7 +385,7 @@ index 4d41602f..ee1bf508 100644
          for (auto message : chat) {
              if (!is_inside_turn) {
                  ss << leading_space << "[INST]" << trailing_space;
-@@ -22990,10 +23118,26 @@ static int32_t llama_chat_apply_template_internal(
+@@ -22990,10 +23158,26 @@ static int32_t llama_chat_apply_template_internal(
              std::string role(message->role);
              std::string content(message->content);
              if (role == "system") {
@@ -370,7 +412,7 @@ index 4d41602f..ee1bf508 100644
                  ss << trailing_space << (trim_assistant_message ? trim(content) : content) << "</s>";
                  is_inside_turn = false;
              }
-@@ -23177,9 +23321,61 @@ static int32_t llama_chat_apply_template_internal(
+@@ -23177,9 +23361,61 @@ static int32_t llama_chat_apply_template_internal(
              ss << "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>";
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3) {
@@ -432,7 +474,7 @@ index 4d41602f..ee1bf508 100644
              ss << "<|start_header_id|>" << role << "<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
          }
          if (add_ass) {
-@@ -23258,9 +23454,57 @@ static int32_t llama_chat_apply_template_internal(
+@@ -23258,9 +23494,57 @@ static int32_t llama_chat_apply_template_internal(
              }
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
@@ -490,7 +532,7 @@ index 4d41602f..ee1bf508 100644
              ss << "<|start_of_role|>" << role << "<|end_of_role|>";
              if (role == "assistant_tool_call") {
                  ss << "<|tool_call|>";
-@@ -23319,6 +23563,9 @@ int32_t llama_chat_apply_template(
+@@ -23319,6 +23603,9 @@ int32_t llama_chat_apply_template(
                                const char * tmpl,
           const struct llama_chat_message * chat,
                                    size_t   n_msg,
@@ -500,7 +542,7 @@ index 4d41602f..ee1bf508 100644
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -23344,12 +23591,19 @@ int32_t llama_chat_apply_template(
+@@ -23344,12 +23631,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  
@@ -517,11 +559,11 @@ index 4d41602f..ee1bf508 100644
          return -1;
      }
 -    int32_t res = llama_chat_apply_template_internal(detected_tmpl, chat_vec, formatted_chat, add_ass);
-+    int32_t res = llama_chat_apply_template_internal(detected_tmpl, chat_vec, func_vec, formatted_chat, req_func, add_ass);
++    int32_t res = llama_chat_apply_template_internal(model->arch, detected_tmpl, chat_vec, func_vec, formatted_chat, req_func, add_ass);
      if (res < 0) {
          return res;
      }
-@@ -23368,6 +23622,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
+@@ -23368,6 +23662,17 @@ int32_t llama_chat_builtin_templates(const char ** output, size_t len) {
      return (int32_t) LLM_CHAT_TEMPLATES.size();
  }
  

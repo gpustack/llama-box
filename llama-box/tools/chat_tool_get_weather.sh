@@ -10,10 +10,14 @@ function get_weather() {
     ARGS="${1}"
     ID="${2}"
 
-    LOCATION=$(echo "${ARGS}" | jq -cr '.location')
-    WEATHER="$(curl -s https://wttr.in/"${LOCATION}"?format="%C")"
+    REQUEST=$(echo "${ARGS}" | jq -cr '.location' | cut -d',' -f1)
+    RESPONSE="$(curl -s https://wttr.in/"${REQUEST}"?format="%C")"
+    if [[ -z "${RESPONSE}" ]]; then
+        MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"error\\\":\\\"Location not found.\\\"}\",\"tool_call_id\":\"${ID}\"}"
+    else
+        MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"weather\\\":\\\"${RESPONSE}\\\"}\",\"tool_call_id\":\"${ID}\"}"
+    fi
 
-    MESSAGE="{\"role\":\"tool\",\"content\":\"{\\\"weather\\\":\\\"${WEATHER}\\\"}\",\"tool_call_id\":\"${ID}\"}"
     echo "${MESSAGE}"
 }
 

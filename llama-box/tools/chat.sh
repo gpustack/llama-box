@@ -61,8 +61,12 @@ chat_completion() {
     PROMPT="$(trim_trailing "$1")"
     if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
         DATA="$(cat "${PROMPT:1}")"
+        while IFS= read -r LINE; do
+            MESSAGES+=("${LINE}")
+        done < <(echo "${DATA}" | jq -cr '.messages[]')
     else
         DATA="{\"messages\":[$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]}"
+        MESSAGES+=("{\"role\":\"user\",\"content\":\"$PROMPT\"}")
     fi
     while true; do
         DATA="$(echo -n "${DATA}" | jq -cr \
@@ -122,9 +126,9 @@ chat_completion() {
                     ID="$(echo "${TOOL_CALL}" | jq -cr '.id')"
                     FUNC_NAME="$(echo "${TOOL_CALL}" | jq -cr '.function.name')"
                     FUNC_ARGS="$(echo "${TOOL_CALL}" | jq -cr '.function.arguments')"
-                    printf "Call: %s %s %s\n" "${FUNC_NAME}" "${FUNC_ARGS}" "${ID}"
+                    printf "\n🛠️: calling %s %s %s\r" "${FUNC_NAME}" "${FUNC_ARGS}" "${ID}"
                     RESULT=$("${FUNC_NAME}" "${FUNC_ARGS}" "${ID}")
-                    printf "Result: %s\n\n" "${RESULT}"
+                    printf "\n🛠️: %s\n" "${RESULT}"
                     TOOL_RESULTS+=("${RESULT}")
                 done < <(jq -cr '.[]' <<<"${TOOL_CALLS}")
             else
@@ -176,7 +180,6 @@ chat_completion() {
 
         printf "\n"
 
-        MESSAGES+=("{\"role\":\"user\",\"content\":\"$PROMPT\"}")
         if [[ -n "${TOOL_CALLS}" ]]; then
             MESSAGES+=("{\"role\":\"assistant\",\"tool_calls\":$TOOL_CALLS}")
         fi
@@ -225,7 +228,7 @@ if [[ "${#@}" -ge 1 ]]; then
     chat_completion "${*}"
 else
     while true; do
-        read -r -e -p "> " QUESTION
-        chat_completion "${QUESTION}"
+        read -r -e -p "> " PROMPT
+        chat_completion "${PROMPT}"
     done
 fi

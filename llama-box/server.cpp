@@ -865,15 +865,15 @@ struct server_context {
     ggml_threadpool *threadpool_batch = nullptr;
 
     // tool calls
-    std::string chat_template_alias = "chatml";
-    bool support_tool_calls         = false;
-    bool tool_call_id_generate      = true;
-    std::string tool_call_start     = "<tool_call>";
-    llama_token tool_call_start_tok = LLAMA_TOKEN_NULL;
-    bool tool_call_start_trim       = true;
-    std::string tool_call_end       = "</tool_call>";
-    llama_token tool_call_end_tok   = LLAMA_TOKEN_NULL;
-    bool tool_call_end_trim         = true;
+    std::string chat_template_alias         = "chatml";
+    bool support_tool_calls                 = false;
+    bool tool_call_id_generate              = true;
+    std::string tool_call_start             = "<tool_call>";
+    llama_token tool_call_start_tok         = LLAMA_TOKEN_NULL;
+    bool tool_call_start_trim               = true;
+    std::vector<std::string> tool_call_ends = {"</tool_call>", "</tool_call>\n"};
+    llama_token tool_call_end_tok           = LLAMA_TOKEN_NULL;
+    bool tool_call_end_trim                 = true;
 
     ~server_context() {
         lora_adapters.clear();
@@ -1142,7 +1142,7 @@ struct server_context {
                     tool_call_start      = "[{\"";
                     tool_call_start_tok  = 9; // [TOOL_CALLS]
                     tool_call_start_trim = false;
-                    tool_call_end        = "}]";
+                    tool_call_ends       = {"}]", "}] "};
                     tool_call_end_tok    = llama_token_eos(llm_model);
                     tool_call_end_trim   = false;
                 } else if (chat_template_alias == "llama3") {
@@ -1150,7 +1150,7 @@ struct server_context {
                     support_tool_calls   = true;
                     tool_call_start      = "{\"";
                     tool_call_start_trim = false;
-                    tool_call_end        = "}}";
+                    tool_call_ends       = {"}}", "}} "};
                     tool_call_end_trim   = false;
                 } else if (chat_template_alias == "granite") {
                     // <|tool_call|>[{"name":"","arguments":{}}]
@@ -1158,7 +1158,7 @@ struct server_context {
                     tool_call_start      = "[{\"";
                     tool_call_start_tok  = 49154; // <|tool_call|>
                     tool_call_start_trim = false;
-                    tool_call_end        = "}]";
+                    tool_call_ends       = {"}]", "}] "};
                     tool_call_end_tok    = llama_token_eos(llm_model);
                     tool_call_end_trim   = false;
                 }
@@ -1809,13 +1809,19 @@ struct server_context {
                 } else if (slot.tool_call_parser != TOOL_CALL_PARSER_TYPE_NONE) {
                     send_text = false;
                     std::string functions_str;
-                    if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_STRING && ends_with(str_test, tool_call_end)) {
-                        functions_str = str_test;
-                        if (tool_call_start_trim) {
-                            functions_str = functions_str.substr(tool_call_start.length());
-                        }
-                        if (tool_call_end_trim) {
-                            functions_str = functions_str.substr(0, functions_str.length() - tool_call_end.length());
+                    if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_STRING) {
+                        for (const auto &tool_call_end : tool_call_ends) {
+                            if (!ends_with(str_test, tool_call_end)) {
+                                continue;
+                            }
+                            functions_str = str_test;
+                            if (tool_call_start_trim) {
+                                functions_str = functions_str.substr(tool_call_start.length());
+                            }
+                            if (tool_call_end_trim) {
+                                functions_str = functions_str.substr(0, functions_str.length() - tool_call_end.length());
+                            }
+                            break;
                         }
                     } else if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_TOKEN && tool_call_end_tok != LLAMA_TOKEN_NULL) {
                         for (auto i = int(result.toks.size()) - 1; i >= 0; --i) {
@@ -1873,7 +1879,7 @@ struct server_context {
             }
 
             // check if the last token is EOG
-            if (!send_text) {
+            if (!send_text && slot.oaicompat_completion_chat_tool && tool_call_end_tok == LLAMA_TOKEN_NULL) {
                 send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1]);
             }
 
@@ -3529,8 +3535,7 @@ struct server_context {
         std::string prompt_string = slot.prompt_string;
         size_t images_count       = 0;
         size_t image_pos          = prompt_string.find(image_sign);
-        SLT_DBG(slot, "preprocessing multi-modal images in prompt format:\n%s\n", prompt_string.c_str());
-        bool add_bos = true;
+        bool add_bos              = true;
         while (image_pos != std::string::npos) {
             // process text
             const std::string text = prompt_string.substr(0, image_pos);
