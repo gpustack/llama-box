@@ -3729,21 +3729,19 @@ int main(int argc, char **argv) {
     common_params &llm_params = params.llm_params;
 
     // print arguments
+    LOG_INF("\n");
+    std::ostringstream argss;
     for (int i = 0; i < argc; i++) {
-        printf("%s", argv[i]);
+        argss << argv[i];
         if (i < argc - 1) {
-            printf(" ");
+            argss << " ";
         }
     }
-    printf("\n");
-
-    LOG_INF("\n");
-    LOG_INF("version: %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
-    LOG_INF("compiler: %s\n", LLAMA_BOX_BUILD_COMPILER);
-    LOG_INF("target: %s\n", LLAMA_BOX_BUILD_TARGET);
-    LOG_INF("vendor: \n");
-    LOG_INF("  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER);
-    LOG_INF("  - stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
+    LOG_INF("arguments  : %s\n", argss.str().c_str());
+    LOG_INF("version    : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
+    LOG_INF("compiler   : %s\n", LLAMA_BOX_BUILD_COMPILER);
+    LOG_INF("target     : %s\n", LLAMA_BOX_BUILD_TARGET);
+    LOG_INF("vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER, STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
     LOG_INF("%s\n", common_params_get_system_info(llm_params).c_str());
     LOG_INF("\n");
 

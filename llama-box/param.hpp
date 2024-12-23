@@ -509,17 +509,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
             }
 
             if (!strcmp(flag, "--version")) {
-                fprintf(stderr, "version  : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
-                fprintf(stderr, "compiler : %s\n", LLAMA_BOX_BUILD_COMPILER);
-                fprintf(stderr, "target   : %s\n", LLAMA_BOX_BUILD_TARGET);
-                fprintf(stderr, "vendor   : \n");
-                fprintf(stderr, "  - llama.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER);
-                fprintf(stderr, "  - stable-diffusion.cpp %s (%d)\n", STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
+                fprintf(stderr, "version    : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
+                fprintf(stderr, "compiler   : %s\n", LLAMA_BOX_BUILD_COMPILER);
+                fprintf(stderr, "target     : %s\n", LLAMA_BOX_BUILD_TARGET);
+                fprintf(stderr, "vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER, STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
                 exit(0);
             }
 
             if (!strcmp(flag, "--system-info")) {
-                fprintf(stderr, "%s\n", llama_print_system_info());
+                fprintf(stderr, "system_info: %s\n", llama_print_system_info());
                 exit(0);
             }
 
