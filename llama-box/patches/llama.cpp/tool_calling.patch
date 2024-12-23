@@ -171,7 +171,7 @@ index a4abf395..1af8c141 100644
      // Sampling API
      //
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 4d41602f..649aa4c5 100644
+index 4d41602f..ee1bf508 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -22947,12 +22947,65 @@ static llm_chat_template llama_chat_detect_template(const std::string & tmpl) {
@@ -208,7 +208,7 @@ index 4d41602f..649aa4c5 100644
 +            ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
 +            ss << "<tools>\n";
 +            for (const auto & fn : func) {
-+                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}\n";
++                ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}\n";
 +            }
 +            ss << "</tools>\n\n";
 +            if (req_func) {
@@ -257,7 +257,7 @@ index 4d41602f..649aa4c5 100644
 +            }
 +            ss << "[AVAILABLE_TOOLS] " << "[";
 +            for (const auto & fn : func) {
-+                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}";
 +                ss << ((fn == func.back()) ? "" : ",");
 +            }
 +            ss << "]" << "[/AVAILABLE_TOOLS]";
@@ -321,7 +321,7 @@ index 4d41602f..649aa4c5 100644
 +            }
 +            ss << leading_space << "[AVAILABLE_TOOLS]" << trailing_space << "[";
 +            for (const auto & fn : func) {
-+                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}";
 +                ss << ((fn == func.back()) ? "" : ",");
 +            }
 +            ss << "]" << leading_space << "[/AVAILABLE_TOOLS]";
@@ -416,7 +416,7 @@ index 4d41602f..649aa4c5 100644
 +                    ss << "You are provided with following function signatures within <tools></tools> XML tags:\n";
 +                    ss << "<tools>\n";
 +                    for (const auto & fn : func) {
-+                        ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}\n";
++                        ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}\n";
 +                    }
 +                    ss << "</tools>\n\n";
 +                    if (req_func) {
@@ -447,7 +447,7 @@ index 4d41602f..649aa4c5 100644
 +            }
 +            ss << "<|start_of_role|>tools<|end_of_role|>[";
 +            for (const auto & fn : func) {
-+                ss << "{\"type\": \"function\", \"function\": {\"name\": \"" << fn->name << "\", \"description\": \"" << fn->description << "\", \"parameters\": " << fn->parameters << "}}";
++                ss << R"({"type": "function", "function": {"name": ")" << fn->name << R"(", "description": ")" << fn->description << R"(", "parameters": )" << fn->parameters << "}}";
 +                ss << ((fn == func.back()) ? "" : ",");
 +            }
 +            ss << "]<|end_of_text|>\n";
@@ -468,7 +468,7 @@ index 4d41602f..649aa4c5 100644
 +                ss << "When you can reply with your internal knowledge, reply directly without any tool calls. ";
 +                ss << "Otherwise, for each tool call, return <|tool_call|> followed by a JSON list of tool used as follows: ";
 +            }
-+            ss << "<|tool_call|>[{\"name\": <function-name>, \"arguments\": <arguments-json-object>}]";
++            ss << R"(<|tool_call|>[{"name": <function-name>, "arguments": <arguments-json-object>}])";
 +            ss << "<|end_of_text|>\n";
 +        }
          // IBM Granite template

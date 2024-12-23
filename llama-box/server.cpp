@@ -1119,10 +1119,10 @@ struct server_context {
             if (llm_params.enable_chat_template) {
                 // if a custom chat template is not supplied, we will use the one that comes
                 // with the model (if any)
-                bool built_in_chat_template = false;
+                bool builtin = false;
                 if (llm_params.chat_template.empty()) {
                     llm_params.chat_template = load_chat_template();
-                    built_in_chat_template   = true;
+                    builtin                  = true;
                 }
                 if (llm_params.chat_template.size() <= 20) {
                     for (char &c : llm_params.chat_template) {
@@ -1162,8 +1162,8 @@ struct server_context {
                     tool_call_end_tok    = llama_token_eos(llm_model);
                     tool_call_end_trim   = false;
                 }
-                SRV_INF("chat template, built_in: %d, alias: %s, tool call: %s, example:\n%s\n",
-                        built_in_chat_template,
+                SRV_INF("chat template, built_in: %s, alias: %s, tool call: %s, example:\n%s\n",
+                        builtin ? "true" : "false",
                         chat_template_alias.c_str(),
                         support_tool_calls ? "supported" : "unsupported",
                         common_chat_format_example(llm_model, llm_params.chat_template).c_str());
