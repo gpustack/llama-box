@@ -11,7 +11,7 @@ index a4abf395..a360f909 100644
      LLAMA_API bool llama_add_bos_token(const struct llama_model * model);
      LLAMA_API bool llama_add_eos_token(const struct llama_model * model);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 7f2725f9..0f470823 100644
+index 0a477d6d..89bb4e58 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1688,6 +1688,10 @@ llama_token llama_token_pad_impl(const struct llama_vocab & vocab) {
@@ -26,7 +26,7 @@ index 7f2725f9..0f470823 100644
      return vocab.tokenizer_add_bos;
  }
 diff --git a/src/llama-vocab.h b/src/llama-vocab.h
-index 4bb16d2e..528f0291 100644
+index a9b0da5e..e2d2a5fa 100644
 --- a/src/llama-vocab.h
 +++ b/src/llama-vocab.h
 @@ -116,6 +116,7 @@ llama_token llama_token_cls_impl(const struct llama_vocab & vocab);
