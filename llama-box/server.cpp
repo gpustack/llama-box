@@ -2878,7 +2878,16 @@ struct server_context {
                         if (!slot.oaicompat_completion_chat_vision && prompt_tokens.empty()) {
                             SLT_WRN(slot, "%s", "empty prompt - releasing slot\n");
                             slot.release();
-                            send_completion(slot);
+                            switch (slot.task_type) {
+                                case SERVER_TASK_TYPE_EMBEDDING:
+                                    send_error(slot, "empty input", ERROR_TYPE_INVALID_REQUEST);
+                                    break;
+                                case SERVER_TASK_TYPE_RERANK:
+                                    send_error(slot, "empty query", ERROR_TYPE_INVALID_REQUEST);
+                                    break;
+                                default:
+                                    send_completion(slot);
+                            }
                             continue;
                         }
 
