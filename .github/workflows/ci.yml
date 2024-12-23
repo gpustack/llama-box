@@ -1001,7 +1001,7 @@ jobs:
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- ${{ matrix.arch == 'arm64' && '-j ' || '/m:' }}${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
           if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
