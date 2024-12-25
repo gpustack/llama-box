@@ -1082,21 +1082,37 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
     llama_params["prompt"] = body.at("input");
 
     // Handle "encoding_format" field
-    llama_params["encoding_format"] = json_value(body, "encoding_format", std::string("float"));
+    if (body.contains("encoding_format")) {
+        std::string encoding_format = body.at("encoding_format").get<std::string>();
+        if (encoding_format != "float" && encoding_format != "base64") {
+            throw std::runtime_error("Illegal param: encoding_format must be one of 'float' or 'base64'");
+        }
+        llama_params["encoding_format"] = encoding_format;
+    } else {
+        llama_params["encoding_format"] = "float";
+    }
 
     return llama_params;
 }
 
 static json oaicompat_embeddings_response(const json &request, const json &result) {
+    const bool use_base64 = json_value(request, "encoding_format", std::string("float")) == "base64";
+
     int num_prompt_tokens = 0;
     json data             = json::array();
     for (const auto &ret : result) {
         num_prompt_tokens += ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
-        data.push_back(json{
-            {"embedding", ret.at("embedding")},
+        json item = json{
             {"index", ret.at("index")},
             {"object", "embedding"},
-        });
+        };
+        if (!use_base64) {
+            item["embedding"] = ret.at("embedding");
+        } else {
+            const std::vector<float> embedding = ret.at("embedding").get<std::vector<float>>();
+            item["embedding"]                  = base64_encode(reinterpret_cast<const unsigned char *>(embedding.data()), embedding.size());
+        }
+        data.push_back(item);
     }
 
     json res = json{

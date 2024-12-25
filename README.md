@@ -136,6 +136,22 @@ LLaMA Box supports the following platforms.
     $ ./llama-box/tools/image_generate.sh "A lovely cat"
     ```
 
+- Image editing(inpainting) via [FLUX.1-Fill-dev](https://huggingface.co/black-forest-labs/FLUX.1-Fill-dev) model. Use
+  GGUF files
+  from [FLUX.1-Fill-dev-GGUF](https://huggingface.co/gpustack/FLUX.1-Fill-dev-GGUF/tree/main?show_file_info=FLUX.1-Fill-dev-Q8_0.gguf).
+
+    ```shell
+    $ # Provide 1 session(allowing 1 parallel chat user).
+    $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/FLUX.1-Fill-dev-GGUF/FLUX.1-Fill-dev-Q8_0.gguf --images
+    
+    $ curl https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png --output /tmp/input.png
+    $ curl https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo_mask.png --output /tmp/mask.png
+  
+    $ # use the image_edit.sh tool
+    $ IMAGE=/tmp/input.png MASK=/tmp/mask.png ./llama-box/tools/image_edit.sh "A tigger sitting on a park bench"
+    ```
+
+
 - Draft model speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
   and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models. Use GGUF files
   from [QuantFactory/Qwen2-7B-Instruct-GGUF](https://huggingface.co/QuantFactory/Qwen2-7B-Instruct-GGUF/tree/main?show_file_info=Qwen2-7B-Instruct.Q5_K_M.gguf)
@@ -408,7 +424,7 @@ server/images:
          --image-max-height N     image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
          --image-max-width N      image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
-         --image-strength N       strength for noising, range of [0.0, 1.0] (default: 0.750000)
+         --image-strength N       strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model
          --image-sample-method, --image-sampler TYPE
                                   sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm
          --image-sampling-steps, --image-sample-steps N

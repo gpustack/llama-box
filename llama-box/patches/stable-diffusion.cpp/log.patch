@@ -1,5 +1,5 @@
 diff --git a/util.cpp b/util.cpp
-index 7a58d0a..7cb85a0 100644
+index e5eaab2..e53b0b9 100644
 --- a/util.cpp
 +++ b/util.cpp
 @@ -380,12 +380,12 @@ void* sd_log_cb_data         = NULL;

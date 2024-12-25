@@ -18,10 +18,10 @@ struct stablediffusion_params_sampling {
     int height                       = 1024;
     int width                        = 1024;
     float guidance                   = 3.5f;
-    float strength                   = 0.75f;
+    float strength                   = 0.0f;
     sample_method_t sample_method    = N_SAMPLE_METHODS;
     int sampling_steps               = 0;
-    float cfg_scale                  = 4.5f;
+    float cfg_scale                  = 0.0f;
     float slg_scale                  = 0.0f;
     std::vector<int> slg_skip_layers = {7, 8, 9};
     float slg_start                  = 0.01;
@@ -81,6 +81,7 @@ class stablediffusion_context {
 
     ~stablediffusion_context();
 
+    float get_default_strength();
     sample_method_t get_default_sample_method();
     int get_default_sampling_steps();
     float get_default_cfg_scale();
@@ -109,8 +110,27 @@ stablediffusion_context::~stablediffusion_context() {
     }
 }
 
+float stablediffusion_context::get_default_strength() {
+    switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1_INPAINT:
+        case VERSION_SD2_INPAINT:
+        case VERSION_SDXL_INPAINT:
+        case VERSION_FLUX_FILL:
+            return 1.0f;
+        default:
+            return 0.75f;
+    }
+}
+
 sample_method_t stablediffusion_context::get_default_sample_method() {
     switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1_INPAINT:
+            return EULER_A;
+        case VERSION_SD2_INPAINT:
+        case VERSION_SDXL_INPAINT:
+        case VERSION_FLUX_FILL:
+            return EULER;
+
         case VERSION_SD1:
         case VERSION_SD2:
             return EULER_A;
@@ -126,6 +146,12 @@ sample_method_t stablediffusion_context::get_default_sample_method() {
 
 int stablediffusion_context::get_default_sampling_steps() {
     switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1_INPAINT:
+        case VERSION_SD2_INPAINT:
+        case VERSION_SDXL_INPAINT:
+        case VERSION_FLUX_FILL:
+            return 50;
+
         case VERSION_SD1:
         case VERSION_SD2:
             return 20;
@@ -142,6 +168,14 @@ int stablediffusion_context::get_default_sampling_steps() {
 
 float stablediffusion_context::get_default_cfg_scale() {
     switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1_INPAINT:
+        case VERSION_SD2_INPAINT:
+            return 9.0f;
+        case VERSION_SDXL_INPAINT:
+            return 5.0f;
+        case VERSION_FLUX_FILL:
+            return 3.5;
+
         case VERSION_SD1:
         case VERSION_SD2:
             return 9.0f;
@@ -170,30 +204,23 @@ void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_con
 
 stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const char *prompt, stablediffusion_params_sampling sparams) {
     int clip_skip = -1;
-    switch (sd_get_version(sd_ctx)) {
-        case VERSION_SD1:
-            clip_skip = 1;
-            break;
-        case VERSION_SD2:
-            clip_skip = 2;
-            break;
-    }
-    int64_t seed = sparams.seed;
+    int64_t seed  = sparams.seed;
     if (seed == LLAMA_DEFAULT_SEED) {
         seed = -1;
     }
 
-    sd_image_t *control_img = nullptr;
-
     sd_sampling_stream_t *stream = nullptr;
     if (sparams.init_img_buffer != nullptr) {
-        auto init_img = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.init_img_buffer};
+        auto init_img           = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.init_img_buffer};
+        auto mask_img           = sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 1, sparams.mask_img_buffer};
+        sd_image_t *control_img = nullptr;
         if (sparams.control_img_buffer != nullptr) {
             control_img = new sd_image_t{uint32_t(sparams.width), uint32_t(sparams.height), 3, sparams.control_img_buffer};
         }
         stream = img2img_stream(
             sd_ctx,
             init_img,
+            mask_img,
             prompt,
             sparams.negative_prompt.c_str(),
             clip_skip,
@@ -227,7 +254,7 @@ stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const 
             sparams.schedule_method,
             sparams.sampling_steps,
             seed,
-            control_img,
+            nullptr,
             sparams.control_strength,
             sparams.slg_skip_layers.data(),
             sparams.slg_skip_layers.size(),
@@ -262,12 +289,7 @@ stablediffusion_generated_image stablediffusion_context::preview_image_stream(st
         return stablediffusion_generated_image{0, nullptr};
     }
 
-    sd_image_t img;
-    if (faster) {
-        img = sd_sampling_stream_get_faster_preview_image(sd_ctx, stream->stream);
-    } else {
-        img = sd_sampling_stream_get_preview_image(sd_ctx, stream->stream);
-    }
+    sd_image_t img = sd_sampling_stream_get_preview_image(sd_ctx, stream->stream, faster);
     if (img.data == nullptr) {
         return stablediffusion_generated_image{0, nullptr};
     }
@@ -392,6 +414,8 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
 
         stablediffusion_params_sampling wparams = params.sampling;
         wparams.sampling_steps                  = 1; // sample only once
+        wparams.sample_method                   = EULER;
+        wparams.schedule_method                 = DEFAULT;
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);
         stablediffusion_generated_image img = sc->result_image_stream(stream);

@@ -409,7 +409,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.height});
     opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.width});
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sd_params.sampling.guidance });
-    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0] (default: %f)", sd_params.sampling.strength });
+    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model" });
     opts.push_back({ "server/images",                      "       --image-sample-method, --image-sampler TYPE",
                                                                                                             "sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sample_methods().c_str() });
     opts.push_back({ "server/images",                      "       --image-sampling-steps, --image-sample-steps N",

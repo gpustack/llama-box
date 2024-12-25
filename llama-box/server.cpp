@@ -935,6 +935,12 @@ struct server_context {
                 return false;
             }
 
+            if (sd_params.model_alias.empty()) {
+                sd_params.model_alias = sd_params.model.substr(sd_params.model.find_last_of('/') + 1);
+            }
+            if (sd_params.sampling.strength <= 0.0f) {
+                sd_params.sampling.strength = sd_ctx->get_default_strength();
+            }
             if (sd_params.sampling.sample_method >= N_SAMPLE_METHODS) {
                 sd_params.sampling.sample_method = sd_ctx->get_default_sample_method();
             }
@@ -954,19 +960,25 @@ struct server_context {
                 lora_adapters.push_back(loaded_la);
             }
 
-            SRV_INF("seed: %d, flash attn: %s, schedule method: %s, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
+            SRV_INF("seed: %d, flash attn: %s, guidance: %f, strength: %f, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f, schedule method: %s\n",
                     sd_params.seed,
                     sd_params.flash_attn ? "true" : "false",
-                    sd_schedule_to_argument(sd_params.sampling.schedule_method),
+                    sd_params.sampling.guidance,
+                    sd_params.sampling.strength,
                     sd_sample_method_to_argument(sd_params.sampling.sample_method),
                     sd_params.sampling.sampling_steps,
                     sd_params.sampling.cfg_scale,
-                    sd_params.sampling.slg_scale);
+                    sd_params.sampling.slg_scale,
+                    sd_schedule_to_argument(sd_params.sampling.schedule_method));
 
             return true;
         }
 
         /* LLAMA */
+
+        if (llm_params.model_alias.empty()) {
+            llm_params.model_alias = llm_params.model.substr(llm_params.model.find_last_of('/') + 1);
+        }
 
         // load multimodal projection model
         if (!llm_params.mmproj.empty()) {
@@ -1195,9 +1207,11 @@ struct server_context {
         for (int i = 0; i < llm_params.n_parallel; i++) {
             server_slot slot;
 
-            slot.id        = i;
-            slot.n_ctx     = n_ctx_slot;
-            slot.n_predict = llm_params.n_predict;
+            slot.id                = i;
+            slot.n_ctx             = n_ctx_slot;
+            slot.n_predict         = llm_params.n_predict;
+            slot.params.llm_params = llm_params.sampling;
+            slot.params.sd_params  = sd_params.sampling;
 
             SLT_INF(slot, "new slot n_ctx_slot = %d\n", slot.n_ctx);
 
@@ -1358,7 +1372,7 @@ struct server_context {
                     int cc           = 0;
                     int cw           = 0;
                     int ch           = 0;
-                    auto control_img = data.at("mask").get<std::string>();
+                    auto control_img = data.at("control").get<std::string>();
                     SLT_INF(slot, "loading control: %zu\n", control_img.length());
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &cw, &ch, &cc, 3);
                     if (control_img_buffer == nullptr) {
@@ -1375,36 +1389,34 @@ struct server_context {
                     slot.params.sd_params.height = ch;
                     slot.params.sd_params.width  = cw;
                 }
-
+#define free_images_0                        \
+    if (control_img_buffer != nullptr) {     \
+        stbi_image_free(control_img_buffer); \
+    }
                 uint8_t *init_img_buffer = nullptr;
-                int ic                   = 0;
                 int iw                   = 0;
                 int ih                   = 0;
+                int ic                   = 0;
                 auto init_img            = data.at("image").get<std::string>();
                 SLT_INF(slot, "loading image: %zu\n", init_img.length());
                 init_img_buffer = stbi_load_from_memory((const stbi_uc *)init_img.c_str(), (int)init_img.length(), &iw, &ih, &ic, 3);
                 if (init_img_buffer == nullptr) {
-                    if (control_img_buffer != nullptr) {
-                        stbi_image_free(control_img_buffer);
-                    }
+                    free_images_0;
                     auto reason = stbi_failure_reason();
                     SLT_ERR(slot, "failed to load image: %s\n", reason);
                     send_error(task, "failed to load image", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
+#define free_images_1 \
+    free_images_0;    \
+    stbi_image_free(init_img_buffer);
                 if (ic < 3) {
-                    if (control_img_buffer != nullptr) {
-                        stbi_image_free(control_img_buffer);
-                    }
-                    stbi_image_free(init_img_buffer);
+                    free_images_1;
                     send_error(task, "image must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
                 if (iw <= 0 || ih <= 0) {
-                    if (control_img_buffer != nullptr) {
-                        stbi_image_free(control_img_buffer);
-                    }
-                    stbi_image_free(init_img_buffer);
+                    free_images_1;
                     send_error(task, "image width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
@@ -1414,10 +1426,7 @@ struct server_context {
                     int rh                     = slot.params.sd_params.height;
                     auto *resized_image_buffer = (uint8_t *)malloc(rw * rh * 3);
                     if (resized_image_buffer == nullptr) {
-                        if (control_img_buffer != nullptr) {
-                            stbi_image_free(control_img_buffer);
-                        }
-                        stbi_image_free(init_img_buffer);
+                        free_images_1;
                         send_error(task, "failed to create resized image buffer", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
@@ -1429,10 +1438,7 @@ struct server_context {
                                       STBIR_COLORSPACE_SRGB, nullptr)) {
                         auto reason = stbi_failure_reason();
                         SLT_ERR(slot, "failed to resize image: %s\n", reason);
-                        if (control_img_buffer != nullptr) {
-                            stbi_image_free(control_img_buffer);
-                        }
-                        stbi_image_free(init_img_buffer);
+                        free_images_1;
                         send_error(task, "failed to resize image", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
@@ -1442,65 +1448,86 @@ struct server_context {
 
                 uint8_t *mask_img_buffer = nullptr;
                 if (data.contains("mask")) {
-                    int mc        = 0;
                     int mw        = 0;
                     int mh        = 0;
+                    int mc        = 0;
                     auto mask_img = data.at("mask").get<std::string>();
                     SLT_INF(slot, "loading mask: %zu\n", mask_img.length());
-                    mask_img_buffer = stbi_load_from_memory((const stbi_uc *)mask_img.c_str(), (int)mask_img.length(), &mw, &mh, &mc, 3);
+                    mask_img_buffer = stbi_load_from_memory((const stbi_uc *)mask_img.c_str(), (int)mask_img.length(), &mw, &mh, &mc, 1);
                     if (mask_img_buffer == nullptr) {
-                        if (control_img_buffer != nullptr) {
-                            stbi_image_free(control_img_buffer);
-                        }
-                        stbi_image_free(init_img_buffer);
+                        free_images_1;
                         auto reason = stbi_failure_reason();
                         SLT_ERR(slot, "failed to load mask: %s\n", reason);
                         send_error(task, "failed to load mask", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
-                    if (mc < 3) {
-                        if (control_img_buffer != nullptr) {
-                            stbi_image_free(control_img_buffer);
-                        }
-                        stbi_image_free(init_img_buffer);
-                        stbi_image_free(mask_img_buffer);
-                        send_error(task, "mask must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
+#define free_images_2 \
+    free_images_1;    \
+    stbi_image_free(mask_img_buffer);
+                    if (mc < 1) {
+                        free_images_2;
+                        send_error(task, "mask must be at least 1 channels", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (mw <= 0 || mh <= 0) {
-                        if (control_img_buffer != nullptr) {
-                            stbi_image_free(control_img_buffer);
-                        }
-                        stbi_image_free(init_img_buffer);
-                        stbi_image_free(mask_img_buffer);
+                        free_images_2;
                         send_error(task, "mask width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (mw != slot.params.sd_params.width || mh != slot.params.sd_params.height) {
-                        if (control_img_buffer != nullptr) {
-                            stbi_image_free(control_img_buffer);
+                        LOG_INF("mask dimensions do not match, resizing image\n");
+                        int rw                    = slot.params.sd_params.width;
+                        int rh                    = slot.params.sd_params.height;
+                        auto *resized_mask_buffer = (uint8_t *)malloc(rw * rh * 1);
+                        if (resized_mask_buffer == nullptr) {
+                            free_images_2;
+                            send_error(task, "failed to create resized mask buffer", ERROR_TYPE_INVALID_REQUEST);
+                            return false;
                         }
-                        stbi_image_free(init_img_buffer);
+                        if (!stbir_resize(mask_img_buffer, mw, mh, 0,
+                                          resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
+                                          1 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
+                                          STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
+                                          STBIR_FILTER_BOX, STBIR_FILTER_BOX,
+                                          STBIR_COLORSPACE_SRGB, nullptr)) {
+                            auto reason = stbi_failure_reason();
+                            SLT_ERR(slot, "failed to resize mask: %s\n", reason);
+                            free_images_2;
+                            send_error(task, "failed to resize mask", ERROR_TYPE_INVALID_REQUEST);
+                            return false;
+                        }
                         stbi_image_free(mask_img_buffer);
-                        send_error(task, "mask size doesn't match image", ERROR_TYPE_INVALID_REQUEST);
+                        mask_img_buffer = resized_mask_buffer;
+                    }
+                } else {
+                    mask_img_buffer = (uint8_t *)malloc(slot.params.sd_params.width * slot.params.sd_params.height * 1);
+                    if (mask_img_buffer == nullptr) {
+                        free_images_1;
+                        send_error(task, "failed to create mask buffer", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
+                    memset(mask_img_buffer, 255, slot.params.sd_params.width * slot.params.sd_params.height * 1);
                 }
 
                 slot.params.sd_params.control_img_buffer = control_img_buffer;
                 slot.params.sd_params.init_img_buffer    = init_img_buffer;
                 slot.params.sd_params.mask_img_buffer    = mask_img_buffer;
+#undef free_images_0
+#undef free_images_1
+#undef free_images_2
             }
 
             slot.state = SLOT_STATE_STARTED;
 
-            SLT_INF(slot, "processing task, seed: %d, schedule method: %s, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f\n",
+            SLT_INF(slot, "processing task, seed: %d, guidance: %f, strength: %f, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f, schedule method: %s\n",
                     slot.params.sd_params.seed,
-                    sd_schedule_to_argument(slot.params.sd_params.schedule_method),
+                    slot.params.sd_params.guidance,
+                    slot.params.sd_params.strength,
                     sd_sample_method_to_argument(slot.params.sd_params.sample_method),
                     slot.params.sd_params.sampling_steps,
                     slot.params.sd_params.cfg_scale,
-                    slot.params.sd_params.slg_scale);
+                    slot.params.sd_params.slg_scale,
+                    sd_schedule_to_argument(slot.params.sd_params.schedule_method));
 
             return true;
         }
@@ -2259,7 +2286,7 @@ struct server_context {
              {"progress_steps", progress_steps},
              {"progress", float(progressed_steps) / float(progress_steps) * 100},
              {"stop", res.stop},
-             {"model", llm_params.model_alias},
+             {"model", sd_params.model_alias},
         };
         if (generated_image.data != nullptr) {
             res.data["b64_json"] = base64_encode(generated_image.data, generated_image.size);
@@ -2743,15 +2770,15 @@ struct server_context {
                 size_t t1     = ggml_time_us();
                 auto progress = sd_ctx->progress_stream(slot.sdsstream);
                 SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
-                if (slot.params.stream) {
-                    if (slot.params.stream_preview_faster) {
-                        generated_image = sd_ctx->preview_image_stream(slot.sdsstream, true);
-                    } else if (slot.params.stream_preview) {
-                        generated_image = sd_ctx->preview_image_stream(slot.sdsstream);
-                    }
-                    send_image(slot, progress.first, progress.second + 1, generated_image);
-                }
                 if (goahead) {
+                    if (slot.params.stream) {
+                        if (slot.params.stream_preview_faster) {
+                            generated_image = sd_ctx->preview_image_stream(slot.sdsstream, true);
+                        } else if (slot.params.stream_preview) {
+                            generated_image = sd_ctx->preview_image_stream(slot.sdsstream);
+                        }
+                        send_image(slot, progress.first, progress.second + 1, generated_image);
+                    }
                     continue;
                 }
 
@@ -3609,6 +3636,7 @@ struct server_context {
             {"size", llama_model_size(llm_model)},
             {"n_ctx", llama_n_ctx(llm_ctx)},
             {"n_slot", llm_params.n_parallel},
+            {"support_tool_calls", support_tool_calls},
         };
     }
 
@@ -4438,7 +4466,7 @@ int main(int argc, char **argv) {
                 "data",
                 {
                     {
-                        {"id", ctx_server.llm_params.model_alias},
+                        {"id", ctx_server.sd_ctx != nullptr ? ctx_server.sd_params.model_alias : ctx_server.llm_params.model_alias},
                         {"object", "model"},
                         {"created", std::time(nullptr)},
                         {"owned_by", "llama-box"},
