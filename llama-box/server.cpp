@@ -2491,6 +2491,16 @@ struct server_context {
                     queue_tasks.defer(task);
                     break;
                 }
+                if ((task.type == SERVER_TASK_TYPE_EMBEDDING || task.type == SERVER_TASK_TYPE_RERANK) &&
+                    int(task.prompt_tokens.size()) < slot->id) {
+                    // if requested slot is unsatisfied, we defer this task for
+                    // processing later
+                    SRV_DBG("no slot is unsatisfied, defer task, id_task = %d\n", task.id);
+                    queue_tasks.defer(task);
+                    // trigger next iteration
+                    queue_tasks.post(server_task(SERVER_TASK_TYPE_NEXT_RESPONSE));
+                    break;
+                }
 
                 slot->reset();
 
