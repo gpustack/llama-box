@@ -385,6 +385,7 @@ server/completion:
          --mmproj FILE            path to a multimodal projector file for LLaVA
          --mlock                  force system to keep model in RAM rather than swapping or compressing
          --no-mmap                do not memory-map model (slower load but may reduce pageouts if not using mlock)
+         --mmap                   apply memory-map model (faster load but may increase pageouts if not using mlock)
          --numa TYPE              attempt optimizations that help on some NUMA systems
                                     - distribute: spread execution evenly over all nodes
                                     - isolate: only spawn threads on CPUs on the node that execution started on

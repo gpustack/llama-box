@@ -372,6 +372,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     }
     if (llama_supports_mmap()) {
         opts.push_back({ "server/completion",              "       --no-mmap",                              "do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
+        opts.push_back({ "server/completion",              "       --mmap",                                 "apply memory-map model (faster load but may increase pageouts if not using mlock)" });
     }
     opts.push_back({ "server/completion",                  "       --numa TYPE",                            "attempt optimizations that help on some NUMA systems\n"
                                                                                                             "  - distribute: spread execution evenly over all nodes\n"
@@ -1519,6 +1520,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
             if (llama_supports_mmap()) {
                 if (!strcmp(flag, "--no-mmap")) {
                     params_.llm_params.use_mmap = false;
+                    continue;
+                }
+                if (!strcmp(flag, "--mmap")) {
+                    params_.llm_params.use_mmap = true;
                     continue;
                 }
             }
