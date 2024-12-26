@@ -868,10 +868,10 @@ struct server_context {
     std::string chat_template_alias         = "chatml";
     bool support_tool_calls                 = false;
     bool tool_call_id_generate              = true;
-    std::string tool_call_start             = "<tool_call>";
+    std::string tool_call_start             = "";
     llama_token tool_call_start_tok         = LLAMA_TOKEN_NULL;
     bool tool_call_start_trim               = true;
-    std::vector<std::string> tool_call_ends = {"</tool_call>", "</tool_call>\n"};
+    std::vector<std::string> tool_call_ends = {};
     llama_token tool_call_end_tok           = LLAMA_TOKEN_NULL;
     bool tool_call_end_trim                 = true;
 
@@ -1148,31 +1148,39 @@ struct server_context {
                     // <tool_call>
                     // {"name":"","arguments":{}}
                     // </tool_call>
-                    support_tool_calls = true;
+                    support_tool_calls   = true;
+                    tool_call_start      = "<tool_call>";
+                    tool_call_start_tok  = LLAMA_TOKEN_NULL;
+                    tool_call_start_trim = true;
+                    tool_call_ends       = {"</tool_call>", "</tool_call>\n"};
+                    tool_call_end_tok    = LLAMA_TOKEN_NULL;
+                    tool_call_end_trim   = true;
                 } else if (starts_with(chat_template_alias, "mistral-")) {
                     // [TOOL_CALLS][{"name":"","arguments":{}}]
                     support_tool_calls   = true;
-                    tool_call_start      = "[{\"";
+                    tool_call_start      = "";
                     tool_call_start_tok  = 9; // [TOOL_CALLS]
                     tool_call_start_trim = false;
-                    tool_call_ends       = {"}]", "}] "};
+                    tool_call_ends       = {};
                     tool_call_end_tok    = llama_token_eos(llm_model);
                     tool_call_end_trim   = false;
                 } else if (chat_template_alias == "llama3") {
                     // {"name":"","arguments":{}}
                     support_tool_calls   = true;
                     tool_call_start      = "{\"";
+                    tool_call_start_tok  = LLAMA_TOKEN_NULL;
                     tool_call_start_trim = false;
                     tool_call_ends       = {"}}", "}} "};
+                    tool_call_end_tok    = LLAMA_TOKEN_NULL;
                     tool_call_end_trim   = false;
                 } else if (chat_template_alias == "granite") {
-                    // <|tool_call|>[{"name":"","arguments":{}}]
+                    // <tool_call>[{"name":"","arguments":{}}]
                     support_tool_calls   = true;
-                    tool_call_start      = "[{\"";
-                    tool_call_start_tok  = 49154; // <|tool_call|>
-                    tool_call_start_trim = false;
+                    tool_call_start      = "<tool_call>";
+                    tool_call_start_tok  = LLAMA_TOKEN_NULL;
+                    tool_call_start_trim = true;
                     tool_call_ends       = {"}]", "}] "};
-                    tool_call_end_tok    = llama_token_eos(llm_model);
+                    tool_call_end_tok    = LLAMA_TOKEN_NULL;
                     tool_call_end_trim   = false;
                 }
                 SRV_INF("chat template, built_in: %s, alias: %s, tool call: %s, example:\n%s\n",
@@ -1826,19 +1834,28 @@ struct server_context {
 
             if (send_text && slot.oaicompat_completion_chat_tool) {
                 if (slot.tool_call_parser == TOOL_CALL_PARSER_TYPE_NONE) {
-                    if (str_test.length() < tool_call_start.length()) {
-                        send_text = false;
-                        if (tool_call_start_tok != LLAMA_TOKEN_NULL) {
-                            for (const llama_token &tok : result.toks) {
-                                if (tok == tool_call_start_tok) {
-                                    slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_TOKEN;
-                                    break;
+                    if (!tool_call_start.empty()) {
+                        if (str_test.length() < tool_call_start.length()) {
+                            send_text = false;
+                            if (tool_call_start_tok != LLAMA_TOKEN_NULL) {
+                                for (const llama_token &tok : result.toks) {
+                                    if (tok == tool_call_start_tok) {
+                                        slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_TOKEN;
+                                        break;
+                                    }
                                 }
                             }
+                        } else if (starts_with(str_test, tool_call_start)) {
+                            send_text             = false;
+                            slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_STRING;
                         }
-                    } else if (starts_with(str_test, tool_call_start)) {
-                        send_text             = false;
-                        slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_STRING;
+                    } else if (tool_call_start_tok != LLAMA_TOKEN_NULL) {
+                        for (const llama_token &tok : result.toks) {
+                            if (tok == tool_call_start_tok) {
+                                slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_TOKEN;
+                                break;
+                            }
+                        }
                     }
                 } else if (slot.tool_call_parser != TOOL_CALL_PARSER_TYPE_NONE) {
                     send_text = false;
@@ -1913,7 +1930,7 @@ struct server_context {
             }
 
             // check if the last token is EOG
-            if (!send_text && slot.oaicompat_completion_chat_tool && tool_call_end_tok == LLAMA_TOKEN_NULL) {
+            if (!send_text && slot.oaicompat_completion_chat_tool && slot.generated_tool_calls.empty()) {
                 send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1]);
             }
 
