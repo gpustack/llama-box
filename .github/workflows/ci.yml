@@ -22,7 +22,8 @@ on:
       - "**.mdx"
       - "**.png"
       - "**.jpg"
-      - "!.github/workflows/ci.yml"
+      - ".github/workflows/prune.yml"
+      - ".github/workflows/sync.yml"
   pull_request:
     branches:
       - "main"
@@ -32,7 +33,8 @@ on:
       - "**.mdx"
       - "**.png"
       - "**.jpg"
-      - "!.github/workflows/ci.yml"
+      - ".github/workflows/prune.yml"
+      - ".github/workflows/sync.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -58,23 +60,14 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
-          path: |
-            ${{ github.workspace }}/.cache
       - name: Deps
         run: |
-          brew update && brew install ccache
+          brew update
       - name: Setup XCode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '15.2'
       - name: Build
-        env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== BUILD ====="
           mkdir -p ${{ github.workspace }}/.cache
@@ -83,7 +76,7 @@ jobs:
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
           
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -121,23 +114,14 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-darwin-metal-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}/.cache
       - name: Deps
         run: |
-          brew update && brew install ccache
+          brew update
       - name: Setup XCode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '15.2'
       - name: Build
-        env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== BUILD ====="
           mkdir -p ${{ github.workspace }}/.cache
@@ -146,7 +130,7 @@ jobs:
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
 
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -290,8 +274,8 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=off \
-            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX2=on' || '' }} \
-            ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on -DGGML_AVX512_BF16=on' || '' }} \
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} \
+            ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} \
             ${{ matrix.instruction == 'neon' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_BLAS_VENDOR=OpenBLAS \
             -DGGML_STATIC=on \
@@ -994,10 +978,10 @@ jobs:
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           cmake ${{ matrix.arch == 'arm64' && '-G "Ninja Multi-Config"'|| '' }} -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_NATIVE=off `
-            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX2=on' || '' }} `
-            ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on -DGGML_AVX512_BF16=on' || '' }} `
+            ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
+            ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} `
+            ${{ matrix.instruction == 'neon' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on

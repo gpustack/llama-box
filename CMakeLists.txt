@@ -25,9 +25,6 @@ endif()
 # Options
 #
 
-# general
-option(LLAMA_CCACHE "llama: use ccache if available" ON)
-
 # debug
 option(LLAMA_ALL_WARNINGS "llama: enable all compiler warnings" ON)
 option(LLAMA_ALL_WARNINGS_3RD_PARTY "llama: enable all compiler warnings in 3rd party libs" OFF)
@@ -177,17 +174,6 @@ if (WIN32)
 
     if (BUILD_SHARED_LIBS)
         set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-    endif ()
-endif ()
-
-if (LLAMA_CCACHE)
-    find_program(LLAMA_CCACHE_FOUND ccache)
-    if (LLAMA_CCACHE_FOUND)
-        set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-        set(ENV{CCACHE_SLOPPINESS} time_macros)
-        message(STATUS "ccache found, compilation results will be cached. Disable with LLAMA_CCACHE=OFF.")
-    else ()
-        message(STATUS "Warning: ccache not found - consider installing it for faster compilation or disable this warning with LLAMA_CCACHE=OFF")
     endif ()
 endif ()
 
