@@ -26,7 +26,7 @@ struct stablediffusion_params_sampling {
     std::vector<int> slg_skip_layers = {7, 8, 9};
     float slg_start                  = 0.01;
     float slg_end                    = 0.2;
-    schedule_t schedule_method       = DEFAULT;
+    schedule_t schedule_method       = DISCRETE;
     std::string negative_prompt;
     float control_strength      = 0.9f;
     bool control_canny          = false;
@@ -415,7 +415,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         stablediffusion_params_sampling wparams = params.sampling;
         wparams.sampling_steps                  = 1; // sample only once
         wparams.sample_method                   = EULER;
-        wparams.schedule_method                 = DEFAULT;
+        wparams.schedule_method                 = DISCRETE;
         stablediffusion_sampling_stream *stream = sc->generate_stream("a lovely cat", wparams);
         sc->sample_stream(stream);
         stablediffusion_generated_image img = sc->result_image_stream(stream);

@@ -936,7 +936,13 @@ struct server_context {
             }
 
             if (sd_params.model_alias.empty()) {
-                sd_params.model_alias = sd_params.model.substr(sd_params.model.find_last_of('/') + 1);
+                if (sd_params.model.find_last_of('/') != std::string::npos) {
+                    sd_params.model_alias = sd_params.model.substr(sd_params.model.find_last_of('/') + 1);
+                } else if (sd_params.model.find_last_of('\\') != std::string::npos) {
+                    sd_params.model_alias = sd_params.model.substr(sd_params.model.find_last_of('\\') + 1);
+                } else {
+                    sd_params.model_alias = sd_params.model;
+                }
             }
             if (sd_params.sampling.strength <= 0.0f) {
                 sd_params.sampling.strength = sd_ctx->get_default_strength();
@@ -977,7 +983,13 @@ struct server_context {
         /* LLAMA */
 
         if (llm_params.model_alias.empty()) {
-            llm_params.model_alias = llm_params.model.substr(llm_params.model.find_last_of('/') + 1);
+            if (llm_params.model.find_last_of('/') != std::string::npos) {
+                llm_params.model_alias = llm_params.model.substr(llm_params.model.find_last_of('/') + 1);
+            } else if (llm_params.model.find_last_of('\\') != std::string::npos) {
+                llm_params.model_alias = llm_params.model.substr(llm_params.model.find_last_of('\\') + 1);
+            } else {
+                llm_params.model_alias = llm_params.model;
+            }
         }
 
         // load multimodal projection model
@@ -3643,12 +3655,21 @@ struct server_context {
 
         if (sd_ctx != nullptr) {
             return json{
-                {"sample_method", sd_sample_method_to_argument(sd_params.sampling.sample_method)},
-                {"sampling_steps", sd_params.sampling.sampling_steps},
-                {"schedule_method", sd_schedule_to_argument(sd_params.sampling.schedule_method)},
+                {"max_batch_count", sd_params.max_batch_count},
                 {"max_height", sd_params.sampling.height},
                 {"max_width", sd_params.sampling.width},
-                {"max_batch_count", sd_params.max_batch_count},
+                {"guidance", sd_params.sampling.guidance},
+                {"strength", sd_params.sampling.strength},
+                {"sample_method", sd_sample_method_to_argument(sd_params.sampling.sample_method)},
+                {"sampling_steps", sd_params.sampling.sampling_steps},
+                {"cfg_scale", sd_params.sampling.cfg_scale},
+                {"slg_scale", sd_params.sampling.slg_scale},
+                {"slg_skip_layers", sd_params.sampling.slg_skip_layers},
+                {"slg_start", sd_params.sampling.slg_start},
+                {"slg_end", sd_params.sampling.slg_end},
+                {"schedule_method", sd_schedule_to_argument(sd_params.sampling.schedule_method)},
+                {"negative_prompt", sd_params.sampling.negative_prompt},
+                {"n_slot", llm_params.n_parallel},
             };
         }
 
@@ -3663,6 +3684,8 @@ struct server_context {
             {"size", llama_model_size(llm_model)},
             {"n_ctx", llama_n_ctx(llm_ctx)},
             {"n_slot", llm_params.n_parallel},
+            {"support_vision", llm_ctx_clip != nullptr},
+            {"support_speculative", llm_ctx_draft != nullptr},
             {"support_tool_calls", support_tool_calls},
         };
     }
