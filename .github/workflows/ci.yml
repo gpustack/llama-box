@@ -325,16 +325,16 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/rocm/dev-centos-7/tags.
-        #     6.1 ==> 6.1.2, CentOS 7.
+        #     6.2 ==> 6.2.4, CentOS 7.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.4/reference/system-requirements.html.
         include:
           - arch: 'amd64'
-            version: '6.1'
-            distro_container_image: 'rocm/dev-centos-7:6.1.2-complete'
+            version: '6.2'
+            distro_container_image: 'rocm/dev-centos-7:6.2.4-complete'
             hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ubuntu-22.04
     steps:
@@ -1017,16 +1017,16 @@ jobs:
       fail-fast: false
       matrix:
         # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
-        #     6.1 ==> 6.1.2, Windows Server 2022.
+        #     6.2 ==> 6.2.4, Windows Server 2022.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.1.2/reference/system-requirements.html.
+        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.4/reference/system-requirements.html.
         include:
           - arch: 'amd64'
-            version: '6.1'
-            distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-WinSvr2022-For-HIP.exe'
+            version: '6.2'
+            distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q4-WinSvr2022-For-HIP.exe'
             hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
