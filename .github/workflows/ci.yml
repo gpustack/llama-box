@@ -73,6 +73,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -127,6 +128,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_ACCELERATE=on -DGGML_METAL=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -273,6 +275,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} \
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} \
@@ -409,6 +412,7 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
@@ -543,6 +547,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
@@ -656,6 +661,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -783,6 +789,7 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
@@ -893,6 +900,7 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -978,6 +986,7 @@ jobs:
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           cmake ${{ matrix.arch == 'arm64' && '-G "Ninja Multi-Config"'|| '' }} -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} `
@@ -1074,6 +1083,7 @@ jobs:
           cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DGGML_HIP=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
@@ -1181,6 +1191,7 @@ jobs:
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
@@ -1274,6 +1285,7 @@ jobs:
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx `
             -DGGML_SYCL=on -DGGML_SYCL_F16=on `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
