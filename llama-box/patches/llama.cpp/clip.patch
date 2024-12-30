@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 3cd0d2fa..4c34e10a 100644
+index 3cd0d2fa..a89814c6 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -8,25 +8,25 @@
@@ -161,6 +161,30 @@ index 3cd0d2fa..4c34e10a 100644
 +            LOG_INF("%s: qwen2vl_merger:  %d\n", __func__, new_clip->has_qwen2vl_merger);
              LOG_INF("%s: model size:     %.2f MB\n", __func__, model_size / 1024.0 / 1024.0);
              LOG_INF("%s: metadata size:  %.2f MB\n", __func__, ggml_get_mem_size(meta) / 1024.0 / 1024.0);
+         }
+@@ -1418,7 +1422,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         }
+ 
+         if (verbosity >= 2) {
+-            LOG_INF("\n%s: vision model hparams\n", __func__);
++            LOG_INF("%s: vision model hparams\n", __func__);
+             LOG_INF("image_size         %d\n", hparams.image_size);
+             LOG_INF("patch_size         %d\n", hparams.patch_size);
+             LOG_INF("v_hidden_size      %d\n", hparams.hidden_size);
+@@ -1429,11 +1433,11 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+             LOG_INF("v_eps              %f\n", hparams.eps);
+             LOG_INF("v_image_mean       %f %f %f\n", new_clip->image_mean[0], new_clip->image_mean[1], new_clip->image_mean[2]);
+             LOG_INF("v_image_std        %f %f %f\n", new_clip->image_std[0], new_clip->image_std[1], new_clip->image_std[2]);
+-            LOG_INF("v_image_grid_pinpoints: ");
++            std::string pinpoints_str;
+             for (int i = 0; i < 32 && (hparams.image_grid_pinpoints[i] != 0); ++i) {
+-                LOG_INF("%d ", hparams.image_grid_pinpoints[i]);
++                pinpoints_str += std::to_string(hparams.image_grid_pinpoints[i]) + " ";
+             }
+-            LOG_INF("\n");
++            LOG_INF("v_image_grid_pinpoints: %s\n", pinpoints_str.c_str());
+             LOG_INF("v_mm_patch_merge_type: %s\n", hparams.mm_patch_merge_type);
+ 
          }
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
 index 1603edd2..c33f86e1 100644

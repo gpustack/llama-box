@@ -999,7 +999,7 @@ struct server_context {
                 llm_params.n_ctx = 2048;
             }
             // NB(thxCode): clip_model_load is a patch.
-            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ 1, llm_params.n_gpu_layers);
+            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ common_log_verbosity_thold, llm_params.n_gpu_layers);
             if (llm_ctx_clip == nullptr) {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.c_str());
                 return false;
