@@ -1083,7 +1083,8 @@ struct server_context {
             }
         }
 
-        cache_prompt = params.cache_prompt || params.lookup_ngram_min > 0 || llm_ctx_draft != nullptr;
+        cache_prompt = (params.cache_prompt || params.lookup_ngram_min > 0 || llm_ctx_draft != nullptr) && llm_ctx_clip == nullptr;
+        SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : "disabled");
 
         // sample tokens per second
         if (params.n_tps < 0) {
@@ -1250,9 +1251,6 @@ struct server_context {
         // attention models such as BERT where the KV cache is not used)
         if (llm_ctx != nullptr) {
             auto n_batch = int32_t(llama_n_batch(llm_ctx));
-            if (need_mrope()) {
-                n_batch *= 4;
-            }
             batch = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
             if (llm_ctx_draft != nullptr) {
                 batch_draft = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
@@ -2933,9 +2931,6 @@ struct server_context {
 
         // process in chunks of params.n_batch
         auto n_batch = int32_t(llama_n_batch(llm_ctx));
-        if (need_mrope()) {
-            n_batch *= 4;
-        }
         auto n_ubatch = int32_t(llama_n_ubatch(llm_ctx));
 
         // track if this is an embedding or non-embedding batch
@@ -3456,9 +3451,8 @@ struct server_context {
     }
 
     bool preprocess_multi_modal_data_image(server_slot &slot, int32_t n_batch, const llava_image_embed *img_embd) const {
-        const int32_t n_embd   = llama_n_embd(llama_get_model(llm_ctx));
-        const int32_t n_tokens = img_embd->n_image_pos;
-        SLT_INF(slot, "processing image tokens: %d\n", n_tokens);
+        const int32_t n_embd = llama_n_embd(llama_get_model(llm_ctx));
+        SLT_INF(slot, "processing image tokens: %d\n", img_embd->n_image_pos);
 
         if (clip_is_qwen2vl(llm_ctx_clip)) {
             if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|vision_start|>"), false)) {
@@ -3466,16 +3460,16 @@ struct server_context {
             }
 
             auto qwen2vl_decode_img_embd = [&](const llava_image_embed *img_embd, const std::vector<llama_pos> &img_mrope_pos) {
-                for (int32_t j = 0; j < n_tokens; j += n_batch) {
-                    const int32_t n_eval = std::min(n_batch, n_tokens - j);
+                for (int32_t j = 0; j < img_embd->n_image_pos; j += n_batch) {
+                    const int32_t n_eval = std::min(n_batch, img_embd->n_image_pos - j);
                     std::vector<llama_pos> batch_img_mrope_pos;
                     {
                         batch_img_mrope_pos.resize(img_mrope_pos.size());
                         std::fill(batch_img_mrope_pos.begin(), batch_img_mrope_pos.end(), 0);
                         memcpy(batch_img_mrope_pos.data(), &img_mrope_pos[j], n_eval * sizeof(llama_pos));
-                        memcpy(&batch_img_mrope_pos[n_eval * 1], &img_mrope_pos[n_tokens * 1 + j], n_eval * sizeof(llama_pos));
-                        memcpy(&batch_img_mrope_pos[n_eval * 2], &img_mrope_pos[n_tokens * 2 + j], n_eval * sizeof(llama_pos));
-                        memcpy(&batch_img_mrope_pos[n_eval * 3], &img_mrope_pos[n_tokens * 3 + j], n_eval * sizeof(llama_pos));
+                        memcpy(&batch_img_mrope_pos[n_eval * 1], &img_mrope_pos[img_embd->n_image_pos * 1 + j], n_eval * sizeof(llama_pos));
+                        memcpy(&batch_img_mrope_pos[n_eval * 2], &img_mrope_pos[img_embd->n_image_pos * 2 + j], n_eval * sizeof(llama_pos));
+                        memcpy(&batch_img_mrope_pos[n_eval * 3], &img_mrope_pos[img_embd->n_image_pos * 3 + j], n_eval * sizeof(llama_pos));
                     }
                     qwen2vl_image_embed_batch_wrapper batch_img = qwen2vl_image_embed_batch_wrapper((img_embd->embed + j * n_embd), n_eval, batch_img_mrope_pos.data(), slot.id);
                     if (llama_decode(llm_ctx, batch_img.batch)) {
@@ -3495,14 +3489,14 @@ struct server_context {
                 const int32_t ps                 = clip_patch_size(llm_ctx_clip) * 2;
                 const int ph                     = img_size->height / ps + (img_size->height % ps > 0);
                 const int pw                     = img_size->width / ps + (img_size->width % ps > 0);
-                img_mrope_pos.resize(n_tokens * 4);
+                img_mrope_pos.resize(img_embd->n_image_pos * 4);
                 for (int32_t y = 0; y < ph; y++) {
                     for (int32_t x = 0; x < pw; x++) {
-                        int i                           = y * pw + x;
-                        img_mrope_pos[i]                = slot.st_pos_id;
-                        img_mrope_pos[i + n_tokens * 1] = slot.st_pos_id + y;
-                        img_mrope_pos[i + n_tokens * 2] = slot.st_pos_id + x;
-                        img_mrope_pos[i + n_tokens * 3] = 0;
+                        int i                                        = y * pw + x;
+                        img_mrope_pos[i]                             = slot.st_pos_id;
+                        img_mrope_pos[i + img_embd->n_image_pos * 1] = slot.st_pos_id + y;
+                        img_mrope_pos[i + img_embd->n_image_pos * 2] = slot.st_pos_id + x;
+                        img_mrope_pos[i + img_embd->n_image_pos * 3] = 0;
                     }
                 }
                 slot.st_pos_id += std::max(ph, pw);
@@ -3519,8 +3513,8 @@ struct server_context {
         }
 
         auto llava_decode_img_embd = [&](const llava_image_embed *img_embd) {
-            for (int32_t j = 0; j < n_tokens; j += n_batch) {
-                const int32_t n_eval                      = std::min(n_batch, n_tokens - j);
+            for (int32_t j = 0; j < img_embd->n_image_pos; j += n_batch) {
+                const int32_t n_eval                      = std::min(n_batch, img_embd->n_image_pos - j);
                 llava_image_embed_batch_wrapper batch_img = llava_image_embed_batch_wrapper((img_embd->embed + j * n_embd), n_eval, slot.n_past, slot.id);
                 if (llama_decode(llm_ctx, batch_img.batch)) {
                     return false;
@@ -3545,7 +3539,7 @@ struct server_context {
                 return slice_embed;
             };
 
-            size_t n_img_embd = n_tokens / clip_n_patches(llm_ctx_clip);
+            size_t n_img_embd = img_embd->n_image_pos / clip_n_patches(llm_ctx_clip);
             if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
                 return false;
             }
@@ -3717,8 +3711,8 @@ struct server_context {
     }
 
     bool need_mrope() const {
-        // NB(thxCode): llama_needs_mrope is a patch.
-        return llm_model != nullptr && llama_needs_mrope(llm_model);
+        // NB(thxCode): llama_model_needs_mrope is a patch.
+        return llm_model != nullptr && llama_model_needs_mrope(llm_model);
     }
 };
 

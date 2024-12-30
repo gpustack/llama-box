@@ -58,8 +58,10 @@ add_custom_target(patch
 add_dependencies(patch version build_info)
 add_dependencies(ggml-base patch)
 add_dependencies(ggml patch)
-add_dependencies(llama ggml ggml-base patch)
-add_dependencies(stable-diffusion ggml ggml-base patch)
+add_dependencies(common ggml ggml-base patch)
+add_dependencies(llava common patch)
+add_dependencies(llama common patch)
+add_dependencies(stable-diffusion common patch)
 
 #
 # llama-box
@@ -91,10 +93,10 @@ add_executable(${TARGET} server.cpp param.hpp ratelimiter.hpp rpcserver.hpp stab
 if (NOT APPLE AND NOT GGML_SYCL)
     target_link_options(${TARGET} PRIVATE -static-libgcc -static-libstdc++)
 endif ()
-target_link_libraries(${TARGET} PRIVATE version common llava stable-diffusion ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${TARGET} PRIVATE version common llama llava stable-diffusion ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 if (WIN32)
-    TARGET_LINK_LIBRARIES(${TARGET} PRIVATE ws2_32)
+    target_link_libraries(${TARGET} PRIVATE ws2_32)
 endif ()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Building in debug mode")
