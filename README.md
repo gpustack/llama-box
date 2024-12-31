@@ -26,7 +26,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - Qwen2 VL Series
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
-      $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --visual-max-image-size 1344
+      $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
       $ # The box will resize the image automatically when the image size exceeds 1344x1344.
     ```
     + Support [OpenAI Function calling API](https://platform.openai.com/docs/guides/function-calling).
