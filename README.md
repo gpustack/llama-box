@@ -24,6 +24,11 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - LLaVA Series
         - MiniCPM VL Series
         - Qwen2 VL Series
+    ```shell
+      $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
+      $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --visual-max-image-size 1344
+      $ # The box will resize the image automatically when the image size exceeds 1344x1344.
+    ```
     + Support [OpenAI Function calling API](https://platform.openai.com/docs/guides/function-calling).
         - Qwen2 Series
         - LLaMA3 Series
@@ -38,7 +43,42 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
   see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
 - Support speculative decoding: draft model or n-gram lookup.
 - Support RPC server mode, which can serve as a remote inference backend.
+- Split offloading layers across multiple devices, including remote RPC server.
+  ```shell
+    $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --rpc remote-ip:remote-port --tensor-split 1,2,3
+    $ # Same as --tensor-split 1,2,3,0. 
+    $ # The remote RPC server will handle 1/6 of the model, the 1st GPU will handle 1/3 of the model, and the 2nd GPU will handle 1/2 of the model. 
+    $ # Nothing to do with the 3rd GPU.
+    
+    $ # Assume that there are 1 remote RPC servers and 3 available GPUs, launch box as below.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --rpc remote-ip:remote-port --tensor-split 0,0,1,1
+    $ # The 2nd GPU will handle 1/2 of the model, and the 3rd GPU will handle 1/2 of the model.
+    $ # Nothing to do with the remote RPC server and the 1st GPUs.
+  ```
 - Support injecting `X-Request-ID` http header for tracking requests.
+  ```shell
+    $ # Launch box.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ...
+    
+    $ # Inject X-Request-ID: trace-id to track the request.
+    $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-ID: trace-id" -d '{"model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+    $ # View logs
+  ```
+- Support `X-Request-Tokens-Per-Second` http header for limiting the number of tokens per second.
+  ```shell
+    $ # Launch box with -tps -1.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --tokens-per-second -1
+  
+    $ # For level 1 users, inject X-Request-Tokens-Per-Second: 10 to limit the number of tokens per second to 10.
+    $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-Tokens-Per-Second: 10" -d '{"stream": true, "model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+
+    $ # For level 2 users, inject X-Request-Tokens-Per-Second: 20 to limit the number of tokens per second to 20.
+    $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-Tokens-Per-Second: 20" -d '{"stream": true, "model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+
+    $ # For super users, let the box handle the request without limiting the number of tokens per second.
+    $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"stream": true, "model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+  ```
 
 ## Supports
 

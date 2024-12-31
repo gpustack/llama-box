@@ -28,6 +28,7 @@
 #define MIMETYPE_JSON "application/json; charset=utf-8"
 #define HEADER_REQUEST_ID "X-Request-ID"
 #define HEADER_REQUEST_ACCEPTED_AT "X-Request-Accepted-At"
+#define HEADER_REQUEST_TOKENS_PER_SECOND "X-Request-Tokens-Per-Second"
 
 using json = nlohmann::json;
 
@@ -3204,7 +3205,7 @@ struct server_context {
         }
 
         if (batch.n_tokens == 0) {
-            SRV_WRN("%s", "no tokens to decode\n");
+            SRV_DBG("%s", "no tokens to decode\n");
             return;
         }
 
@@ -4432,7 +4433,7 @@ int main(int argc, char **argv) {
 
         int tps = 0;
         {
-            const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
+            const std::string tps_s = req.get_header_value(HEADER_REQUEST_TOKENS_PER_SECOND);
             if (!tps_s.empty()) {
                 try {
                     tps = std::stoi(tps_s);
@@ -4576,7 +4577,7 @@ int main(int argc, char **argv) {
 
         int tps = 0;
         {
-            const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
+            const std::string tps_s = req.get_header_value(HEADER_REQUEST_TOKENS_PER_SECOND);
             if (!tps_s.empty()) {
                 try {
                     tps = std::stoi(tps_s);
@@ -4706,7 +4707,7 @@ int main(int argc, char **argv) {
 
         int tps = 0;
         {
-            const std::string tps_s = req.get_header_value("X-Request-Tokens-Per-Second");
+            const std::string tps_s = req.get_header_value(HEADER_REQUEST_TOKENS_PER_SECOND);
             if (!tps_s.empty()) {
                 try {
                     tps = std::stoi(tps_s);

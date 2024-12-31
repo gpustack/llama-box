@@ -56,6 +56,7 @@ SEED="${SEED:-"null"}"
 STOP="${STOP:-"null"}"
 TEMP="${TEMP:-"1"}"
 TOP_P="${TOP_P:-"1"}"
+MAX_TOKENS_PER_SECOND="${MAX_TOKENS_PER_SECOND:-"0"}"
 
 chat_completion() {
     PROMPT="$(trim_trailing "$1")"
@@ -176,6 +177,7 @@ chat_completion() {
             --request POST \
             --url "${API_URL}/v1/chat/completions" \
             --header "Content-Type: application/json" \
+            --header "X-Request-Tokens-Per-Second: ${MAX_TOKENS_PER_SECOND}" \
             --data @/tmp/request.json)
 
         printf "\n"
