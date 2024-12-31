@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 20be9291..cfbfb179 100644
+index 9071999a..8adb54d9 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -1614,27 +1614,34 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
+@@ -1616,27 +1616,34 @@ std::string common_detokenize(llama_context * ctx, const std::vector<llama_token
  
  bool common_chat_verify_template(const std::string & tmpl) {
      llama_chat_message chat[] = {{"user", "test"}};
@@ -40,7 +40,7 @@ index 20be9291..cfbfb179 100644
  
      // error: chat template is not supported
      if (res < 0) {
-@@ -1644,7 +1651,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1646,7 +1653,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
              throw std::runtime_error("this custom template is not supported");
          } else {
              // If the built-in template is not supported, we default to chatml
@@ -49,7 +49,7 @@ index 20be9291..cfbfb179 100644
              fallback = true;
          }
      }
-@@ -1655,7 +1662,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1657,7 +1664,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
          res = llama_chat_apply_template(
              fallback ? nullptr : model,
              fallback ? "chatml" : ptr_tmpl,
@@ -58,7 +58,7 @@ index 20be9291..cfbfb179 100644
      }
  
      std::string formatted_chat(buf.data(), res);
-@@ -1668,7 +1675,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1670,7 +1677,7 @@ std::string common_chat_format_single(const struct llama_model * model,
          const common_chat_msg & new_msg,
          bool add_ass) {
      std::ostringstream ss;
@@ -67,7 +67,7 @@ index 20be9291..cfbfb179 100644
      std::vector<common_chat_msg> chat_new(past_msg);
      // if the past_msg ends with a newline, we must preserve it in the formatted version
      if (add_ass && !fmt_past_msg.empty() && fmt_past_msg.back() == '\n') {
-@@ -1676,7 +1683,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1678,7 +1685,7 @@ std::string common_chat_format_single(const struct llama_model * model,
      };
      // format chat with new_msg
      chat_new.push_back(new_msg);
@@ -76,7 +76,7 @@ index 20be9291..cfbfb179 100644
      // get the diff part
      ss << fmt_new_msg.substr(fmt_past_msg.size(), fmt_new_msg.size() - fmt_past_msg.size());
      return ss.str();
-@@ -1685,12 +1692,16 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1687,12 +1694,16 @@ std::string common_chat_format_single(const struct llama_model * model,
  std::string common_chat_format_example(const struct llama_model * model,
          const std::string & tmpl) {
      std::vector<common_chat_msg> msgs = {
