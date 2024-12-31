@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 3cd0d2fa..0d994194 100644
+index 3cd0d2fa..834c013e 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -8,25 +8,25 @@
@@ -71,39 +71,49 @@ index 3cd0d2fa..0d994194 100644
  
  // RGB uint8 image
  struct clip_image_u8 {
-@@ -606,13 +598,13 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
-         if (load_image_size == nullptr) {
-             load_image_size = clip_image_size_init();
+@@ -603,12 +595,10 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
+     int image_size_width  = image_size;
+     int image_size_height = image_size;
+     if (ctx->has_minicpmv_projector) {
+-        if (load_image_size == nullptr) {
+-            load_image_size = clip_image_size_init();
++        if (load_image_size != nullptr) {
++            image_size_width  = load_image_size->width;
++            image_size_height = load_image_size->height;
          }
 -        LOG_DBG("%s: %d %d\n", __func__, load_image_size->width, load_image_size->height);
-         image_size_width  = load_image_size->width;
-         image_size_height = load_image_size->height;
+-        image_size_width  = load_image_size->width;
+-        image_size_height = load_image_size->height;
          if (is_inf) {
              image_size_width  = imgs->data->nx;
              image_size_height = imgs->data->ny;
-         }
-+        LOG_DBG("%s: %d %d\n", __func__, image_size_width, image_size_height);
-     }
-     else if (ctx->has_qwen2vl_merger) {
-         // use the image's native resolution when image is avaible
-@@ -621,6 +613,7 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
-             image_size_width  = imgs->data->nx;
+@@ -622,6 +612,8 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
              image_size_height = imgs->data->ny;
          }
-+        LOG_DBG("%s: %d %d\n", __func__, image_size_width, image_size_height);
      }
++    LOG_DBG("%s: %d %d\n", __func__, image_size_width, image_size_height);
++
      const int patch_size           = hparams.patch_size;
      const int num_patches          = ((image_size_width / patch_size) * (image_size_height / patch_size));
-@@ -1109,7 +1102,7 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
+     const int patches_w            = image_size_width / patch_size;
+@@ -1109,7 +1101,7 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
  }
  
  // read and create ggml_context containing the tensors and their data
 -struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
-+struct clip_ctx * clip_model_load(const char * fname, const int verbosity, int32_t ngl) {
++struct clip_ctx * clip_model_load(const char * fname, const int verbosity, int32_t ngl, int32_t max_image_size) {
      struct ggml_context * meta = NULL;
  
      struct gguf_init_params params = {
-@@ -1196,7 +1189,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1140,7 +1132,6 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         LOG_INF("%s: n_tensors:    %d\n", __func__, n_tensors);
+         LOG_INF("%s: n_kv:         %d\n", __func__, n_kv);
+         LOG_INF("%s: ftype:        %s\n", __func__, ftype_str.c_str());
+-        LOG_INF("\n");
+     }
+     const int n_tensors = gguf_get_n_tensors(ctx);
+ 
+@@ -1196,7 +1187,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
              struct ggml_tensor * cur = ggml_get_tensor(meta, name);
              size_t tensor_size = ggml_nbytes(cur);
              model_size += tensor_size;
@@ -112,7 +122,7 @@ index 3cd0d2fa..0d994194 100644
                  LOG_INF("%s: tensor[%d]: n_dims = %d, name = %s, tensor_size=%zu, offset=%zu, shape:[%" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 "], type = %s\n",
                         __func__, i, ggml_n_dims(cur), cur->name, tensor_size, offset, cur->ne[0], cur->ne[1], cur->ne[2], cur->ne[3], ggml_type_name(type));
              }
-@@ -1222,34 +1215,40 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1222,34 +1213,40 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          }
      }
  
@@ -177,7 +187,7 @@ index 3cd0d2fa..0d994194 100644
      }
  
      // model size and capabilities
-@@ -1278,6 +1277,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1278,6 +1275,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          idx = gguf_find_key(ctx, KEY_HAS_QWEN2VL_MERGER);
          if (idx != -1) {
              new_clip->has_qwen2vl_merger = gguf_get_val_bool(ctx, idx);
@@ -191,7 +201,7 @@ index 3cd0d2fa..0d994194 100644
          }
          // GGML_ASSERT(new_clip->has_llava_projector); // see monatis/clip.cpp for image and/or text encoding for semantic search
  
-@@ -1299,6 +1305,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1299,6 +1303,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
              LOG_INF("%s: vision_encoder: %d\n", __func__, new_clip->has_vision_encoder);
              LOG_INF("%s: llava_projector:  %d\n", __func__, new_clip->has_llava_projector);
              LOG_INF("%s: minicpmv_projector:  %d\n", __func__, new_clip->has_minicpmv_projector);
@@ -199,7 +209,7 @@ index 3cd0d2fa..0d994194 100644
              LOG_INF("%s: model size:     %.2f MB\n", __func__, model_size / 1024.0 / 1024.0);
              LOG_INF("%s: metadata size:  %.2f MB\n", __func__, ggml_get_mem_size(meta) / 1024.0 / 1024.0);
          }
-@@ -1418,24 +1425,23 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1418,24 +1423,23 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          }
  
          if (verbosity >= 2) {
@@ -239,7 +249,42 @@ index 3cd0d2fa..0d994194 100644
          }
  
          try {
-@@ -2074,6 +2080,14 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -1611,10 +1615,32 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         clip_image_f32_batch batch;
+         batch.size = 1;
+         batch.data = nullptr;
+-        ggml_cgraph * gf = clip_image_build_graph(new_clip, &batch, nullptr, false);
++        ggml_cgraph * gf;
++        if (max_image_size > 0) {
++            clip_image_u8 * img = new clip_image_u8();
++            img->nx = max_image_size;
++            img->ny = max_image_size;
++            img->buf.resize(3 * max_image_size * max_image_size);
++            bool processed = clip_image_preprocess(new_clip, img, &batch);
++            clip_image_u8_free(img);
++            if (!processed) {
++                LOG_ERR("%s: unable to preprocess image\n", __func__);
++                delete[] batch.data;
++                clip_free(new_clip);
++                return nullptr;
++            }
++            batch.size = 1;
++            struct clip_image_size * load_image_size = clip_image_size_init();
++            load_image_size->width = batch.data[0].nx;
++            load_image_size->height = batch.data[0].ny;
++            gf = clip_image_build_graph(new_clip, &batch, load_image_size, true);
++            delete[] batch.data;
++        } else {
++            gf = clip_image_build_graph(new_clip, &batch, nullptr, false);
++        }
+         ggml_gallocr_reserve(new_clip->compute_alloc, gf);
+         size_t compute_memory_buffer_size = ggml_gallocr_get_buffer_size(new_clip->compute_alloc, 0);
+-        LOG_INF("%s: compute allocated memory: %.2f MB\n", __func__, compute_memory_buffer_size /1024.0/1024.0);
++        LOG_INF("%s: compute allocated memory: %.2f MiB\n", __func__, compute_memory_buffer_size /1024.0/1024.0);
+     }
+ 
+     return new_clip;
+@@ -2074,6 +2100,14 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
                  LOG_DBG("%s: %d %d\n", __func__,imgs[i][j]->nx,imgs[i][j]->ny);
                  clip_image_f32 * res = clip_image_f32_init();
                  normalize_image_u8_to_f32(imgs[i][j], res, ctx->image_mean, ctx->image_std);
@@ -254,7 +299,7 @@ index 3cd0d2fa..0d994194 100644
                  res_imgs->data[idx++] = *res;
                  clip_image_f32_free(res);
              }
-@@ -2089,7 +2103,16 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2089,7 +2123,16 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
          res_imgs->data = new clip_image_f32[1];
          // clip_image_f32 * res = clip_image_f32_init();
@@ -271,7 +316,7 @@ index 3cd0d2fa..0d994194 100644
          // res_imgs->data[0] = *res;
          res_imgs->size = 1;
  
-@@ -2165,14 +2188,23 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2165,14 +2208,23 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
              clip_image_u8 *image_original_resize = clip_image_u8_init();
              // bilinear_resize(*img, *image_original_resize, params.image_size, params.image_size); // in python this is "shortest_edge", but all CLIP are square
@@ -296,7 +341,7 @@ index 3cd0d2fa..0d994194 100644
                  num++;
              }
  
-@@ -2207,49 +2239,18 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2207,49 +2259,18 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
      const int nx3 = int(nx / scale + 0.5f);
      const int ny3 = int(ny / scale + 0.5f);
@@ -357,7 +402,7 @@ index 3cd0d2fa..0d994194 100644
  
      // {
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index 1603edd2..c33f86e1 100644
+index 1603edd2..5c44415b 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -39,7 +39,7 @@ struct clip_image_f32_batch {
@@ -365,12 +410,12 @@ index 1603edd2..c33f86e1 100644
  };
  
 -CLIP_API struct clip_ctx * clip_model_load    (const char * fname, int verbosity);
-+CLIP_API struct clip_ctx * clip_model_load    (const char * fname, int verbosity = 1, int32_t ngl = 999);
++CLIP_API struct clip_ctx * clip_model_load    (const char * fname, int verbosity = 1, int32_t ngl = 999, int32_t max_image_size = 0);
  CLIP_API struct clip_ctx * clip_model_load_cpu(const char * fname, int verbosity);
  
  CLIP_API void clip_free(struct clip_ctx * ctx);
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index 16f30c56..c74d8c66 100644
+index 16f30c56..5635f085 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -11,17 +11,7 @@
@@ -401,3 +446,47 @@ index 16f30c56..c74d8c66 100644
  
      return true;
  }
+@@ -498,6 +488,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
+     return result;
+ }
+ 
++struct llava_image_embed * llava_image_embed_make_with_data(struct clip_ctx * ctx_clip, int n_threads, const unsigned char * data, int nx, int ny, int nc) {
++    clip_image_u8 * img = clip_image_u8_init();
++    img->nx = nx;
++    img->ny = ny;
++    img->buf.resize(nx * ny * nc);
++    memcpy(img->buf.data(), data, img->buf.size());
++
++    float* image_embed = NULL;
++    int n_image_pos = 0;
++    bool image_embed_result = llava_image_embed_make_with_clip_img(ctx_clip, n_threads, img, &image_embed, &n_image_pos);
++    if (!image_embed_result) {
++        clip_image_u8_free(img);
++        LOG_ERR("%s: couldn't embed the image\n", __func__);
++        return NULL;
++    }
++
++    clip_image_u8_free(img);
++    auto result = (llava_image_embed*)malloc(sizeof(llava_image_embed));
++    result->embed = image_embed;
++    result->n_image_pos = n_image_pos;
++    return result;
++}
++
++
+ static bool load_file_to_bytes(const char* path, unsigned char** bytesOut, long *sizeOut) {
+     auto file = fopen(path, "rb");
+     if (file == NULL) {
+diff --git a/examples/llava/llava.h b/examples/llava/llava.h
+index b6feb302..7b29b7a0 100644
+--- a/examples/llava/llava.h
++++ b/examples/llava/llava.h
+@@ -34,6 +34,8 @@ LLAVA_API bool llava_image_embed_make_with_clip_img(struct clip_ctx * ctx_clip,
+ 
+ /** build an image embed from image file bytes */
+ LLAVA_API struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * ctx_clip, int n_threads, const unsigned char * image_bytes, int image_bytes_length);
++/** build an image embed from image data */
++LLAVA_API struct llava_image_embed * llava_image_embed_make_with_data(struct clip_ctx * ctx_clip, int n_threads, const unsigned char * data, int nx, int ny, int nc);
+ /** build an image embed from a path to an image filename */
+ LLAVA_API struct llava_image_embed * llava_image_embed_make_with_filename(struct clip_ctx * ctx_clip, int n_threads, const char * image_path);
+ /** free an embedding made with llava_image_embed_make_* */

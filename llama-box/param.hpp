@@ -33,10 +33,11 @@ struct llama_box_params {
     bool cache_prompt        = true;
     bool endpoint_infill     = false;
     bool endpoint_images     = false;
-    int32_t conn_idle        = 60; // connection idle in seconds
-    int32_t conn_keepalive   = 15; // connection keep-alive in seconds
-    int32_t n_tps            = 0;  // maximum number of tokens per seconds
-    int32_t lookup_ngram_min = 0;  // minimum n-gram size for lookup cache
+    int32_t conn_idle        = 60;   // connection idle in seconds
+    int32_t conn_keepalive   = 15;   // connection keep-alive in seconds
+    int32_t n_tps            = 0;    // maximum number of tokens per seconds
+    int32_t lookup_ngram_min = 0;    // minimum n-gram size for lookup cache
+    int32_t max_image_size   = 0; // maximum image size for vision image processing
 };
 
 static void unknown(const char *flag) {
@@ -401,7 +402,12 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "path to static lookup cache to use for lookup decoding (not updated by generation)" });
     opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
     // server // completion // speculative //
+    // server // completion // visual //
+    opts.push_back({ "server/completion/visual" });
+    opts.push_back({ "server/completion/visual",           "       --visual-max-image-size N",              "maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: %d, 0 = disabled)", params_.max_image_size});
+    // server // completion // visual //
     // server // embedding //
+    opts.push_back({ "server/embedding" });
     opts.push_back({ "server/embedding",                   "       --pooling",                              "pooling type for embeddings, use model default if unspecified" });
     // server // embedding //
     // server // images //
@@ -1685,6 +1691,23 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                               = argv[i++];
                 params_.llm_params.lookup_cache_dynamic = std::string(arg);
+                continue;
+            }
+
+            // server // completion // visual //
+
+            if (!strcmp(flag, "--visual-max-image-size")) {
+                if (i == argc) {
+                    missing("--visual-max-image-size");
+                }
+                char *arg              = argv[i++];
+                params_.max_image_size = std::stoi(std::string(arg));
+                if (params_.max_image_size != 0 && params_.max_image_size < 224) {
+                    invalid("--visual-max-image-size");
+                }
+                if (params_.max_image_size % 14 != 0) {
+                    invalid("--visual-max-image-size");
+                }
                 continue;
             }
 

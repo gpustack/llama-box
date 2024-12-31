@@ -416,6 +416,14 @@ server/completion/speculative:
                                   path to static lookup cache to use for lookup decoding (not updated by generation)
   -lcd,  --lookup-cache-dynamic FILE
                                   path to dynamic lookup cache to use for lookup decoding (updated by generation)
+
+server/completion/visual:
+
+         --visual-max-image-size N
+                                  maximum image size when completion with vision, resize if exceed, must be larger than 224 and be multiples of 14 (default: 0)
+
+server/embedding:
+
          --pooling                pooling type for embeddings, use model default if unspecified
 
 server/images:
@@ -436,7 +444,7 @@ server/images:
          --image-slg-end N        the phase to disable SLG (default: 0.20)
                                   SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])
          --image-schedule-method, --image-schedule TYPE
-                                  denoiser sigma schedule method, allowed values: default, discrete, karras, exponential, ays, gits (default: default)
+                                  denoiser sigma schedule method, allowed values: default, discrete, karras, exponential, ays, gits (default: discrete)
          --image-no-text-encoder-model-offload
                                   disable text-encoder(clip-l/clip-g/t5xxl) model offload
          --image-clip-l-model PATH

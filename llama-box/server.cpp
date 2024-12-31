@@ -999,7 +999,7 @@ struct server_context {
                 llm_params.n_ctx = 2048;
             }
             // NB(thxCode): clip_model_load is a patch.
-            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ common_log_verbosity_thold, llm_params.n_gpu_layers);
+            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ common_log_verbosity_thold, llm_params.n_gpu_layers, params_.max_image_size);
             if (llm_ctx_clip == nullptr) {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.c_str());
                 return false;
@@ -1251,7 +1251,7 @@ struct server_context {
         // attention models such as BERT where the KV cache is not used)
         if (llm_ctx != nullptr) {
             auto n_batch = int32_t(llama_n_batch(llm_ctx));
-            batch = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
+            batch        = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
             if (llm_ctx_draft != nullptr) {
                 batch_draft = llama_batch_init(std::max(n_batch, llm_params.n_parallel), 0, 1);
             }
@@ -2930,7 +2930,7 @@ struct server_context {
         }
 
         // process in chunks of params.n_batch
-        auto n_batch = int32_t(llama_n_batch(llm_ctx));
+        auto n_batch  = int32_t(llama_n_batch(llm_ctx));
         auto n_ubatch = int32_t(llama_n_ubatch(llm_ctx));
 
         // track if this is an embedding or non-embedding batch
@@ -3612,9 +3612,54 @@ struct server_context {
             add_bos = false;
 
             // process image
-            const std::string img           = images_json.at(images_count++).get<std::string>();
-            const std::vector<uint8_t> buff = base64_decode(img);
-            llava_image_embed *img_embd     = llava_image_embed_make_with_bytes(llm_ctx_clip, llm_params.cpuparams.n_threads, buff.data(), int(buff.size()));
+            uint8_t *dt = nullptr;
+            int w       = 0;
+            int h       = 0;
+            int c       = 0;
+            {
+                const std::string img               = images_json.at(images_count++).get<std::string>();
+                const std::vector<uint8_t> img_buff = base64_decode(img);
+
+                dt = stbi_load_from_memory((const stbi_uc *)img_buff.data(), (int)img_buff.size(), &w, &h, &c, 3);
+                if (dt == nullptr) {
+                    auto reason = stbi_failure_reason();
+                    SLT_ERR(slot, "failed to load image: %s\n", reason);
+                    return false;
+                }
+
+                int m = std::max(w, h);
+                if (params.max_image_size > 0 && m > params.max_image_size) {
+                    SLT_INF(slot, "image dimensions exceeded the maximum size: %d, resizing image\n", params.max_image_size);
+                    float nr  = float(params.max_image_size) / float(m);
+                    int nw    = std::max(int(std::ceil(float(w) * nr)), 1);
+                    int nh    = std::max(int(std::ceil(float(h) * nr)), 1);
+                    auto *ndt = (uint8_t *)malloc(nw * nh * c);
+                    if (ndt == nullptr) {
+                        SLT_ERR(slot, "%s", "failed to resize image: allocate new buffer\n");
+                        stbi_image_free(dt);
+                        return false;
+                    }
+                    bool resized = stbir_resize(
+                        dt, w, h, 0,
+                        ndt, nw, nh, 0, STBIR_TYPE_UINT8,
+                        c /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
+                        STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
+                        STBIR_FILTER_BOX, STBIR_FILTER_BOX,
+                        STBIR_COLORSPACE_SRGB, nullptr);
+                    stbi_image_free(dt);
+                    if (!resized) {
+                        auto reason = stbi_failure_reason();
+                        SLT_ERR(slot, "failed to resize image: %s\n", reason);
+                        return false;
+                    }
+                    SLT_INF(slot, "image resized from %dx%d to %dx%d\n", w, h, nw, nh);
+                    dt = ndt;
+                    w  = nw;
+                    h  = nh;
+                }
+            }
+            // NB(thxCode): llava_image_embed_make_with_data is a patch.
+            llava_image_embed *img_embd = llava_image_embed_make_with_data(llm_ctx_clip, llm_params.cpuparams.n_threads, dt, w, h, c);
             if (!img_embd) {
                 SLT_ERR(slot, "%s", "failed to embed image\n");
                 return false;
