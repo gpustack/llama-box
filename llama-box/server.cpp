@@ -920,7 +920,7 @@ struct server_context {
     }
 
     bool load_model(llama_box_params &params_) {
-        SRV_INF("loading model '%s'\n", llm_params.model.c_str());
+        SRV_INF("loading model '%s'\n", params_.llm_params.model.c_str());
 
         params     = params_;
         llm_params = params.llm_params;
