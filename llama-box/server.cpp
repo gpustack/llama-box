@@ -3724,6 +3724,8 @@ struct server_context {
             {"size", llama_model_size(llm_model)},
             {"n_ctx", llama_n_ctx(llm_ctx)},
             {"n_slot", llm_params.n_parallel},
+            {"n_slot_ctx", int32_t(llama_n_ctx(llm_ctx)) / llm_params.n_parallel},
+            {"ctx_shift", llm_params.ctx_shift},
             {"support_vision", llm_ctx_clip != nullptr},
             {"support_speculative", llm_ctx_draft != nullptr},
             {"support_tool_calls", support_tool_calls},
