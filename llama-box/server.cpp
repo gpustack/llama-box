@@ -4143,11 +4143,26 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_props = [&](const httplib::Request &, httplib::Response &res) {
-        const json response{
+        json response{
             {"default_generation_settings", ctx_server.default_generation_settings_for_props},
             {"total_slots", ctx_server.llm_params.n_parallel},
-            {"chat_template", ctx_server.llm_params.chat_template.c_str()},
+            {"build_info",
+             json{
+                 {"version", LLAMA_BOX_BUILD_VERSION},
+                 {"number", LLAMA_BOX_BUILD_NUMBER},
+                 {"commit", LLAMA_BOX_COMMIT},
+                 {"compiler", LLAMA_BOX_BUILD_COMPILER},
+                 {"target", LLAMA_BOX_BUILD_TARGET},
+             }},
         };
+        if (ctx_server.llm_ctx) {
+            response["model_path"]    = ctx_server.llm_params.model;
+            response["model_alias"]   = ctx_server.llm_params.model_alias;
+            response["chat_template"] = ctx_server.llm_params.chat_template.c_str();
+        } else if (ctx_server.sd_ctx) {
+            response["model_path"]  = ctx_server.sd_params.model;
+            response["model_alias"] = ctx_server.sd_params.model_alias;
+        }
         res_ok(res, response);
     };
 
