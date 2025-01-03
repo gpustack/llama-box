@@ -33,11 +33,11 @@ struct llama_box_params {
     bool cache_prompt        = true;
     bool endpoint_infill     = false;
     bool endpoint_images     = false;
-    int32_t conn_idle        = 60;   // connection idle in seconds
-    int32_t conn_keepalive   = 15;   // connection keep-alive in seconds
-    int32_t n_tps            = 0;    // maximum number of tokens per seconds
-    int32_t lookup_ngram_min = 0;    // minimum n-gram size for lookup cache
-    int32_t max_image_size   = 0; // maximum image size for vision image processing
+    int32_t conn_idle        = 60; // connection idle in seconds
+    int32_t conn_keepalive   = 15; // connection keep-alive in seconds
+    int32_t n_tps            = 0;  // maximum number of tokens per seconds
+    int32_t lookup_ngram_min = 0;  // minimum n-gram size for lookup cache
+    int32_t max_image_size   = 0;  // maximum image size for vision image processing
 };
 
 static void unknown(const char *flag) {
@@ -2133,6 +2133,12 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     if (!params_.llm_params.kv_overrides.empty()) {
         params_.llm_params.kv_overrides.emplace_back();
         params_.llm_params.kv_overrides.back().key[0] = 0;
+    }
+
+    if (params_.llm_params.lora_init_without_apply) {
+        for (auto &lora_adapter : params_.llm_params.lora_adapters) {
+            lora_adapter.scale = 0.0f;
+        }
     }
 
     if (params_.endpoint_images) {

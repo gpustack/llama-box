@@ -146,8 +146,9 @@ struct server_task {
     int id        = -1; // to be filled by server_queue
     int id_target = -1;
 
-    llama_tokens prompt_tokens;
     json data;
+    llama_tokens prompt_tokens;
+    std::vector<common_lora_adapter_container> lora;
 
     int tps = 0;
 
@@ -198,9 +199,11 @@ struct server_slot {
     server_task_type task_type = SERVER_TASK_TYPE_COMPLETION;
     int id;
     std::string rid;
-    int id_task      = -1;
-    size_t index     = 0;
-    slot_state state = SLOT_STATE_IDLE;
+    int id_task                = -1;
+    size_t index               = 0;
+    slot_state state           = SLOT_STATE_IDLE;
+    bool lora_adapters_applied = false;
+    std::vector<common_lora_adapter_container> lora_adapters;
     struct slot_params params;
 
     llama_tokens prompt_tokens;
@@ -372,6 +375,11 @@ struct server_slot {
 
     bool is_processing() const {
         return state != SLOT_STATE_IDLE;
+    }
+
+    bool can_batch_with(server_slot &other_slot) {
+        return is_non_causal() == other_slot.is_non_causal() &&
+               are_lora_equal(lora_adapters, other_slot.lora_adapters);
     }
 
     bool has_budget(const common_params &global_params) {
@@ -1229,11 +1237,13 @@ struct server_context {
         for (int i = 0; i < llm_params.n_parallel; i++) {
             server_slot slot;
 
-            slot.id                = i;
-            slot.n_ctx             = n_ctx_slot;
-            slot.n_predict         = llm_params.n_predict;
-            slot.params.llm_params = llm_params.sampling;
-            slot.params.sd_params  = sd_params.sampling;
+            slot.id                    = i;
+            slot.n_ctx                 = n_ctx_slot;
+            slot.n_predict             = llm_params.n_predict;
+            slot.lora_adapters_applied = !params.llm_params.lora_init_without_apply;
+            slot.lora_adapters         = lora_adapters;
+            slot.params.llm_params     = llm_params.sampling;
+            slot.params.sd_params      = sd_params.sampling;
 
             SLT_INF(slot, "new slot n_ctx_slot = %d\n", slot.n_ctx);
 
@@ -1356,6 +1366,25 @@ struct server_context {
             slot.oaicompat_image          = true;
             slot.oaicompat_image_generate = json_value(data, "__oaicompat_image_generate", false);
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
+
+            try {
+                std::vector<common_lora_adapter_container> slot_lora_adapters;
+                if (data.contains("lora")) {
+                    if (data.at("lora").is_array()) {
+                        slot_lora_adapters = parse_lora_request(lora_adapters, data.at("lora"));
+                    } else {
+                        send_error(task, "failed to parse \"lora\" parameter: must be an array", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
+                } else {
+                    slot_lora_adapters = lora_adapters;
+                }
+                slot.lora_adapters_applied = are_lora_equal(slot_lora_adapters, slot.lora_adapters);
+                slot.lora_adapters         = slot_lora_adapters;
+            } catch (const std::exception &e) {
+                send_error(task, std::string("failed to parse \"lora\" parameter: ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
+                return false;
+            }
 
             slot.params.stream = json_value(data, "stream", false);
             if (data.contains("stream_options")) {
@@ -1558,8 +1587,30 @@ struct server_context {
         slot.oaicompat_completion_chat_tool   = json_value(data, "__oaicompat_completion_chat_tool", false) && support_tool_calls;
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && llm_ctx_clip != nullptr;
 
-        slot.params.stream = json_value(data, "stream", false);
+        try {
+            std::vector<common_lora_adapter_container> slot_lora_adapters;
+            if (data.contains("lora")) {
+                if (data.at("lora").is_array()) {
+                    slot_lora_adapters = parse_lora_request(lora_adapters, data.at("lora"));
+                } else {
+                    send_error(task, "failed to parse \"lora\" parameter: must be an array", ERROR_TYPE_INVALID_REQUEST);
+                    return false;
+                }
+            } else {
+                slot_lora_adapters = lora_adapters;
+            }
+            slot.lora_adapters_applied = are_lora_equal(slot_lora_adapters, slot.lora_adapters);
+            slot.lora_adapters         = slot_lora_adapters;
+            // if lora is changed, we cannot reuse cached tokens.
+            if (!slot.lora_adapters_applied) {
+                slot.cache_tokens.clear();
+            }
+        } catch (const std::exception &e) {
+            send_error(task, std::string("failed to parse \"lora\" parameter: ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
+            return false;
+        }
 
+        slot.params.stream        = json_value(data, "stream", false);
         slot.params.return_tokens = json_value(data, "return_tokens", false);
         slot.params.n_predict     = json_value(data, "n_predict", llm_params.n_predict);
         slot.params.n_indent      = json_value(data, "n_indent", 0);
@@ -2053,10 +2104,9 @@ struct server_context {
     }
 
     json get_formated_generation(const server_slot &slot) const {
-        std::vector<std::string> samplers;
-        samplers.reserve(slot.params.llm_params.samplers.size());
-        for (const auto &sampler : slot.params.llm_params.samplers) {
-            samplers.emplace_back(common_sampler_type_to_str(sampler));
+        json lora = json::array();
+        for (size_t i = 0; i < this->lora_adapters.size(); ++i) {
+            lora.push_back({{"id", i}, {"scale", this->lora_adapters[i].scale}});
         }
 
         /* STABLE DIFFUSION */
@@ -2091,10 +2141,17 @@ struct server_context {
                 {"control_net_model", sd_params.control_net_model},
                 {"control_strength", slot.params.sd_params.control_strength},
                 {"control_canny", slot.params.sd_params.control_canny},
+                {"lora", lora},
             };
         }
 
         /* LLAMA */
+
+        std::vector<std::string> samplers;
+        samplers.reserve(slot.params.llm_params.samplers.size());
+        for (const auto &sampler : slot.params.llm_params.samplers) {
+            samplers.emplace_back(common_sampler_type_to_str(sampler));
+        }
 
         return json{
             {"n_ctx", slot.n_ctx},
@@ -2129,6 +2186,7 @@ struct server_context {
             {"grammar", slot.params.llm_params.grammar},
             {"samplers", samplers},
             {"speculative", llm_ctx_draft != nullptr},
+            {"lora", lora},
         };
     }
 
@@ -2715,14 +2773,27 @@ struct server_context {
                 queue_results.send(result);
             } break;
             case SERVER_TASK_TYPE_SET_LORA: {
-                if (sd_ctx != nullptr) {
-                    std::vector<sd_lora_adapter_container_t> sd_lora_adapters;
-                    for (auto &lora_adapter : lora_adapters) {
-                        sd_lora_adapters.push_back({lora_adapter.path.c_str(), lora_adapter.scale});
+                try {
+                    if (sd_ctx != nullptr) {
+                        sd_ctx->apply_lora_adpters(task.lora);
+                    } else {
+                        common_lora_adapters_apply(llm_ctx, task.lora);
                     }
-                    sd_ctx->apply_lora_adpters(sd_lora_adapters);
-                } else {
-                    common_lora_adapters_apply(llm_ctx, lora_adapters);
+                    lora_adapters = task.lora;
+
+                    for (server_slot &slot : slots) {
+                        slot.lora_adapters_applied = false;
+                        if (!slot.is_processing()) {
+                            if (!are_lora_equal(slot.lora_adapters, lora_adapters)) {
+                                slot.cache_tokens.clear();
+                            }
+                            slot.lora_adapters = lora_adapters;
+                        }
+                    }
+                } catch (const std::exception &e) {
+                    SRV_ERR("failed to apply lora adapters: %s\n", e.what());
+                    send_error(task, "failed to apply lora adapters", ERROR_TYPE_SERVER);
+                    break;
                 }
 
                 server_task_result result;
@@ -2795,9 +2866,33 @@ struct server_context {
                 SLT_INF(slot, "created image generation stream, %.2fs\n", slot.t_image_processing / 1e3);
             }
 
+            server_slot *slot_batched = nullptr;
+
             for (server_slot &slot : slots) {
                 if (slot.state != SLOT_STATE_GENERATING) {
                     continue;
+                }
+
+                if (!slot_batched) {
+                    slot_batched = &slot;
+                } else if (!slot_batched->can_batch_with(slot)) {
+                    slot.lora_adapters_applied = false;
+                    continue;
+                } else {
+                    slot.lora_adapters_applied = true;
+                }
+
+                // apply lora adapters
+                if (!slot_batched->lora_adapters_applied) {
+                    slot_batched->lora_adapters_applied = true;
+                    try {
+                        sd_ctx->apply_lora_adpters(slot.lora_adapters);
+                    } catch (const std::exception &e) {
+                        SLT_ERR(slot, "failed to apply lora adapters: %s\n", e.what());
+                        slot.release();
+                        send_error(slot, "failed to apply lora adapters", ERROR_TYPE_SERVER);
+                        continue;
+                    }
                 }
 
                 stablediffusion_generated_image generated_image{};
@@ -2885,6 +2980,9 @@ struct server_context {
             common_batch_clear(batch_draft);
         }
 
+        // track if given slot can be batched with slots already in the batch
+        server_slot *slot_batched = nullptr;
+
         // first, add sampled tokens from any ongoing sequences
         for (auto &slot : slots) {
             if (slot.state != SLOT_STATE_GENERATING) {
@@ -2893,6 +2991,16 @@ struct server_context {
 
             if (slot.token_bkt && !slot.token_bkt->acquire()) {
                 continue;
+            }
+
+            // check if we can batch this slot with the previous one
+            if (!slot_batched) {
+                slot_batched = &slot;
+            } else if (!slot_batched->can_batch_with(slot)) {
+                slot.lora_adapters_applied = false;
+                continue;
+            } else {
+                slot.lora_adapters_applied = true;
             }
 
             slot.i_batch = batch.n_tokens;
@@ -2934,15 +3042,18 @@ struct server_context {
         auto n_batch  = int32_t(llama_n_batch(llm_ctx));
         auto n_ubatch = int32_t(llama_n_ubatch(llm_ctx));
 
-        // track if this is an embedding or non-embedding batch
-        // if we've added sampled tokens above, we are in non-embedding mode
-        // -1: none, 0: non-embedding, 1: embedding
-        // TODO: make enum
-        int32_t batch_type = batch.n_tokens > 0 ? 0 : -1;
-
         // next, batch any pending prompts without exceeding n_batch
         if (llm_params.cont_batching || batch.n_tokens == 0) {
             for (auto &slot : slots) {
+                // check if we can batch this slot with the previous one
+                if (slot.is_processing()) {
+                    if (!slot_batched) {
+                        slot_batched = &slot;
+                    } else if (!slot_batched->can_batch_with(slot)) {
+                        continue;
+                    }
+                }
+
                 // this slot still has a prompt to be processed
                 if (slot.state == SLOT_STATE_PROCESSING_PROMPT || slot.state == SLOT_STATE_STARTED) {
                     auto &prompt_tokens = slot.prompt_tokens;
@@ -3110,14 +3221,6 @@ struct server_context {
                         }
                     }
 
-                    // check that we are in the right batch_type, if not defer the slot
-                    const int32_t slot_type = slot.is_non_causal() ? 1 : 0;
-                    if (batch_type == -1) {
-                        batch_type = slot_type;
-                    } else if (batch_type != slot_type) {
-                        continue;
-                    }
-
                     // keep only the common part
                     int32_t slot_npast = slot.n_past;
                     if (!llama_kv_cache_seq_rm(llm_ctx, slot.id, slot_npast, -1)) {
@@ -3211,8 +3314,15 @@ struct server_context {
 
         SRV_DBG("decoding batch, n_tokens = %d\n", batch.n_tokens);
 
-        // make sure we're in the right embedding mode
-        llama_set_embeddings(llm_ctx, batch_type == 1);
+        if (slot_batched) {
+            // make sure we're in the right embedding mode
+            llama_set_embeddings(llm_ctx, slot_batched->is_non_causal());
+            // apply lora, only need to do it once per batch
+            if (!slot_batched->lora_adapters_applied) {
+                slot_batched->lora_adapters_applied = true;
+                common_lora_adapters_apply(llm_ctx, slot_batched->lora_adapters);
+            }
+        }
 
         // process the created batch of tokens
         for (int32_t i = 0; i < batch.n_tokens; i += n_batch) {
@@ -4393,25 +4503,17 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_lora_adapters_apply = [&](const httplib::Request &req, httplib::Response &res) {
-        const std::vector<json> request = json::parse(req.body);
+        const json request = json::parse(req.body);
 
-        for (common_lora_adapter_container &la : ctx_server.lora_adapters) {
-            la.scale = 0.0f;
-        }
-        auto max_idx = int32_t(ctx_server.lora_adapters.size());
-        for (json part : request) {
-            int id      = part.at("id");
-            float scale = part.at("scale");
-            if (0 <= id && id < max_idx) {
-                ctx_server.lora_adapters[id].scale = scale;
-                continue;
-            }
-            throw std::runtime_error("invalid adapter id");
+        if (!request.is_array()) {
+            res_error(res, format_error_response("Request body must be an array", ERROR_TYPE_INVALID_REQUEST));
+            return;
         }
 
         // construct task
         server_task task(SERVER_TASK_TYPE_SET_LORA);
-        task.rid = res.get_header_value(HEADER_REQUEST_ID);
+        task.rid  = res.get_header_value(HEADER_REQUEST_ID);
+        task.lora = parse_lora_request(ctx_server.lora_adapters, request);
 
         // post task
         task.id = ctx_server.queue_tasks.post(task);
@@ -5111,6 +5213,18 @@ int main(int argc, char **argv) {
                 }
                 if (req.has_file("stream_options_preview_faster")) {
                     request["stream_options"]["preview_faster"] = req.get_file_value("stream_options_preview_faster").content == "true";
+                }
+            }
+            if (req.has_file("lora")) {
+                try {
+                    json lora = json::parse(req.get_file_value("lora").content);
+                    if (!lora.is_array()) {
+                        throw std::runtime_error("JSON is not an array");
+                    }
+                    request["lora"] = lora;
+                } catch (const std::exception &) {
+                    res_error(res, format_error_response("\"lora\" must be a valid JSON array", ERROR_TYPE_INVALID_REQUEST));
+                    return;
                 }
             }
             request = oaicompat_images_edits_request(ctx_server.sd_params, request);

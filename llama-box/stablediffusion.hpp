@@ -86,7 +86,7 @@ class stablediffusion_context {
     int get_default_sampling_steps();
     float get_default_cfg_scale();
     float get_default_slg_scale();
-    void apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters);
+    void apply_lora_adpters(std::vector<common_lora_adapter_container> &lora_adapters);
     stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_params_sampling sparams);
     bool sample_stream(stablediffusion_sampling_stream *stream);
     std::pair<int, int> progress_stream(stablediffusion_sampling_stream *stream);
@@ -198,8 +198,12 @@ float stablediffusion_context::get_default_slg_scale() {
     return 0.0f;
 }
 
-void stablediffusion_context::apply_lora_adpters(std::vector<sd_lora_adapter_container_t> &lora_adapters) {
-    sd_lora_adapters_apply(sd_ctx, lora_adapters);
+void stablediffusion_context::apply_lora_adpters(std::vector<common_lora_adapter_container> &lora_adapters) {
+    std::vector<sd_lora_adapter_container_t> sd_lora_adapters;
+    for (auto &lora_adapter : lora_adapters) {
+        sd_lora_adapters.push_back({lora_adapter.path.c_str(), lora_adapter.scale});
+    }
+    sd_lora_adapters_apply(sd_ctx, sd_lora_adapters);
 }
 
 stablediffusion_sampling_stream *stablediffusion_context::generate_stream(const char *prompt, stablediffusion_params_sampling sparams) {

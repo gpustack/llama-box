@@ -792,7 +792,11 @@ The available endpoints for the LLaMA Box server mode are:
           "chunk_size": 4096,            // split the final image b64_json into chunks with the given size, default 4k
           "preview": true,               // enable preview mode
           "preview_faster": true         // enable faster preview mode
-        }
+        },
+        "lora": [                        // specify LoRA adapters' scale
+          {"id": 0, "scale": 1.0},
+          ...
+         ]
       }
       
       RESPONSE : (text/event-stream)
@@ -860,6 +864,7 @@ The available endpoints for the LLaMA Box server mode are:
       stream_options_chunk_size=4096     // split the final image b64_json into chunks with the given size, default 4k
       stream_options_preview=true        // enable preview mode
       stream_options_preview_faster=true // enable faster preview mode
+      lora="[{\"id\":0,\"scale\":1.0}]"  // specify LoRA adapters' scale
 
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
