@@ -19,7 +19,7 @@
 #define DEFAULT_OAICOMPAT_MODEL "gpt-3.5-turbo"
 
 #define SLT_INF(slot, fmt, ...)                                                                                                                 \
-    if (common_log_verbosity_thold > 2) {                                                                                                       \
+    if (common_log_verbosity_thold > 3) {                                                                                                       \
         if ((slot).rid.empty()) {                                                                                                               \
             LOG_INF("slt %25.*s: id %02d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__);                              \
         } else {                                                                                                                                \
@@ -39,7 +39,7 @@
         LOG_ERR("slt %25.*s: rid %s | id %02d | task %d | " fmt, 25, __func__, (slot).rid.c_str(), (slot).id, (slot).id_task, __VA_ARGS__); \
     }
 #define SLT_DBG(slot, fmt, ...)                                                                                                                 \
-    if (common_log_verbosity_thold > 2) {                                                                                                       \
+    if (common_log_verbosity_thold > 4) {                                                                                                       \
         if ((slot).rid.empty()) {                                                                                                               \
             LOG_DBG("slt %25.*s: id %02d | task %d | " fmt, 25, __func__, (slot).id, (slot).id_task, __VA_ARGS__);                              \
         } else {                                                                                                                                \
@@ -51,18 +51,18 @@
 #define SRV_WRN(fmt, ...) LOG_WRN("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define SRV_ERR(fmt, ...) LOG_ERR("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define SRV_DBG(fmt, ...)                                       \
-    if (common_log_verbosity_thold > 3) {                       \
+    if (common_log_verbosity_thold > 5) {                       \
         LOG_DBG("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
 #define QUE_INF(fmt, ...)                                       \
-    if (common_log_verbosity_thold > 2) {                       \
+    if (common_log_verbosity_thold > 4) {                       \
         LOG_INF("que %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 #define QUE_WRN(fmt, ...) LOG_WRN("que %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define QUE_ERR(fmt, ...) LOG_ERR("que %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define QUE_DBG(fmt, ...)                                       \
-    if (common_log_verbosity_thold > 3) {                       \
+    if (common_log_verbosity_thold > 5) {                       \
         LOG_DBG("que %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
