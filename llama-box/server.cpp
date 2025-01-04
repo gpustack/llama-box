@@ -626,9 +626,10 @@ struct server_task_queue {
     // Add a new task to the end of the queue
     int post(server_task task, bool front = false) {
         std::unique_lock<std::mutex> lock(mutex_tasks);
-        if (task.id == -1) {
+        if (task.id == -1 && task.type != SERVER_TASK_TYPE_CANCEL && task.type != SERVER_TASK_TYPE_NEXT_RESPONSE) {
             task.id = id++;
         }
+        int task_id = task.id;
         QUE_DBG("new task, id = %d, front = %d\n", task.id, front);
         if (front) {
             queue_tasks.push_front(std::move(task));
@@ -636,7 +637,7 @@ struct server_task_queue {
             queue_tasks.push_back(std::move(task));
         }
         condition_tasks.notify_one();
-        return task.id;
+        return task_id;
     }
 
     // Add multiple tasks to the end of the queue
@@ -644,16 +645,16 @@ struct server_task_queue {
         std::unique_lock<std::mutex> lock(mutex_tasks);
         std::unordered_set<int> ids(tasks.size());
         for (auto &task : tasks) {
-            if (task.id == -1) {
+            if (task.id == -1 && task.type != SERVER_TASK_TYPE_CANCEL && task.type != SERVER_TASK_TYPE_NEXT_RESPONSE) {
                 task.id = id++;
             }
+            ids.insert(task.id);
             QUE_DBG("new task, id = %d/%d, front = %d\n", task.id, (int)tasks.size(), front);
             if (front) {
                 queue_tasks.push_front(std::move(task));
             } else {
                 queue_tasks.push_back(std::move(task));
             }
-            ids.insert(task.id);
         }
         condition_tasks.notify_one();
         return ids;
@@ -2467,6 +2468,65 @@ struct server_context {
         return tasks;
     }
 
+    int submit_task(server_task task, bool front = false) {
+        std::unique_lock<std::mutex> lock1(queue_tasks.mutex_tasks);
+
+        if (task.id == -1) {
+            task.id = queue_tasks.id++;
+        }
+
+        std::unique_lock<std::mutex> lock2(queue_results.mutex_results);
+        SRV_DBG("add task %d to waiting list. current waiting = %d (before add)\n", task.id, (int)queue_results.waiting_task_ids.size());
+        queue_results.waiting_task_ids.insert(task.id);
+        lock2.unlock();
+
+        int task_id = task.id;
+        QUE_DBG("new task, id = %d, front = %d\n", task.id, front);
+        if (front) {
+            queue_tasks.queue_tasks.push_front(std::move(task));
+        } else {
+            queue_tasks.queue_tasks.push_back(std::move(task));
+        }
+
+        queue_tasks.condition_tasks.notify_one();
+        lock1.unlock();
+
+        return task_id;
+    }
+
+    std::unordered_set<int> submit_tasks(std::vector<server_task> tasks, bool front = false) {
+        std::unique_lock<std::mutex> lock1(queue_tasks.mutex_tasks);
+
+        std::unordered_set<int> task_ids(tasks.size());
+        for (auto &task : tasks) {
+            if (task.id == -1) {
+                task.id = queue_tasks.id++;
+            }
+            task_ids.insert(task.id);
+        }
+
+        std::unique_lock<std::mutex> lock2(queue_results.mutex_results);
+        for (auto &task : tasks) {
+            SRV_DBG("add task %d to waiting list. current waiting = %d (before add)\n", task.id, (int)queue_results.waiting_task_ids.size());
+            queue_results.waiting_task_ids.insert(task.id);
+        }
+        lock2.unlock();
+
+        for (auto &task : tasks) {
+            QUE_DBG("new task, id = %d/%d, front = %d\n", task.id, (int)tasks.size(), front);
+            if (front) {
+                queue_tasks.queue_tasks.push_front(std::move(task));
+            } else {
+                queue_tasks.queue_tasks.push_back(std::move(task));
+            }
+        }
+
+        queue_tasks.condition_tasks.notify_one();
+        lock1.unlock();
+
+        return task_ids;
+    }
+
     void cancel_tasks(const std::unordered_set<int> &id_tasks) {
         std::vector<server_task> cancel_tasks;
         cancel_tasks.reserve(id_tasks.size());
@@ -4046,8 +4106,7 @@ int main(int argc, char **argv) {
         task.data.push_back({{"reset_bucket", true}});
 
         // post task
-        task.id = ctx_server.queue_tasks.post(task, true); // high-priority task
-        ctx_server.queue_results.add_waiting_task_id(task.id);
+        task.id = ctx_server.submit_task(task, true); // high-priority task
 
         // get result
         server_task_result result = ctx_server.queue_results.recv(task.id);
@@ -4319,8 +4378,7 @@ int main(int argc, char **argv) {
         task.rid = res.get_header_value(HEADER_REQUEST_ID);
 
         // post task
-        task.id = ctx_server.queue_tasks.post(task, true); // high-priority task
-        ctx_server.queue_results.add_waiting_task_id(task.id);
+        task.id = ctx_server.submit_task(task, true); // high-priority task
 
         // get result
         server_task_result result = ctx_server.queue_results.recv(task.id);
@@ -4354,8 +4412,7 @@ int main(int argc, char **argv) {
         task.data = {{"id_slot", id_slot}, {"filename", filename}, {"filepath", filepath}};
 
         // post task
-        task.id = ctx_server.queue_tasks.post(task);
-        ctx_server.queue_results.add_waiting_task_id(task.id);
+        task.id = ctx_server.submit_task(task);
 
         // get result
         server_task_result result = ctx_server.queue_results.recv(task.id);
@@ -4386,8 +4443,7 @@ int main(int argc, char **argv) {
         task.data = {{"id_slot", id_slot}, {"filename", filename}, {"filepath", filepath}};
 
         // post task
-        task.id = ctx_server.queue_tasks.post(task);
-        ctx_server.queue_results.add_waiting_task_id(task.id);
+        task.id = ctx_server.submit_task(task);
 
         // get result
         server_task_result result = ctx_server.queue_results.recv(task.id);
@@ -4409,8 +4465,7 @@ int main(int argc, char **argv) {
         task.data = {{"id_slot", id_slot}};
 
         // post task
-        task.id = ctx_server.queue_tasks.post(task);
-        ctx_server.queue_results.add_waiting_task_id(task.id);
+        task.id = ctx_server.submit_task(task);
 
         // get result
         server_task_result result = ctx_server.queue_results.recv(task.id);
@@ -4484,8 +4539,7 @@ int main(int argc, char **argv) {
         task.lora = parse_lora_request(ctx_server.sd_ctx != nullptr ? ctx_server.sd_params.lora_adapters : ctx_server.llm_params.lora_adapters, request);
 
         // post task
-        task.id = ctx_server.queue_tasks.post(task);
-        ctx_server.queue_results.add_waiting_task_id(task.id);
+        task.id = ctx_server.submit_task(task);
 
         // get result
         server_task_result result = ctx_server.queue_results.recv(task.id);
@@ -4575,8 +4629,7 @@ int main(int argc, char **argv) {
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_INFILL, tps);
 
         // post task
-        std::unordered_set<int> task_ids = ctx_server.queue_tasks.post(tasks);
-        ctx_server.queue_results.add_waiting_task_ids(task_ids);
+        std::unordered_set<int> task_ids = ctx_server.submit_tasks(tasks);
 
         // get result: process non-streaming requests
         if (!json_value(request, "stream", false)) {
@@ -4701,8 +4754,7 @@ int main(int argc, char **argv) {
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);
 
         // post task
-        std::unordered_set<int> task_ids = ctx_server.queue_tasks.post(tasks);
-        ctx_server.queue_results.add_waiting_task_ids(task_ids);
+        std::unordered_set<int> task_ids = ctx_server.submit_tasks(tasks);
 
         // get result: process non-streaming requests
         if (!json_value(request, "stream", false)) {
@@ -4828,8 +4880,7 @@ int main(int argc, char **argv) {
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);
 
         // post task
-        const std::unordered_set<int> task_ids = ctx_server.queue_tasks.post(tasks);
-        ctx_server.queue_results.add_waiting_task_ids(task_ids);
+        const std::unordered_set<int> task_ids = ctx_server.submit_tasks(tasks);
 
         // get result: process non-streaming requests
         if (!json_value(request, "stream", false)) {
@@ -4927,8 +4978,7 @@ int main(int argc, char **argv) {
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_EMBEDDING);
 
         // post task
-        std::unordered_set<int> task_ids = ctx_server.queue_tasks.post(tasks);
-        ctx_server.queue_results.add_waiting_task_ids(task_ids);
+        std::unordered_set<int> task_ids = ctx_server.submit_tasks(tasks);
 
         // get result
         ctx_server.receive_multi_results(
@@ -4985,8 +5035,7 @@ int main(int argc, char **argv) {
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_RERANK);
 
         // post task
-        std::unordered_set<int> task_ids = ctx_server.queue_tasks.post(tasks);
-        ctx_server.queue_results.add_waiting_task_ids(task_ids);
+        std::unordered_set<int> task_ids = ctx_server.submit_tasks(tasks);
 
         // get result
         ctx_server.receive_multi_results(
@@ -5202,8 +5251,7 @@ int main(int argc, char **argv) {
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_IMAGE);
 
         // post task
-        std::unordered_set<int> task_ids = ctx_server.queue_tasks.post(tasks);
-        ctx_server.queue_results.add_waiting_task_ids(task_ids);
+        std::unordered_set<int> task_ids = ctx_server.submit_tasks(tasks);
 
         // get result: process non-streaming requests
         if (!json_value(request, "stream", false)) {
