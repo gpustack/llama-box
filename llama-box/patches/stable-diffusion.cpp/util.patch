@@ -1,0 +1,26 @@
+diff --git a/util.cpp b/util.cpp
+index 055b1ad..7fca471 100644
+--- a/util.cpp
++++ b/util.cpp
+@@ -59,7 +59,7 @@ void replace_all_chars(std::string& str, char target, char replacement) {
+     }
+ }
+ 
+-std::string format(const char* fmt, ...) {
++inline std::string format(const char* fmt, ...) {
+     va_list ap;
+     va_list ap2;
+     va_start(ap, fmt);
+diff --git a/util.h b/util.h
+index b6f188a..7c4c611 100644
+--- a/util.h
++++ b/util.h
+@@ -11,7 +11,7 @@ bool ends_with(const std::string& str, const std::string& ending);
+ bool starts_with(const std::string& str, const std::string& start);
+ bool contains(const std::string& str, const std::string& substr);
+ 
+-std::string format(const char* fmt, ...);
++inline std::string format(const char* fmt, ...);
+ 
+ void replace_all_chars(std::string& str, char target, char replacement);
+ 
