@@ -4757,7 +4757,7 @@ int main(int argc, char **argv) {
                     for (const server_task_result &ret : results) {
                         response.push_back(ret.data);
                     }
-                    response            = oaicompat_completions_response(request, response, completion_id);
+                    response            = oaicompat_completions_response(rid, request, response, completion_id);
                     std::string tps_str = std::to_string(json_value(response.at("usage"), "tokens_per_second", double(tps)));
                     res.set_header("X-Response-Tokens-Per-Second", tps_str);
                     res_ok(res, response);
@@ -4777,7 +4777,7 @@ int main(int argc, char **argv) {
                 [&](const server_task_result &result) -> bool {
                     json response = result.data;
                     if (oaicompat) {
-                        response = oaicompat_completions_response(request, json::array({response}), completion_id, true);
+                        response = oaicompat_completions_response(rid, request, json::array({response}), completion_id, true);
                     }
                     if (!server_sent_event(sink, "data", response)) {
                         LOG_WRN("srv        handle_completions: rid %s | failed to send chunk data\n", rid.c_str());
@@ -4871,7 +4871,7 @@ int main(int argc, char **argv) {
                         response.push_back(ret.data);
                     }
 
-                    response            = oaicompat_completions_response(request, response, completion_id);
+                    response            = oaicompat_completions_response(rid, request, response, completion_id);
                     std::string tps_str = std::to_string(json_value(response.at("usage"), "tokens_per_second", double(tps)));
                     res.set_header("X-Response-Tokens-Per-Second", tps_str);
                     res_ok(res, response);
@@ -4892,7 +4892,7 @@ int main(int argc, char **argv) {
                 [&](const server_task_result &result) -> bool {
                     if (first) {
                         first         = false;
-                        json response = oaicompat_completions_response(request, json::array(), completion_id, true, true);
+                        json response = oaicompat_completions_response(rid, request, json::array(), completion_id, true, true);
                         if (!server_sent_event(sink, "data", response)) {
                             LOG_WRN("srv   handle_chat_completions: rid %s | failed to send chunk data\n", rid.c_str());
                             sink.done();
@@ -4900,7 +4900,7 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    json response = oaicompat_completions_response(request, json::array({result.data}), completion_id, true);
+                    json response = oaicompat_completions_response(rid, request, json::array({result.data}), completion_id, true);
                     if (!server_sent_event(sink, "data", response)) {
                         LOG_WRN("srv   handle_chat_completions: rid %s | failed to send chunk data\n", rid.c_str());
                         sink.done();
@@ -4969,7 +4969,7 @@ int main(int argc, char **argv) {
                     response.push_back(ret.data);
                 }
 
-                response = oaicompat_embeddings_response(request, response);
+                response = oaicompat_embeddings_response(rid, request, response);
                 res_ok(res, response);
             },
             [&](const json &error_data) {
@@ -5009,7 +5009,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"documents\" must not be empty", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = jinaaicompat_rerank_request(ctx_server.llm_params, request, ctx_server.llm_ctx);
+        request = jinaaicompat_rerank_request(ctx_server.llm_params, rid, request, ctx_server.llm_ctx);
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_RERANK);
@@ -5027,7 +5027,7 @@ int main(int argc, char **argv) {
                     response.push_back(ret.data);
                 }
 
-                response = jinaicompat_rerank_response(request, response);
+                response = jinaicompat_rerank_response(rid, request, response);
                 res_ok(res, response);
             },
             [&](const json &error_data) {
@@ -5225,7 +5225,7 @@ int main(int argc, char **argv) {
                     return;
                 }
             }
-            request = oaicompat_images_edits_request(ctx_server.sd_params, request);
+            request = oaicompat_images_edits_request(ctx_server.sd_params, rid, request);
         }
 
         // construct task
@@ -5249,7 +5249,7 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    response = oaicompat_images_response(request, response, false, true, usages);
+                    response = oaicompat_images_response(rid, request, response, false, true, usages);
                     res_ok(res, response);
                 },
                 [&](const json &error_data) {
@@ -5282,7 +5282,7 @@ int main(int argc, char **argv) {
                     }
                     const bool all_stops = std::all_of(stops.begin(), stops.end(), [](bool stop) { return stop; });
                     if (!result.data.contains("b64_json") || !chunk_result) {
-                        json response = oaicompat_images_response(request, json::array({result.data}), true, result.stop, all_stops ? usages : std::vector<json>());
+                        json response = oaicompat_images_response(rid, request, json::array({result.data}), true, result.stop, all_stops ? usages : std::vector<json>());
                         if (!server_sent_event(sink, "data", response)) {
                             LOG_WRN("srv             handle_images: rid %s | failed to send chunk data\n", rid.c_str());
                             sink.done();
@@ -5320,7 +5320,7 @@ int main(int argc, char **argv) {
                                 chunk_data["b64_json"] = b64_json.substr(0, chunk_size);
                                 b64_json               = b64_json.substr(chunk_size);
                             }
-                            json response = oaicompat_images_response(request, json::array({chunk_data}), true, chunk_stop && result.stop, chunk_stop && result.stop ? usages : std::vector<json>());
+                            json response = oaicompat_images_response(rid, request, json::array({chunk_data}), true, chunk_stop && result.stop, chunk_stop && result.stop ? usages : std::vector<json>());
                             if (!server_sent_event(sink, "data", response)) {
                                 LOG_WRN("srv             handle_images: rid %s | failed to send chunk data\n", rid.c_str());
                                 sink.done();

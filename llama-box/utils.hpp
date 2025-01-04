@@ -576,7 +576,7 @@ static size_t find_partial_stop_string(const std::string &stop, const std::strin
 
 // format incomplete utf-8 multibyte character for output
 static std::string tokens_to_output_formatted_string(const llama_context *ctx, const llama_token token) {
-    std::string out = token == -1 ? "" : common_token_to_piece(ctx, token);
+    std::string out = token == LLAMA_TOKEN_NULL ? "" : common_token_to_piece(ctx, token);
 
     // if the size is 1 and first bit is 1, meaning it's a partial character
     //   (size > 1 meaning it's already a known token)
@@ -941,21 +941,21 @@ static json oaicompat_completions_request(const struct common_params &params, co
     return llama_params;
 }
 
-static json oaicompat_completions_response(const json &request, const json &result, const std::string &completion_id, bool streaming = false, bool first = false) {
+static json oaicompat_completions_response(const std::string &rid, const json &request, const json &result, const std::string &completion_id, bool streaming = false, bool first = false) {
     json res = json{
         {"id", completion_id},
         {"created", std::time(nullptr)},
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
     };
 
-    bool chat                      = json_value(request, "__oaicompat_completion_chat", false);
-    int completion_tokens          = 0;
-    int prompt_tokens              = 0;
-    int drafted_tokens             = 0;
-    double draft_tokens_acceptance = 0.0;
-    double ttft                    = 0.0;
-    double tpot                    = 0.0;
-    double tps                     = 0.0;
+    bool chat             = json_value(request, "__oaicompat_completion_chat", false);
+    int completion_tokens = 0;
+    int prompt_tokens     = 0;
+    int drafted_tokens    = 0;
+    double ttft           = 0.0;
+    double tpot           = 0.0;
+    double tps            = 0.0;
+    double dta            = 0.0;
 
     // Construct choices field
     json choices = json::array();
@@ -1019,7 +1019,7 @@ static json oaicompat_completions_response(const json &request, const json &resu
         tps += json_value(ts, "predicted_per_second", 0.0);
         if (ts.contains("drafted_n")) {
             drafted_tokens += json_value(ts, "drafted_n", 0);
-            draft_tokens_acceptance += json_value(ts, "drafted_accepted_p", 0.0);
+            dta += json_value(ts, "drafted_accepted_p", 0.0);
         }
     }
     res["choices"] = choices;
@@ -1029,27 +1029,31 @@ static json oaicompat_completions_response(const json &request, const json &resu
     if (request.contains("stream_options")) {
         include_usage = json_value(request.at("stream_options"), "include_usage", false);
     }
-    if (!streaming || (include_usage && finish)) {
-        const size_t result_size = result.size();
-        ttft                     = ttft / result_size;
-        tpot                     = tpot / result_size;
-        tps                      = tps / result_size;
-        json usage               = json{
-                          {"completion_tokens", completion_tokens},
-                          {"prompt_tokens", prompt_tokens},
-                          {"total_tokens", completion_tokens + prompt_tokens},
-                          {"time_to_first_token_ms", ttft},
-                          {"time_per_output_token_ms", tpot},
-                          {"tokens_per_second", tps},
-        };
-        if (drafted_tokens > 0) {
-            draft_tokens_acceptance          = draft_tokens_acceptance / result_size;
-            usage["draft_tokens"]            = drafted_tokens;
-            usage["draft_tokens_acceptance"] = draft_tokens_acceptance;
-        }
-        res["usage"] = usage;
-    } else if (include_usage) {
+    if (!streaming || include_usage) {
         res["usage"] = nullptr;
+        if (finish) {
+            const auto rs = double(result.size());
+            ttft          = ttft / rs;
+            tpot          = tpot / rs;
+            tps           = tps / rs;
+
+            json usage = json{
+                {"completion_tokens", completion_tokens},
+                {"prompt_tokens", prompt_tokens},
+                {"total_tokens", completion_tokens + prompt_tokens},
+                {"time_to_first_token_ms", ttft},
+                {"time_per_output_token_ms", tpot},
+                {"tokens_per_second", tps},
+            };
+            if (drafted_tokens > 0) {
+                dta                              = dta / rs;
+                usage["draft_tokens"]            = drafted_tokens;
+                usage["draft_tokens_acceptance"] = dta;
+            }
+
+            res["usage"] = usage;
+            SRV_INF("rid %s | prompt_tokens: %d, completion_tokens: %d, draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, completion_tokens, drafted_tokens, ttft, tpot, tps, dta);
+        }
     }
 
     return res;
@@ -1095,13 +1099,13 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
     return llama_params;
 }
 
-static json oaicompat_embeddings_response(const json &request, const json &result) {
+static json oaicompat_embeddings_response(const std::string &rid, const json &request, const json &result) {
     const bool use_base64 = json_value(request, "encoding_format", std::string("float")) == "base64";
 
-    int num_prompt_tokens = 0;
-    json data             = json::array();
+    int prompt_tokens = 0;
+    json data         = json::array();
     for (const auto &ret : result) {
-        num_prompt_tokens += ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
+        prompt_tokens += ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
         json item = json{
             {"index", ret.at("index")},
             {"object", "embedding"},
@@ -1120,8 +1124,18 @@ static json oaicompat_embeddings_response(const json &request, const json &resul
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
         {"object", "list"},
         {"data", data},
-        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
     };
+
+    // Add usage field
+    {
+        json usage = json{
+            {"prompt_tokens", prompt_tokens},
+            {"total_tokens", prompt_tokens},
+        };
+
+        res["usage"] = usage;
+        SRV_INF("rid %s | prompt_tokens: %d\n", rid.c_str(), prompt_tokens);
+    }
 
     return res;
 }
@@ -1285,7 +1299,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     return llama_params;
 }
 
-static json oaicompat_images_edits_request(const struct stablediffusion_params &params, const json &body) {
+static json oaicompat_images_edits_request(const struct stablediffusion_params &params, const std::string rid, const json &body) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -1299,7 +1313,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         if (body_cp.contains("control")) {
             body_cp["control"] = "...";
         }
-        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
@@ -1437,7 +1451,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     return llama_params;
 }
 
-static json oaicompat_images_response(const json &request, const json &result, const bool streaming = false, const bool stop = false, const std::vector<json> &usages = {}) {
+static json oaicompat_images_response(const std::string &rid, const json &request, const json &result, const bool streaming = false, const bool stop = false, const std::vector<json> &usages = {}) {
     json data = json::array();
     for (auto &ret : result) {
         json item = json{
@@ -1473,32 +1487,38 @@ static json oaicompat_images_response(const json &request, const json &result, c
     if (request.contains("stream_options")) {
         include_usage = json_value(request.at("stream_options"), "include_usage", false);
     }
-    if (include_usage && !usages.empty()) {
-        const size_t result_size = usages.size();
-        double ttp               = 0.0;
-        double tpg               = 0.0;
-        double gps               = 0.0;
-        for (const auto &usage : usages) {
-            ttp += json_value(usage, "processing_ms", 0.0);
-            tpg += json_value(usage, "generation_ms", 0.0);
-            gps += json_value(usage, "generation_per_second", 0.0);
-        }
-        ttp          = ttp / result_size;
-        tpg          = tpg / result_size;
-        gps          = gps / result_size;
-        res["usage"] = json{
-            {"time_to_process_ms", ttp},
-            {"time_per_generation_ms", tpg},
-            {"generation_per_second", gps},
-        };
-    } else if (include_usage) {
+    if (include_usage) {
         res["usage"] = nullptr;
+        if (!usages.empty()) {
+            double ttp = 0.0;
+            double tpg = 0.0;
+            double gps = 0.0;
+
+            const auto rs = double(usages.size());
+            for (const auto &usage : usages) {
+                ttp += json_value(usage, "processing_ms", 0.0);
+                tpg += json_value(usage, "generation_ms", 0.0);
+                gps += json_value(usage, "generation_per_second", 0.0);
+            }
+            ttp = ttp / rs;
+            tpg = tpg / rs;
+            gps = gps / rs;
+
+            json usage = json{
+                {"time_to_process_ms", ttp},
+                {"time_per_generation_ms", tpg},
+                {"generation_per_second", gps},
+            };
+
+            res["usage"] = usage;
+            SRV_INF("rid %s | ttp: %.2fms, tpg: %.2fms, gps: %.2f\n", rid.c_str(), ttp, tpg, gps);
+        }
     }
 
     return res;
 }
 
-static json jinaaicompat_rerank_request(const struct common_params &params, const json &body, const llama_context *ctx) {
+static json jinaaicompat_rerank_request(const struct common_params &params, const std::string &rid, const json &body, const llama_context *ctx) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -1510,7 +1530,7 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
                 body_cp["documents"] = "[...]";
             }
         }
-        SRV_INF("params: %s\n", body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
@@ -1589,7 +1609,7 @@ static void jinaicompat_rerank_response_sort(json &result, int32_t low, int32_t 
     jinaicompat_rerank_response_sort(result, i + 1, high);
 }
 
-static json jinaicompat_rerank_response(const json &request, json &result) {
+static json jinaicompat_rerank_response(const std::string &rid, const json &request, json &result) {
     json documents;
     int32_t top_n         = request.at("top_n");
     bool return_documents = request.at("return_documents");
@@ -1597,9 +1617,9 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         documents = request.at("__oaicompat_rerank_documents");
     }
 
-    int num_prompt_tokens = 0;
-    int32_t start         = 0;
-    auto end              = int32_t(result.size() - 3);
+    int prompt_tokens = 0;
+    int32_t start     = 0;
+    auto end          = int32_t(result.size() - 3);
     jinaicompat_rerank_response_sort(result, start, end);
 
     json data      = json::array();
@@ -1625,7 +1645,7 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
         }
 
         int32_t tke = json_value(ret, "tokens_evaluated", 0);
-        num_prompt_tokens += tke;
+        prompt_tokens += tke;
 
         int32_t idx = json_value(ret, "index", 0);
         json item   = json{
@@ -1647,8 +1667,18 @@ static json jinaicompat_rerank_response(const json &request, json &result) {
     json res = json{
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
         {"results", data},
-        {"usage", json{{"prompt_tokens", num_prompt_tokens}, {"total_tokens", num_prompt_tokens}}},
     };
+
+    // Add usage field
+    {
+        json usage = json{
+            {"prompt_tokens", prompt_tokens},
+            {"total_tokens", prompt_tokens},
+        };
+
+        res["usage"] = usage;
+        SRV_INF("rid %s | prompt_tokens: %d\n", rid.c_str(), prompt_tokens);
+    }
 
     return res;
 }
