@@ -32,7 +32,6 @@ on:
 
 jobs:
   gitcode:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     steps:
@@ -53,7 +52,6 @@ jobs:
           dry-run: "${{ inputs.dry_run && inputs.dry_run || 'false' }}"
 
   gitee:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
