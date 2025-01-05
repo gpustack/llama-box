@@ -15,10 +15,10 @@ index 4bb140ee..a73a7939 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
 diff --git a/include/llama.h b/include/llama.h
-index 7b305b29..596dcd19 100644
+index a0d5ba5d..5dc901ef 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -494,6 +494,9 @@ extern "C" {
+@@ -495,6 +495,9 @@ extern "C" {
      // to the decoder to start generating output sequence. For other models, it returns -1.
      LLAMA_API llama_token llama_model_decoder_start_token(const struct llama_model * model);
  
@@ -29,10 +29,10 @@ index 7b305b29..596dcd19 100644
      LLAMA_API bool llama_model_is_recurrent(const struct llama_model * model);
  
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index ace0ba26..adf14311 100644
+index 405e0528..d7fe4d74 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -2155,6 +2155,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
+@@ -2189,6 +2189,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
      return model->hparams.dec_start_token_id;
  }
  
