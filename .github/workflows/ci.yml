@@ -274,6 +274,7 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
+          env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
@@ -409,6 +410,7 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
+          env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
@@ -545,6 +547,7 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
+          env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
@@ -659,6 +662,7 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
+          env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
@@ -786,6 +790,7 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
+          env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
@@ -898,6 +903,7 @@ jobs:
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
+          env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
@@ -938,6 +944,132 @@ jobs:
         with:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}
+
+  linux-dtk:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see https://sourcefind.cn/#/image/dcu/dtk.
+        #     24.04 ==> 24.04.3, Ubuntu 20.04.
+        # build fat binary,
+        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
+        #     https://llvm.org/docs/AMDGPUUsage.html.
+        # official gpu support list,
+        # see https://download.sourcefind.cn:65024/6/main.
+        include:
+          - arch: 'amd64'
+            version: '24.04'
+            distro_container_image: 'image.sourcefind.cn:5000/dcu/admin/base/dtk:24.04.3-py3.8-ubuntu20.04'
+            hip_arch: 'gfx906;gfx926;gfx928'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Maximize Docker Build Space
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+        with:
+          deep-clean: false
+          root-reserve-mb: 20480
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-linux-dtk-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}/.cache
+      - name: Setup QEMU
+        if: ${{ matrix.arch == 'arm64' }}
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:qemu-v8.1.5
+          platforms: "arm64"
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
+        run: |
+          echo "===== SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          if [ -f /etc/os-release ]; then
+            source /etc/os-release
+            cat /etc/os-release
+            if [ "\${ID}" = "ubuntu" ]; then
+              apt-get update -y \
+                && apt-get install -y build-essential ccache curl git bc
+              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
+                apt-get update -y \
+                  && apt-get install -y software-properties-common
+                add-apt-repository -y ppa:ubuntu-toolchain-r/test
+                apt-get update -y \
+                  && apt-get install -y gcc-11 g++-11
+                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
+                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
+              fi
+            else
+              echo "Unsupport distribution: \${ID}"
+              exit 1
+            fi
+          else
+            echo "Unknown distribution"
+            exit 1
+          fi
+          git config --system --add safe.directory '*'
+          mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
+          source /opt/dtk/env.sh
+          export LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:\${LD_LIBRARY_PATH}"
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_HIP=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_C_COMPILER="hipcc" \
+            -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_CXX_COMPILER="hipcc" \
+            -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            -DGGML_NATIVE=off \
+            -DGGML_CUDA_DMMV_X=4096 \
+            -DGGML_CUDA_MMV_Y=256 \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env AMDGPU_TARGETS \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/*.zip
+          name: llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
 
   windows:
     strategy:
@@ -1324,6 +1456,7 @@ jobs:
       - linux-oneapi
       - linux-cann
       - linux-musa
+      - linux-dtk
       - windows
       - windows-hip
       - windows-cuda
