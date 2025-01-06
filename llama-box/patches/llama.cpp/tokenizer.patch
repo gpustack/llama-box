@@ -1,5 +1,5 @@
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 405e0528..21ba3946 100644
+index 7deb3683..a5674c89 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -1373,7 +1373,8 @@ void llm_load_vocab(llama_model_loader & ml, llama_model & model) {

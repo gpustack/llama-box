@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 4bb140ee..1ec9c00c 100644
+index 4fd36105..c36b4242 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -1628,13 +1628,15 @@ std::string common_get_builtin_chat_template(const struct llama_model * model) {
@@ -124,10 +124,10 @@ index 0d452cf0..30d12ca4 100644
  
  // Format single message, while taking into account the position of that message in chat history
 diff --git a/include/llama.h b/include/llama.h
-index a0d5ba5d..dc44ddaa 100644
+index 0295a51f..274a1bc4 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -384,6 +384,11 @@ extern "C" {
+@@ -383,6 +383,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -139,7 +139,7 @@ index a0d5ba5d..dc44ddaa 100644
  
      // lora adapter
      // TODO: rename to llama_adapter_lora
-@@ -998,6 +1003,9 @@ extern "C" {
+@@ -1004,6 +1009,9 @@ extern "C" {
      /// @param tmpl A Jinja template to use for this chat. If this is nullptr, the model’s default chat template will be used instead.
      /// @param chat Pointer to a list of multiple llama_chat_message
      /// @param n_msg Number of llama_chat_message in this chat
@@ -149,7 +149,7 @@ index a0d5ba5d..dc44ddaa 100644
      /// @param add_ass Whether to end the prompt with the token(s) that indicate the start of an assistant message.
      /// @param buf A buffer to hold the output formatted prompt. The recommended alloc size is 2 * (total number of characters of all messages)
      /// @param length The size of the allocated buffer
-@@ -1007,6 +1015,9 @@ extern "C" {
+@@ -1013,6 +1021,9 @@ extern "C" {
                              const char * tmpl,
         const struct llama_chat_message * chat,
                                  size_t   n_msg,
@@ -159,7 +159,7 @@ index a0d5ba5d..dc44ddaa 100644
                                    bool   add_ass,
                                    char * buf,
                                 int32_t   length);
-@@ -1014,6 +1025,9 @@ extern "C" {
+@@ -1020,6 +1031,9 @@ extern "C" {
      // Get list of built-in chat templates
      LLAMA_API int32_t llama_chat_builtin_templates(const char ** output, size_t len);
  
@@ -589,7 +589,7 @@ index b8e94d9e..42dbc0dd 100644
 +    const std::vector<const llama_chat_function * > & func,
 +    std::string & dest, bool req_func, bool add_ass);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index ea78ea48..2cae3820 100644
+index ebd6e3b2..c042994c 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -12365,6 +12365,9 @@ int32_t llama_chat_apply_template(

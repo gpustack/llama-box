@@ -47,7 +47,7 @@ index 45e458bb..70f9707c 100644
      LLM_ARCH_STABLELM,
      LLM_ARCH_QWEN,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 405e0528..12f44dce 100644
+index 7deb3683..eb826d18 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -516,6 +516,17 @@ void llm_load_hparams(llama_model_loader & ml, llama_model & model) {
@@ -68,7 +68,7 @@ index 405e0528..12f44dce 100644
          case LLM_ARCH_JINA_BERT_V2:
              {
                  ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-@@ -2080,6 +2091,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
+@@ -2084,6 +2095,7 @@ enum llama_rope_type llama_rope_type(const struct llama_model * model) {
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
          case LLM_ARCH_BERT:
@@ -77,7 +77,7 @@ index 405e0528..12f44dce 100644
          case LLM_ARCH_STABLELM:
          case LLM_ARCH_BITNET:
 diff --git a/src/llama.cpp b/src/llama.cpp
-index ea78ea48..1db9a0cf 100644
+index ebd6e3b2..c3c01718 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -831,13 +831,14 @@ static bool llm_load_tensors(
