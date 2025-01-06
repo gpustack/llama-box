@@ -5136,7 +5136,7 @@ int main(int argc, char **argv) {
                 }
                 if (req.has_file("seed")) {
                     try {
-                        request["seed"] = std::stoi(req.get_file_value("seed").content);
+                        request["seed"] = std::stoul(req.get_file_value("seed").content);
                     } catch (const std::exception &) {
                         res_error(res, format_error_response("\"seed\" must be an integer", ERROR_TYPE_INVALID_REQUEST));
                         return;
