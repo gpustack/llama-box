@@ -2599,7 +2599,7 @@ struct server_context {
             case SERVER_TASK_TYPE_EMBEDDING:
             case SERVER_TASK_TYPE_RERANK:
             case SERVER_TASK_TYPE_IMAGE: {
-                const int id_slot = json_value(task.data, "id_slot", -1);
+                int id_slot = json_value(task.data, "id_slot", -1);
 
                 server_slot *slot = id_slot != -1 ? get_slot_by_id(id_slot) : get_available_slot(task);
 
@@ -2619,11 +2619,24 @@ struct server_context {
                 }
                 if ((task.type == SERVER_TASK_TYPE_EMBEDDING || task.type == SERVER_TASK_TYPE_RERANK) &&
                     int(task.prompt_tokens.size()) <= slot->id) {
-                    // if requested slot is unsatisfied, we defer this task for
-                    // processing later
-                    SRV_DBG("no slot is unsatisfied, defer task, id_task = %d\n", task.id);
-                    queue_tasks.defer(task);
-                    break;
+                    // if requested slot is unsatisfied, we try to find slot from
+                    // previous slots
+                    id_slot = slot->id;
+                    slot    = nullptr;
+                    for (int i = id_slot - 1; i >= 0; i--) {
+                        if (slots[i].is_processing()) {
+                            continue;
+                        }
+                        slot = &slots[i];
+                    }
+                    if (slot == nullptr) {
+                        // if no slot find, we defer this task for
+                        // processing later
+                        SRV_DBG("no slot is satisfied, defer task, id_task = %d\n", task.id);
+                        queue_tasks.defer(task);
+                        break;
+                    }
+                    SRV_DBG("selected slot is satisfied, use slot %d instead\n", slot->id);
                 }
 
                 slot->reset();
