@@ -1,0 +1,20 @@
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index b7fefb9d..b4ae25b4 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -8871,9 +8871,14 @@ static void ggml_compute_forward_soft_max_f32(
+ 
+         float max = -INFINITY;
+         ggml_vec_max_f32(nc, &max, wp);
++        if (max == -INFINITY) {
++            max = 0.0;
++        }
+ 
+         ggml_float sum = ggml_vec_soft_max_f32(nc, dp, wp, max);
+-        assert(sum > 0.0);
++        if (sum == 0.0) {
++            sum = -INFINITY;
++        }
+ 
+         sum = 1.0/sum;
+         ggml_vec_scale_f32(nc, dp, sum);
