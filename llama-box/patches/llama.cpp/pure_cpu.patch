@@ -1,0 +1,26 @@
+diff --git a/src/llama.cpp b/src/llama.cpp
+index 8ea6686c..9bc5affe 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -11715,7 +11715,7 @@ struct llama_model * llama_model_load_from_file(
+         for (ggml_backend_dev_t * dev = params.devices; *dev; ++dev) {
+             model->devices.push_back(*dev);
+         }
+-    } else {
++    } else if (params.n_gpu_layers > 0) {
+         // use all available devices
+         for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+             ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+@@ -11730,6 +11730,12 @@ struct llama_model * llama_model_load_from_file(
+                     break;
+             }
+         }
++    } else {
++        ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_ACCEL);
++        if (!dev) {
++            dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
++        }
++        model->devices.push_back(dev);
+     }
+ 
+     // if using single GPU mode, remove all except the main GPU
