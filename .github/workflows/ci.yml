@@ -162,13 +162,13 @@ jobs:
         include:
           - arch: 'amd64'
             instruction: 'avx2'
-            distro_container_image: 'centos:7'
+            distro_container_image: 'gpustack/devel-cpu:centos7'
           - arch: 'amd64'
             instruction: 'avx512'
-            distro_container_image: 'rockylinux:8.9'
+            distro_container_image: 'gpustack/devel-cpu:rockylinux8.9'
           - arch: 'arm64'
             instruction: 'neon'
-            distro_container_image: 'ubuntu:18.04'
+            distro_container_image: 'gpustack/devel-cpu:ubuntu18.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -196,81 +196,11 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
-          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y binutils pkg-config build-essential libopenblas-dev ccache curl git bc
-              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-              fi
-            elif [ "\${ID}" = "rocky" ]; then
-              # NB(thxCode): Enbale EPEL, see 
-              # https://wiki.rockylinux.org/rocky/repo/#notes-on-epel.
-              dnf install -y epel-release
-              if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
-                dnf config-manager --set-enabled powertools
-              else
-                dnf config-manager --set-enabled crb
-              fi
-              dnf install -y binutils pkgconfig gcc gcc-c++ make glibc-static libstdc++-static openblas-static ccache curl git
-              if [[ "\${VERSION_ID}" =~ 8\\.* ]]; then
-                dnf install -y gcc-toolset-11
-                source scl_source enable gcc-toolset-11
-              fi
-            elif [ "\${ID}" = "centos" ]; then
-              # NB(thxCode): Patch for CentOS, see
-              # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
-              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-              yum install -y centos-release-scl
-              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-              yum update -y \
-                && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
-              export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
-                && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
-                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info:\${INFOPATH}" \
-                && export PKG_CONFIG_PATH="/opt/rh/devtoolset-9/root/usr/lib64/pkgconfig:\${PKG_CONFIG_PATH}" \
-                && export PCP_DIR="/opt/rh/devtoolset-9/root" \
-                && export PERL5LIB="/opt/rh/devtoolset-9/root/usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root/usr/share/perl5/" \
-                && export LD_LIBRARY_PATH="/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:/opt/rh/devtoolset-9/root/usr/lib64/dyninst:/opt/rh/devtoolset-9/root/usr/lib/dyninst:/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:\${LD_LIBRARY_PATH}" \
-                && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
-              yum --enablerepo=extras install -y epel-release
-              yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
-              yum update -y \
-                && yum install -y make glibc-static libstdc++-static openblas-static ccache curl git
-              cat <<EOL >/usr/lib64/pkgconfig/openblas.pc
-          Name: OpenBLAS
-          Description: OpenBLAS library
-          Version: 0.3.3
-          Libs: -L/usr/lib64 -lopenblas
-          Cflags: -I/usr/include/openblas
-          EOL
-            else
-              echo "Unsupport distribution: \${ID}"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
-          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -286,6 +216,7 @@ jobs:
             -DGGML_BLAS=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -335,7 +266,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: '6.2'
-            distro_container_image: 'rocm/dev-centos-7:6.2.4-complete'
+            distro_container_image: 'gpustack/devel-rocm-hip:6.2.4-centos7'
             hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ubuntu-22.04
     steps:
@@ -364,55 +295,20 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
-          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "centos" ]; then
-              # NB(thxCode): Patch for CentOS, see
-              # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
-              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-              yum install -y centos-release-scl
-              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-              yum update -y \
-                && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
-              export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
-                && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
-                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info:\${INFOPATH}" \
-                && export PKG_CONFIG_PATH="/opt/rh/devtoolset-9/root/usr/lib64/pkgconfig:\${PKG_CONFIG_PATH}" \
-                && export PCP_DIR="/opt/rh/devtoolset-9/root" \
-                && export PERL5LIB="/opt/rh/devtoolset-9/root/usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root/usr/share/perl5/" \
-                && export LD_LIBRARY_PATH="/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:/opt/rh/devtoolset-9/root/usr/lib64/dyninst:/opt/rh/devtoolset-9/root/usr/lib/dyninst:/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:\${LD_LIBRARY_PATH}" \
-                && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
-              yum --enablerepo=extras install -y epel-release
-              yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
-              yum update -y \
-                && yum install -y make glibc-static libstdc++-static ccache curl git
-            else
-              echo "Unsupport distribution: \${ID}"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
-          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
@@ -420,6 +316,7 @@ jobs:
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -468,11 +365,11 @@ jobs:
         include:
           - arch: 'amd64'
             version: '12.4'
-            distro_container_image: 'nvidia/cuda:12.4.0-devel-centos7'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-centos7'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
           - arch: 'amd64'
             version: '11.8'
-            distro_container_image: 'nvidia/cuda:11.8.0-devel-centos7'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-centos7'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: ubuntu-22.04
     steps:
@@ -501,49 +398,12 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
-          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "centos" ]; then
-              # NB(thxCode): Patch for CentOS, see
-              # https://github.com/ROCm/ROCm-docker/blob/db86386c24eeb45f5d3ba73564b00cc66566e537/dev/Dockerfile-centos-7.
-              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-              yum install -y centos-release-scl
-              sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo \
-                && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-              yum update -y \
-                && yum install -y devtoolset-9 devtoolset-9-libatomic-devel devtoolset-9-elfutils-libelf-devel
-              export PATH="/opt/rh/devtoolset-9/root/usr/bin:\${PATH}" \
-                && export MANPATH="/opt/rh/devtoolset-9/root/usr/share/man:\${MANPATH}" \
-                && export INFOPATH="/opt/rh/devtoolset-9/root/usr/share/info:\${INFOPATH}" \
-                && export PKG_CONFIG_PATH="/opt/rh/devtoolset-9/root/usr/lib64/pkgconfig:\${PKG_CONFIG_PATH}" \
-                && export PCP_DIR="/opt/rh/devtoolset-9/root" \
-                && export PERL5LIB="/opt/rh/devtoolset-9/root/usr/lib64/perl5/vendor_perl:/opt/rh/devtoolset-9/root/usr/lib/perl5:/opt/rh/devtoolset-9/root/usr/share/perl5/" \
-                && export LD_LIBRARY_PATH="/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:/opt/rh/devtoolset-9/root/usr/lib64/dyninst:/opt/rh/devtoolset-9/root/usr/lib/dyninst:/opt/rh/devtoolset-9/root/usr/lib64:/opt/rh/devtoolset-9/root/usr/lib:\${LD_LIBRARY_PATH}" \
-                && export LDFLAGS="-Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib64 -Wl,-rpath=/opt/rh/devtoolset-9/root/usr/lib"
-              yum --enablerepo=extras install -y epel-release
-              yum install -y https://packages.endpointdev.com/rhel/\${VERSION_ID}/os/\$(uname -m)/endpoint-repo.\$(uname -m).rpm
-              yum update -y \
-                && yum install -y make glibc-static libstdc++-static ccache curl git
-            else
-              echo "Unsupport distribution: \${ID}"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
-          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -556,6 +416,7 @@ jobs:
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -601,7 +462,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: '2025.0'
-            distro_container_image: 'intel/oneapi-basekit:2025.0.0-0-devel-ubuntu22.04'
+            distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -629,7 +490,6 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
-          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
@@ -640,7 +500,7 @@ jobs:
             cat /etc/os-release
             if [ "\${ID}" = "ubuntu" ]; then
               apt-get update -y \
-                && apt-get install -y build-essential ccache curl git bc
+                && apt-get install -y build-essential libssl-dev ccache curl git bc
               if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
                 apt-get update -y \
                   && apt-get install -y software-properties-common
@@ -658,7 +518,6 @@ jobs:
             echo "Unknown distribution"
             exit 1
           fi
-          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -669,6 +528,7 @@ jobs:
             -DGGML_NATIVE=off \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -718,10 +578,8 @@ jobs:
         version:
           - '8.0'
         distro_container_image:
-          - 'ascendai/cann:8.0.rc2.alpha003-910b-openeuler20.03-py3.9'
-          - 'ascendai/cann:8.0.rc2.alpha003-910b-ubuntu20.04-py3.9'
-          - 'gpustack/ascendai-cann:8.0.RC2.alpha003-310p-openeuler20.03-py3.9'
-          - 'gpustack/ascendai-cann:8.0.RC2.alpha003-310p-ubuntu20.04-py3.9'
+          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-910b-ubuntu20.04'
+          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-ubuntu20.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -749,44 +607,12 @@ jobs:
           platforms: "arm64"
       - name: Build
         env:
-          CMAKE_VERSION: "3.22.1"
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y build-essential ccache curl git bc
-              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-              fi
-            elif [ "\${ID}" = "openEuler" ]; then
-              yum update -y \
-                && yum install -y gcc gcc-c++ gcc-toolset-10-gcc*
-              yum update -y \
-                && yum install -y gcc-toolset-10-libstdc++-static make ccache curl git
-              export PATH="/opt/openEuler/gcc-toolset-10/root/usr/bin/:\${PATH}" && \
-                export LD_LIBRARY_PATH="/opt/openEuler/gcc-toolset-10/root/usr/lib64/:\${LD_LIBRARY_PATH}"
-            else
-              echo "Unsupport distribution: \${ID}"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
           source /usr/local/Ascend/ascend-toolkit/set_env.sh
-          curl -L "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-\$(uname -m).tar.gz" | tar -zx -C /usr --strip-components 1
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -800,6 +626,7 @@ jobs:
             ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -839,12 +666,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu20.04.
-        #     rc3.1.0 ==> rc3.1.0, Ubuntu 20.04.
+        # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu22.04.
+        #     rc3.1.0 ==> rc3.1.0, Ubuntu 22.04.
         include:
           - arch: 'amd64'
             version: 'rc3.1'
-            distro_container_image: 'mthreads/musa:rc3.1.0-devel-ubuntu22.04'
+            distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.0-ubuntu22.04'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -877,29 +704,6 @@ jobs:
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y build-essential ccache curl git cmake
-              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-              fi
-            else
-              echo "Unsupport distribution: \$ID"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -910,6 +714,7 @@ jobs:
             -DGGML_NATIVE=off \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -959,7 +764,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: '24.04'
-            distro_container_image: 'image.sourcefind.cn:5000/dcu/admin/base/dtk:24.04.3-py3.8-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04'
             hip_arch: 'gfx906;gfx926;gfx928'
     runs-on: ubuntu-22.04
     steps:
@@ -994,29 +799,6 @@ jobs:
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y build-essential ccache curl git bc
-              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-              fi
-            else
-              echo "Unsupport distribution: \${ID}"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
@@ -1029,12 +811,15 @@ jobs:
             -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
             -DCMAKE_CXX_COMPILER="hipcc" \
             -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_HIP_COMPILER="clang" \
+            -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
@@ -1093,21 +878,32 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
-        # doesn't support ccache,
-        # see https://stackoverflow.com/questions/72829476/how-to-use-ccache-4-6-1-on-windows-msvc-with-cmake.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
           key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
-            ${{ github.workspace }}\build
             ${{ github.workspace }}\.cache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl -y
+          choco install ccache ninja curl openssl -y
+      - name: Setup
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+          
+          if (Test-Path -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          } else {
+            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          }
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
@@ -1117,7 +913,7 @@ jobs:
           
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
-          cmake ${{ matrix.arch == 'arm64' && '-G "Ninja Multi-Config"'|| '' }} -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
@@ -1126,18 +922,19 @@ jobs:
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- ${{ matrix.arch == 'arm64' && '-j ' || '/m:' }}${env:NUMBER_OF_PROCESSORS}
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\Release\" -File -ErrorAction Ignore
-          if (Test-Path -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\Release\llama-box.exe"
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
           } else {
             exit 1
           }
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\Release\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1179,7 +976,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache curl -y
+          choco install ccache ninja curl openssl -y
       - name: Setup HIP
         run: |
           $ErrorActionPreference = "Stop"
@@ -1199,6 +996,16 @@ jobs:
 
           $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
           "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+          if (Test-Path -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          } else {
+            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          }
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
@@ -1212,15 +1019,18 @@ jobs:
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
-          cmake -G "Unix Makefiles" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_HIP=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
+            -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_CUDA_F16=on `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
@@ -1276,7 +1086,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl -y
+          choco install ccache ninja curl openssl -y
       - name: Setup CUDA
         run: |
           $ErrorActionPreference = "Stop"
@@ -1322,9 +1132,10 @@ jobs:
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+            -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_CUDA_F16=on `
             -DGGML_CUDA_DMMV_X=4096 `
             -DGGML_CUDA_MMV_Y=256 `
             -DGGML_OPENMP=off `
@@ -1379,7 +1190,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ninja curl -y
+          choco install ninja curl openssl -y
       - name: Setup oneAPI
         run: |
           $ErrorActionPreference = "Stop"
@@ -1415,10 +1226,12 @@ jobs:
           
           Write-Host "===== BUILD ====="
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx `
-            -DGGML_SYCL=on -DGGML_SYCL_F16=on `
+            -DGGML_SYCL=on `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=icx `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_SYCL_F16=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))

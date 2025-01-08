@@ -3747,7 +3747,7 @@ struct server_context {
         }
 
         const std::string image_sign = "<image>";
-        const json images_json       = slot.prompt_multi_modal_data.at("images");
+        const json images            = slot.prompt_multi_modal_data.at("images");
 
         std::string prompt_string = slot.prompt_string;
         size_t images_count       = 0;
@@ -3767,8 +3767,7 @@ struct server_context {
             int h       = 0;
             int c       = 0;
             {
-                const std::string img               = images_json.at(images_count++).get<std::string>();
-                const std::vector<uint8_t> img_buff = base64_decode(img);
+                const std::vector<uint8_t> img_buff = images.at(images_count++).get<std::vector<uint8_t>>();
 
                 dt = stbi_load_from_memory((const stbi_uc *)img_buff.data(), (int)img_buff.size(), &w, &h, &c, 3);
                 if (dt == nullptr) {

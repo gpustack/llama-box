@@ -19,7 +19,7 @@ set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "sd: build shared libs" FORCE)
 if (MSVC)
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:/utf-8>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/utf-8>")
-endif()
+endif ()
 
 #
 # Options
@@ -27,10 +27,10 @@ endif()
 
 # debug
 option(LLAMA_ALL_WARNINGS "llama: enable all compiler warnings" ON)
-option(LLAMA_ALL_WARNINGS_3RD_PARTY "llama: enable all compiler warnings in 3rd party libs" OFF)
 
 # build
 option(LLAMA_FATAL_WARNINGS "llama: enable -Werror flag" OFF)
+option(LLAMA_OPENSSL "llama: use OpenSSL for HTTPS" ON)
 
 # sanitizers
 option(LLAMA_SANITIZE_THREAD "llama: enable thread sanitizer" OFF)
@@ -166,14 +166,6 @@ if (LLAMA_ALL_WARNINGS)
         # todo : msvc
         set(C_FLAGS "")
         set(CXX_FLAGS "")
-    endif ()
-endif ()
-
-if (WIN32)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-
-    if (BUILD_SHARED_LIBS)
-        set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
     endif ()
 endif ()
 

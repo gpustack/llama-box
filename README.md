@@ -125,10 +125,11 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF/Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf
-
+    
+    $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "hermes2", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
 
-    $ # or use the chat.sh tool
+    $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh "Introduce Beijing in 50 words."
     ```
 
@@ -139,13 +140,25 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/bartowski/Qwen2-VL-2B-Instruct-GGUF/Qwen2-VL-2B-Instruct-Q4_0.gguf --mmproj ~/.cache/lm-studio/models/bartowski/Qwen2-VL-2B-Instruct-GGUF/mmproj-Qwen2-VL-2B-Instruct-f32.gguf
-
+    
+    $ # Chat with image base64.
     $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://raw.githubusercontent.com/haotian-liu/LLaVA/main/llava/serve/examples/extreme_ironing.jpg --output - | base64)")"; \
       echo "{\"model\": \"qwen2-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
-
+    
+    $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
 
-    $ # or use the chat.sh tool
+    $ # or use the chat.sh tool.
+    $ ./llama-box/tools/chat.sh @/tmp/data.json
+  
+    $ # Chat with image url.
+    $ IMAGE_URL="https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"; \
+      echo "{\"model\": \"tsinghua\", \"temperature\": 0.1, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\":\"text\",\"text\":\"What is in this image?\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}]}]}" > /tmp/data.json
+    
+    $ # Call with curl,
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
+  
+    $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
 
@@ -156,10 +169,11 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/Qwen/Qwen2-0.5B-Instruct-GGUF/qwen2-0_5b-instruct-fp16.gguf
-
+    
+    $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen2.5", "messages": [{"role":"user","content":"What is the weather like in Paris today?"}], "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}}}]}'
     
-    $ # or use the chat.sh tool
+    $ # or use the chat.sh tool.
     $ TOOLS_WITH=true ./llama-box/tools/chat.sh "What is the weather like in Paris today?"
     ```
 
@@ -172,9 +186,10 @@ LLaMA Box supports the following platforms.
     $ # Provide 1 session(allowing 1 parallel chat user).
     $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/stable-diffusion-v3.5-medium-GGUF/stable-diffusion-v3-5-medium-FP16.gguf --images
     
+    $ # Call with curl,
     $ curl http://localhost:8080/v1/images/generations -H "Content-Type: application/json" -d '{"model": "sd3-medium", "prompt": "A lovely cat"}'
     
-    $ # or use the image_generate.sh tool
+    $ # or use the image_generate.sh tool.
     $ ./llama-box/tools/image_generate.sh "A lovely cat"
     ```
 
@@ -186,10 +201,11 @@ LLaMA Box supports the following platforms.
     $ # Provide 1 session(allowing 1 parallel chat user).
     $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/FLUX.1-Fill-dev-GGUF/FLUX.1-Fill-dev-Q8_0.gguf --images
     
+    $ # Call with curl,
     $ curl https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png --output /tmp/input.png
     $ curl https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo_mask.png --output /tmp/mask.png
   
-    $ # use the image_edit.sh tool
+    $ # or use the image_edit.sh tool.
     $ IMAGE=/tmp/input.png MASK=/tmp/mask.png ./llama-box/tools/image_edit.sh "a tiger sitting on a park bench"
     ```
 
@@ -202,9 +218,10 @@ LLaMA Box supports the following platforms.
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Qwen2-7B-Instruct-GGUF/Qwen2-7B-Instruct.Q5_K_M.gguf -md ~/.cache/lm-studio/models/QuantFactory/Qwen2-1.5B-Instruct-GGUF/Qwen2-1.5B-Instruct.Q5_K_M.gguf --draft 8
 
+    $ # Call with curl,
     $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "stream": true, "prompt": "Write a short story about a cat and a dog, more than 100 words."}'
 
-    $ # or use the chat.sh tool
+    $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh "Write a short story about a cat and a dog, more than 100 words."
     ```
 
@@ -219,9 +236,10 @@ LLaMA Box supports the following platforms.
     $ CONTENT="$(curl https://en.wikipedia.org/w/api.php\?action\=query\&format\=json\&titles\=Medusa\&prop\=extracts\&exintro\&explaintext | jq '.query.pages | to_entries | .[0].value.extract | gsub("\n"; "\\n") | gsub("\t"; "\\t")')"; \
       echo "{\"model\": \"mistral-nemo\", \"stream\": true, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\": \"text\", \"text\": \"Please read the following content and summarize the article in 5 sentences.\"}, {\"type\": \"text\", \"text\": "$CONTENT"}]}]}" > /tmp/data.json
 
+    $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
 
-    $ # or use the chat.sh tool
+    $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
 
@@ -233,6 +251,7 @@ LLaMA Box supports the following platforms.
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/jina-reranker-v1-tiny-en-GGUF/jina-reranker-v1-tiny-en-FP16.gguf --rerank
     
+    $ # Call with curl.
     $ curl http://localhost:8080/v1/rerank -H "Content-Type: application/json" -d '{"model":"jina-reranker-v1-tiny-en","query":"Organic skincare products for sensitive skin","top_n":3,"documents":["Eco-friendly kitchenware for modern homes","Biodegradable cleaning supplies for eco-conscious consumers","Organic cotton baby clothes for sensitive skin","Natural organic skincare range for sensitive skin","Tech gadgets for smart homes: 2024 edition","Sustainable gardening tools and compost solutions","Sensitive skin-friendly facial cleansers and toners","Organic food wraps and storage solutions","All-natural pet food for dogs with allergies","oga mats made from recycled materials"]}'
     ```
 
@@ -726,9 +745,7 @@ The available endpoints for the LLaMA Box server mode are:
     + This is only work to `Text-To-Text` or `Image-To-Text` models.
     + This endpoint is compatible with [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision) when
       enabled `--mmproj` flag,
-      see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main. (Note: do not support link `url`, use base64
-      encoded image
-      instead.)
+      see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main.
 
 - **POST** `/v1/embeddings`: (OpenAI-compatible) Returns the embeddings of the given prompt,
   see https://platform.openai.com/docs/api-reference/embeddings/create.

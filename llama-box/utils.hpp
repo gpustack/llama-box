@@ -837,7 +837,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
             // see https://platform.openai.com/docs/guides/vision
             json images = json::array();
             for (const json &msg : messages) {
-                if (!msg.contains("role") || msg.at("role") != "user") {
+                if (!msg.contains("role")) {
                     continue;
                 }
                 for (const json &part : msg.at("content")) {
@@ -845,19 +845,54 @@ static json oaicompat_completions_request(const struct common_params &params, co
                         continue;
                     }
                     std::string img = json_value(part.at("image_url"), "url", std::string());
-                    if (img.find("data:image/") == std::string::npos) {
-                        throw std::runtime_error("Illegal param: image data URI is not supported");
+                    if (img.find("data:image/") != std::string::npos) {
+                        const std::string split = "base64,";
+                        const size_t idx        = img.find(split);
+                        if (idx == std::string::npos) {
+                            throw std::runtime_error("Illegal param: invalid image URL, must be a base64-encoded image");
+                        }
+                        img = img.substr(idx + split.length());
+                        if (img.empty()) {
+                            throw std::runtime_error("Illegal param: empty image base64-encoded data");
+                        }
+                        try {
+                            const std::vector<uint8_t> img_buff = base64_decode(img);
+                            images.push_back(img_buff);
+                        } catch (const std::exception &e) {
+                            throw std::runtime_error("Illegal param: invalid image base64-encoded data");
+                        }
+                        continue;
                     }
-                    const std::string split = "base64,";
-                    const size_t idx        = img.find(split);
-                    if (idx == std::string::npos) {
-                        throw std::runtime_error("Illegal param: invalid image URL, must be a base64-encoded image");
+                    std::string host, path;
+                    if (auto pos = img.find("://"); pos == std::string::npos) {
+                        throw std::runtime_error("Illegal param: invalid image URL, must be a data URI or a valid URL");
+                    } else {
+                        pos = img.find('/', pos + 3);
+                        if (pos == std::string::npos) {
+                            host = img;
+                            path = "/";
+                        } else {
+                            host = img.substr(0, pos);
+                            path = img.substr(pos);
+                        }
                     }
-                    img = img.substr(idx + split.length());
-                    if (img.empty()) {
-                        throw std::runtime_error("Illegal param: empty image base64-encoded data");
+                    httplib::Client cli(host);
+                    cli.set_connection_timeout(15, 0);                      // 15 seconds
+                    cli.set_read_timeout(300, 0);                           // 5 minutes
+                    cli.set_keep_alive(false);                              // close connection after request
+                    cli.set_follow_location(true);                          // follow redirects
+                    cli.set_default_headers({{"User-Agent", "llama-box"}}); // set user-agent
+                    cli.set_url_encode(true);                               // encode URL
+                    cli.set_tcp_nodelay(true);                              // disable Nagle's algorithm
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+                    cli.enable_server_certificate_verification(false); // disable SSL verification
+#endif
+                    httplib::Result res = cli.Get(path);
+                    if (!res || res->status != httplib::StatusCode::OK_200) {
+                        throw std::runtime_error("Illegal param: failed to fetch image from URL: " + img + ", status: " + std::to_string(res ? res->status : -1) + ", reason: " + (res ? res->reason : "unknown"));
                     }
-                    images.push_back(img);
+                    const std::vector<uint8_t> img_buff(res->body.begin(), res->body.end());
+                    images.push_back(img_buff);
                 }
             }
             llama_params["multi_modal_data"] = json{{"images", images}};
