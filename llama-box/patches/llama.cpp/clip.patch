@@ -1,10 +1,10 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 3cd0d2fa..a0ede6c3 100644
+index 7a8a3156..4fe97948 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -8,25 +8,25 @@
- #include "ggml-alloc.h"
+@@ -9,25 +9,25 @@
  #include "ggml-backend.h"
+ #include "gguf.h"
  
 -//#ifdef GGML_USE_CUDA
 -//#include "ggml-cuda.h"
@@ -47,7 +47,7 @@ index 3cd0d2fa..a0ede6c3 100644
  
  #define STB_IMAGE_IMPLEMENTATION
  #include "stb_image.h"
-@@ -44,19 +44,11 @@
+@@ -45,17 +45,7 @@
  #include <cinttypes>
  #include <limits>
  
@@ -64,30 +64,22 @@ index 3cd0d2fa..a0ede6c3 100644
 -#endif // defined(LLAVA_LOG_OFF)
 +#include "common/log.h"
  
--//#define CLIP_DEBUG_FUNCTIONS
-+#ifndef NDEBUG
-+#define CLIP_DEBUG_FUNCTIONS
-+#endif
+ //#define CLIP_DEBUG_FUNCTIONS
  
- // RGB uint8 image
- struct clip_image_u8 {
-@@ -603,12 +595,10 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
+@@ -604,12 +594,6 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
      int image_size_width  = image_size;
      int image_size_height = image_size;
      if (ctx->has_minicpmv_projector) {
 -        if (load_image_size == nullptr) {
 -            load_image_size = clip_image_size_init();
-+        if (load_image_size != nullptr) {
-+            image_size_width  = load_image_size->width;
-+            image_size_height = load_image_size->height;
-         }
+-        }
 -        LOG_DBG("%s: %d %d\n", __func__, load_image_size->width, load_image_size->height);
 -        image_size_width  = load_image_size->width;
 -        image_size_height = load_image_size->height;
          if (is_inf) {
              image_size_width  = imgs->data->nx;
              image_size_height = imgs->data->ny;
-@@ -1109,7 +1099,7 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
+@@ -1110,7 +1094,7 @@ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32
  }
  
  // read and create ggml_context containing the tensors and their data
@@ -96,7 +88,7 @@ index 3cd0d2fa..a0ede6c3 100644
      struct ggml_context * meta = NULL;
  
      struct gguf_init_params params = {
-@@ -1140,7 +1130,6 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1141,7 +1125,6 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          LOG_INF("%s: n_tensors:    %d\n", __func__, n_tensors);
          LOG_INF("%s: n_kv:         %d\n", __func__, n_kv);
          LOG_INF("%s: ftype:        %s\n", __func__, ftype_str.c_str());
@@ -104,7 +96,7 @@ index 3cd0d2fa..a0ede6c3 100644
      }
      const int n_tensors = gguf_get_n_tensors(ctx);
  
-@@ -1196,7 +1185,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1197,7 +1180,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
              struct ggml_tensor * cur = ggml_get_tensor(meta, name);
              size_t tensor_size = ggml_nbytes(cur);
              model_size += tensor_size;
@@ -113,7 +105,7 @@ index 3cd0d2fa..a0ede6c3 100644
                  LOG_INF("%s: tensor[%d]: n_dims = %d, name = %s, tensor_size=%zu, offset=%zu, shape:[%" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 "], type = %s\n",
                         __func__, i, ggml_n_dims(cur), cur->name, tensor_size, offset, cur->ne[0], cur->ne[1], cur->ne[2], cur->ne[3], ggml_type_name(type));
              }
-@@ -1222,34 +1211,40 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1223,34 +1206,40 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          }
      }
  
@@ -178,7 +170,7 @@ index 3cd0d2fa..a0ede6c3 100644
      }
  
      // model size and capabilities
-@@ -1278,6 +1273,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1279,6 +1268,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          idx = gguf_find_key(ctx, KEY_HAS_QWEN2VL_MERGER);
          if (idx != -1) {
              new_clip->has_qwen2vl_merger = gguf_get_val_bool(ctx, idx);
@@ -192,7 +184,7 @@ index 3cd0d2fa..a0ede6c3 100644
          }
          // GGML_ASSERT(new_clip->has_llava_projector); // see monatis/clip.cpp for image and/or text encoding for semantic search
  
-@@ -1299,6 +1301,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1300,6 +1296,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
              LOG_INF("%s: vision_encoder: %d\n", __func__, new_clip->has_vision_encoder);
              LOG_INF("%s: llava_projector:  %d\n", __func__, new_clip->has_llava_projector);
              LOG_INF("%s: minicpmv_projector:  %d\n", __func__, new_clip->has_minicpmv_projector);
@@ -200,7 +192,7 @@ index 3cd0d2fa..a0ede6c3 100644
              LOG_INF("%s: model size:     %.2f MB\n", __func__, model_size / 1024.0 / 1024.0);
              LOG_INF("%s: metadata size:  %.2f MB\n", __func__, ggml_get_mem_size(meta) / 1024.0 / 1024.0);
          }
-@@ -1418,24 +1421,23 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1419,24 +1416,23 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          }
  
          if (verbosity >= 2) {
@@ -240,7 +232,7 @@ index 3cd0d2fa..a0ede6c3 100644
          }
  
          try {
-@@ -1611,10 +1613,32 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1612,10 +1608,32 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          clip_image_f32_batch batch;
          batch.size = 1;
          batch.data = nullptr;
@@ -275,7 +267,7 @@ index 3cd0d2fa..a0ede6c3 100644
      }
  
      return new_clip;
-@@ -1989,7 +2013,7 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
+@@ -1990,7 +2008,7 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
      const int multiple = fmin(ceil(ratio), max_slice_nums);
  
      std::vector<std::vector<clip_image_u8 *>> images;
@@ -284,7 +276,7 @@ index 3cd0d2fa..a0ede6c3 100644
      images.push_back(std::vector<clip_image_u8 *>());
  
      if (multiple <= 1) {
-@@ -2004,17 +2028,17 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
+@@ -2005,17 +2023,17 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
          clip_image_u8 * source_image = clip_image_u8_init();
          bicubic_resize(*img, *source_image, best_size.first, best_size.second);
          // source_image = image.copy().resize(best_resize, Image.Resampling.BICUBIC)
@@ -305,7 +297,7 @@ index 3cd0d2fa..a0ede6c3 100644
  
          // split_to_patches
          int width = refine_image->nx;
-@@ -2071,9 +2095,17 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2072,7 +2090,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
          int idx = 0;
          for (size_t i = 0; i < imgs.size(); ++i) {
              for (size_t j = 0; j < imgs[i].size(); ++j) {
@@ -313,35 +305,16 @@ index 3cd0d2fa..a0ede6c3 100644
 +                LOG_DBGV(6, "%s: %d %d\n", __func__,imgs[i][j]->nx,imgs[i][j]->ny);
                  clip_image_f32 * res = clip_image_f32_init();
                  normalize_image_u8_to_f32(imgs[i][j], res, ctx->image_mean, ctx->image_std);
-+#ifndef NDEBUG
-+                {
-+                    clip_image_u8 * temp2 = clip_image_u8_init();
-+                    clip_image_convert_f32_to_u8(*res, *temp2);
-+                    clip_image_save_to_bmp(*temp2, "resized_normalized_f32_"+std::to_string(i)+"_"+std::to_string(j)+".bmp");
-+                    clip_image_u8_free(temp2);
-+                }
-+#endif
                  res_imgs->data[idx++] = *res;
-                 clip_image_f32_free(res);
-             }
-@@ -2089,7 +2121,16 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2090,6 +2108,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
          res_imgs->data = new clip_image_f32[1];
          // clip_image_f32 * res = clip_image_f32_init();
 +        LOG_DBGV(6, "%s: %d %d\n", __func__, resized->nx, resized->ny);
          normalize_image_u8_to_f32(resized, res_imgs->data, ctx->image_mean, ctx->image_std);
-+#ifndef NDEBUG
-+        {
-+            clip_image_u8 * temp2 = clip_image_u8_init();
-+            clip_image_convert_f32_to_u8(res_imgs->data[0], *temp2);
-+            clip_image_save_to_bmp(*temp2, "resized_normalized_f32.bmp");
-+            clip_image_u8_free(temp2);
-+        }
-+#endif
          // res_imgs->data[0] = *res;
          res_imgs->size = 1;
- 
-@@ -2165,14 +2206,23 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2166,13 +2185,14 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
              clip_image_u8 *image_original_resize = clip_image_u8_init();
              // bilinear_resize(*img, *image_original_resize, params.image_size, params.image_size); // in python this is "shortest_edge", but all CLIP are square
@@ -355,18 +328,9 @@ index 3cd0d2fa..a0ede6c3 100644
              for (auto& patch : patches) {
 +                LOG_DBGV(6, "%s: %d %d\n", __func__, patch->nx, patch->ny);
                  normalize_image_u8_to_f32(patch, &res_imgs->data[num], ctx->image_mean, ctx->image_std);
-+#ifndef NDEBUG
-+                {
-+                    clip_image_u8 * temp2 = clip_image_u8_init();
-+                    clip_image_convert_f32_to_u8(res_imgs->data[num], *temp2);
-+                    clip_image_save_to_bmp(*temp2, "resized_normalized_f32_"+std::to_string(num)+".bmp");
-+                    clip_image_u8_free(temp2);
-+                }
-+#endif
                  num++;
              }
- 
-@@ -2207,49 +2257,18 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2208,49 +2228,10 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
      const int nx3 = int(nx / scale + 0.5f);
      const int ny3 = int(ny / scale + 0.5f);
@@ -413,16 +377,9 @@ index 3cd0d2fa..a0ede6c3 100644
 -                res->buf[i] = ((float(v2) / 255.0f) - m3[c]) / s3[c];
 -            }
 -        }
+-    }
 +    LOG_DBGV(6, "%s: %d %d\n", __func__, temp->nx, temp->ny);
 +    normalize_image_u8_to_f32(temp, res, ctx->image_mean, ctx->image_std);
-+#ifndef NDEBUG
-+    {
-+        clip_image_u8 * temp2 = clip_image_u8_init();
-+        clip_image_convert_f32_to_u8(*res, *temp2);
-+        clip_image_save_to_bmp(*temp2, "resized_normalized_f32.bmp");
-+        clip_image_u8_free(temp2);
-     }
-+#endif
      clip_image_u8_free(temp);
  
      // {

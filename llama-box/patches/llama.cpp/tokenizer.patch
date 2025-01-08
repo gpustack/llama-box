@@ -1,8 +1,8 @@
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 7deb3683..a5674c89 100644
+index 7260cb15..47886fa0 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -1373,7 +1373,8 @@ void llm_load_vocab(llama_model_loader & ml, llama_model & model) {
+@@ -1383,7 +1383,8 @@ void llm_load_vocab(llama_model_loader & ml, llama_model & model) {
                  tokenizer_pre == "megrez") {
                  vocab.type_pre = LLAMA_VOCAB_PRE_TYPE_QWEN2;
              } else {

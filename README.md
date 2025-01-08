@@ -339,7 +339,7 @@ server/completion:
          --chat-template JINJA_TEMPLATE
                                   set custom jinja chat template (default: template taken from model's metadata)
                                   list of built-in templates:
-                                  chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, exaone3, falcon, falcon3, gemma, gigachat, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, rwkv-world, vicuna, vicuna-orca, zephyr
+                                  chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, zephyr
          --chat-template-file FILE
                                   set a file to load a custom jinja chat template (default: template taken from model's metadata)
          --slot-save-path PATH    path to save slot kv cache (default: disabled)
@@ -462,7 +462,7 @@ server/completion/speculative:
 server/completion/visual:
 
          --visual-max-image-size N
-                                  maximum image size when completion with vision, resize if exceed, must be larger than 224 and be multiples of 14 (default: 0)
+                                  maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: 0, 0 = disabled)
 
 server/embedding:
 

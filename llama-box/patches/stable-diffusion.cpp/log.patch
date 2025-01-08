@@ -1,8 +1,8 @@
 diff --git a/util.cpp b/util.cpp
-index 055b1ad..f7b4bb1 100644
+index 8c358dd..d136277 100644
 --- a/util.cpp
 +++ b/util.cpp
-@@ -380,12 +380,12 @@ void* sd_log_cb_data         = NULL;
+@@ -380,12 +380,15 @@ void* sd_log_cb_data         = NULL;
  
  #define LOG_BUFFER_SIZE 1024
  
@@ -13,7 +13,10 @@ index 055b1ad..f7b4bb1 100644
  
      static char log_buffer[LOG_BUFFER_SIZE + 1];
 -    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s:%-4d - ", sd_basename(file).c_str(), line);
-+    int written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s: ", func);
++    int written = 0;
++    if (strcmp(func, "ggml_log_callback_default") != 0) {
++        written = snprintf(log_buffer, LOG_BUFFER_SIZE, "%s: ", func);
++    }
  
      if (written >= 0 && written < LOG_BUFFER_SIZE) {
          vsnprintf(log_buffer + written, LOG_BUFFER_SIZE - written, format, args);

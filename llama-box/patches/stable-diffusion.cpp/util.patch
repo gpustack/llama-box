@@ -1,5 +1,5 @@
 diff --git a/util.cpp b/util.cpp
-index 055b1ad..7fca471 100644
+index 8c358dd..0dac8de 100644
 --- a/util.cpp
 +++ b/util.cpp
 @@ -59,7 +59,7 @@ void replace_all_chars(std::string& str, char target, char replacement) {
