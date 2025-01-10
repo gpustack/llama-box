@@ -191,6 +191,7 @@ float stablediffusion_context::get_default_cfg_scale() {
 }
 
 std::pair<int, int> stablediffusion_context::get_default_image_size() {
+    // { height, width }
     switch (sd_get_version(sd_ctx)) {
         case VERSION_SD1_INPAINT:
         case VERSION_SD2_INPAINT:
