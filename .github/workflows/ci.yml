@@ -579,7 +579,9 @@ jobs:
           - '8.0'
         distro_container_image:
           - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-910b-ubuntu20.04'
+          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-910b-openeuler20.03'
           - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-ubuntu20.04'
+          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-openeuler20.03'
     runs-on: ubuntu-22.04
     steps:
       - name: Maximize Docker Build Space
@@ -904,6 +906,8 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
@@ -913,6 +917,7 @@ jobs:
           
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
@@ -1006,6 +1011,8 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
@@ -1019,6 +1026,7 @@ jobs:
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_HIP=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
@@ -1119,6 +1127,8 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
@@ -1131,6 +1141,7 @@ jobs:
           
           Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
@@ -1216,6 +1227,8 @@ jobs:
           cmd /c "call `"${oneapiRoot}\setvars.bat`" && set" | ForEach-Object { `
             if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
           }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         run: |
           $ErrorActionPreference = "Stop"
@@ -1225,6 +1238,7 @@ jobs:
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
           
           Write-Host "===== BUILD ====="
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_SYCL=on `
             -DCMAKE_C_COMPILER=cl `
