@@ -3967,6 +3967,11 @@ inline void signal_handler(int signal) {
 }
 
 int main(int argc, char **argv) {
+#if __linux__ && defined(GGML_USE_HIP)
+    // NB(thxCode): this is a workaround for the issue that the ROCm runtime occupies the CPU 100% utilization,
+    // see https://github.com/gpustack/gpustack/issues/844.
+    setenv("GPU_MAX_HW_QUEUES", "1", 1);
+#endif
     common_log_set_prefix(common_log_main(), true);
     common_log_set_timestamps(common_log_main(), true);
     llama_log_set(
