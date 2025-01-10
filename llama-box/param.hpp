@@ -108,7 +108,7 @@ static std::string get_builtin_chat_templates() {
     return msg.str();
 }
 
-static std::vector<ggml_backend_dev_t> parse_device_list(const std::string &value) {
+inline std::vector<ggml_backend_dev_t> parse_device_list(const std::string &value) {
     std::vector<ggml_backend_dev_t> devices;
     auto dev_names = string_split<std::string>(value, ',');
     if (dev_names.empty()) {
@@ -237,9 +237,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "general",                            "-h,    --help, --usage",                        "print usage and exit" });
     opts.push_back({ "general",                            "       --version",                              "print version and exit" });
     opts.push_back({ "general",                            "       --system-info",                          "print system info and exit" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "general",                        "       --list-devices",                         "print list of available devices and exit" });
-    }
+    opts.push_back({ "general",                            "       --list-devices",                         "print list of available devices and exit" });
     opts.push_back({ "general",                            "-v,    --verbose, --log-verbose",               "set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
     opts.push_back({ "general",                            "-lv,   --verbosity, --log-verbosity V",         "set the verbosity threshold, messages with a higher verbosity will be ignored" });
     opts.push_back({ "general",                            "       --log-colors",                           "enable colored logging" });
@@ -257,10 +255,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "       --lora FILE",                            "apply LoRA adapter (implies --no-mmap)" });
     opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
     opts.push_back({ "server",                             "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %u)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server",                         "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", llm_params.main_gpu });
-    }
+    opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
+    opts.push_back({ "server",                             "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", llm_params.main_gpu });
     opts.push_back({ "server",                             "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --infill",                               "enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
@@ -268,22 +264,18 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "       --images",                               "enable image endpoint (default: %s)", params_.endpoint_images ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --rerank",                               "enable reranking endpoint (default: %s)", llm_params.reranking ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --slots",                                "enable slots monitoring endpoint (default: %s)", llm_params.endpoint_slots ? "enabled" : "disabled" });
-    if (llama_supports_rpc()) {
-        opts.push_back({ "server",                         "       --rpc SERVERS",                          "comma separated list of RPC servers" });
-    }
+    opts.push_back({ "server",                             "       --rpc SERVERS",                          "comma separated list of RPC servers" });
     opts.push_back({ "server",                             "       --no-warmup",                            "skip warming up the model with an empty run" });
     // server // completion //
     opts.push_back({ "server/completion" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/completion",              "-dev,  --device <dev1,dev2,...>",               "comma-separated list of devices to use for offloading (none = don't offload)\n"
+    opts.push_back({ "server/completion",                  "-dev,  --device <dev1,dev2,...>",               "comma-separated list of devices to use for offloading (none = don't offload)\n"
                                                                                                             "use --list-devices to see a list of available devices"});
-        opts.push_back({ "server/completion",              "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM" });
-        opts.push_back({ "server/completion",              "-sm,   --split-mode SPLIT_MODE",                "how to split the model across multiple GPUs, one of:\n"
+    opts.push_back({ "server/completion",                  "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM" });
+    opts.push_back({ "server/completion",                  "-sm,   --split-mode SPLIT_MODE",                "how to split the model across multiple GPUs, one of:\n"
                                                                                                             "  - none: use one GPU only\n"
                                                                                                             "  - layer (default): split layers and KV across GPUs\n"
                                                                                                             "  - row: split rows across GPUs, store intermediate results and KV in --main-gpu" });
-        opts.push_back({ "server/completion",              "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
-    }
+    opts.push_back({ "server/completion",                  "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
     opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
                                                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
     opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
@@ -357,9 +349,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --yarn-attn-factor N",                   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)llm_params.yarn_attn_factor });
     opts.push_back({ "server/completion",                  "       --yarn-beta-fast N",                     "YaRN: low correction dim or beta (default: %.1f)", (double)llm_params.yarn_beta_fast });
     opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN: high correction dim or alpha (default: %.1f)", (double)llm_params.yarn_beta_slow });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/completion",              "-nkvo, --no-kv-offload",                        "disable KV offload" });
-    }
+    opts.push_back({ "server/completion",                  "-nkvo, --no-kv-offload",                        "disable KV offload" });
     opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "disable caching prompt" });
     opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
     opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_k) });
@@ -392,12 +382,10 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion/speculative",      "       --draft-min, --draft-n-min N",           "minimum number of draft tokens to use for speculative decoding (default: %d)", llm_params.speculative.n_min });
     opts.push_back({ "server/completion/speculative",      "       --draft-p-min P",                        "minimum speculative decoding probability (greedy) (default: %.1f)", llm_params.speculative.p_min });
     opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "draft model for speculative decoding (default: unused)" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/completion/speculative",  "-devd, --device-draft <dev1,dev2,...>",         "comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
+    opts.push_back({ "server/completion/speculative",      "-devd, --device-draft <dev1,dev2,...>",         "comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
                                                                                                             "use --list-devices to see a list of available devices" });
-        opts.push_back({ "server/completion/speculative",  "-ngld, --gpu-layers-draft, --n-gpu-layers-draft N",
+    opts.push_back({ "server/completion/speculative",      "-ngld, --gpu-layers-draft, --n-gpu-layers-draft N",
                                                                                                             "number of layers to store in VRAM for the draft model" });
-    }
     opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", params_.lookup_ngram_min });
     opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "path to static lookup cache to use for lookup decoding (not updated by generation)" });
     opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
@@ -422,31 +410,25 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/images",                      "       --image-sampling-steps, --image-sample-steps N",
                                                                                                             "number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
     opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
-    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model (0.0 = disabled) (default: %.2f)", sd_params.sampling.slg_scale });
+    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
     opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
     opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sd_params.sampling.slg_start });
     opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
                                                                                                             "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.sampling.slg_end });
     opts.push_back({ "server/images",                      "       --image-schedule-method, --image-schedule TYPE",
                                                                                                             "denoiser sigma schedule method, allowed values: %s (default: %s)", get_builtin_sd_schedule_method().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule_method) });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/images",                  "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
-    }
+    opts.push_back({ "server/images",                      "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
     opts.push_back({ "server/images",                      "       --image-clip-l-model PATH",              "path to the CLIP Large (clip-l) text encoder, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-clip-g-model PATH",              "path to the CLIP Generic (clip-g) text encoder, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-t5xxl-model PATH",               "path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included" });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/images",                  "       --image-no-vae-model-offload",           "disable vae(taesd) model offload" });
-    }
+    opts.push_back({ "server/images",                      "       --image-no-vae-model-offload",           "disable vae(taesd) model offload" });
     opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
     opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sd_params.vae_tiling ? "enabled" : "disabled" });
     opts.push_back({ "server/images",                      "       --image-no-vae-tiling",                  "disable vae decoder in tiles" });
     opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
     opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sd_params.upscale_repeats });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "server/images",                  "       --image-no-control-net-model-offload",   "disable control-net model offload" });
-    }
+    opts.push_back({ "server/images",                      "       --image-no-control-net-model-offload",   "disable control-net model offload" });
     opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sd_params.sampling.control_strength });
     opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sd_params.sampling.control_canny ? "enabled" : "disabled" });
@@ -458,9 +440,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "rpc-server" });
     opts.push_back({ "rpc-server",                         "       --rpc-server-host HOST",                 "ip address to rpc server listen (default: %s)", rpc_params.hostname.c_str() });
     opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "port to rpc server listen (default: %d, 0 = disabled)", rpc_params.port });
-    if (llama_supports_gpu_offload()) {
-        opts.push_back({ "rpc-server",                     "       --rpc-server-main-gpu N",                "the GPU VRAM to use for the rpc server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
-    }
+    opts.push_back({ "rpc-server",                         "       --rpc-server-main-gpu N",                "the GPU VRAM to use for the rpc server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
     opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
     // rpc-server //
 
@@ -528,19 +508,17 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 exit(0);
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "--list-devices")) {
-                    printf("Available devices:\n");
-                    for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
-                        auto *dev = ggml_backend_dev_get(j);
-                        if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-                            size_t free, total;
-                            ggml_backend_dev_memory(dev, &free, &total);
-                            printf("  %s: %s (%zu MiB, %zu MiB free)\n", ggml_backend_dev_name(dev), ggml_backend_dev_description(dev), total / 1024 / 1024, free / 1024 / 1024);
-                        }
+            if (!strcmp(flag, "--list-devices")) {
+                printf("Available devices:\n");
+                for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
+                    auto *dev = ggml_backend_dev_get(j);
+                    if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+                        size_t free, total;
+                        ggml_backend_dev_memory(dev, &free, &total);
+                        printf("  %s: %s (%zu MiB, %zu MiB free)\n", ggml_backend_dev_name(dev), ggml_backend_dev_description(dev), total / 1024 / 1024, free / 1024 / 1024);
                     }
-                    exit(0);
                 }
+                exit(0);
             }
 
             if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") || !strcmp(flag, "--log-verbose")) {
@@ -686,18 +664,16 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "-mg") || !strcmp(flag, "--main-gpu")) {
-                    if (i == argc) {
-                        missing("--main-gpu");
-                    }
-                    char *arg                   = argv[i++];
-                    params_.llm_params.main_gpu = std::stoi(std::string(arg));
-                    if (params_.llm_params.main_gpu < 0 || params_.llm_params.main_gpu >= int32_t(llama_max_devices())) {
-                        invalid("--main-gpu");
-                    }
-                    continue;
+            if (!strcmp(flag, "-mg") || !strcmp(flag, "--main-gpu")) {
+                if (i == argc) {
+                    missing("--main-gpu");
                 }
+                char *arg                   = argv[i++];
+                params_.llm_params.main_gpu = std::stoi(std::string(arg));
+                if (params_.llm_params.main_gpu < 0 || params_.llm_params.main_gpu >= int32_t(llama_max_devices())) {
+                    invalid("--main-gpu");
+                }
+                continue;
             }
 
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
@@ -735,76 +711,72 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_rpc()) {
-                if (!strcmp(flag, "--rpc")) {
-                    if (i == argc) {
-                        missing("--rpc");
-                    }
-                    char *arg                      = argv[i++];
-                    params_.llm_params.rpc_servers = arg;
-                    continue;
+            if (!strcmp(flag, "--rpc")) {
+                if (i == argc) {
+                    missing("--rpc");
                 }
+                char *arg                      = argv[i++];
+                params_.llm_params.rpc_servers = arg;
+                continue;
             }
 
             // server // completion//
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "-devd") || !strcmp(flag, "--device-draft")) {
-                    if (i == argc) {
-                        missing("--device-draft");
-                    }
-                    char *arg                              = argv[i++];
-                    params_.llm_params.speculative.devices = parse_device_list(arg);
-                    continue;
+            if (!strcmp(flag, "-devd") || !strcmp(flag, "--device-draft")) {
+                if (i == argc) {
+                    missing("--device-draft");
                 }
+                char *arg                              = argv[i++];
+                params_.llm_params.speculative.devices = parse_device_list(arg);
+                continue;
+            }
 
-                if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") || !strcmp(flag, "--n-gpu-layers")) {
-                    if (i == argc) {
-                        missing("--gpu-layers");
-                    }
-                    char *arg                       = argv[i++];
-                    params_.llm_params.n_gpu_layers = std::stoi(arg);
-                    continue;
+            if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") || !strcmp(flag, "--n-gpu-layers")) {
+                if (i == argc) {
+                    missing("--gpu-layers");
                 }
+                char *arg                       = argv[i++];
+                params_.llm_params.n_gpu_layers = std::stoi(arg);
+                continue;
+            }
 
-                if (!strcmp(flag, "-sm") || !strcmp(flag, "--split-mode")) {
-                    if (i == argc) {
-                        missing("--split-mode");
-                    }
-                    char *arg = argv[i++];
-                    if (!strcmp(arg, "none")) {
-                        params_.llm_params.split_mode = LLAMA_SPLIT_MODE_NONE;
-                    } else if (!strcmp(arg, "layer")) {
-                        params_.llm_params.split_mode = LLAMA_SPLIT_MODE_LAYER;
-                    } else if (!strcmp(arg, "row")) {
-                        params_.llm_params.split_mode = LLAMA_SPLIT_MODE_ROW;
+            if (!strcmp(flag, "-sm") || !strcmp(flag, "--split-mode")) {
+                if (i == argc) {
+                    missing("--split-mode");
+                }
+                char *arg = argv[i++];
+                if (!strcmp(arg, "none")) {
+                    params_.llm_params.split_mode = LLAMA_SPLIT_MODE_NONE;
+                } else if (!strcmp(arg, "layer")) {
+                    params_.llm_params.split_mode = LLAMA_SPLIT_MODE_LAYER;
+                } else if (!strcmp(arg, "row")) {
+                    params_.llm_params.split_mode = LLAMA_SPLIT_MODE_ROW;
+                } else {
+                    invalid("--split-mode");
+                }
+                continue;
+            }
+
+            if (!strcmp(flag, "-ts") || !strcmp(flag, "--tensor-split")) {
+                if (i == argc) {
+                    missing("--tensor-split");
+                }
+                char *arg = argv[i++];
+                const std::regex regex{R"([,/]+)"};
+                std::string arg_s{arg};
+                std::sregex_token_iterator it{arg_s.begin(), arg_s.end(), regex, -1};
+                std::vector<std::string> split_arg{it, {}};
+                if (split_arg.size() >= llama_max_devices()) {
+                    invalid("--tensor-split");
+                }
+                for (size_t j = 0; j < llama_max_devices(); ++j) {
+                    if (j < split_arg.size()) {
+                        params_.llm_params.tensor_split[j] = std::stof(split_arg[j]);
                     } else {
-                        invalid("--split-mode");
+                        params_.llm_params.tensor_split[j] = 0.0f;
                     }
-                    continue;
                 }
-
-                if (!strcmp(flag, "-ts") || !strcmp(flag, "--tensor-split")) {
-                    if (i == argc) {
-                        missing("--tensor-split");
-                    }
-                    char *arg = argv[i++];
-                    const std::regex regex{R"([,/]+)"};
-                    std::string arg_s{arg};
-                    std::sregex_token_iterator it{arg_s.begin(), arg_s.end(), regex, -1};
-                    std::vector<std::string> split_arg{it, {}};
-                    if (split_arg.size() >= llama_max_devices()) {
-                        invalid("--tensor-split");
-                    }
-                    for (size_t j = 0; j < llama_max_devices(); ++j) {
-                        if (j < split_arg.size()) {
-                            params_.llm_params.tensor_split[j] = std::stof(split_arg[j]);
-                        } else {
-                            params_.llm_params.tensor_split[j] = 0.0f;
-                        }
-                    }
-                    continue;
-                }
+                continue;
             }
 
             if (!strcmp(flag, "--override-kv")) {
@@ -1641,24 +1613,22 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "-dev") || !strcmp(flag, "--device")) {
-                    if (i == argc) {
-                        missing("--device");
-                    }
-                    char *arg                  = argv[i++];
-                    params_.llm_params.devices = parse_device_list(arg);
-                    continue;
+            if (!strcmp(flag, "-dev") || !strcmp(flag, "--device")) {
+                if (i == argc) {
+                    missing("--device");
                 }
+                char *arg                  = argv[i++];
+                params_.llm_params.devices = parse_device_list(arg);
+                continue;
+            }
 
-                if (!strcmp(flag, "-ngld") || !strcmp(flag, "--gpu-layers-draft") || !strcmp(flag, "--n-gpu-layers-draft")) {
-                    if (i == argc) {
-                        missing("--gpu-layers-draft");
-                    }
-                    char *arg                                   = argv[i++];
-                    params_.llm_params.speculative.n_gpu_layers = std::stoi(arg);
-                    continue;
+            if (!strcmp(flag, "-ngld") || !strcmp(flag, "--gpu-layers-draft") || !strcmp(flag, "--n-gpu-layers-draft")) {
+                if (i == argc) {
+                    missing("--gpu-layers-draft");
                 }
+                char *arg                                   = argv[i++];
+                params_.llm_params.speculative.n_gpu_layers = std::stoi(arg);
+                continue;
             }
 
             if (!strcmp(flag, "--lookup-ngram-min")) {
@@ -1900,11 +1870,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "--image-no-text-encoder-model-offload")) {
-                    params_.sd_params.text_encoder_model_offload = false;
-                    continue;
-                }
+            if (!strcmp(flag, "--image-no-text-encoder-model-offload")) {
+                params_.sd_params.text_encoder_model_offload = false;
+                continue;
             }
 
             if (!strcmp(flag, "--image-clip-l-model")) {
@@ -1934,11 +1902,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "--image-no-vae-model-offload")) {
-                    params_.sd_params.vae_model_offload = false;
-                    continue;
-                }
+            if (!strcmp(flag, "--image-no-vae-model-offload")) {
+                params_.sd_params.vae_model_offload = false;
+                continue;
             }
 
             if (!strcmp(flag, "--image-vae-model")) {
@@ -1990,11 +1956,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "--image-no-control-net-model-offload")) {
-                    params_.sd_params.control_model_offload = false;
-                    continue;
-                }
+            if (!strcmp(flag, "--image-no-control-net-model-offload")) {
+                params_.sd_params.control_model_offload = false;
+                continue;
             }
 
             if (!strcmp(flag, "--image-control-net-model")) {
@@ -2053,18 +2017,16 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (llama_supports_gpu_offload()) {
-                if (!strcmp(flag, "--rpc-server-main-gpu")) {
-                    if (i == argc) {
-                        missing("--rpc-server-main-gpu");
-                    }
-                    char *arg                   = argv[i++];
-                    params_.rpc_params.main_gpu = std::stoi(std::string(arg));
-                    if (params_.rpc_params.main_gpu >= int32_t(llama_max_devices())) {
-                        invalid("--rpc-server-main-gpu");
-                    }
-                    continue;
+            if (!strcmp(flag, "--rpc-server-main-gpu")) {
+                if (i == argc) {
+                    missing("--rpc-server-main-gpu");
                 }
+                char *arg                   = argv[i++];
+                params_.rpc_params.main_gpu = std::stoi(std::string(arg));
+                if (params_.rpc_params.main_gpu >= int32_t(llama_max_devices())) {
+                    invalid("--rpc-server-main-gpu");
+                }
+                continue;
             }
 
             if (!strcmp(flag, "--rpc-server-reserve-memory")) {
