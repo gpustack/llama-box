@@ -1185,6 +1185,12 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
+    // Handle "response_format" field
+    std::string response_format = json_value(body, "response_format", std::string("b64_json"));
+    if (response_format != "b64_json") {
+        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
+    }
+
     json llama_params;
 
     // Annotations for OAI compatibility
@@ -1307,12 +1313,6 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         llama_params["height"] = height;
     }
 
-    // Handle "response_format" field
-    std::string response_format = json_value(body, "response_format", std::string("b64_json"));
-    if (response_format != "b64_json") {
-        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
-    }
-
     // Handle "stream" & "stream_options" field
     // "stream_options": {"include_usage": bool, "chunk_result": bool, "chunk_size": int, "preview": bool}
     if (json_value(body, "stream", false)) {
@@ -1349,6 +1349,12 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
             body_cp["control"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+    }
+
+    // Handle "response_format" field
+    std::string response_format = json_value(body, "response_format", std::string("b64_json"));
+    if (response_format != "b64_json") {
+        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
     }
 
     json llama_params;
@@ -1457,12 +1463,6 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
         }
         llama_params["width"]  = width;
         llama_params["height"] = height;
-    }
-
-    // Handle "response_format" field
-    std::string response_format = json_value(body, "response_format", std::string("b64_json"));
-    if (response_format != "b64_json") {
-        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
     }
 
     // Handle "stream" & "stream_options" field

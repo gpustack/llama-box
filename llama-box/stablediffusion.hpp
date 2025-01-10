@@ -85,8 +85,8 @@ class stablediffusion_context {
     sample_method_t get_default_sample_method();
     int get_default_sampling_steps();
     float get_default_cfg_scale();
-    float get_default_slg_scale();
-    void apply_lora_adpters(std::vector<common_lora_adapter_info> &lora_adapters);
+    std::pair<int, int> get_default_image_size();
+    void apply_lora_adapters(std::vector<common_lora_adapter_info> &lora_adapters);
     stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_params_sampling sparams);
     bool sample_stream(stablediffusion_sampling_stream *stream);
     std::pair<int, int> progress_stream(stablediffusion_sampling_stream *stream);
@@ -132,12 +132,12 @@ sample_method_t stablediffusion_context::get_default_sample_method() {
             return EULER;
 
         case VERSION_SD1:
-        case VERSION_SD2:
+        case VERSION_SD2: // including Turbo
             return EULER_A;
-        case VERSION_SDXL:
+        case VERSION_SDXL: // including Turbo
         case VERSION_SDXL_REFINER:
-        case VERSION_SD3:
-        case VERSION_FLUX:
+        case VERSION_SD3:  // including Turbo
+        case VERSION_FLUX: // including Schnell
             return EULER;
         default:
             return EULER_A;
@@ -153,14 +153,13 @@ int stablediffusion_context::get_default_sampling_steps() {
             return 50;
 
         case VERSION_SD1:
-        case VERSION_SD2:
+        case VERSION_SD2: // including Turbo
             return 20;
-        case VERSION_SDXL:
+        case VERSION_SDXL: // including Turbo
         case VERSION_SDXL_REFINER:
             return 40;
-        case VERSION_SD3:
-        case VERSION_FLUX:
-            return 10;
+        case VERSION_SD3:  // including Turbo
+        case VERSION_FLUX: // including Schnell
         default:
             return 20;
     }
@@ -174,31 +173,45 @@ float stablediffusion_context::get_default_cfg_scale() {
         case VERSION_SDXL_INPAINT:
             return 5.0f;
         case VERSION_FLUX_FILL:
-            return 3.5;
+            return 3.5f;
 
         case VERSION_SD1:
-        case VERSION_SD2:
+        case VERSION_SD2: // including Turbo
             return 9.0f;
-        case VERSION_SDXL:
+        case VERSION_SDXL: // including Turbo
         case VERSION_SDXL_REFINER:
             return 5.0f;
-        case VERSION_SD3:
+        case VERSION_SD3: // including Turbo
             return 4.5f;
-        case VERSION_FLUX:
+        case VERSION_FLUX: // including Schnell
             return 1.0f;
         default:
             return 4.5f;
     }
 }
 
-float stablediffusion_context::get_default_slg_scale() {
-    if (sd_get_version(sd_ctx) == VERSION_SD3) {
-        return 2.5f;
+std::pair<int, int> stablediffusion_context::get_default_image_size() {
+    switch (sd_get_version(sd_ctx)) {
+        case VERSION_SD1_INPAINT:
+        case VERSION_SD2_INPAINT:
+        case VERSION_SDXL_INPAINT:
+            return {512, 512};
+        case VERSION_FLUX_FILL:
+            return {1024, 1024};
+
+        case VERSION_SD1:
+        case VERSION_SD2: // including Turbo
+            return {512, 512};
+        case VERSION_SDXL: // including Turbo
+        case VERSION_SDXL_REFINER:
+        case VERSION_SD3:  // including Turbo
+        case VERSION_FLUX: // including Schnell
+        default:
+            return {1024, 1024};
     }
-    return 0.0f;
 }
 
-void stablediffusion_context::apply_lora_adpters(std::vector<common_lora_adapter_info> &lora_adapters) {
+void stablediffusion_context::apply_lora_adapters(std::vector<common_lora_adapter_info> &lora_adapters) {
     std::vector<sd_lora_adapter_container_t> sd_lora_adapters;
     for (auto &lora_adapter : lora_adapters) {
         sd_lora_adapters.push_back({lora_adapter.path.c_str(), lora_adapter.scale});

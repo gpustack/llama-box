@@ -499,7 +499,7 @@ server/images:
          --image-sampling-steps, --image-sample-steps N
                                   number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
          --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
-         --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
+         --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model (0.0 = disabled, default: 0.0)
          --image-slg-skip-layer   the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)
          --image-slg-start N      the phase to enable SLG (default: 0.01)
          --image-slg-end N        the phase to disable SLG (default: 0.20)

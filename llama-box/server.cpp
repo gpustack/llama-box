@@ -960,11 +960,8 @@ struct server_context {
             if (sd_params.sampling.cfg_scale <= 0.0f) {
                 sd_params.sampling.cfg_scale = sd_ctx->get_default_cfg_scale();
             }
-            if (sd_params.sampling.slg_scale <= 0.0f) {
-                sd_params.sampling.slg_scale = sd_ctx->get_default_slg_scale();
-            }
 
-            SRV_INF("seed: %d, flash attn: %s, guidance: %f, strength: %f, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f, schedule method: %s\n",
+            SRV_INF("seed: %u, flash attn: %s, guidance: %.2f, strength: %.2f, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f, schedule method: %s\n",
                     sd_params.seed,
                     sd_params.flash_attn ? "true" : "false",
                     sd_params.sampling.guidance,
@@ -1393,7 +1390,7 @@ struct server_context {
             slot.params.sd_params.slg_end          = json_value(data, "slg_end", defaults.sd_params.slg_end);
             slot.params.sd_params.schedule_method  = json_value(data, "schedule_method", defaults.sd_params.schedule_method);
             slot.params.sd_params.control_strength = json_value(data, "control_strength", defaults.sd_params.control_strength);
-            slot.params.sd_params.control_canny    = json_value(data, "control_strength", defaults.sd_params.control_canny);
+            slot.params.sd_params.control_canny    = json_value(data, "control_canny", defaults.sd_params.control_canny);
             slot.params.sd_params.negative_prompt  = json_value(data, "negative_prompt", std::string(""));
 
             // get prompt
@@ -1553,7 +1550,7 @@ struct server_context {
 
             slot.state = SLOT_STATE_STARTED;
 
-            SLT_INF(slot, "processing task, seed: %d, guidance: %f, strength: %f, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f, schedule method: %s\n",
+            SLT_INF(slot, "processing task, seed: %u, guidance: %.2f, strength: %.2f, sample method: %s, sampling steps: %d, cfg scale: %.2f, slg scale: %.2f, schedule method: %s\n",
                     slot.params.sd_params.seed,
                     slot.params.sd_params.guidance,
                     slot.params.sd_params.strength,
@@ -2932,7 +2929,7 @@ struct server_context {
 
                 // apply lora adapters
                 try {
-                    sd_ctx->apply_lora_adpters(slot.lora_adapters);
+                    sd_ctx->apply_lora_adapters(slot.lora_adapters);
                 } catch (const std::exception &e) {
                     SLT_ERR(slot, "failed to apply lora adapters: %s\n", e.what());
                     slot.release();
@@ -3842,10 +3839,13 @@ struct server_context {
         /* STABLE DIFFUSION */
 
         if (sd_ctx != nullptr) {
+            std::pair<int, int> img_size = sd_ctx->get_default_image_size();
             return json{
                 {"max_batch_count", sd_params.max_batch_count},
                 {"max_height", sd_params.sampling.height},
                 {"max_width", sd_params.sampling.width},
+                {"default_height", img_size.first},
+                {"default_width", img_size.second},
                 {"guidance", sd_params.sampling.guidance},
                 {"strength", sd_params.sampling.strength},
                 {"sample_method", sd_sample_method_to_argument(sd_params.sampling.sample_method)},
