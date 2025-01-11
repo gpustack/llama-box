@@ -1,26 +1,81 @@
-diff --git a/src/llama.cpp b/src/llama.cpp
-index a364861d..d94aa559 100644
---- a/src/llama.cpp
-+++ b/src/llama.cpp
-@@ -11971,7 +11971,7 @@ struct llama_model * llama_model_load_from_file(
-         for (ggml_backend_dev_t * dev = params.devices; *dev; ++dev) {
-             model->devices.push_back(*dev);
-         }
--    } else {
-+    } else if (params.n_gpu_layers > 0) {
-         // use all available devices
-         for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
-             ggml_backend_dev_t dev = ggml_backend_dev_get(i);
-@@ -11986,6 +11986,12 @@ struct llama_model * llama_model_load_from_file(
-                     break;
-             }
-         }
-+    } else {
-+        ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_ACCEL);
-+        if (!dev) {
-+            dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
-+        }
-+        model->devices.push_back(dev);
-     }
+diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
+index 36d72e95..4809627b 100644
+--- a/ggml/src/ggml-backend-impl.h
++++ b/ggml/src/ggml-backend-impl.h
+@@ -207,6 +207,9 @@ extern "C" {
+     };
  
-     // if using single GPU mode, remove all except the main GPU
+     // Internal backend registry API
++    static int ngl = -1;
++
++    GGML_API void ggml_backend_register_metadata_set(int ngl_);
+     GGML_API void ggml_backend_register(ggml_backend_reg_t reg);
+     GGML_API void ggml_backend_device_register(ggml_backend_dev_t device);
+ 
+diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
+index 955ed505..1caffd34 100644
+--- a/ggml/src/ggml-backend-reg.cpp
++++ b/ggml/src/ggml-backend-reg.cpp
+@@ -154,22 +154,34 @@ struct ggml_backend_registry {
+ 
+     ggml_backend_registry() {
+ #ifdef GGML_USE_CUDA
+-        register_backend(ggml_backend_cuda_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_cuda_reg());
++        }
+ #endif
+ #ifdef GGML_USE_METAL
+-        register_backend(ggml_backend_metal_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_metal_reg());
++        }
+ #endif
+ #ifdef GGML_USE_SYCL
+-        register_backend(ggml_backend_sycl_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_sycl_reg());
++        }
+ #endif
+ #ifdef GGML_USE_VULKAN
+-        register_backend(ggml_backend_vk_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_vk_reg());
++        }
+ #endif
+ #ifdef GGML_USE_OPENCL
+-        register_backend(ggml_backend_opencl_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_opencl_reg());
++        }
+ #endif
+ #ifdef GGML_USE_CANN
+-        register_backend(ggml_backend_cann_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_cann_reg());
++        }
+ #endif
+ #ifdef GGML_USE_BLAS
+         register_backend(ggml_backend_blas_reg());
+@@ -178,7 +190,9 @@ struct ggml_backend_registry {
+         register_backend(ggml_backend_rpc_reg());
+ #endif
+ #ifdef GGML_USE_KOMPUTE
+-        register_backend(ggml_backend_kompute_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_kompute_reg());
++        }
+ #endif
+ #ifdef GGML_USE_CPU
+         register_backend(ggml_backend_cpu_reg());
+@@ -294,6 +308,10 @@ static ggml_backend_registry & get_reg() {
+ }
+ 
+ // Internal API
++void ggml_backend_register_metadata_set(int ngl_) {
++    ngl = ngl_;
++}
++
+ void ggml_backend_register(ggml_backend_reg_t reg) {
+     get_reg().register_backend(reg);
+ }
