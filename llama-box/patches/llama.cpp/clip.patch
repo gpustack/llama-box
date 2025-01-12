@@ -397,7 +397,7 @@ index 1603edd2..5c44415b 100644
  
  CLIP_API void clip_free(struct clip_ctx * ctx);
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index 16f30c56..f48c7833 100644
+index c598caf3..facf4d25 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -11,17 +11,7 @@

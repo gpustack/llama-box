@@ -61,7 +61,7 @@ struct stablediffusion_params {
     int n_threads                                       = 1;
     int main_gpu                                        = 0;
     bool lora_init_without_apply                        = false;
-    std::vector<common_lora_adapter_info> lora_adapters = {};
+    std::vector<common_adapter_lora_info> lora_adapters = {};
 };
 
 struct stablediffusion_sampling_stream {
@@ -86,7 +86,7 @@ class stablediffusion_context {
     int get_default_sampling_steps();
     float get_default_cfg_scale();
     std::pair<int, int> get_default_image_size();
-    void apply_lora_adapters(std::vector<common_lora_adapter_info> &lora_adapters);
+    void apply_lora_adapters(std::vector<common_adapter_lora_info> &lora_adapters);
     stablediffusion_sampling_stream *generate_stream(const char *prompt, stablediffusion_params_sampling sparams);
     bool sample_stream(stablediffusion_sampling_stream *stream);
     std::pair<int, int> progress_stream(stablediffusion_sampling_stream *stream);
@@ -212,7 +212,7 @@ std::pair<int, int> stablediffusion_context::get_default_image_size() {
     }
 }
 
-void stablediffusion_context::apply_lora_adapters(std::vector<common_lora_adapter_info> &lora_adapters) {
+void stablediffusion_context::apply_lora_adapters(std::vector<common_adapter_lora_info> &lora_adapters) {
     std::vector<sd_lora_adapter_container_t> sd_lora_adapters;
     for (auto &lora_adapter : lora_adapters) {
         sd_lora_adapters.push_back({lora_adapter.path.c_str(), lora_adapter.scale});

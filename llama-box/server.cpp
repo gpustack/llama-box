@@ -148,7 +148,7 @@ struct server_task {
 
     json data;
     llama_tokens prompt_tokens;
-    std::vector<common_lora_adapter_info> lora;
+    std::vector<common_adapter_lora_info> lora;
 
     int tps = 0;
 
@@ -202,7 +202,7 @@ struct server_slot {
     int id_task      = -1;
     size_t index     = 0;
     slot_state state = SLOT_STATE_IDLE;
-    std::vector<common_lora_adapter_info> lora_adapters;
+    std::vector<common_adapter_lora_info> lora_adapters;
     struct slot_params params;
 
     llama_tokens prompt_tokens;
@@ -507,7 +507,7 @@ struct server_slot {
 
         if (params.llm_params.n_probs > 0) {
             const std::vector<llama_token_data> cur = get_token_probabilities(llm_ctx, tok_idx);
-            const size_t n_vocab                    = llama_n_vocab(llama_get_model(llm_ctx));
+            const size_t n_vocab                    = llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(llm_ctx)));
             const size_t n_probs                    = params.llm_params.n_probs;
             // set probability for sampled token
             for (size_t i = 0; i < n_vocab; i++) {
@@ -855,17 +855,19 @@ struct server_context {
 
     common_params llm_params;
     common_init_result llm_init;
-    llama_model *llm_model = nullptr;
-    llama_context *llm_ctx = nullptr;
-    clip_ctx *llm_ctx_clip = nullptr;
+    llama_model *llm_model       = nullptr;
+    llama_context *llm_ctx       = nullptr;
+    const llama_vocab *llm_vocab = nullptr;
+    clip_ctx *llm_ctx_clip       = nullptr;
 
     bool cache_prompt; // remember the prompt to avoid reprocessing all prompt
 
     // draft-model speculative decoding
     llama_batch batch_draft;
     common_init_result llm_init_draft;
-    llama_model *llm_model_draft = nullptr;
-    llama_context *llm_ctx_draft = nullptr;
+    llama_model *llm_model_draft       = nullptr;
+    llama_context *llm_ctx_draft       = nullptr;
+    const llama_vocab *llm_vocab_draft = nullptr;
     // model-free speculative decoding
     common_ngram_cache ngram_cache_static;
     common_ngram_cache ngram_cache_dynamic;
@@ -1020,6 +1022,7 @@ struct server_context {
                 SRV_ERR("failed to load draft model, '%s'\n", llm_params.speculative.model.c_str());
                 return false;
             }
+            llm_vocab_draft = llama_model_get_vocab(llm_model_draft);
         }
 
         // load the ngram cache if needed
@@ -1048,11 +1051,12 @@ struct server_context {
             SRV_ERR("failed to load model, '%s'\n", llm_params.model.c_str());
             return false;
         }
+        llm_vocab = llama_model_get_vocab(llm_model);
 
         // check multimodal projection model compatibility
         if (llm_ctx_clip != nullptr) {
             const int n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip);
-            const int n_embd      = llama_n_embd(llm_model);
+            const int n_embd      = llama_model_n_embd(llm_model);
             if (n_embd_clip != n_embd) {
                 SRV_ERR("multimodal projector embedding length is not equal to the model, n_embd_clip = %d, n_embd = %d\n", n_embd_clip, n_embd);
                 return false;
@@ -1061,17 +1065,17 @@ struct server_context {
 
         // check draft model compatibility if needed
         if (llm_ctx_draft != nullptr) {
-            const bool vocab_type_draft = llama_vocab_type(llm_model_draft);
-            const bool vocab_type       = llama_vocab_type(llm_model);
+            const bool vocab_type_draft = llama_vocab_type(llm_vocab_draft);
+            const bool vocab_type       = llama_vocab_type(llm_vocab);
             if (vocab_type_draft != vocab_type) {
                 SRV_ERR("draft model vocabulary type is not equal to the model, vocab_type_draft = %d, vocab_type = %d\n", vocab_type_draft, vocab_type);
                 return false;
             }
 
-            if (llama_add_bos_token(llm_model_draft) != llama_add_bos_token(llm_model) ||
-                llama_add_eos_token(llm_model_draft) != llama_add_eos_token(llm_model) ||
-                llama_token_bos(llm_model_draft) != llama_token_bos(llm_model) ||
-                llama_token_eos(llm_model_draft) != llama_token_eos(llm_model)) {
+            if (llama_vocab_get_add_bos(llm_vocab_draft) != llama_vocab_get_add_bos(llm_vocab) ||
+                llama_vocab_get_add_eos(llm_vocab_draft) != llama_vocab_get_add_eos(llm_vocab) ||
+                llama_vocab_bos(llm_vocab_draft) != llama_vocab_bos(llm_vocab) ||
+                llama_vocab_eos(llm_vocab_draft) != llama_vocab_eos(llm_vocab)) {
                 SRV_ERR("%s", "draft model special tokens are not equal to the model\n");
                 return false;
             }
@@ -1084,7 +1088,7 @@ struct server_context {
         if (params.n_tps < 0) {
             SRV_INF("%s", "sampling tokens per second, this will take some time...\n");
             const int32_t n_check            = std::min(int32_t(llama_n_ctx(llm_ctx)), llm_params.n_ubatch);
-            llama_tokens check_prompt_tokens = {llama_token_bos(llm_model)};
+            llama_tokens check_prompt_tokens = {llama_vocab_bos(llm_vocab)};
             common_sampler *check_smpl       = common_sampler_init(llm_model, llm_params.sampling);
             int64_t t_start_decoding         = ggml_time_us();
             int32_t n_check_decoded          = 0;
@@ -1098,7 +1102,7 @@ struct server_context {
                 }
                 n_check_decoded++;
                 const int32_t id = common_sampler_sample(check_smpl, llm_ctx, 0);
-                if (llama_token_is_eog(llm_model, id)) {
+                if (llama_vocab_is_eog(llm_vocab, id)) {
                     break;
                 }
                 common_sampler_accept(check_smpl, id, false);
@@ -1141,7 +1145,8 @@ struct server_context {
                 // with the model (if any)
                 bool builtin = false;
                 if (llm_params.chat_template.empty()) {
-                    llm_params.chat_template = load_chat_template();
+                    const char *tmpl         = llama_model_chat_template(llm_model);
+                    llm_params.chat_template = tmpl == nullptr ? "chatml" : tmpl;
                     builtin                  = true;
                 }
                 if (llm_params.chat_template.size() <= 20) {
@@ -1169,7 +1174,7 @@ struct server_context {
                     tool_call_start_tok  = 9; // [TOOL_CALLS]
                     tool_call_start_trim = false;
                     tool_call_ends       = {};
-                    tool_call_end_tok    = llama_token_eos(llm_model);
+                    tool_call_end_tok    = llama_vocab_eos(llm_vocab);
                     tool_call_end_trim   = false;
                 } else if (chat_template_alias == "llama3") {
                     // {"name":"","arguments":{}}
@@ -1201,18 +1206,6 @@ struct server_context {
         }
 
         return true;
-    }
-
-    std::string load_chat_template() const {
-        std::string tkey = "tokenizer.chat_template";
-        int32_t tlen     = llama_model_meta_val_str(llm_model, tkey.c_str(), nullptr, 0);
-        if (tlen > 0) {
-            std::vector<char> tval(tlen + 1, 0);
-            if (llama_model_meta_val_str(llm_model, tkey.c_str(), tval.data(), tlen + 1) == tlen) {
-                return {tval.data(), (unsigned long)tlen};
-            }
-        }
-        return "chatml"; // see llama_chat_apply_template_internal
     }
 
     bool init() {
@@ -1352,7 +1345,7 @@ struct server_context {
             slot.oaicompat_image_edit     = json_value(data, "__oaicompat_image_edit", false);
 
             try {
-                std::vector<common_lora_adapter_info> slot_lora_adapters;
+                std::vector<common_adapter_lora_info> slot_lora_adapters;
                 if (data.contains("lora")) {
                     if (data.at("lora").is_array()) {
                         slot_lora_adapters = parse_lora_request(sd_params.lora_adapters, data.at("lora"));
@@ -1571,7 +1564,7 @@ struct server_context {
         slot.oaicompat_completion_chat_vision = json_value(data, "__oaicompat_completion_chat_vision", false) && llm_ctx_clip != nullptr;
 
         try {
-            std::vector<common_lora_adapter_info> slot_lora_adapters;
+            std::vector<common_adapter_lora_info> slot_lora_adapters;
             if (data.contains("lora")) {
                 if (data.at("lora").is_array()) {
                     slot_lora_adapters = parse_lora_request(llm_params.lora_adapters, data.at("lora"));
@@ -1683,13 +1676,13 @@ struct server_context {
         {
             slot.params.llm_params.logit_bias.clear();
 
-            if (json_value(data, "ignore_eos", false) && llama_token_eos(llm_model) != LLAMA_TOKEN_NULL) {
-                slot.params.llm_params.logit_bias.push_back({llama_token_eos(llm_model), -INFINITY});
+            if (json_value(data, "ignore_eos", false) && llama_vocab_eos(llm_vocab) != LLAMA_TOKEN_NULL) {
+                slot.params.llm_params.logit_bias.push_back({llama_vocab_eos(llm_vocab), -INFINITY});
             }
 
             const auto &logit_bias = data.find("logit_bias");
             if (logit_bias != data.end() && logit_bias->is_array()) {
-                const int n_vocab = llama_n_vocab(llm_model);
+                const int n_vocab = llama_vocab_n_tokens(llm_vocab);
                 for (const auto &el : *logit_bias) {
                     // TODO: we may want to throw errors here, in case "el" is
                     // incorrect
@@ -1709,7 +1702,7 @@ struct server_context {
                                 slot.params.llm_params.logit_bias.push_back({tok, bias});
                             }
                         } else if (el[0].is_string()) {
-                            auto toks = common_tokenize(llm_model, el[0].get<std::string>(), false);
+                            auto toks = common_tokenize(llm_vocab, el[0].get<std::string>(), false);
                             for (auto tok : toks) {
                                 slot.params.llm_params.logit_bias.push_back({tok, bias});
                             }
@@ -1975,7 +1968,7 @@ struct server_context {
 
             // check if the last token is EOG
             if (!send_text && slot.oaicompat_completion_chat_tool && slot.generated_tool_calls.empty()) {
-                send_text = llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1]);
+                send_text = llama_vocab_is_eog(llm_vocab, result.toks[result.toks.size() - 1]);
             }
 
             // check if there is any token to predict
@@ -2063,14 +2056,14 @@ struct server_context {
         }
 
         // check the EOT
-        if (llama_token_is_eog(llm_model, result.toks[result.toks.size() - 1])) {
+        if (llama_vocab_is_eog(llm_vocab, result.toks[result.toks.size() - 1])) {
             slot.stop           = slot.generated_tool_calls.empty() ? STOP_TYPE_EOS : STOP_TYPE_TOOL;
             slot.has_next_token = false;
 
             SLT_DBG(slot, "%s", "stopped by EOS\n");
         }
 
-        int32_t n_ctx_train = llama_n_ctx_train(llm_model);
+        int32_t n_ctx_train = llama_model_n_ctx_train(llm_model);
         if (slot.params.n_predict < 1 && slot.n_predict < 1 && slot.n_prompt_tokens + slot.n_decoded >= n_ctx_train) {
             slot.truncated      = true;
             slot.stop           = STOP_TYPE_LIMIT;
@@ -2287,7 +2280,7 @@ struct server_context {
         res.error = false;
         res.stop  = true;
 
-        const int n_embd = llama_n_embd(llm_model);
+        const int n_embd = llama_model_n_embd(llm_model);
 
         std::vector<float> embedding(n_embd, 0.0f);
 
@@ -2417,14 +2410,14 @@ struct server_context {
         if (!chat_vision) {
             // because llama_tokenize api is thread-safe, we can tokenize the prompt from HTTP thread
             bool add_special                            = task_type != SERVER_TASK_TYPE_INFILL && task_type != SERVER_TASK_TYPE_RERANK;
-            std::vector<llama_tokens> tokenized_prompts = tokenize_input_prompts(llm_ctx, data.at("prompt"), add_special, true);
+            std::vector<llama_tokens> tokenized_prompts = tokenize_input_prompts(llm_vocab, data.at("prompt"), add_special, true);
             switch (task_type) {
                 case SERVER_TASK_TYPE_INFILL: {
                     SRV_DBG("creating infill tasks, n_prompts = %d\n", (int)tokenized_prompts.size());
                     for (size_t i = 0; i < tokenized_prompts.size(); i++) {
                         data["index"] = i;
                         auto tokens   = format_infill(
-                            llm_ctx,
+                            llm_vocab,
                             data.at("input_prefix"),
                             data.at("input_suffix"),
                             data.at("input_extra"),
@@ -2445,7 +2438,7 @@ struct server_context {
                     SRV_DBG("creating rerank tasks, n_prompts = %d\n", (int)tokenized_prompts.size() - 3);
                     for (size_t i = 1; i < tokenized_prompts.size(); i++) {
                         data["index"] = i - 1;
-                        auto tokens   = format_rerank(llm_model, tokenized_prompts[0], tokenized_prompts[i]);
+                        auto tokens   = format_rerank(llm_vocab, tokenized_prompts[0], tokenized_prompts[i]);
                         create_task(data, tokens, tps);
                     }
                 } break;
@@ -2989,7 +2982,7 @@ struct server_context {
                 }
 
                 // Shift context
-                const int n_keep    = slot.params.n_keep + llama_add_bos_token(llm_model);
+                const int n_keep    = slot.params.n_keep + llama_vocab_get_add_bos(llm_vocab);
                 const int n_left    = slot.n_past - n_keep;
                 const int n_discard = slot.params.n_discard ? slot.params.n_discard : (n_left / 2);
 
@@ -3357,7 +3350,7 @@ struct server_context {
             // make sure we're in the right embedding mode
             llama_set_embeddings(llm_ctx, slot_batched->is_non_causal());
             // apply lora, only need to do it once per batch
-            common_lora_adapters_apply(llm_ctx, slot_batched->lora_adapters);
+            common_set_adapter_lora(llm_ctx, slot_batched->lora_adapters);
         }
 
         // process the created batch of tokens
@@ -3505,7 +3498,7 @@ struct server_context {
 
                         slot.sampled_draft.push_back(tok);
                         common_sampler_accept(slot.smpl_draft, tok, true);
-                        if (llama_token_is_eog(llm_model_draft, tok)) {
+                        if (llama_vocab_is_eog(llm_vocab_draft, tok)) {
                             break;
                         }
                         common_batch_clear(batch_draft);
@@ -3598,7 +3591,7 @@ struct server_context {
     }
 
     bool preprocess_multi_modal_data_image(server_slot &slot, int32_t n_batch, const llava_image_embed *img_embd) const {
-        const int32_t n_embd = llama_n_embd(llama_get_model(llm_ctx));
+        const int32_t n_embd = llama_model_n_embd(llama_get_model(llm_ctx));
         SLT_INF(slot, "processing image tokens: %d\n", img_embd->n_image_pos);
 
         if (clip_is_qwen2vl(llm_ctx_clip)) {
@@ -3864,10 +3857,10 @@ struct server_context {
         /* LLAMA */
 
         return json{
-            {"vocab_type", llama_vocab_type(llm_model)},
-            {"n_vocab", llama_n_vocab(llm_model)},
-            {"n_ctx_train", llama_n_ctx_train(llm_model)},
-            {"n_embd", llama_n_embd(llm_model)},
+            {"vocab_type", llama_vocab_type(llm_vocab)},
+            {"n_vocab", llama_vocab_n_tokens(llm_vocab)},
+            {"n_ctx_train", llama_model_n_ctx_train(llm_model)},
+            {"n_embd", llama_model_n_embd(llm_model)},
             {"n_params", llama_model_n_params(llm_model)},
             {"size", llama_model_size(llm_model)},
             {"n_ctx", llama_n_ctx(llm_ctx)},
@@ -4341,7 +4334,7 @@ int main(int argc, char **argv) {
 
         const bool add_special = json_value(request, "add_special", false);
         const bool with_pieces = json_value(request, "with_pieces", false);
-        llama_tokens tokens    = tokenize_mixed(ctx_server.llm_ctx, request.at("content"), add_special, true);
+        llama_tokens tokens    = tokenize_mixed(ctx_server.llm_vocab, request.at("content"), add_special, true);
         if (with_pieces) {
             for (const llama_token &token : tokens) {
                 json piece_json;
@@ -4531,7 +4524,7 @@ int main(int argc, char **argv) {
     };
 
     const auto handle_lora_adapters_list = [&](const httplib::Request &, httplib::Response &res) {
-        std::vector<common_lora_adapter_info> lora_adapters = ctx_server.sd_ctx != nullptr ? ctx_server.sd_params.lora_adapters : ctx_server.llm_params.lora_adapters;
+        std::vector<common_adapter_lora_info> lora_adapters = ctx_server.sd_ctx != nullptr ? ctx_server.sd_params.lora_adapters : ctx_server.llm_params.lora_adapters;
 
         json response = json::array();
         for (size_t i = 0; i < lora_adapters.size(); ++i) {
@@ -4577,14 +4570,15 @@ int main(int argc, char **argv) {
         }
 
         // check model compatibility
+        const llama_vocab *llm_vocab = llama_model_get_vocab(ctx_server.llm_model);
         std::string err;
-        if (llama_token_fim_pre(ctx_server.llm_model) == LLAMA_TOKEN_NULL) {
+        if (llama_vocab_fim_pre(llm_vocab) == LLAMA_TOKEN_NULL) {
             err += "prefix token is missing. ";
         }
-        if (llama_token_fim_suf(ctx_server.llm_model) == LLAMA_TOKEN_NULL) {
+        if (llama_vocab_fim_suf(llm_vocab) == LLAMA_TOKEN_NULL) {
             err += "suffix token is missing. ";
         }
-        if (llama_token_fim_mid(ctx_server.llm_model) == LLAMA_TOKEN_NULL) {
+        if (llama_vocab_fim_mid(llm_vocab) == LLAMA_TOKEN_NULL) {
             err += "middle token is missing. ";
         }
         if (!err.empty()) {
@@ -5049,7 +5043,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"documents\" must not be empty", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = jinaaicompat_rerank_request(ctx_server.llm_params, rid, request, ctx_server.llm_ctx);
+        request = jinaaicompat_rerank_request(ctx_server.llm_params, rid, request, ctx_server.llm_vocab);
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_RERANK);

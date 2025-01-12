@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 86e4e1e2..a9494b31 100644
+index 1a2e1524..f1bbe39e 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -884,6 +884,11 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -886,6 +886,11 @@ struct common_init_result common_init_from_params(common_params & params) {
  
      auto cparams = common_context_params_to_llama(params);
  
@@ -11,14 +11,14 @@ index 86e4e1e2..a9494b31 100644
 +        cparams.n_batch *= 4;
 +    }
 +
-     llama_context * lctx = llama_new_context_with_model(model, cparams);
+     llama_context * lctx = llama_init_from_model(model, cparams);
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
 diff --git a/include/llama.h b/include/llama.h
-index 0295a51f..913c7c71 100644
+index a184884c..2190383a 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -501,6 +501,9 @@ extern "C" {
+@@ -518,6 +518,9 @@ extern "C" {
      // to the decoder to start generating output sequence. For other models, it returns -1.
      LLAMA_API llama_token llama_model_decoder_start_token(const struct llama_model * model);
  
@@ -29,10 +29,10 @@ index 0295a51f..913c7c71 100644
      LLAMA_API bool llama_model_is_recurrent(const struct llama_model * model);
  
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index c056204b..4db46cb4 100644
+index f90f5e74..fe208282 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -2209,6 +2209,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
+@@ -3944,6 +3944,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
      return model->hparams.dec_start_token_id;
  }
  

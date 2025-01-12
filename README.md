@@ -495,7 +495,7 @@ server/images:
          --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
          --image-strength N       strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model
          --image-sample-method, --image-sampler TYPE
-                                  sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm
+                                  sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm, ddim_trailing
          --image-sampling-steps, --image-sample-steps N
                                   number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
          --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
@@ -797,7 +797,7 @@ The available endpoints for the LLaMA Box server mode are:
         "response_format": "b64_json",
         "size": "512x512",
         "prompt": "A lovely cat",
-        "sample_method": "euler",        // required, alias "sampler", select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+        "sample_method": "euler",        // required, alias "sampler", select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm;ddim_trailing
         "sampling_steps": 20,            // optional, alias "sample_steps", number of sampling steps
         "schedule_method": "default",    // optional, alias "schedule", select from default;discrete;karras;exponential;ays;gits
         "seed": null,                    // optional, random seed
@@ -869,7 +869,7 @@ The available endpoints for the LLaMA Box server mode are:
       prompt="A lovely cat"
       image=...                          // required
       mask=...                           // optional
-      sample_method=euler                // required, alias "sampler", select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm
+      sample_method=euler                // required, alias "sampler", select from euler_a;euler;heun;dpm2;dpm++2s_a;dpm++2m;dpm++2mv2;ipndm;ipndm_v;lcm;ddim_trailing
       sampling_steps=20                  // optional, alias "sample_steps", number of sampling steps
       schedule_method=default            // optional, alias "schedule", select from default;discrete;karras;exponential;ays;gits
       seed=null                          // optional, random seed

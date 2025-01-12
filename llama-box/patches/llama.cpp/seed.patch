@@ -1,5 +1,5 @@
 diff --git a/src/llama-sampling.cpp b/src/llama-sampling.cpp
-index ef5a576c..d588b5bf 100644
+index b3a12386..fb7294da 100644
 --- a/src/llama-sampling.cpp
 +++ b/src/llama-sampling.cpp
 @@ -17,6 +17,53 @@
@@ -81,7 +81,7 @@ index ef5a576c..d588b5bf 100644
      }
      return seed;
  }
-@@ -555,7 +597,7 @@ struct llama_sampler_dist {
+@@ -558,7 +600,7 @@ struct llama_sampler_dist {
      const uint32_t seed;
            uint32_t seed_cur;
  
@@ -90,7 +90,7 @@ index ef5a576c..d588b5bf 100644
  };
  
  static const char * llama_sampler_dist_name(const struct llama_sampler * /*smpl*/) {
-@@ -610,7 +652,7 @@ struct llama_sampler * llama_sampler_init_dist(uint32_t seed) {
+@@ -613,7 +655,7 @@ struct llama_sampler * llama_sampler_init_dist(uint32_t seed) {
          /* .ctx   = */ new llama_sampler_dist {
              /* .seed     = */ seed,
              /* .seed_cur = */ seed_cur,
@@ -99,7 +99,7 @@ index ef5a576c..d588b5bf 100644
          },
      };
  }
-@@ -1110,7 +1152,7 @@ struct llama_sampler_xtc {
+@@ -1113,7 +1155,7 @@ struct llama_sampler_xtc {
      const uint32_t seed;
      uint32_t       seed_cur;
  
@@ -108,7 +108,7 @@ index ef5a576c..d588b5bf 100644
  };
  
  static const char * llama_sampler_xtc_name(const struct llama_sampler * /*smpl*/) {
-@@ -1190,7 +1232,7 @@ struct llama_sampler * llama_sampler_init_xtc(float p, float t, size_t min_keep,
+@@ -1193,7 +1235,7 @@ struct llama_sampler * llama_sampler_init_xtc(float p, float t, size_t min_keep,
              /* .min_keep      = */ min_keep,
              /* .seed          = */ seed,
              /* .seed_cur      = */ seed_cur,
@@ -117,7 +117,7 @@ index ef5a576c..d588b5bf 100644
          },
      };
  }
-@@ -1210,7 +1252,7 @@ struct llama_sampler_mirostat {
+@@ -1213,7 +1255,7 @@ struct llama_sampler_mirostat {
  
      float mu;
  
@@ -126,7 +126,7 @@ index ef5a576c..d588b5bf 100644
  };
  
  static const char * llama_sampler_mirostat_name(const struct llama_sampler * /*smpl*/) {
-@@ -1299,7 +1341,7 @@ struct llama_sampler * llama_sampler_init_mirostat(int32_t n_vocab, uint32_t see
+@@ -1302,7 +1344,7 @@ struct llama_sampler * llama_sampler_init_mirostat(int32_t n_vocab, uint32_t see
              /* .eta      = */ eta,
              /* .m        = */ m,
              /* .mu       = */ 2.0f*tau,
@@ -135,7 +135,7 @@ index ef5a576c..d588b5bf 100644
          },
      };
  }
-@@ -1315,7 +1357,7 @@ struct llama_sampler_mirostat_v2 {
+@@ -1318,7 +1360,7 @@ struct llama_sampler_mirostat_v2 {
  
      float mu;
  
@@ -144,7 +144,7 @@ index ef5a576c..d588b5bf 100644
  };
  
  static const char * llama_sampler_mirostat_v2_name(const struct llama_sampler * /*smpl*/) {
-@@ -1396,7 +1438,7 @@ struct llama_sampler * llama_sampler_init_mirostat_v2(uint32_t seed, float tau,
+@@ -1399,7 +1441,7 @@ struct llama_sampler * llama_sampler_init_mirostat_v2(uint32_t seed, float tau,
              /* .tau      = */ tau,
              /* .eta      = */ eta,
              /* .mu       = */ 2.0f*tau,
