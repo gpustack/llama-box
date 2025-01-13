@@ -4,4 +4,4 @@
 [submodule "stable-diffusion.cpp"]
 	path = stable-diffusion.cpp
 	url = https://github.com/thxcode/stable-diffusion.cpp
-	branch = dev-dcf91f9e
+	branch = dev-dcf91f9e-2
