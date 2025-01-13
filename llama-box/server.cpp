@@ -3995,7 +3995,7 @@ int main(int argc, char **argv) {
     common_params &llm_params = params.llm_params;
 
     // NB(thxCode): ggml_backend_register_metadata_set is a patch.
-    ggml_backend_register_metadata_set(params.endpoint_images ? 999 : llm_params.n_gpu_layers);
+    ggml_backend_register_metadata_set(llm_params.n_gpu_layers);
 
     // print arguments
     LOG_INF("\n");

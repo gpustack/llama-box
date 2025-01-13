@@ -1104,7 +1104,7 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
                 body_cp["input"] = "[...]";
             }
         }
-        SRV_INF("rdi %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), body_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     json llama_params;
