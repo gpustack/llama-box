@@ -171,7 +171,7 @@ index a184884c..a519bf58 100644
      LLAMA_API int32_t llama_chat_builtin_templates(const char ** output, size_t len);
  
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 1347ec15..b2b77774 100644
+index 1347ec15..c66070c2 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -173,14 +173,114 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
@@ -481,7 +481,89 @@ index 1347ec15..b2b77774 100644
              ss << "<|start_header_id|>" << role << "<|end_header_id|>\n\n" << trim(message->content) << "<|eot_id|>";
          }
          if (add_ass) {
-@@ -509,13 +752,59 @@ int32_t llm_chat_apply_template(
+@@ -433,12 +676,80 @@ int32_t llm_chat_apply_template(
+         }
+     } else if (tmpl == LLM_CHAT_TEMPLATE_CHATGML_4) {
+         ss << "[gMASK]" << "<sop>";
++        if (!func.empty()) {
++            const llama_chat_message *root_msg = nullptr;
++            for (const auto *message: chat) {
++                std::string role(message->role);
++                if (role == "system") {
++                    root_msg = message;
++                    break;
++                }
++            }
++            ss << "<|system|>\n";
++            if (root_msg) {
++                ss << root_msg -> content << "\n";
++            } else {
++                ss << "You are a helpful assistant.\n";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n";
++            } else {
++                ss << "You CAN call functions to assist with the user query. Do not make assumptions about what values to plug into functions.\n";
++            }
++            ss << "# Functions\n";
++            ss << "You are provided with following functions:\n";
++            for (size_t i = 0; i < func.size(); i++) {
++                const llama_chat_function *fn = func[i];
++                ss << "## Function " << i << "\n";
++                ss << "### Name\n" << fn->name << "\n";
++                ss << "### Description\n" << fn->description << "\n";
++                ss << "### Parameters\n" << fn->parameters << "\n";
++            }
++            if (req_func) {
++                ss << "For each function call, just generate an answer, no explanation before or after your answer, and MUST return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++            } else {
++                ss << "When you can reply with your internal knowledge, reply directly without any function calls. ";
++                ss << "Otherwise, for each function call, just generate an answer, no explanation before or after your answer, and MUST return a JSON object with function name and arguments within <tool_call></tool_call> XML tags:\n";
++            }
++            ss << "<tool_call>\n";
++            ss << "{\"name\": The name of the function to use, \"arguments\": The input of the function, must be a JSON object in compact format}\n";
++            ss << "</tool_call>\n";
++            ss << "<tool_result>\n";
++            ss << "The function results.\n";
++            ss << "</tool_result>\n";
++            ss << "Reply based on the function results.\n";
++        }
++        bool previous_tool_response = false;
+         for (auto message : chat) {
+             std::string role(message->role);
++            if (!func.empty()) {
++                if (role == "assistant_tool_call") {
++                    if (!previous_tool_response) {
++                        ss << "<|assistant|>\n";
++                    }
++                    ss << "<tool_call>\n" << message->content << "\n</tool_call>\n";
++                    previous_tool_response = false;
++                    continue;
++                }
++                previous_tool_response = false;
++                if (role == "system") {
++                    continue;
++                }
++                if (role == "tool") {
++                    ss << "<tool_result>\n" << message->content << "\n</tool_result>\n";
++                    add_ass = message != chat.back();
++                    previous_tool_response = true;
++                    continue;
++                }
++                if (role == "assistant") {
++                    ss << "<|assistant|>\n" << message->content;
++                    continue;
++                }
++            }
+             ss << "<|" << role << "|>" << "\n" << message->content;
+         }
+         if (add_ass) {
+-            ss << "<|assistant|>";
++            ss << "<|assistant|>\n";
+         }
+     } else if (tmpl == LLM_CHAT_TEMPLATE_MINICPM) {
+         // MiniCPM-3B-OpenHermes-2.5-v2-GGUF
+@@ -509,13 +820,59 @@ int32_t llm_chat_apply_template(
              }
          }
      } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
@@ -544,7 +626,7 @@ index 1347ec15..b2b77774 100644
              ss << message->content << "<|end_of_text|>\n";
          }
          if (add_ass) {
-@@ -567,6 +856,17 @@ int32_t llm_chat_apply_template(
+@@ -567,6 +924,17 @@ int32_t llm_chat_apply_template(
  
  // public interface
  

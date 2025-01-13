@@ -1156,7 +1156,7 @@ struct server_context {
                 }
                 // NB(thxCode): llama_chat_template_alias is a patch.
                 chat_template_alias = llama_chat_template_alias(llm_params.chat_template.c_str());
-                if (chat_template_alias == "chatml") {
+                if (chat_template_alias == "chatml" || chat_template_alias == "chatglm4") {
                     // <tool_call>
                     // {"name":"","arguments":{}}
                     // </tool_call>
