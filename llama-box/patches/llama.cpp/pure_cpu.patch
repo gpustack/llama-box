@@ -80,28 +80,15 @@ index 955ed505..1caffd34 100644
      get_reg().register_backend(reg);
  }
 diff --git a/src/llama.cpp b/src/llama.cpp
-index daf1b7c9..2a573d6d 100644
+index daf1b7c9..eae1ea7e 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9450,7 +9450,7 @@ struct llama_model * llama_model_load_from_file(
-         for (ggml_backend_dev_t * dev = params.devices; *dev; ++dev) {
-             model->devices.push_back(*dev);
-         }
--    } else {
-+    } else if (params.n_gpu_layers > 0) {
-         // use all available devices
-         for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
-             ggml_backend_dev_t dev = ggml_backend_dev_get(i);
-@@ -9465,6 +9465,12 @@ struct llama_model * llama_model_load_from_file(
-                     break;
-             }
-         }
-+    } else {
-+        ggml_backend_dev_t dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_ACCEL);
-+        if (dev == nullptr) {
-+            dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
-+        }
-+        model->devices.push_back(dev);
+@@ -9468,7 +9468,7 @@ struct llama_model * llama_model_load_from_file(
      }
  
      // if using single GPU mode, remove all except the main GPU
+-    if (params.split_mode == LLAMA_SPLIT_MODE_NONE) {
++    if (model->devices.size() > 0 && params.split_mode == LLAMA_SPLIT_MODE_NONE) {
+         if (params.main_gpu < 0 || params.main_gpu >= (int)model->devices.size()) {
+             LLAMA_LOG_ERROR("%s: invalid value for main_gpu: %d (available devices: %d)\n", __func__, params.main_gpu, (int)model->devices.size());
+             llama_model_free(model);
