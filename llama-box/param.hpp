@@ -256,7 +256,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
     opts.push_back({ "server",                             "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
-    opts.push_back({ "server",                             "-mg,   --main-gpu N",                           "the GPU to use for the model (default: %d)", llm_params.main_gpu });
     opts.push_back({ "server",                             "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --infill",                               "enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
@@ -265,17 +264,22 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "       --rerank",                               "enable reranking endpoint (default: %s)", llm_params.reranking ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --slots",                                "enable slots monitoring endpoint (default: %s)", llm_params.endpoint_slots ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --rpc SERVERS",                          "comma separated list of RPC servers" });
+    opts.push_back({ "server",                             "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1\n"
+                                                                                                            "for image models, indicate which device should be able to offload"});
+    opts.push_back({ "server",                             "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM\n"
+                                                                                                            "'-ngl 0' means no offloading"});
     opts.push_back({ "server",                             "       --no-warmup",                            "skip warming up the model with an empty run" });
+    opts.push_back({ "server",                             "       --warmup",                               "enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving" });
     // server // completion //
     opts.push_back({ "server/completion" });
     opts.push_back({ "server/completion",                  "-dev,  --device <dev1,dev2,...>",               "comma-separated list of devices to use for offloading (none = don't offload)\n"
                                                                                                             "use --list-devices to see a list of available devices"});
-    opts.push_back({ "server/completion",                  "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM" });
     opts.push_back({ "server/completion",                  "-sm,   --split-mode SPLIT_MODE",                "how to split the model across multiple GPUs, one of:\n"
                                                                                                             "  - none: use one GPU only\n"
                                                                                                             "  - layer (default): split layers and KV across GPUs\n"
                                                                                                             "  - row: split rows across GPUs, store intermediate results and KV in --main-gpu" });
-    opts.push_back({ "server/completion",                  "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1" });
+    opts.push_back({ "server/completion",                  "-mg,   --main-gpu N",                           "the device to use for the model\n"
+                                                                                                            "work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: %d)", llm_params.main_gpu });
     opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
                                                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
     opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
@@ -664,18 +668,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (!strcmp(flag, "-mg") || !strcmp(flag, "--main-gpu")) {
-                if (i == argc) {
-                    missing("--main-gpu");
-                }
-                char *arg                   = argv[i++];
-                params_.llm_params.main_gpu = std::stoi(std::string(arg));
-                if (params_.llm_params.main_gpu < 0 || params_.llm_params.main_gpu >= int32_t(llama_max_devices())) {
-                    invalid("--main-gpu");
-                }
-                continue;
-            }
-
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
                 params_.llm_params.flash_attn = true;
                 continue;
@@ -720,14 +712,25 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            // server // completion//
-
-            if (!strcmp(flag, "-devd") || !strcmp(flag, "--device-draft")) {
+            if (!strcmp(flag, "-ts") || !strcmp(flag, "--tensor-split")) {
                 if (i == argc) {
-                    missing("--device-draft");
+                    missing("--tensor-split");
                 }
-                char *arg                              = argv[i++];
-                params_.llm_params.speculative.devices = parse_device_list(arg);
+                char *arg = argv[i++];
+                const std::regex regex{R"([,/]+)"};
+                std::string arg_s{arg};
+                std::sregex_token_iterator it{arg_s.begin(), arg_s.end(), regex, -1};
+                std::vector<std::string> split_arg{it, {}};
+                if (split_arg.size() >= llama_max_devices()) {
+                    invalid("--tensor-split");
+                }
+                for (size_t j = 0; j < llama_max_devices(); ++j) {
+                    if (j < split_arg.size()) {
+                        params_.llm_params.tensor_split[j] = std::stof(split_arg[j]);
+                    } else {
+                        params_.llm_params.tensor_split[j] = 0.0f;
+                    }
+                }
                 continue;
             }
 
@@ -737,6 +740,27 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                       = argv[i++];
                 params_.llm_params.n_gpu_layers = std::stoi(arg);
+                continue;
+            }
+
+            if (!strcmp(flag, "--no-warmup")) {
+                params_.llm_params.warmup = false;
+                continue;
+            }
+
+            if (!strcmp(flag, "--warmup")) {
+                params_.llm_params.warmup = true;
+                continue;
+            }
+
+            // server // completion//
+
+            if (!strcmp(flag, "-devd") || !strcmp(flag, "--device-draft")) {
+                if (i == argc) {
+                    missing("--device-draft");
+                }
+                char *arg                              = argv[i++];
+                params_.llm_params.speculative.devices = parse_device_list(arg);
                 continue;
             }
 
@@ -757,24 +781,14 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (!strcmp(flag, "-ts") || !strcmp(flag, "--tensor-split")) {
+            if (!strcmp(flag, "-mg") || !strcmp(flag, "--main-gpu")) {
                 if (i == argc) {
-                    missing("--tensor-split");
+                    missing("--main-gpu");
                 }
-                char *arg = argv[i++];
-                const std::regex regex{R"([,/]+)"};
-                std::string arg_s{arg};
-                std::sregex_token_iterator it{arg_s.begin(), arg_s.end(), regex, -1};
-                std::vector<std::string> split_arg{it, {}};
-                if (split_arg.size() >= llama_max_devices()) {
-                    invalid("--tensor-split");
-                }
-                for (size_t j = 0; j < llama_max_devices(); ++j) {
-                    if (j < split_arg.size()) {
-                        params_.llm_params.tensor_split[j] = std::stof(split_arg[j]);
-                    } else {
-                        params_.llm_params.tensor_split[j] = 0.0f;
-                    }
+                char *arg                   = argv[i++];
+                params_.llm_params.main_gpu = std::stoi(std::string(arg));
+                if (params_.llm_params.main_gpu < 0 || params_.llm_params.main_gpu >= int32_t(llama_max_devices())) {
+                    invalid("--main-gpu");
                 }
                 continue;
             }
@@ -1560,11 +1574,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
-            if (!strcmp(flag, "--no-warmup")) {
-                params_.llm_params.warmup = false;
-                continue;
-            }
-
             if (!strcmp(flag, "--spm-infill")) {
                 params_.llm_params.spm_infill = true;
                 continue;
@@ -1755,7 +1764,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                           = argv[i++];
                 params_.sd_params.sampling.guidance = std::stof(std::string(arg));
-                if (params_.sd_params.sampling.guidance < 0.0f) {
+                if (params_.sd_params.sampling.guidance < 1.0f) {
                     invalid("--image-guidance");
                 }
                 continue;
@@ -2111,9 +2120,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
         params_.sd_params.warmup                  = params_.llm_params.warmup;
         params_.sd_params.flash_attn              = params_.llm_params.flash_attn;
         params_.sd_params.n_threads               = params_.llm_params.cpuparams.n_threads;
-        params_.sd_params.main_gpu                = params_.llm_params.main_gpu;
         params_.sd_params.lora_init_without_apply = params_.llm_params.lora_init_without_apply;
         params_.sd_params.lora_adapters           = params_.llm_params.lora_adapters;
+        params_.sd_params.rpc_servers             = params_.llm_params.rpc_servers;
+        params_.sd_params.tensor_split            = params_.llm_params.tensor_split;
     }
 
     return true;

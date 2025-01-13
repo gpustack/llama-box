@@ -44,23 +44,36 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
   see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
 - Support speculative decoding: draft model or n-gram lookup.
 - Support RPC server mode, which can serve as a remote inference backend.
-- Split offloading layers across multiple devices, including remote RPC server.
+- For none image models, split offloading layers across multiple devices, including remote RPC server.
   ```shell
     $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --rpc remote-ip:remote-port --tensor-split 1,2,3
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <none image model> --rpc remote-ip:remote-port --tensor-split 1,2,3
     $ # Same as --tensor-split 1,2,3,0. 
     $ # The remote RPC server will handle 1/6 of the model, the 1st GPU will handle 1/3 of the model, and the 2nd GPU will handle 1/2 of the model. 
     $ # Nothing to do with the 3rd GPU.
     
     $ # Assume that there are 1 remote RPC servers and 3 available GPUs, launch box as below.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --rpc remote-ip:remote-port --tensor-split 0,0,1,1
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <none image model> --rpc remote-ip:remote-port --tensor-split 0,0,1,1
     $ # The 2nd GPU will handle 1/2 of the model, and the 3rd GPU will handle 1/2 of the model.
+    $ # Nothing to do with the remote RPC server and the 1st GPUs.
+  ```
+- For image models, split offloading different components across multiple devices, include remote RPC server.
+  ```shell
+    $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
+    $ llama-box -np 4 --host 0.0.0.0 -m <image model> --rpc remote-ip:remote-port --tensor-split 1,1,1
+    $ # Same as --tensor-split 1,1,1,0.
+    $ # The remote RPC server will handle text encoder part, the 1st GPU will handle VAE part, and the 2nd GPU will handle diffusion part.
+    $ # Nothing to do with the 3rd GPU.
+    
+    $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
+    $ llama-box -np 4 --host 0.0.0.0 -m <image model> --rpc remote-ip:remote-port --tensor-split 0,0,1,1
+    $ # Then 2nd GPU will handle text encoder and VAE parts, and the 3rd GPU will handle diffusion part.
     $ # Nothing to do with the remote RPC server and the 1st GPUs.
   ```
 - Support injecting `X-Request-ID` http header for tracking requests.
   ```shell
     $ # Launch box.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ...
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <model>
     
     $ # Inject X-Request-ID: trace-id to track the request.
     $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-ID: trace-id" -d '{"model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
@@ -69,7 +82,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 - Support `X-Request-Tokens-Per-Second` http header for limiting the number of tokens per second.
   ```shell
     $ # Launch box with -tps -1.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --tokens-per-second -1
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <model> --tokens-per-second -1
   
     $ # For level 1 users, inject X-Request-Tokens-Per-Second: 10 to limit the number of tokens per second to 10.
     $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-Tokens-Per-Second: 10" -d '{"stream": true, "model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
@@ -330,7 +343,6 @@ server:
          --lora-init-without-apply
                                   load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
-  -mg,   --main-gpu N             the GPU to use for the model (default: 0)
   -fa,   --flash-attn             enable Flash Attention (default: disabled)
          --metrics                enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 enable infill endpoint (default: disabled)
@@ -339,20 +351,25 @@ server:
          --rerank                 enable reranking endpoint (default: disabled)
          --slots                  enable slots monitoring endpoint (default: disabled)
          --rpc SERVERS            comma separated list of RPC servers
+  -ts,   --tensor-split SPLIT     fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1
+                                  for image models, indicate which device should be able to offload
+  -ngl,  --gpu-layers,  --n-gpu-layers N
+                                  number of layers to store in VRAM
+                                  '-ngl 0' means no offloading
          --no-warmup              skip warming up the model with an empty run
+         --warmup                 enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving
 
 server/completion:
 
   -dev,  --device <dev1,dev2,...> 
                                   comma-separated list of devices to use for offloading (none = don't offload)
                                   use --list-devices to see a list of available devices
-  -ngl,  --gpu-layers,  --n-gpu-layers N
-                                  number of layers to store in VRAM
   -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
                                     - layer (default): split layers and KV across GPUs
                                     - row: split rows across GPUs, store intermediate results and KV in --main-gpu
-  -ts,   --tensor-split SPLIT     fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1
+  -mg,   --main-gpu N             the device to use for the model
+                                  work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: 0)
          --override-kv KEY=TYPE:VALUE
                                   advanced option to override model metadata by key. may be specified multiple times.
                                   types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
@@ -500,7 +517,7 @@ server/images:
          --image-sampling-steps, --image-sample-steps N
                                   number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
          --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
-         --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model (0.0 = disabled, default: 0.0)
+         --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
          --image-slg-skip-layer   the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)
          --image-slg-start N      the phase to enable SLG (default: 0.01)
          --image-slg-end N        the phase to disable SLG (default: 0.20)

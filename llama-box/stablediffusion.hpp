@@ -59,9 +59,10 @@ struct stablediffusion_params {
     bool warmup                                         = true;
     bool flash_attn                                     = false;
     int n_threads                                       = 1;
-    int main_gpu                                        = 0;
     bool lora_init_without_apply                        = false;
     std::vector<common_adapter_lora_info> lora_adapters = {};
+    std::string rpc_servers                             = "";
+    float *tensor_split                                 = nullptr;
 };
 
 struct stablediffusion_sampling_stream {
@@ -157,7 +158,7 @@ int stablediffusion_context::get_default_sampling_steps() {
             return 20;
         case VERSION_SDXL: // including Turbo
         case VERSION_SDXL_REFINER:
-            return 40;
+            return 25;
         case VERSION_SD3:  // including Turbo
         case VERSION_FLUX: // including Schnell
         default:
@@ -377,6 +378,7 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
     rng_type_t rng_type          = CUDA_RNG;
     bool vae_decode_only         = false;
     bool free_params_immediately = false;
+    bool tae_preview_only        = false;
 
     sd_ctx_t *sd_ctx = new_sd_ctx(
         params.model.c_str(),
@@ -402,7 +404,9 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         !params.control_model_offload,
         !params.vae_model_offload,
         params.flash_attn,
-        params.main_gpu);
+        tae_preview_only,
+        params.rpc_servers.c_str(),
+        params.tensor_split);
     if (sd_ctx == nullptr) {
         LOG_ERR("%s: failed to create stable diffusion context\n", __func__);
         return nullptr;
@@ -410,7 +414,11 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
 
     upscaler_ctx_t *upscaler_ctx = nullptr;
     if (!params.upscale_model.empty()) {
-        upscaler_ctx = new_upscaler_ctx(params.upscale_model.c_str(), params.n_threads, params.main_gpu);
+        upscaler_ctx = new_upscaler_ctx(
+            params.upscale_model.c_str(),
+            params.n_threads,
+            params.rpc_servers.c_str(),
+            params.tensor_split);
         if (upscaler_ctx == nullptr) {
             LOG_ERR("%s: failed to create upscaler context\n", __func__);
             free_sd_ctx(sd_ctx);
