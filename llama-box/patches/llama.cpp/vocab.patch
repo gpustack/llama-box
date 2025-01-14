@@ -11,10 +11,10 @@ index a184884c..ec814882 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 96b74e93..c57a8648 100644
+index 4969d262..44b68cbf 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
-@@ -1586,7 +1586,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1587,7 +1587,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                  tokenizer_pre == "megrez") {
                  pre_type = LLAMA_VOCAB_PRE_TYPE_QWEN2;
              } else {
@@ -24,7 +24,7 @@ index 96b74e93..c57a8648 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3074,6 +3075,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3075,6 +3076,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  

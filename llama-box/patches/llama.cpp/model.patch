@@ -133,10 +133,10 @@ index f90f5e74..818caf0b 100644
          case LLM_ARCH_NOMIC_BERT:
          case LLM_ARCH_STABLELM:
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 96b74e93..6cc05279 100644
+index 4969d262..3c178c90 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
-@@ -1429,7 +1429,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1430,7 +1430,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
              special_mask_id = LLAMA_TOKEN_NULL;
  
              const int precompiled_charsmap_keyidx = gguf_find_key(ctx, kv(LLM_KV_TOKENIZER_PRECOMPILED_CHARSMAP).c_str());
