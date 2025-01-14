@@ -99,10 +99,10 @@ index a6f9252b..ffdc5388 100644
  
  //
 diff --git a/common/common.h b/common/common.h
-index c86a4ef3..14acb5ad 100644
+index 4fab1319..fa056d7a 100644
 --- a/common/common.h
 +++ b/common/common.h
-@@ -583,6 +583,13 @@ std::string common_detokenize(
+@@ -590,6 +590,13 @@ std::string common_detokenize(
  // Chat template utils
  //
  
@@ -116,7 +116,7 @@ index c86a4ef3..14acb5ad 100644
  // same with llama_chat_message, but uses std::string
  struct common_chat_msg {
      std::string role;
-@@ -601,6 +608,8 @@ bool common_chat_verify_template(const std::string & tmpl);
+@@ -608,6 +615,8 @@ bool common_chat_verify_template(const std::string & tmpl);
  std::string common_chat_apply_template(const struct llama_model * model,
          const std::string & tmpl,
          const std::vector<common_chat_msg> & chat,
