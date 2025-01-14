@@ -3379,7 +3379,7 @@ struct server_context {
 
                     for (auto &slot : slots) {
                         slot.release();
-                        send_error(slot, "input prompt is too big compared to KV size, please increase KV size");
+                        send_error(slot, "decoding exceeds the available context size. try increasing the context size.");
                     }
                     break; // break loop of n_batch
                 }
