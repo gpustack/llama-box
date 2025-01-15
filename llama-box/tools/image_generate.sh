@@ -2,7 +2,7 @@
 
 #
 # MIT license
-# Copyright (c) 2024 llama-box authors
+# Copyright (c) 2025 llama-box authors
 # SPDX-License-Identifier: MIT
 #
 
