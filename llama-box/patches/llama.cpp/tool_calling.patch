@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index a6f9252b..ffdc5388 100644
+index a6f9252b..ed5a2709 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -1736,13 +1736,15 @@ std::string common_get_builtin_chat_template(const struct llama_model * model) {
@@ -67,7 +67,7 @@ index a6f9252b..ffdc5388 100644
      std::vector<common_chat_msg> chat_new(past_msg);
      // if the past_msg ends with a newline, we must preserve it in the formatted version
      if (add_ass && !fmt_past_msg.empty() && fmt_past_msg.back() == '\n') {
-@@ -1797,7 +1805,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1797,21 +1805,29 @@ std::string common_chat_format_single(const struct llama_model * model,
      };
      // format chat with new_msg
      chat_new.push_back(new_msg);
@@ -76,9 +76,12 @@ index a6f9252b..ffdc5388 100644
      // get the diff part
      ss << fmt_new_msg.substr(fmt_past_msg.size(), fmt_new_msg.size() - fmt_past_msg.size());
      return ss.str();
-@@ -1806,12 +1814,16 @@ std::string common_chat_format_single(const struct llama_model * model,
+ }
+ 
  std::string common_chat_format_example(const struct llama_model * model,
-         const std::string & tmpl) {
+-        const std::string & tmpl) {
++        const std::string & tmpl,
++        bool display_funcs) {
      std::vector<common_chat_msg> msgs = {
 -        {"system",    "You are a helpful assistant"},
 -        {"user",      "Hello"},
@@ -88,18 +91,21 @@ index a6f9252b..ffdc5388 100644
 +        {"user",      "Hello."},
 +        {"assistant", "Hi there."},
 +        {"user",      "What's the weather like in Paris today?"},
-+    };
-+    std::vector<common_chat_func> funcs = {
-+        {"get_weather", "", "{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}}}"},
-+        {"get_temperature", "Return the temperature according to the location.", "{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}}}"},
      };
 -    return common_chat_apply_template(model, tmpl, msgs, true);
++    std::vector<common_chat_func> funcs = {};
++    if (display_funcs) {
++        funcs = {
++            {"get_weather", "", "{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}}}"},
++            {"get_temperature", "Return the temperature according to the location.", "{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}}}"},
++        };
++    }
 +    return common_chat_apply_template(model, tmpl, msgs, funcs, false, true);
  }
  
  //
 diff --git a/common/common.h b/common/common.h
-index 4fab1319..fa056d7a 100644
+index 4fab1319..cab640d1 100644
 --- a/common/common.h
 +++ b/common/common.h
 @@ -590,6 +590,13 @@ std::string common_detokenize(
@@ -125,6 +131,16 @@ index 4fab1319..fa056d7a 100644
          bool add_ass);
  
  // Format single message, while taking into account the position of that message in chat history
+@@ -619,7 +628,8 @@ std::string common_chat_format_single(const struct llama_model * model,
+ 
+ // Returns an example of formatted chat
+ std::string common_chat_format_example(const struct llama_model * model,
+-        const std::string & tmpl);
++        const std::string & tmpl,
++        bool display_funcs = false);
+ 
+ //
+ // KV cache utils
 diff --git a/include/llama.h b/include/llama.h
 index a184884c..a519bf58 100644
 --- a/include/llama.h

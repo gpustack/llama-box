@@ -1195,11 +1195,13 @@ struct server_context {
                     tool_call_end_tok    = LLAMA_TOKEN_NULL;
                     tool_call_end_trim   = false;
                 }
+                support_tool_calls = support_tool_calls && support_completion_only();
                 SRV_INF("chat template, built_in: %s, alias: %s, tool call: %s, example:\n%s\n",
                         builtin ? "true" : "false",
                         chat_template_alias.c_str(),
                         support_tool_calls ? "supported" : "unsupported",
-                        common_chat_format_example(llm_model, llm_params.chat_template).c_str());
+                        // NB(thxCode): common_chat_format_example is a patch.
+                        common_chat_format_example(llm_model, llm_params.chat_template, support_tool_calls).c_str());
             } else {
                 SRV_INF("%s", "chat template is disabled\n");
             }
