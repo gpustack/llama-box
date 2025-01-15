@@ -2945,10 +2945,8 @@ struct server_context {
                 SLT_INF(slot, "sampled image %03i/%03i %.2fs/it\n", progress.first, progress.second, (t1 - t0) / 1e6);
                 if (goahead) {
                     if (slot.params.stream) {
-                        if (slot.params.stream_preview_faster) {
-                            generated_image = sd_ctx->preview_image_stream(slot.sdsstream, true);
-                        } else if (slot.params.stream_preview) {
-                            generated_image = sd_ctx->preview_image_stream(slot.sdsstream);
+                        if (slot.params.stream_preview || slot.params.stream_preview_faster) {
+                            generated_image = sd_ctx->preview_image_stream(slot.sdsstream, slot.params.stream_preview_faster);
                         }
                         send_image(slot, progress.first, progress.second + 1, generated_image);
                     }
@@ -3810,6 +3808,7 @@ struct server_context {
             }
             bool processed = preprocess_multi_modal_data_image(slot, n_batch, img_embd);
             llava_image_embed_free(img_embd);
+            stbi_image_free(dt);
             if (!processed) {
                 return false;
             }
@@ -3830,6 +3829,7 @@ struct server_context {
         slot.prompt_tokens.insert(slot.prompt_tokens.end(), tokens.begin(), tokens.end());
         slot.n_prompt_tokens += int32_t(tokens.size());
 
+        slot.prompt_multi_modal_data.clear();
         return true;
     }
 

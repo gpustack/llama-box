@@ -397,7 +397,7 @@ index 1603edd2..5c44415b 100644
  
  CLIP_API void clip_free(struct clip_ctx * ctx);
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index c598caf3..facf4d25 100644
+index c598caf3..bf7338c4 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -11,17 +11,7 @@
@@ -419,7 +419,12 @@ index c598caf3..facf4d25 100644
  
  // RGB uint8 image
  struct clip_image_u8 {
-@@ -255,8 +245,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -252,11 +242,11 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+     if (!clip_image_preprocess(ctx_clip, img, &img_res_v)) {
+         LOG_ERR("%s: unable to preprocess image\n", __func__);
+         delete[] img_res_v.data;
++        img_res_v.size = 0;
++        img_res_v.data = nullptr;
          return false;
      }
  
@@ -428,17 +433,25 @@ index c598caf3..facf4d25 100644
      const char * mm_patch_merge_type = clip_patch_merge_type(ctx_clip);
  
      if (clip_is_minicpmv(ctx_clip) || clip_is_qwen2vl(ctx_clip)) {
-@@ -266,6 +254,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -264,8 +254,10 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+         image_embd_v.resize(img_res_v.size);
+         struct clip_image_size * load_image_size = clip_image_size_init();
  
-         for (size_t i = 0; i < img_res_v.size; i++) {
+-        for (size_t i = 0; i < img_res_v.size; i++) {
++        bool ok = true;
++        for (size_t i = 0; ok && i < img_res_v.size; i++) {
              const int64_t t_img_enc_step_start_us = ggml_time_us();
 +
              image_embd_v[i] = (float *)malloc(clip_embd_nbytes_by_img(ctx_clip, img_res_v.data[i].nx, img_res_v.data[i].ny));
              int patch_size=14;
              load_image_size->width = img_res_v.data[i].nx;
-@@ -290,11 +279,10 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -288,13 +280,23 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+ 
+             if (!encoded) {
                  LOG_ERR("Unable to encode image - spatial_unpad - subimage %d of %d\n", (int) i+1, (int) img_res_v.size);
-                 return false;
+-                return false;
++                ok = false;
++                continue;
              }
 +
              const int64_t t_img_enc_steop_batch_us = ggml_time_us();
@@ -446,13 +459,37 @@ index c598caf3..facf4d25 100644
          }
 -        const int64_t t_img_enc_batch_us = ggml_time_us();
 -        LOG_INF("%s: all %d segments encoded in %8.2f ms\n", __func__, (int)img_res_v.size, (t_img_enc_batch_us - t_img_enc_start_us) / 1000.0);
++        if (!ok) {
++            delete[] img_res_v.data;
++            img_res_v.size = 0;
++            img_res_v.data = nullptr;
++            for (size_t i = 0; i < image_embd_v.size(); i++) {
++                free(image_embd_v[i]);
++            }
++            image_embd_v.clear();
++            return false;
++        }
  
          int n_img_pos_out = 0;
          for (size_t i = 0; i < image_embd_v.size(); i++) {
-@@ -312,18 +300,21 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
-         load_image_size->width = img->nx;
-         load_image_size->height = img->ny;
-         clip_add_load_image_size(ctx_clip, load_image_size);
+@@ -305,41 +307,67 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+             n_img_pos_out += clip_n_patches_by_img(ctx_clip, &img_res_v.data[i]);
+         }
+         *n_img_pos = n_img_pos_out;
++        load_image_size->width = img->nx;
++        load_image_size->height = img->ny;
++        clip_add_load_image_size(ctx_clip, load_image_size);
++
++        delete[] img_res_v.data;
++        img_res_v.size = 0;
++        img_res_v.data = nullptr;
+         for (size_t i = 0; i < image_embd_v.size(); i++) {
+             free(image_embd_v[i]);
+         }
+         image_embd_v.clear();
+-        load_image_size->width = img->nx;
+-        load_image_size->height = img->ny;
+-        clip_add_load_image_size(ctx_clip, load_image_size);
 -        LOG_INF("%s: load_image_size %d %d\n", __func__, load_image_size->width, load_image_size->height);
      }
      else if (strcmp(mm_patch_merge_type, "spatial_unpad") != 0) {
@@ -462,6 +499,8 @@ index c598caf3..facf4d25 100644
          *n_img_pos = clip_n_patches(ctx_clip);
          bool encoded = clip_image_encode(ctx_clip, n_threads, &img_res_v.data[0], image_embd); // image_embd shape is 576 x 4096
          delete[] img_res_v.data;
++        img_res_v.size = 0;
++        img_res_v.data = nullptr;
          if (!encoded) {
              LOG_ERR("Unable to encode image\n");
 -
@@ -473,10 +512,12 @@ index c598caf3..facf4d25 100644
      }
      else {
          // spatial_unpad llava-1.6 type embedding
-@@ -331,15 +322,19 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+         // TODO: CLIP needs batching support - in HF the llm projection is separate after encoding, which might be a solution to quickly get batching working
          std::vector<float *> image_embd_v;
          image_embd_v.resize(img_res_v.size);
-         for (size_t i = 0; i < img_res_v.size; i++) {
+-        for (size_t i = 0; i < img_res_v.size; i++) {
++        bool ok = true;
++        for (size_t i = 0; ok && i < img_res_v.size; i++) {
 +            const int64_t t_img_enc_step_start_us = ggml_time_us();
 +
              image_embd_v[i] = (float *)malloc(clip_embd_nbytes(ctx_clip)); // 576 patches * 4096 embeddings * 4 bytes = 9437184
@@ -484,19 +525,54 @@ index c598caf3..facf4d25 100644
 +
              if (!encoded) {
 -                LOG_ERR("Unable to encode image - spatial_unpad - subimage %d of %d\n", (int) i+1, (int) img_res_v.size);
+-                return false;
 +                LOG_ERR("unable to encode image - spatial_unpad - subimage %d of %d\n", (int) i+1, (int) img_res_v.size);
-                 return false;
-             }
++                ok = false;
++                continue;
++            }
 +
 +            const int64_t t_img_enc_steop_batch_us = ggml_time_us();
 +            LOG_INF("%s: step %d of %d encoded in %8.2f ms\n", __func__, (int)i+1, (int)img_res_v.size, (t_img_enc_steop_batch_us - t_img_enc_step_start_us) / 1000.0);
++        }
++
++        if (!ok) {
++            delete[] img_res_v.data;
++            img_res_v.size = 0;
++            img_res_v.data = nullptr;
++            for (size_t i = 0; i < image_embd_v.size(); i++) {
++                free(image_embd_v[i]);
+             }
++            image_embd_v.clear();
++            return false;
          }
 -        const int64_t t_img_enc_batch_us = ggml_time_us();
 -        LOG_INF("%s: %d segments encoded in %8.2f ms\n", __func__, (int)img_res_v.size, (t_img_enc_batch_us - t_img_enc_start_us) / 1000.0);
  
          const int32_t * image_grid = clip_image_grid(ctx_clip);
  
-@@ -374,11 +369,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -348,11 +376,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+             grid_pinpoints.push_back({image_grid[i], image_grid[i+1]});
+         }
+ 
+-        // free all img_res_v - not needed anymore
+-        delete[] img_res_v.data;
+-        img_res_v.size = 0;
+-        img_res_v.data = nullptr;
+-
+         const int32_t image_size = clip_image_size(ctx_clip);
+ 
+         struct clip_image_grid_shape grid_shape = get_anyres_image_grid_shape({img->nx,img->ny}, grid_pinpoints, image_size);
+@@ -361,6 +384,9 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+         clip_llava_handle_patches(ctx_clip, image_embd_v, grid_shape, image_embd, &n_img_pos_out);
+         *n_img_pos = n_img_pos_out;
+ 
++        delete[] img_res_v.data;
++        img_res_v.size = 0;
++        img_res_v.data = nullptr;
+         for (size_t i = 0; i < image_embd_v.size(); i++) {
+             free(image_embd_v[i]);
+         }
+@@ -374,11 +400,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
  
      LOG_INF("%s: image embedding created: %d tokens\n", __func__, *n_img_pos);
  
@@ -508,7 +584,7 @@ index c598caf3..facf4d25 100644
      return true;
  }
  
-@@ -498,6 +488,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
+@@ -498,6 +519,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
      return result;
  }
  
