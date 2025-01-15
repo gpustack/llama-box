@@ -146,7 +146,7 @@ index 4969d262..3c178c90 100644
                  const char * pc = (const char *) gguf_get_arr_data(ctx, precompiled_charsmap_keyidx);
                  precompiled_charsmap.assign(pc, pc + n_precompiled_charsmap);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index daf1b7c9..e1e98f03 100644
+index 2e391b3b..07cc5e07 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -2645,7 +2645,7 @@ struct llm_build_context {

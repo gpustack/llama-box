@@ -80,7 +80,7 @@ index 955ed505..1caffd34 100644
      get_reg().register_backend(reg);
  }
 diff --git a/src/llama.cpp b/src/llama.cpp
-index daf1b7c9..eae1ea7e 100644
+index 2e391b3b..89f72886 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -9468,7 +9468,7 @@ struct llama_model * llama_model_load_from_file(
