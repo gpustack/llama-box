@@ -1887,6 +1887,9 @@ struct server_context {
                         } else if (starts_with(str_test, tool_call_start)) {
                             send_text             = false;
                             slot.tool_call_parser = TOOL_CALL_PARSER_TYPE_STRING;
+                        } else if (ends_with(str_test, tool_call_start)) {
+                            send_text = true;
+                            stop_pos  = str_test.find(tool_call_start);
                         }
                     } else if (tool_call_start_tok != LLAMA_TOKEN_NULL) {
                         for (const llama_token &tok : result.toks) {
