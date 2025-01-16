@@ -400,7 +400,7 @@ index 1603edd2..5c44415b 100644
  
  CLIP_API void clip_free(struct clip_ctx * ctx);
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index c598caf3..bf7338c4 100644
+index c598caf3..3a89ddf2 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -11,17 +11,7 @@
@@ -596,6 +596,7 @@ index c598caf3..bf7338c4 100644
 +    img->nx = nx;
 +    img->ny = ny;
 +    img->buf.resize(nx * ny * nc);
++    LOG_INFV(4, "%s: image size: %.2fKiB, nx: %d, ny: %d, nc: %d\n", __func__, float(img->buf.size())/1024, nx, ny, nc);
 +    memcpy(img->buf.data(), data, img->buf.size());
 +
 +    float* image_embed = NULL;
@@ -608,12 +609,11 @@ index c598caf3..bf7338c4 100644
 +    }
 +
 +    clip_image_u8_free(img);
-+    auto result = (llava_image_embed*)malloc(sizeof(llava_image_embed));
++    auto *result = (llava_image_embed*)malloc(sizeof(llava_image_embed));
 +    result->embed = image_embed;
 +    result->n_image_pos = n_image_pos;
 +    return result;
 +}
-+
 +
  static bool load_file_to_bytes(const char* path, unsigned char** bytesOut, long *sizeOut) {
      auto file = fopen(path, "rb");

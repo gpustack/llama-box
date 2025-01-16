@@ -1407,6 +1407,11 @@ struct server_context {
                         send_error(task, "failed to load control", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
+                    if (cc < 3) {
+                        stbi_image_free(control_img_buffer);
+                        send_error(task, "control must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
+                        return false;
+                    }
                     if (cw <= 0 || ch <= 0) {
                         send_error(task, "control width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                         return false;
@@ -1457,11 +1462,15 @@ struct server_context {
                         return false;
                     }
                     if (!stbir_resize(init_img_buffer, iw, ih, 0,
-                                      resized_image_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
-                                      3 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
-                                      STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
-                                      STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                      STBIR_COLORSPACE_SRGB, nullptr)) {
+                                      resized_image_buffer, rw, rh, 0,
+                                      STBIR_TYPE_UINT8,
+                                      3,                                                // RGB
+                                      STBIR_ALPHA_CHANNEL_NONE,                         // no Alpha
+                                      0,                                                // flags
+                                      STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,               // clamp edge mode
+                                      STBIR_FILTER_CATMULLROM, STBIR_FILTER_CATMULLROM, // catmull-rom filter
+                                      STBIR_COLORSPACE_SRGB,                            // sRGB
+                                      nullptr)) {
                         auto reason = stbi_failure_reason();
                         SLT_ERR(slot, "failed to resize image: %s\n", reason);
                         free_images_1;
@@ -1511,11 +1520,15 @@ struct server_context {
                             return false;
                         }
                         if (!stbir_resize(mask_img_buffer, mw, mh, 0,
-                                          resized_mask_buffer, rw, rh, 0, STBIR_TYPE_UINT8,
-                                          1 /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
-                                          STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
-                                          STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                                          STBIR_COLORSPACE_SRGB, nullptr)) {
+                                          resized_mask_buffer, rw, rh, 0,
+                                          STBIR_TYPE_UINT8,
+                                          1,                                            // GREY
+                                          STBIR_ALPHA_CHANNEL_NONE,                     // no Alpha
+                                          0,                                            // flags
+                                          STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,           // clamp edge mode
+                                          STBIR_FILTER_TRIANGLE, STBIR_FILTER_TRIANGLE, // box filter
+                                          STBIR_COLORSPACE_SRGB,                        // sRGB
+                                          nullptr)) {
                             auto reason = stbi_failure_reason();
                             SLT_ERR(slot, "failed to resize mask: %s\n", reason);
                             free_images_2;
@@ -3768,14 +3781,18 @@ struct server_context {
                     SLT_ERR(slot, "failed to load image: %s\n", reason);
                     return false;
                 }
-
+                if (c < 3) {
+                    stbi_image_free(dt);
+                    SLT_ERR(slot, "%s", "image must be at least 3 channels\n");
+                    return false;
+                }
                 int m = std::max(w, h);
                 if (params.max_image_size > 0 && m > params.max_image_size) {
                     SLT_INF(slot, "image dimensions exceeded the maximum size: %d, resizing image\n", params.max_image_size);
                     float nr  = float(params.max_image_size) / float(m);
                     int nw    = std::max(int(std::ceil(float(w) * nr)), 1);
                     int nh    = std::max(int(std::ceil(float(h) * nr)), 1);
-                    auto *ndt = (uint8_t *)malloc(nw * nh * c);
+                    auto *ndt = (uint8_t *)malloc(nw * nh * 3);
                     if (ndt == nullptr) {
                         SLT_ERR(slot, "%s", "failed to resize image: allocate new buffer\n");
                         stbi_image_free(dt);
@@ -3783,11 +3800,15 @@ struct server_context {
                     }
                     bool resized = stbir_resize(
                         dt, w, h, 0,
-                        ndt, nw, nh, 0, STBIR_TYPE_UINT8,
-                        c /*RGB channel*/, STBIR_ALPHA_CHANNEL_NONE, 0,
-                        STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,
-                        STBIR_FILTER_BOX, STBIR_FILTER_BOX,
-                        STBIR_COLORSPACE_SRGB, nullptr);
+                        ndt, nw, nh, 0,
+                        STBIR_TYPE_UINT8,
+                        3,                                                // RGB
+                        STBIR_ALPHA_CHANNEL_NONE,                         // no Alpha
+                        0,                                                // flags
+                        STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,               // clamp edge mode
+                        STBIR_FILTER_CATMULLROM, STBIR_FILTER_CATMULLROM, // catmull-rom filter
+                        STBIR_COLORSPACE_SRGB,                            // sRGB
+                        nullptr);
                     stbi_image_free(dt);
                     if (!resized) {
                         auto reason = stbi_failure_reason();
@@ -3801,7 +3822,7 @@ struct server_context {
                 }
             }
             // NB(thxCode): llava_image_embed_make_with_data is a patch.
-            llava_image_embed *img_embd = llava_image_embed_make_with_data(llm_ctx_clip, llm_params.cpuparams.n_threads, dt, w, h, c);
+            llava_image_embed *img_embd = llava_image_embed_make_with_data(llm_ctx_clip, llm_params.cpuparams.n_threads, dt, w, h, 3);
             if (!img_embd) {
                 SLT_ERR(slot, "%s", "failed to embed image\n");
                 return false;
