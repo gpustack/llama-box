@@ -421,7 +421,7 @@ struct server_slot {
 
             /* LLAMA */
 
-            SLT_INF(*this, "stop processing: n_past = %d, truncated = %d\n", n_past, truncated);
+            SLT_INF(*this, "stop processing: n_past = %d, truncated = %s\n", n_past, truncated ? "true" : "false");
 
             t_last_used        = ggml_time_us();
             t_token_generation = double(ggml_time_us() - t_start_generation) / 1e3;
@@ -3082,8 +3082,8 @@ struct server_context {
                 }
             }
 
-            SLT_DBG(slot, "slot decode token, n_ctx = %d, n_past = %d, n_cache_tokens = %d, truncated = %d\n",
-                    slot.n_ctx, slot.n_past, (int)slot.cache_tokens.size(), slot.truncated);
+            SLT_DBG(slot, "slot decode token, n_ctx = %d, n_past = %d, n_cache_tokens = %d, truncated = %s\n",
+                    slot.n_ctx, slot.n_past, (int)slot.cache_tokens.size(), slot.truncated ? "true" : "false");
         }
 
         // process in chunks of params.n_batch

@@ -14,6 +14,21 @@ index a6f9252b..e16beb15 100644
      llama_context * lctx = llama_init_from_model(model, cparams);
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
+diff --git a/ggml/src/ggml-cuda/rope.cu b/ggml/src/ggml-cuda/rope.cu
+index e1912fee..c6766170 100644
+--- a/ggml/src/ggml-cuda/rope.cu
++++ b/ggml/src/ggml-cuda/rope.cu
+@@ -377,10 +377,6 @@ void ggml_cuda_op_rope_impl(ggml_backend_cuda_context & ctx, ggml_tensor * dst)
+     const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
+     const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
+ 
+-    if (is_mrope) {
+-        GGML_ASSERT(sections.v[0] > 0 || sections.v[1] > 0 || sections.v[2] > 0);
+-    }
+-
+     if (is_vision) {
+         GGML_ASSERT(n_dims == ne00/2);
+     }
 diff --git a/include/llama.h b/include/llama.h
 index a184884c..2190383a 100644
 --- a/include/llama.h
