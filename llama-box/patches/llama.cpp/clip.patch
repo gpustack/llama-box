@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 7a8a3156..4fe97948 100644
+index 7a8a3156..df37f9e4 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -9,25 +9,25 @@
@@ -105,7 +105,7 @@ index 7a8a3156..4fe97948 100644
                  LOG_INF("%s: tensor[%d]: n_dims = %d, name = %s, tensor_size=%zu, offset=%zu, shape:[%" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 "], type = %s\n",
                         __func__, i, ggml_n_dims(cur), cur->name, tensor_size, offset, cur->ne[0], cur->ne[1], cur->ne[2], cur->ne[3], ggml_type_name(type));
              }
-@@ -1223,34 +1206,40 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1223,32 +1206,42 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          }
      }
  
@@ -134,43 +134,46 @@ index 7a8a3156..4fe97948 100644
 -//    LOG_INF("%s: CLIP using SYCL backend\n", __func__);
 -//#endif
 +#ifdef GGML_USE_CUDA
-+    new_clip->backend = ggml_backend_cuda_init(0);
-+    LOG_INF("%s: CLIP using CUDA backend\n", __func__);
++    if (ngl != 0) {
++        new_clip->backend = ggml_backend_cuda_init(0);
++        LOG_INF("%s: CLIP using CUDA backend\n", __func__);
++    }
 +#endif
 +
 +#ifdef GGML_USE_METAL
-+    if (ngl < 0) {
-+        ngl = 999;
++    if (ngl != 0) {
++        new_clip->backend = ggml_backend_metal_init();
++        LOG_INF("%s: CLIP using Metal backend\n", __func__);
 +    }
-+    new_clip->backend = ggml_backend_metal_init();
-+    LOG_INF("%s: CLIP using Metal backend\n", __func__);
 +#endif
-+
+ 
+-    if (!new_clip->backend) {
 +#ifdef GGML_USE_CANN
-+    new_clip->backend = ggml_backend_cann_init(0);
-+    LOG_INF("%s: CLIP using CANN backend\n", __func__);
++    if (ngl != 0) {
++        new_clip->backend = ggml_backend_cann_init(0);
++        LOG_INF("%s: CLIP using CANN backend\n", __func__);
++    }
 +#endif
 +
 +#ifdef GGML_USE_VULKAN
-+    new_clip->backend = ggml_backend_vk_init(0);
-+    LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
++    if (ngl != 0) {
++        new_clip->backend = ggml_backend_vk_init(0);
++        LOG_INF("%s: CLIP using Vulkan backend\n", __func__);
++    }
 +#endif
 +
 +#ifdef GGML_USE_SYCL
-+    new_clip->backend = ggml_backend_sycl_init(0);
-+    LOG_INF("%s: CLIP using SYCL backend\n", __func__);
++    if (ngl != 0) {
++        new_clip->backend = ggml_backend_sycl_init(0);
++        LOG_INF("%s: CLIP using SYCL backend\n", __func__);
++    }
 +#endif
- 
-     if (!new_clip->backend) {
++
++    if (new_clip->backend == nullptr) {
          new_clip->backend = ggml_backend_cpu_init();
          LOG_INF("%s: CLIP using CPU backend\n", __func__);
-+    } else if (ngl <= 0) {
-+        new_clip->backend = ggml_backend_cpu_init();
-+        LOG_WRN("%s: Main model doesn't offload, fallback to CPU backend\n", __func__);
      }
- 
-     // model size and capabilities
-@@ -1279,6 +1268,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1279,6 +1272,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          idx = gguf_find_key(ctx, KEY_HAS_QWEN2VL_MERGER);
          if (idx != -1) {
              new_clip->has_qwen2vl_merger = gguf_get_val_bool(ctx, idx);
@@ -184,7 +187,7 @@ index 7a8a3156..4fe97948 100644
          }
          // GGML_ASSERT(new_clip->has_llava_projector); // see monatis/clip.cpp for image and/or text encoding for semantic search
  
-@@ -1300,6 +1296,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1300,6 +1300,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
              LOG_INF("%s: vision_encoder: %d\n", __func__, new_clip->has_vision_encoder);
              LOG_INF("%s: llava_projector:  %d\n", __func__, new_clip->has_llava_projector);
              LOG_INF("%s: minicpmv_projector:  %d\n", __func__, new_clip->has_minicpmv_projector);
@@ -192,7 +195,7 @@ index 7a8a3156..4fe97948 100644
              LOG_INF("%s: model size:     %.2f MB\n", __func__, model_size / 1024.0 / 1024.0);
              LOG_INF("%s: metadata size:  %.2f MB\n", __func__, ggml_get_mem_size(meta) / 1024.0 / 1024.0);
          }
-@@ -1419,24 +1416,23 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1419,24 +1420,23 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          }
  
          if (verbosity >= 2) {
@@ -232,7 +235,7 @@ index 7a8a3156..4fe97948 100644
          }
  
          try {
-@@ -1612,10 +1608,32 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+@@ -1612,10 +1612,32 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
          clip_image_f32_batch batch;
          batch.size = 1;
          batch.data = nullptr;
@@ -267,7 +270,7 @@ index 7a8a3156..4fe97948 100644
      }
  
      return new_clip;
-@@ -1990,7 +2008,7 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
+@@ -1990,7 +2012,7 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
      const int multiple = fmin(ceil(ratio), max_slice_nums);
  
      std::vector<std::vector<clip_image_u8 *>> images;
@@ -276,7 +279,7 @@ index 7a8a3156..4fe97948 100644
      images.push_back(std::vector<clip_image_u8 *>());
  
      if (multiple <= 1) {
-@@ -2005,17 +2023,17 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
+@@ -2005,17 +2027,17 @@ static std::vector<std::vector<clip_image_u8 *>> uhd_slice_image(const clip_imag
          clip_image_u8 * source_image = clip_image_u8_init();
          bicubic_resize(*img, *source_image, best_size.first, best_size.second);
          // source_image = image.copy().resize(best_resize, Image.Resampling.BICUBIC)
@@ -297,7 +300,7 @@ index 7a8a3156..4fe97948 100644
  
          // split_to_patches
          int width = refine_image->nx;
-@@ -2072,7 +2090,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2072,7 +2094,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
          int idx = 0;
          for (size_t i = 0; i < imgs.size(); ++i) {
              for (size_t j = 0; j < imgs[i].size(); ++j) {
@@ -306,7 +309,7 @@ index 7a8a3156..4fe97948 100644
                  clip_image_f32 * res = clip_image_f32_init();
                  normalize_image_u8_to_f32(imgs[i][j], res, ctx->image_mean, ctx->image_std);
                  res_imgs->data[idx++] = *res;
-@@ -2090,6 +2108,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2090,6 +2112,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
          res_imgs->data = new clip_image_f32[1];
          // clip_image_f32 * res = clip_image_f32_init();
@@ -314,7 +317,7 @@ index 7a8a3156..4fe97948 100644
          normalize_image_u8_to_f32(resized, res_imgs->data, ctx->image_mean, ctx->image_std);
          // res_imgs->data[0] = *res;
          res_imgs->size = 1;
-@@ -2166,13 +2185,14 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2166,13 +2189,14 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
              clip_image_u8 *image_original_resize = clip_image_u8_init();
              // bilinear_resize(*img, *image_original_resize, params.image_size, params.image_size); // in python this is "shortest_edge", but all CLIP are square
@@ -330,7 +333,7 @@ index 7a8a3156..4fe97948 100644
                  normalize_image_u8_to_f32(patch, &res_imgs->data[num], ctx->image_mean, ctx->image_std);
                  num++;
              }
-@@ -2208,49 +2228,10 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2208,49 +2232,10 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
      const int nx3 = int(nx / scale + 0.5f);
      const int ny3 = int(ny / scale + 0.5f);
