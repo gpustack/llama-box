@@ -47,7 +47,7 @@ index 34984479..976e9c15 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_JINA_BERT_V2,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index f90f5e74..818caf0b 100644
+index 590386e6..676b591a 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -618,6 +618,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
@@ -124,7 +124,7 @@ index f90f5e74..818caf0b 100644
                              layer.ffn_down_b = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd}, 0);
                          } else {
                              layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
-@@ -3827,6 +3843,7 @@ enum llama_rope_type llama_model_rope_type(const struct llama_model * model) {
+@@ -3870,6 +3886,7 @@ enum llama_rope_type llama_model_rope_type(const struct llama_model * model) {
          case LLM_ARCH_FALCON:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
@@ -133,7 +133,7 @@ index f90f5e74..818caf0b 100644
          case LLM_ARCH_NOMIC_BERT:
          case LLM_ARCH_STABLELM:
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 2e391b3b..07cc5e07 100644
+index e8cfe501..f77ad89c 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -2645,7 +2645,7 @@ struct llm_build_context {

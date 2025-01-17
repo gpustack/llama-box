@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index a6f9252b..ed5a2709 100644
+index 451826d5..f1affcf5 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -1736,13 +1736,15 @@ std::string common_get_builtin_chat_template(const struct llama_model * model) {
+@@ -1735,13 +1735,15 @@ std::string common_get_builtin_chat_template(const struct llama_model * model) {
  
  bool common_chat_verify_template(const std::string & tmpl) {
      llama_chat_message chat[] = {{"user", "test"}};
@@ -19,7 +19,7 @@ index a6f9252b..ed5a2709 100644
          bool add_ass) {
      int alloc_size = 0;
      bool fallback = false; // indicate if we must fallback to default chatml
-@@ -1751,12 +1753,17 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1750,12 +1752,17 @@ std::string common_chat_apply_template(const struct llama_model * model,
          chat.push_back({msg.role.c_str(), msg.content.c_str()});
          alloc_size += (msg.role.size() + msg.content.size()) * 1.25;
      }
@@ -38,7 +38,7 @@ index a6f9252b..ed5a2709 100644
  
      // error: chat template is not supported
      if (res < 0) {
-@@ -1767,7 +1774,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1766,7 +1773,7 @@ std::string common_chat_apply_template(const struct llama_model * model,
          }
  
          // If the built-in template is not supported, we default to chatml
@@ -47,7 +47,7 @@ index a6f9252b..ed5a2709 100644
          fallback = true;
      }
  
-@@ -1775,8 +1782,9 @@ std::string common_chat_apply_template(const struct llama_model * model,
+@@ -1774,8 +1781,9 @@ std::string common_chat_apply_template(const struct llama_model * model,
      if ((size_t) res > buf.size()) {
          buf.resize(res);
          res = llama_chat_apply_template(
@@ -58,7 +58,7 @@ index a6f9252b..ed5a2709 100644
      }
  
      std::string formatted_chat(buf.data(), res);
-@@ -1789,7 +1797,7 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1788,7 +1796,7 @@ std::string common_chat_format_single(const struct llama_model * model,
          const common_chat_msg & new_msg,
          bool add_ass) {
      std::ostringstream ss;
@@ -67,7 +67,7 @@ index a6f9252b..ed5a2709 100644
      std::vector<common_chat_msg> chat_new(past_msg);
      // if the past_msg ends with a newline, we must preserve it in the formatted version
      if (add_ass && !fmt_past_msg.empty() && fmt_past_msg.back() == '\n') {
-@@ -1797,21 +1805,29 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -1796,21 +1804,29 @@ std::string common_chat_format_single(const struct llama_model * model,
      };
      // format chat with new_msg
      chat_new.push_back(new_msg);
@@ -105,10 +105,10 @@ index a6f9252b..ed5a2709 100644
  
  //
 diff --git a/common/common.h b/common/common.h
-index 4fab1319..cab640d1 100644
+index b2709c04..5afc623f 100644
 --- a/common/common.h
 +++ b/common/common.h
-@@ -590,6 +590,13 @@ std::string common_detokenize(
+@@ -597,6 +597,13 @@ std::string common_detokenize(
  // Chat template utils
  //
  
@@ -122,7 +122,7 @@ index 4fab1319..cab640d1 100644
  // same with llama_chat_message, but uses std::string
  struct common_chat_msg {
      std::string role;
-@@ -608,6 +615,8 @@ bool common_chat_verify_template(const std::string & tmpl);
+@@ -615,6 +622,8 @@ bool common_chat_verify_template(const std::string & tmpl);
  std::string common_chat_apply_template(const struct llama_model * model,
          const std::string & tmpl,
          const std::vector<common_chat_msg> & chat,
@@ -131,7 +131,7 @@ index 4fab1319..cab640d1 100644
          bool add_ass);
  
  // Format single message, while taking into account the position of that message in chat history
-@@ -619,7 +628,8 @@ std::string common_chat_format_single(const struct llama_model * model,
+@@ -626,7 +635,8 @@ std::string common_chat_format_single(const struct llama_model * model,
  
  // Returns an example of formatted chat
  std::string common_chat_format_example(const struct llama_model * model,
@@ -142,10 +142,10 @@ index 4fab1319..cab640d1 100644
  //
  // KV cache utils
 diff --git a/include/llama.h b/include/llama.h
-index a184884c..a519bf58 100644
+index 298b8d1b..9d38735d 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -383,6 +383,11 @@ extern "C" {
+@@ -380,6 +380,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -157,7 +157,7 @@ index a184884c..a519bf58 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -1036,18 +1041,28 @@ extern "C" {
+@@ -1043,18 +1048,28 @@ extern "C" {
      /// @param tmpl A Jinja template to use for this chat. If this is nullptr, the model’s default chat template will be used instead.
      /// @param chat Pointer to a list of multiple llama_chat_message
      /// @param n_msg Number of llama_chat_message in this chat
@@ -187,7 +187,7 @@ index a184884c..a519bf58 100644
      LLAMA_API int32_t llama_chat_builtin_templates(const char ** output, size_t len);
  
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 1347ec15..7b7027df 100644
+index 5c19bab2..575a199f 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -173,14 +173,112 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
@@ -686,10 +686,10 @@ index 3a4d07ce..527e9334 100644
 +    const std::vector<const llama_chat_function * > & func,
 +    std::string & dest, bool req_func, bool add_ass);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 2e391b3b..4f6a3ee2 100644
+index e8cfe501..88e7f392 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9960,9 +9960,13 @@ int32_t llama_decode(
+@@ -9943,9 +9943,13 @@ int32_t llama_decode(
  //
  
  int32_t llama_chat_apply_template(
@@ -703,7 +703,7 @@ index 2e391b3b..4f6a3ee2 100644
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -9975,12 +9979,19 @@ int32_t llama_chat_apply_template(
+@@ -9958,12 +9962,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  

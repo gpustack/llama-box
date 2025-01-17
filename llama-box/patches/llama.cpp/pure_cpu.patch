@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
-index 36d72e95..4809627b 100644
+index d1c2d76d..4159e13c 100644
 --- a/ggml/src/ggml-backend-impl.h
 +++ b/ggml/src/ggml-backend-impl.h
 @@ -207,6 +207,9 @@ extern "C" {
@@ -10,13 +10,13 @@ index 36d72e95..4809627b 100644
 +
 +    GGML_API void ggml_backend_register_metadata_set(int ngl_);
      GGML_API void ggml_backend_register(ggml_backend_reg_t reg);
-     GGML_API void ggml_backend_device_register(ggml_backend_dev_t device);
  
+     // Add backend dynamic loading support to the backend
 diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
-index 955ed505..1caffd34 100644
+index 955ed505..e44a8157 100644
 --- a/ggml/src/ggml-backend-reg.cpp
 +++ b/ggml/src/ggml-backend-reg.cpp
-@@ -154,22 +154,34 @@ struct ggml_backend_registry {
+@@ -154,31 +154,42 @@ struct ggml_backend_registry {
  
      ggml_backend_registry() {
  #ifdef GGML_USE_CUDA
@@ -51,13 +51,14 @@ index 955ed505..1caffd34 100644
  #endif
  #ifdef GGML_USE_CANN
 -        register_backend(ggml_backend_cann_reg());
+-#endif
+-#ifdef GGML_USE_BLAS
+-        register_backend(ggml_backend_blas_reg());
 +        if (ngl != 0) {
 +            register_backend(ggml_backend_cann_reg());
 +        }
  #endif
- #ifdef GGML_USE_BLAS
-         register_backend(ggml_backend_blas_reg());
-@@ -178,7 +190,9 @@ struct ggml_backend_registry {
+ #ifdef GGML_USE_RPC
          register_backend(ggml_backend_rpc_reg());
  #endif
  #ifdef GGML_USE_KOMPUTE
@@ -68,7 +69,7 @@ index 955ed505..1caffd34 100644
  #endif
  #ifdef GGML_USE_CPU
          register_backend(ggml_backend_cpu_reg());
-@@ -294,6 +308,10 @@ static ggml_backend_registry & get_reg() {
+@@ -294,6 +305,10 @@ static ggml_backend_registry & get_reg() {
  }
  
  // Internal API
@@ -80,10 +81,10 @@ index 955ed505..1caffd34 100644
      get_reg().register_backend(reg);
  }
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 2e391b3b..89f72886 100644
+index e8cfe501..e7bf4b9b 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9468,7 +9468,7 @@ struct llama_model * llama_model_load_from_file(
+@@ -9422,7 +9422,7 @@ static struct llama_model * llama_model_load_from_file_impl(
      }
  
      // if using single GPU mode, remove all except the main GPU

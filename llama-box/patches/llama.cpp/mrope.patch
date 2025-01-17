@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index a6f9252b..e16beb15 100644
+index 451826d5..475b39e0 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -902,6 +902,11 @@ struct common_init_result common_init_from_params(common_params & params) {
@@ -15,7 +15,7 @@ index a6f9252b..e16beb15 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
 diff --git a/ggml/src/ggml-cuda/rope.cu b/ggml/src/ggml-cuda/rope.cu
-index e1912fee..c6766170 100644
+index 18f691b2..f5a4da3a 100644
 --- a/ggml/src/ggml-cuda/rope.cu
 +++ b/ggml/src/ggml-cuda/rope.cu
 @@ -377,10 +377,6 @@ void ggml_cuda_op_rope_impl(ggml_backend_cuda_context & ctx, ggml_tensor * dst)
@@ -30,10 +30,10 @@ index e1912fee..c6766170 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/include/llama.h b/include/llama.h
-index a184884c..2190383a 100644
+index 298b8d1b..8ff736a1 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -518,6 +518,9 @@ extern "C" {
+@@ -525,6 +525,9 @@ extern "C" {
      // to the decoder to start generating output sequence. For other models, it returns -1.
      LLAMA_API llama_token llama_model_decoder_start_token(const struct llama_model * model);
  
@@ -44,10 +44,10 @@ index a184884c..2190383a 100644
      LLAMA_API bool llama_model_is_recurrent(const struct llama_model * model);
  
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index f90f5e74..fe208282 100644
+index 590386e6..d855ed97 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -3944,6 +3944,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
+@@ -3987,6 +3987,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
      return model->hparams.dec_start_token_id;
  }
  

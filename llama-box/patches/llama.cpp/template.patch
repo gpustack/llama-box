@@ -1,5 +1,5 @@
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 1347ec15..f3a2570b 100644
+index 5c19bab2..f8b54389 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -56,6 +56,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
