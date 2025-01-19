@@ -61,7 +61,6 @@ struct stablediffusion_params {
     int n_threads                                       = 1;
     bool lora_init_without_apply                        = false;
     std::vector<common_adapter_lora_info> lora_adapters = {};
-    std::string rpc_servers                             = "";
     float *tensor_split                                 = nullptr;
 };
 
@@ -405,7 +404,6 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         !params.vae_model_offload,
         params.flash_attn,
         tae_preview_only,
-        params.rpc_servers.c_str(),
         params.tensor_split);
     if (sd_ctx == nullptr) {
         LOG_ERR("%s: failed to create stable diffusion context\n", __func__);
@@ -417,7 +415,6 @@ stablediffusion_context *common_sd_init_from_params(stablediffusion_params param
         upscaler_ctx = new_upscaler_ctx(
             params.upscale_model.c_str(),
             params.n_threads,
-            params.rpc_servers.c_str(),
             params.tensor_split);
         if (upscaler_ctx == nullptr) {
             LOG_ERR("%s: failed to create upscaler context\n", __func__);

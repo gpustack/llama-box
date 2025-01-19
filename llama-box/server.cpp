@@ -32,6 +32,8 @@
 
 using json = nlohmann::json;
 
+constexpr int HTTP_POLLING_SECONDS = 1;
+
 enum tool_call_parser_type {
     TOOL_CALL_PARSER_TYPE_NONE,
     TOOL_CALL_PARSER_TYPE_STRING,
@@ -795,12 +797,6 @@ struct server_task_result_queue {
         }
     }
 
-    // this function blocks the thread until there is a response for the id_task
-    server_task_result recv(int id_task) {
-        std::unordered_set<int> id_tasks = {id_task};
-        return recv(id_tasks);
-    }
-
     // this function blocks the thread until there is a response for one of the id_tasks
     server_task_result recv(const std::unordered_set<int> &id_tasks) {
         while (true) {
@@ -817,6 +813,36 @@ struct server_task_result_queue {
         }
 
         // should never reach here
+    }
+
+    // same as recv(), but have timeout in seconds
+    // if timeout is reached, nullptr is returned
+    server_task_result recv_with_timeout(const std::unordered_set<int> &id_tasks, int timeout) {
+        while (true) {
+            std::unique_lock<std::mutex> lock(mutex_results);
+            bool cr_res = condition_results.wait_for(lock, std::chrono::seconds(timeout), [&] {
+                return !queue_results.empty();
+            });
+            if (!cr_res) {
+                return {};
+            }
+
+            for (int i = 0; i < (int)queue_results.size(); i++) {
+                if (id_tasks.find(queue_results[i].id) != id_tasks.end()) {
+                    server_task_result res = queue_results[i];
+                    queue_results.erase(queue_results.begin() + i);
+                    return res;
+                }
+            }
+        }
+
+        // should never reach here
+    }
+
+    // this function blocks the thread until there is a response for the id_task
+    server_task_result recv(int id_task) {
+        std::unordered_set<int> id_tasks = {id_task};
+        return recv(id_tasks);
     }
 
     // Send a new result to a waiting id_task
@@ -2552,10 +2578,22 @@ struct server_context {
     void receive_multi_results(
         const std::unordered_set<int> &id_tasks,
         const std::function<void(std::vector<server_task_result> &)> &result_handler,
-        const std::function<void(json)> &error_handler) {
+        const std::function<void(json)> &error_handler,
+        const std::function<bool()> &is_connection_closed) {
         std::vector<server_task_result> results(id_tasks.size());
         for (size_t i = 0; i < id_tasks.size(); i++) {
-            server_task_result result = queue_results.recv(id_tasks);
+            server_task_result result = queue_results.recv_with_timeout(id_tasks, HTTP_POLLING_SECONDS);
+
+            if (is_connection_closed()) {
+                cancel_tasks(id_tasks);
+                return;
+            }
+
+            if (result.id == -1) {
+                i--; // retry
+                continue;
+            }
+
             if (result.error) {
                 error_handler(result.data);
                 cancel_tasks(id_tasks);
@@ -4689,7 +4727,8 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) {
                     res_error(res, error_data);
-                });
+                },
+                req.is_connection_closed);
 
             ctx_server.cancel_tasks(task_ids);
             return;
@@ -4826,7 +4865,8 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) {
                     res_error(res, error_data);
-                });
+                },
+                req.is_connection_closed);
 
             ctx_server.cancel_tasks(task_ids);
             return;
@@ -4939,7 +4979,8 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) {
                     res_error(res, error_data);
-                });
+                },
+                req.is_connection_closed);
 
             ctx_server.cancel_tasks(task_ids);
             return;
@@ -5034,7 +5075,8 @@ int main(int argc, char **argv) {
             },
             [&](const json &error_data) {
                 res_error(res, error_data);
-            });
+            },
+            req.is_connection_closed);
 
         ctx_server.cancel_tasks(task_ids);
     };
@@ -5091,7 +5133,8 @@ int main(int argc, char **argv) {
             },
             [&](const json &error_data) {
                 res_error(res, error_data);
-            });
+            },
+            req.is_connection_closed);
 
         ctx_server.cancel_tasks(task_ids);
     };
@@ -5312,7 +5355,8 @@ int main(int argc, char **argv) {
                 },
                 [&](const json &error_data) {
                     res_error(res, error_data);
-                });
+                },
+                req.is_connection_closed);
 
             ctx_server.cancel_tasks(task_ids);
             return;

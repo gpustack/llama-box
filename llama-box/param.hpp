@@ -108,6 +108,30 @@ static std::string get_builtin_chat_templates() {
     return msg.str();
 }
 
+static void add_rpc_devices(std::string servers) {
+    auto rpc_servers = string_split<std::string>(servers, ',');
+    if (rpc_servers.empty()) {
+        throw std::invalid_argument("no RPC servers specified");
+    }
+    ggml_backend_reg_t rpc_reg = ggml_backend_reg_by_name("RPC");
+    if (!rpc_reg) {
+        throw std::invalid_argument("failed to find RPC backend");
+    }
+    typedef ggml_backend_dev_t (*ggml_backend_rpc_add_device_t)(const char *endpoint);
+    auto ggml_backend_rpc_add_device_fn = (ggml_backend_rpc_add_device_t)ggml_backend_reg_get_proc_address(rpc_reg, "ggml_backend_rpc_add_device");
+    if (!ggml_backend_rpc_add_device_fn) {
+        throw std::invalid_argument("failed to find RPC device add function");
+    }
+    for (const auto &server : rpc_servers) {
+        ggml_backend_dev_t dev = ggml_backend_rpc_add_device_fn(server.c_str());
+        if (dev) {
+            ggml_backend_device_register(dev);
+        } else {
+            throw std::invalid_argument("failed to register RPC device");
+        }
+    }
+}
+
 inline std::vector<ggml_backend_dev_t> parse_device_list(const std::string &value) {
     std::vector<ggml_backend_dev_t> devices;
     auto dev_names = string_split<std::string>(value, ',');
@@ -707,8 +731,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--rpc");
                 }
-                char *arg                      = argv[i++];
-                params_.llm_params.rpc_servers = arg;
+                char *arg = argv[i++];
+                add_rpc_devices(std::string(arg));
                 continue;
             }
 
@@ -2122,7 +2146,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
         params_.sd_params.n_threads               = params_.llm_params.cpuparams.n_threads;
         params_.sd_params.lora_init_without_apply = params_.llm_params.lora_init_without_apply;
         params_.sd_params.lora_adapters           = params_.llm_params.lora_adapters;
-        params_.sd_params.rpc_servers             = params_.llm_params.rpc_servers;
         params_.sd_params.tensor_split            = params_.llm_params.tensor_split;
     }
 
