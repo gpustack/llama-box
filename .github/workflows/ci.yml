@@ -201,6 +201,11 @@ jobs:
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
+          # NB(thxCode): workaround to avoid using OpenMP.
+          rm -rf /opt/rh/devtoolset-9/root/usr/lib/gcc/\$(uname -m)-redhat-linux/9/libgomp* || true
+          rm -rf /opt/rh/gcc-toolset-11/root/usr/lib/gcc/\$(uname -m)-redhat-linux/11/libgomp* || true
+          rm -rf /usr/lib/gcc/\$(uname -m)-linux-gnu/11/libgomp* || true
+          rm -rf /opt/openEuler/gcc-toolset-10/root/usr/lib/gcc/\$(uname -m)-linux-gnu/10/libgomp* || true
           git config --system --add safe.directory '*'
           mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
