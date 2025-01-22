@@ -903,6 +903,7 @@ struct server_context {
     ggml_threadpool *threadpool_batch = nullptr;
 
     // tool calls
+    common_chat_templates chat_templates;
     std::string chat_template_alias         = "chatml";
     bool support_tool_calls                 = false;
     bool tool_call_id_generate              = true;
@@ -1167,11 +1168,14 @@ struct server_context {
         // chat template
         {
             if (llm_params.enable_chat_template) {
+                chat_templates = common_chat_templates_from_model(llm_model, llm_params.chat_template);
+                GGML_ASSERT(chat_templates.template_default.get() != nullptr);
+
                 // if a custom chat template is not supplied, we will use the one that comes
                 // with the model (if any)
                 bool builtin = false;
                 if (llm_params.chat_template.empty()) {
-                    const char *tmpl         = llama_model_chat_template(llm_model);
+                    const char *tmpl         = llama_model_chat_template(llm_model, nullptr);
                     llm_params.chat_template = tmpl == nullptr ? "chatml" : tmpl;
                     builtin                  = true;
                 }
@@ -1227,7 +1231,7 @@ struct server_context {
                         chat_template_alias.c_str(),
                         support_tool_calls ? "supported" : "unsupported",
                         // NB(thxCode): common_chat_format_example is a patch.
-                        common_chat_format_example(llm_model, llm_params.chat_template, support_tool_calls).c_str());
+                        common_chat_format_example(llm_model, *chat_templates.template_default, llm_params.use_jinja, support_tool_calls).c_str());
             } else {
                 SRV_INF("%s", "chat template is disabled\n");
             }
@@ -4826,7 +4830,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false, false);
+            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false, false, ctx_server.llm_params.use_jinja);
         }
 
         // construct task
@@ -4954,7 +4958,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true, ctx_server.support_tool_calls);
+        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja);
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);

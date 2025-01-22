@@ -1,5 +1,5 @@
 diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
-index d7d277e7..913584ab 100644
+index a7260f49..833bb880 100644
 --- a/src/llama-arch.cpp
 +++ b/src/llama-arch.cpp
 @@ -16,6 +16,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
@@ -10,7 +10,7 @@ index d7d277e7..913584ab 100644
      { LLM_ARCH_BERT,             "bert"             },
      { LLM_ARCH_NOMIC_BERT,       "nomic-bert"       },
      { LLM_ARCH_JINA_BERT_V2,     "jina-bert-v2"     },
-@@ -402,6 +403,23 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
+@@ -403,6 +404,23 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
              { LLM_TENSOR_ATTN_Q,          "blk.%d.attn_q" },
              { LLM_TENSOR_ATTN_K,          "blk.%d.attn_k" },
              { LLM_TENSOR_ATTN_V,          "blk.%d.attn_v" },
@@ -35,7 +35,7 @@ index d7d277e7..913584ab 100644
              { LLM_TENSOR_LAYER_OUT_NORM,  "blk.%d.layer_output_norm" },
              { LLM_TENSOR_FFN_DOWN,        "blk.%d.ffn_down" },
 diff --git a/src/llama-arch.h b/src/llama-arch.h
-index 34984479..976e9c15 100644
+index 122fdceb..7fc5e788 100644
 --- a/src/llama-arch.h
 +++ b/src/llama-arch.h
 @@ -20,6 +20,7 @@ enum llm_arch {
@@ -47,7 +47,7 @@ index 34984479..976e9c15 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_JINA_BERT_V2,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 590386e6..676b591a 100644
+index 031b4c30..3fd000a0 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -618,6 +618,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {

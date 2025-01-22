@@ -307,8 +307,11 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
                                                                                                             "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
     opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
+                                                                                                            "only commonly used templates are accepted (unless --jinja is set before this flag)\n"
                                                                                                             "list of built-in templates:\n%s", get_builtin_chat_templates().c_str() });
-    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "set a file to load a custom jinja chat template (default: template taken from model's metadata)" });
+    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "set a file to load a custom jinja chat template (default: template taken from model's metadata)"
+                                                                                                            "only commonly used templates are accepted (unless --jinja is set before this flag)\n" });
+    opts.push_back({ "server/completion",                  "       --jinja",                                "use jinja template for chat (default: disabled)" });
     opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "path to save slot kv cache (default: disabled)" });
     opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", llm_params.slot_prompt_similarity });
     opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
@@ -853,9 +856,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                     invalid("--chat-template");
                 }
                 std::string t(arg);
-                if (t.size() > 20 && !common_chat_verify_template(t)) {
-                    invalid("--chat-template");
-                }
                 params_.llm_params.enable_chat_template = true;
                 params_.llm_params.chat_template        = t;
                 continue;
@@ -872,9 +872,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 std::string t;
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), std::back_inserter(t));
-                if (t.size() > 20 && !common_chat_verify_template(t)) {
-                    invalid("--chat-template-file");
-                }
                 params_.llm_params.enable_chat_template = true;
                 params_.llm_params.chat_template        = t;
                 continue;
@@ -2094,6 +2091,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     get_env("LLAMA_ARG_CACHE_PROMPT", params_.cache_prompt);
     get_env("LLAMA_ARG_CACHE_REUSE", params_.llm_params.n_cache_reuse);
     get_env("LLAMA_ARG_CHAT_TEMPLATE", params_.llm_params.chat_template);
+    get_env("LLAMA_ARG_JINJA", params_.llm_params.use_jinja);
     get_env("LLAMA_ARG_N_PREDICT", params_.llm_params.n_predict);
     get_env("LLAMA_ARG_METRICS", params_.llm_params.endpoint_metrics);
     get_env("LLAMA_ARG_SLOTS", params_.llm_params.endpoint_slots);
@@ -2117,6 +2115,9 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     get_env("LLAMA_LOG_VERBOSITY", params_.llm_params.verbosity);
 
     // Postprocess params
+    if (params_.llm_params.chat_template.size() > 20 && !common_chat_verify_template(params_.llm_params.chat_template, params_.llm_params.use_jinja)) {
+        invalid("--chat-template");
+    }
     postprocess_cpu_params(params_.llm_params.cpuparams, nullptr);
     postprocess_cpu_params(params_.llm_params.cpuparams_batch, &params_.llm_params.cpuparams);
     postprocess_cpu_params(params_.llm_params.speculative.cpuparams, &params_.llm_params.cpuparams);
