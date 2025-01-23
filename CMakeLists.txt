@@ -27,6 +27,7 @@ endif ()
 
 # debug
 option(LLAMA_ALL_WARNINGS "llama: enable all compiler warnings" ON)
+option(LLAMA_PATCH_DEBUG "llama: enable debug patches" OFF)
 
 # build
 option(LLAMA_FATAL_WARNINGS "llama: enable -Werror flag" OFF)
