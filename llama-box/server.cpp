@@ -18,6 +18,7 @@
 #include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
 
+#include "chat-template.hpp"
 #include "param.hpp"
 #include "ratelimiter.hpp"
 #include "rpcserver.hpp"
@@ -29,8 +30,6 @@
 #define HEADER_REQUEST_ID "X-Request-ID"
 #define HEADER_REQUEST_ACCEPTED_AT "X-Request-Accepted-At"
 #define HEADER_REQUEST_TOKENS_PER_SECOND "X-Request-Tokens-Per-Second"
-
-using json = nlohmann::json;
 
 constexpr int HTTP_POLLING_SECONDS = 1;
 
@@ -4830,7 +4829,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false, false, ctx_server.llm_params.use_jinja);
+            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, false, *ctx_server.chat_templates.template_default, false, ctx_server.llm_params.use_jinja);
         }
 
         // construct task
@@ -4958,7 +4957,8 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja);
+        const auto &tmpl = ctx_server.support_tool_calls && ctx_server.chat_templates.template_tool_use ? *ctx_server.chat_templates.template_tool_use : *ctx_server.chat_templates.template_default;
+        request          = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true, tmpl, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja);
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);

@@ -318,249 +318,254 @@ usage: llama-box [options]
 
 general:
 
-  -h,    --help, --usage          print usage and exit
-         --version                print version and exit
-         --system-info            print system info and exit
-         --list-devices           print list of available devices and exit
+  -h,    --help, --usage          Print usage and exit
+         --version                Print version and exit
+         --system-info            Print system info and exit
+         --list-devices           Print list of available devices and exit
   -v,    --verbose, --log-verbose 
-                                  set verbosity level to infinity (i.e. log all messages, useful for debugging)
+                                  Set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V
-                                  set the verbosity threshold, messages with a higher verbosity will be ignored
-         --log-colors             enable colored logging
+                                  Set the verbosity threshold, messages with a higher verbosity will be ignored
+         --log-colors             Enable colored logging
 
 server:
 
-         --host HOST              ip address to listen (default: 127.0.0.1)
-         --port PORT              port to listen (default: 8080)
-  -to    --timeout N              server read/write timeout in seconds (default: 600)
-         --threads-http N         number of threads used to process HTTP requests (default: -1)
-         --conn-idle N            server connection idle in seconds (default: 60)
-         --conn-keepalive N       server connection keep-alive in seconds (default: 15)
-  -m,    --model FILE             model path (default: models/7B/ggml-model-f16.gguf)
-  -a,    --alias NAME             model name alias
-         --lora FILE              apply LoRA adapter (implies --no-mmap)
+         --host HOST              IP address to listen (default: 127.0.0.1)
+         --port PORT              Port to listen (default: 8080)
+  -to    --timeout N              Server read/write timeout in seconds (default: 600)
+         --threads-http N         Number of threads used to process HTTP requests (default: -1)
+         --conn-idle N            Server connection idle in seconds (default: 60)
+         --conn-keepalive N       Server connection keep-alive in seconds (default: 15)
+  -m,    --model FILE             Model path (default: models/7B/ggml-model-f16.gguf)
+  -a,    --alias NAME             Model name alias
+         --lora FILE              Apply LoRA adapter (implies --no-mmap)
          --lora-scaled FILE SCALE 
-                                  apply LoRA adapter with user defined scaling S (implies --no-mmap)
+                                  Apply LoRA adapter with user defined scaling S (implies --no-mmap)
          --lora-init-without-apply
-                                  load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
+                                  Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
-  -fa,   --flash-attn             enable Flash Attention (default: disabled)
-         --metrics                enable prometheus compatible metrics endpoint (default: disabled)
-         --infill                 enable infill endpoint (default: disabled)
-         --embeddings             enable embedding endpoint (default: disabled)
-         --images                 enable image endpoint (default: disabled)
-         --rerank                 enable reranking endpoint (default: disabled)
-         --slots                  enable slots monitoring endpoint (default: disabled)
-         --rpc SERVERS            comma separated list of RPC servers
-  -ts,   --tensor-split SPLIT     fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1
-                                  for image models, indicate which device should be able to offload
+  -fa,   --flash-attn             Enable Flash Attention (default: disabled)
+         --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
+         --infill                 Enable infill endpoint (default: disabled)
+         --embeddings             Enable embedding endpoint (default: disabled)
+         --images                 Enable image endpoint (default: disabled)
+         --rerank                 Enable reranking endpoint (default: disabled)
+         --slots                  Enable slots monitoring endpoint (default: disabled)
+         --rpc SERVERS            A comma-separated list of RPC server
+  -ts,   --tensor-split SPLIT     Fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1
+                                  For image models, indicate which device should be able to offload
   -ngl,  --gpu-layers,  --n-gpu-layers N
-                                  number of layers to store in VRAM
+                                  Number of layers to store in VRAM
                                   '-ngl 0' means no offloading
-         --no-warmup              skip warming up the model with an empty run
-         --warmup                 enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving
+         --no-warmup              Skip warming up the model with an empty run
+         --warmup                 Enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving
 
 server/completion:
 
   -dev,  --device <dev1,dev2,...> 
-                                  comma-separated list of devices to use for offloading (none = don't offload)
-                                  use --list-devices to see a list of available devices
-  -sm,   --split-mode SPLIT_MODE  how to split the model across multiple GPUs, one of:
+                                  A comma-separated list of devices to use for offloading (none = don't offload)
+                                  Use --list-devices to see a list of available devices
+  -sm,   --split-mode SPLIT_MODE  How to split the model across multiple GPUs, one of:
                                     - none: use one GPU only
                                     - layer (default): split layers and KV across GPUs
                                     - row: split rows across GPUs, store intermediate results and KV in --main-gpu
-  -mg,   --main-gpu N             the device to use for the model
-                                  work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: 0)
+  -mg,   --main-gpu N             The device to use for the model
+                                  Work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: 0)
          --override-kv KEY=TYPE:VALUE
-                                  advanced option to override model metadata by key. may be specified multiple times.
-                                  types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
+                                  Advanced option to override model metadata by key, may be specified multiple times
+                                  Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template JINJA_TEMPLATE
-                                  set custom jinja chat template (default: template taken from model's metadata)
-                                  list of built-in templates:
+                                  Set custom jinja chat template (default: template taken from model's metadata)
+                                  Only commonly used templates are accepted (unless --jinja is set before this flag)
+                                  List of built-in templates:
                                   chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, zephyr
          --chat-template-file FILE
-                                  set a file to load a custom jinja chat template (default: template taken from model's metadata)
-         --slot-save-path PATH    path to save slot kv cache (default: disabled)
+                                  Set a file to load a custom jinja chat template (default: template taken from model's metadata)Only commonly used templates are accepted (unless --jinja is set before this flag)
+                                  
+         --jinja                  Use jinja template for chat (default: disabled)
+         --slot-save-path PATH    Path to save slot kv cache (default: disabled)
   -sps,  --slot-prompt-similarity N
-                                  how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
+                                  How much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
                                   
-  -tps   --tokens-per-second N    maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
-                                  when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
-  -t,    --threads N              number of threads to use during generation (default: -1)
-  -C,    --cpu-mask M             set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
-  -Cr,   --cpu-range lo-hi        range of CPUs for affinity. Complements --cpu-mask
-         --cpu-strict <0|1>       use strict CPU placement (default: 0)
+  -tps   --tokens-per-second N    Maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
+                                  When enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
+  -t,    --threads N              Number of threads to use during generation (default: -1)
+  -C,    --cpu-mask M             Set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
+  -Cr,   --cpu-range lo-hi        Range of CPUs for affinity. Complements --cpu-mask
+         --cpu-strict <0|1>       Use strict CPU placement (default: 0)
                                   
-         --prio N                 set process/thread priority (default: 0), one of:
+         --prio N                 Set process/thread priority (default: 0), one of:
                                     - 0-normal
                                     - 1-medium
                                     - 2-high
                                     - 3-realtime
-         --poll <0...100>         use polling level to wait for work (0 - no polling, default: 50)
+         --poll <0...100>         Use polling level to wait for work (0 - no polling, default: 50)
                                   
-  -tb,   --threads-batch N        number of threads to use during batch and prompt processing (default: same as --threads)
-  -Cb,   --cpu-mask-batch M       set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
-  -Crb,  --cpu-range-batch lo-hi  ranges of CPUs for affinity. Complements --cpu-mask-batch
+  -tb,   --threads-batch N        Number of threads to use during batch and prompt processing (default: same as --threads)
+  -Cb,   --cpu-mask-batch M       Set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
+  -Crb,  --cpu-range-batch lo-hi  Ranges of CPUs for affinity. Complements --cpu-mask-batch
          --cpu-strict-batch <0|1> 
-                                  use strict CPU placement (default: same as --cpu-strict)
-         --prio-batch N           set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
-         --poll-batch <0...100>   use polling to wait for work (default: same as --poll
-  -c,    --ctx-size N             size of the prompt context (default: 4096, 0 = loaded from model)
-         --no-context-shift       disables context shift on infinite text generation (default: disabled)
-  -n,    --predict N              number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
-  -b,    --batch-size N           logical maximum batch size (default: 2048)
-  -ub,   --ubatch-size N          physical maximum batch size (default: 512)
-         --keep N                 number of tokens to keep from the initial prompt (default: 0, -1 = all)
-  -e,    --escape                 process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
-         --no-escape              do not process escape sequences
-         --samplers SAMPLERS      samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_k;typ_p;top_p;min_p;xtc;temperature)
-         --sampling-seq SEQUENCE  simplified sequence for samplers that will be used (default: edkypmxt)
-         --temp T                 temperature (default: 0.8)
-         --top-k N                top-k sampling (default: 40, 0 = disabled)
-         --top-p P                top-p sampling (default: 0.9, 1.0 = disabled)
-         --min-p P                min-p sampling (default: 0.1, 0.0 = disabled)
-         --xtc-probability N      xtc probability (default: 0.0, 0.0 = disabled)
-         --xtc-threshold N        xtc threshold (default: 0.1, 1.0 = disabled)
-         --typical P              locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
-         --repeat-last-n N        last n tokens to consider for penalize (default: 64, 0 = disabled, -1 = ctx_size)
-         --repeat-penalty N       penalize repeat sequence of tokens (default: 1.0, 1.0 = disabled)
-         --presence-penalty N     repeat alpha presence penalty (default: 0.0, 0.0 = disabled)
-         --frequency-penalty N    repeat alpha frequency penalty (default: 0.0, 0.0 = disabled)
-         --dry-multiplier N       set DRY sampling multiplier (default: 0.0, 0.0 = disabled)
-         --dry-base N             set DRY sampling base value (default: 1.75)
-         --dry-allowed-length N   set allowed length for DRY sampling (default: 2)
-         --dry-penalty-last-n N   set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
+                                  Use strict CPU placement (default: same as --cpu-strict)
+         --prio-batch N           Set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
+         --poll-batch <0...100>   Use polling to wait for work (default: same as --poll
+  -c,    --ctx-size N             Size of the prompt context (default: 4096, 0 = loaded from model)
+         --no-context-shift       Disables context shift on infinite text generation (default: disabled)
+  -n,    --predict N              Number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
+  -b,    --batch-size N           Logical batch size.
+                                  Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: 2048)
+  -ub,   --ubatch-size N          Physical batch size, which is the maximum number of tokens that may be processed at a time.
+                                  Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: 512)
+         --keep N                 Number of tokens to keep from the initial prompt (default: 0, -1 = all)
+  -e,    --escape                 Process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
+         --no-escape              Do not process escape sequences
+         --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_k;typ_p;top_p;min_p;xtc;temperature)
+         --sampling-seq SEQUENCE  Simplified sequence for samplers that will be used (default: edkypmxt)
+         --temp T                 Temperature (default: 0.8)
+         --top-k N                Top-K sampling (default: 40, 0 = disabled)
+         --top-p P                Top-P sampling (default: 0.9, 1.0 = disabled)
+         --min-p P                Min-P sampling (default: 0.1, 0.0 = disabled)
+         --xtc-probability N      XTC probability (default: 0.0, 0.0 = disabled)
+         --xtc-threshold N        XTC threshold (default: 0.1, 1.0 = disabled)
+         --typical P              Locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
+         --repeat-last-n N        Last n tokens to consider for penalize (default: 64, 0 = disabled, -1 = ctx_size)
+         --repeat-penalty N       Penalize repeat sequence of tokens (default: 1.0, 1.0 = disabled)
+         --presence-penalty N     Repeat alpha presence penalty (default: 0.0, 0.0 = disabled)
+         --frequency-penalty N    Repeat alpha frequency penalty (default: 0.0, 0.0 = disabled)
+         --dry-multiplier N       Set DRY sampling multiplier (default: 0.0, 0.0 = disabled)
+         --dry-base N             Set DRY sampling base value (default: 1.75)
+         --dry-allowed-length N   Set allowed length for DRY sampling (default: 2)
+         --dry-penalty-last-n N   Set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
          --dry-sequence-breaker N 
-                                  add sequence breaker for DRY sampling, clearing out default breakers (
+                                  Add sequence breaker for DRY sampling, clearing out default breakers (
                                   ;:;";*) in the process; use "none" to not use any sequence breakers
-         --dynatemp-range N       dynamic temperature range (default: 0.0, 0.0 = disabled)
-         --dynatemp-exp N         dynamic temperature exponent (default: 1.0)
-         --mirostat N             use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)
+         --dynatemp-range N       Dynamic temperature range (default: 0.0, 0.0 = disabled)
+         --dynatemp-exp N         Dynamic temperature exponent (default: 1.0)
+         --mirostat N             Use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)
          --mirostat-lr N          Mirostat learning rate, parameter eta (default: 0.1)
          --mirostat-ent N         Mirostat target entropy, parameter tau (default: 5.0)
   -l     --logit-bias TOKEN_ID(+/-)BIAS
-                                  modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello'
+                                  Modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello'
          --grammar GRAMMAR        BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '')
-         --grammar-file FILE      file to read grammar from
+         --grammar-file FILE      File to read grammar from
   -j,    --json-schema SCHEMA     JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead
          --rope-scaling {none,linear,yarn}
                                   RoPE frequency scaling method, defaults to linear unless specified by the model
          --rope-scale N           RoPE context scaling factor, expands context by a factor of N
          --rope-freq-base N       RoPE base frequency, used by NTK-aware scaling (default: loaded from model)
          --rope-freq-scale N      RoPE frequency scaling factor, expands context by a factor of 1/N
-         --yarn-orig-ctx N        YaRN: original context size of model (default: 0 = model training context size)
-         --yarn-ext-factor N      YaRN: extrapolation mix factor (default: -1.0, 0.0 = full interpolation)
-         --yarn-attn-factor N     YaRN: scale sqrt(t) or attention magnitude (default: 1.0)
-         --yarn-beta-fast N       YaRN: low correction dim or beta (default: 32.0)
-         --yarn-beta-slow N       YaRN: high correction dim or alpha (default: 1.0)
-  -nkvo, --no-kv-offload          disable KV offload
-         --no-cache-prompt        disable caching prompt
-         --cache-reuse N          min chunk size to attempt reusing from the cache via KV shifting (default: 0)
+         --yarn-orig-ctx N        YaRN original context size of model (default: 0 = model training context size)
+         --yarn-ext-factor N      YaRN extrapolation mix factor (default: -1.0, 0.0 = full interpolation)
+         --yarn-attn-factor N     YaRN scale sqrt(t) or attention magnitude (default: 1.0)
+         --yarn-beta-fast N       YaRN low correction dim or beta (default: 32.0)
+         --yarn-beta-slow N       YaRN high correction dim or alpha (default: 1.0)
+  -nkvo, --no-kv-offload          Disable KV offload
+         --no-cache-prompt        Disable caching prompt
+         --cache-reuse N          Min chunk size to attempt reusing from the cache via KV shifting (default: 0)
   -ctk,  --cache-type-k TYPE      KV cache data type for K, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
-  -np,   --parallel N             number of parallel sequences to decode (default: 1)
-  -nocb, --no-cont-batching       disable continuous batching
-         --mmproj FILE            path to a multimodal projector file for LLaVA
-         --mlock                  force system to keep model in RAM rather than swapping or compressing
-         --no-mmap                do not memory-map model (slower load but may reduce pageouts if not using mlock)
-         --mmap                   apply memory-map model (faster load but may increase pageouts if not using mlock)
-         --numa TYPE              attempt optimizations that help on some NUMA systems
+  -np,   --parallel N             Number of parallel sequences to decode (default: 1)
+  -nocb, --no-cont-batching       Disable continuous batching
+         --mmproj FILE            Path to a multimodal projector file for LLaVA
+         --mlock                  Force system to keep model in RAM rather than swapping or compressing
+         --no-mmap                Do not memory-map model (slower load but may reduce pageouts if not using mlock)
+         --mmap                   Apply memory-map model (faster load but may increase pageouts if not using mlock)
+         --numa TYPE              Attempt optimizations that help on some NUMA systems
                                     - distribute: spread execution evenly over all nodes
                                     - isolate: only spawn threads on CPUs on the node that execution started on
                                     - numactl: use the CPU map provided by numactl
-                                  if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437
-         --control-vector FILE    add a control vector
+                                  If run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437
+         --control-vector FILE    Add a control vector
          --control-vector-scaled FILE SCALE
-                                  add a control vector with user defined scaling SCALE
+                                  Add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
-                                  layer range to apply the control vector(s) to, start and end inclusive
-         --spm-infill             use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
-  -sp,   --special                special tokens output enabled (default: false)
+                                  Layer range to apply the control vector(s) to, start and end inclusive
+         --spm-infill             Use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
+  -sp,   --special                Special tokens output enabled (default: false)
 
 server/completion/speculative:
 
          --draft-max, --draft, --draft-n N
-                                  number of tokens to draft for speculative decoding (default: 16)
+                                  Number of tokens to draft for speculative decoding (default: 16)
          --draft-min, --draft-n-min N
-                                  minimum number of draft tokens to use for speculative decoding (default: 5)
-         --draft-p-min P          minimum speculative decoding probability (greedy) (default: 0.9)
-  -md,   --model-draft FNAME      draft model for speculative decoding (default: unused)
+                                  Minimum number of draft tokens to use for speculative decoding (default: 5)
+         --draft-p-min P          Minimum speculative decoding probability (greedy) (default: 0.9)
+  -md,   --model-draft FNAME      Draft model for speculative decoding (default: unused)
   -devd, --device-draft <dev1,dev2,...>
-                                  comma-separated list of devices to use for offloading the draft model (none = don't offload)
-                                  use --list-devices to see a list of available devices
+                                  A comma-separated list of devices to use for offloading the draft model (none = don't offload)
+                                  Use --list-devices to see a list of available devices
   -ngld, --gpu-layers-draft, --n-gpu-layers-draft N
-                                  number of layers to store in VRAM for the draft model
-         --lookup-ngram-min N     minimum n-gram size for lookup cache (default: 0, 0 = disabled)
+                                  Number of layers to store in VRAM for the draft model
+         --lookup-ngram-min N     Minimum n-gram size for lookup cache (default: 0, 0 = disabled)
   -lcs,  --lookup-cache-static FILE
-                                  path to static lookup cache to use for lookup decoding (not updated by generation)
+                                  Path to static lookup cache to use for lookup decoding (not updated by generation)
   -lcd,  --lookup-cache-dynamic FILE
-                                  path to dynamic lookup cache to use for lookup decoding (updated by generation)
+                                  Path to dynamic lookup cache to use for lookup decoding (updated by generation)
 
 server/completion/visual:
 
          --visual-max-image-size N
-                                  maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: 0, 0 = disabled)
+                                  Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: 0, 0 = disabled)
 
 server/embedding:
 
-         --pooling                pooling type for embeddings, use model default if unspecified
+         --pooling                Pooling type for embeddings, use model default if unspecified
 
 server/images:
 
-         --image-max-batch N      maximum batch count (default: 4)
-         --image-max-height N     image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
-         --image-max-width N      image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
-         --image-guidance N       the value of guidance during the computing phase (default: 3.500000)
-         --image-strength N       strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model
+         --image-max-batch N      Maximum batch count (default: 4)
+         --image-max-height N     Image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
+         --image-max-width N      Image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: 1024)
+         --image-guidance N       The value of guidance during the computing phase (default: 3.500000)
+         --image-strength N       Strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model
          --image-sample-method, --image-sampler TYPE
-                                  sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm, ddim_trailing, tcd
+                                  Sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2m, dpm++2mv2, ipndm, ipndm_v, lcm, ddim_trailing, tcd
          --image-sampling-steps, --image-sample-steps N
-                                  number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
-         --image-cfg-scale N      the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
-         --image-slg-scale N      the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
-         --image-slg-skip-layer   the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)
-         --image-slg-start N      the phase to enable SLG (default: 0.01)
-         --image-slg-end N        the phase to disable SLG (default: 0.20)
+                                  Number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation
+         --image-cfg-scale N      The scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)
+         --image-slg-scale N      The scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)
+         --image-slg-skip-layer   The layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)
+         --image-slg-start N      The phase to enable SLG (default: 0.01)
+         --image-slg-end N        The phase to disable SLG (default: 0.20)
                                   SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])
          --image-schedule-method, --image-schedule TYPE
-                                  denoiser sigma schedule method, allowed values: default, discrete, karras, exponential, ays, gits (default: discrete)
+                                  Denoiser sigma schedule method, allowed values: default, discrete, karras, exponential, ays, gits (default: discrete)
          --image-no-text-encoder-model-offload
-                                  disable text-encoder(clip-l/clip-g/t5xxl) model offload
+                                  Disable text-encoder(clip-l/clip-g/t5xxl) model offload
          --image-clip-l-model PATH
-                                  path to the CLIP Large (clip-l) text encoder, or use --model included
+                                  Path to the CLIP Large (clip-l) text encoder, or use --model included
          --image-clip-g-model PATH
-                                  path to the CLIP Generic (clip-g) text encoder, or use --model included
+                                  Path to the CLIP Generic (clip-g) text encoder, or use --model included
          --image-t5xxl-model PATH 
-                                  path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
+                                  Path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
          --image-no-vae-model-offload
-                                  disable vae(taesd) model offload
-         --image-vae-model PATH   path to Variational AutoEncoder (vae), or use --model included
-         --image-vae-tiling       indicate to process vae decoder in tiles to reduce memory usage (default: disabled)
-         --image-no-vae-tiling    disable vae decoder in tiles
+                                  Disable vae(taesd) model offload
+         --image-vae-model PATH   Path to Variational AutoEncoder (vae), or use --model included
+         --image-vae-tiling       Indicate to process vae decoder in tiles to reduce memory usage (default: disabled)
+         --image-no-vae-tiling    Disable vae decoder in tiles
          --image-taesd-model PATH 
-                                  path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
+                                  Path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
          --image-upscale-model PATH
-                                  path to the upscale model, or use --model included
+                                  Path to the upscale model, or use --model included
          --image-upscale-repeats N
-                                  how many times to run upscaler (default: 1)
+                                  How many times to run upscaler (default: 1)
          --image-no-control-net-model-offload
-                                  disable control-net model offload
+                                  Disable control-net model offload
          --image-control-net-model PATH
-                                  path to the control net model, or use --model included
+                                  Path to the control net model, or use --model included
          --image-control-strength N
-                                  how strength to apply the control net (default: 0.900000)
-         --image-control-canny    indicate to apply canny preprocessor (default: disabled)
+                                  How strength to apply the control net (default: 0.900000)
+         --image-control-canny    Indicate to apply canny preprocessor (default: disabled)
          --image-free-compute-memory-immediately
-                                  indicate to free compute memory immediately, which allow generating high resolution image (default: disabled)
+                                  Indicate to free compute memory immediately, which allow generating high resolution image (default: disabled)
 
 rpc-server:
 
-         --rpc-server-host HOST   ip address to rpc server listen (default: 0.0.0.0)
-         --rpc-server-port PORT   port to rpc server listen (default: 0, 0 = disabled)
-         --rpc-server-main-gpu N  the GPU VRAM to use for the rpc server (default: 0, -1 = disabled, use RAM)
+         --rpc-server-host HOST   IP address to RPC server listen (default: 0.0.0.0)
+         --rpc-server-port PORT   Port to RPC server listen (default: 0, 0 = disabled)
+         --rpc-server-main-gpu N  The GPU VRAM to use for the RPC server (default: 0, -1 = disabled, use RAM)
          --rpc-server-reserve-memory MEM
-                                  reserve memory in MiB (default: 0)
+                                  Reserve memory in MiB (default: 0)
 
 ```
 

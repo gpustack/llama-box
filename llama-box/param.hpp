@@ -23,8 +23,6 @@ extern int LLAMA_CPP_BUILD_NUMBER;
 extern const char *STABLE_DIFFUSION_CPP_COMMIT;
 extern int STABLE_DIFFUSION_CPP_BUILD_NUMBER;
 
-using json = nlohmann::json;
-
 struct llama_box_params {
     common_params llm_params;
     rpcserver_params rpc_params;
@@ -258,221 +256,223 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     std::vector<opt> opts;
     // general //
     opts.push_back({ "general" });
-    opts.push_back({ "general",                            "-h,    --help, --usage",                        "print usage and exit" });
-    opts.push_back({ "general",                            "       --version",                              "print version and exit" });
-    opts.push_back({ "general",                            "       --system-info",                          "print system info and exit" });
-    opts.push_back({ "general",                            "       --list-devices",                         "print list of available devices and exit" });
-    opts.push_back({ "general",                            "-v,    --verbose, --log-verbose",               "set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
-    opts.push_back({ "general",                            "-lv,   --verbosity, --log-verbosity V",         "set the verbosity threshold, messages with a higher verbosity will be ignored" });
-    opts.push_back({ "general",                            "       --log-colors",                           "enable colored logging" });
+    opts.push_back({ "general",                            "-h,    --help, --usage",                        "Print usage and exit" });
+    opts.push_back({ "general",                            "       --version",                              "Print version and exit" });
+    opts.push_back({ "general",                            "       --system-info",                          "Print system info and exit" });
+    opts.push_back({ "general",                            "       --list-devices",                         "Print list of available devices and exit" });
+    opts.push_back({ "general",                            "-v,    --verbose, --log-verbose",               "Set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
+    opts.push_back({ "general",                            "-lv,   --verbosity, --log-verbosity V",         "Set the verbosity threshold, messages with a higher verbosity will be ignored" });
+    opts.push_back({ "general",                            "       --log-colors",                           "Enable colored logging" });
     // general //
     // server //
     opts.push_back({ "server" });
-    opts.push_back({ "server",                             "       --host HOST",                            "ip address to listen (default: %s)", llm_params.hostname.c_str() });
-    opts.push_back({ "server",                             "       --port PORT",                            "port to listen (default: %d)", llm_params.port });
-    opts.push_back({ "server",                             "-to    --timeout N",                            "server read/write timeout in seconds (default: %d)", llm_params.timeout_read });
-    opts.push_back({ "server",                             "       --threads-http N",                       "number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
-    opts.push_back({ "server",                             "       --conn-idle N",                          "server connection idle in seconds (default: %d)", params_.conn_idle });
-    opts.push_back({ "server",                             "       --conn-keepalive N",                     "server connection keep-alive in seconds (default: %d)", params_.conn_keepalive });
-    opts.push_back({ "server",                             "-m,    --model FILE",                           "model path (default: %s)", DEFAULT_MODEL_PATH });
-    opts.push_back({ "server",                             "-a,    --alias NAME",                           "model name alias" });
-    opts.push_back({ "server",                             "       --lora FILE",                            "apply LoRA adapter (implies --no-mmap)" });
-    opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
-    opts.push_back({ "server",                             "       --lora-init-without-apply",              "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen (default: %s)", llm_params.hostname.c_str() });
+    opts.push_back({ "server",                             "       --port PORT",                            "Port to listen (default: %d)", llm_params.port });
+    opts.push_back({ "server",                             "-to    --timeout N",                            "Server read/write timeout in seconds (default: %d)", llm_params.timeout_read });
+    opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
+    opts.push_back({ "server",                             "       --conn-idle N",                          "Server connection idle in seconds (default: %d)", params_.conn_idle });
+    opts.push_back({ "server",                             "       --conn-keepalive N",                     "Server connection keep-alive in seconds (default: %d)", params_.conn_keepalive });
+    opts.push_back({ "server",                             "-m,    --model FILE",                           "Model path (default: %s)", DEFAULT_MODEL_PATH });
+    opts.push_back({ "server",                             "-a,    --alias NAME",                           "Model name alias" });
+    opts.push_back({ "server",                             "       --lora FILE",                            "Apply LoRA adapter (implies --no-mmap)" });
+    opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "Apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
+    opts.push_back({ "server",                             "       --lora-init-without-apply",              "Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
-    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --metrics",                              "enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --infill",                               "enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --embeddings",                           "enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --images",                               "enable image endpoint (default: %s)", params_.endpoint_images ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --rerank",                               "enable reranking endpoint (default: %s)", llm_params.reranking ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --slots",                                "enable slots monitoring endpoint (default: %s)", llm_params.endpoint_slots ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --rpc SERVERS",                          "comma separated list of RPC servers" });
-    opts.push_back({ "server",                             "-ts,   --tensor-split SPLIT",                   "fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1\n"
-                                                                                                            "for image models, indicate which device should be able to offload"});
-    opts.push_back({ "server",                             "-ngl,  --gpu-layers,  --n-gpu-layers N",        "number of layers to store in VRAM\n"
+    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --infill",                               "Enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --images",                               "Enable image endpoint (default: %s)", params_.endpoint_images ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --rerank",                               "Enable reranking endpoint (default: %s)", llm_params.reranking ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --slots",                                "Enable slots monitoring endpoint (default: %s)", llm_params.endpoint_slots ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --rpc SERVERS",                          "A comma-separated list of RPC server" });
+    opts.push_back({ "server",                             "-ts,   --tensor-split SPLIT",                   "Fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1\n"
+                                                                                                            "For image models, indicate which device should be able to offload"});
+    opts.push_back({ "server",                             "-ngl,  --gpu-layers,  --n-gpu-layers N",        "Number of layers to store in VRAM\n"
                                                                                                             "'-ngl 0' means no offloading"});
-    opts.push_back({ "server",                             "       --no-warmup",                            "skip warming up the model with an empty run" });
-    opts.push_back({ "server",                             "       --warmup",                               "enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving" });
+    opts.push_back({ "server",                             "       --no-warmup",                            "Skip warming up the model with an empty run" });
+    opts.push_back({ "server",                             "       --warmup",                               "Enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving" });
     // server // completion //
     opts.push_back({ "server/completion" });
-    opts.push_back({ "server/completion",                  "-dev,  --device <dev1,dev2,...>",               "comma-separated list of devices to use for offloading (none = don't offload)\n"
-                                                                                                            "use --list-devices to see a list of available devices"});
-    opts.push_back({ "server/completion",                  "-sm,   --split-mode SPLIT_MODE",                "how to split the model across multiple GPUs, one of:\n"
+    opts.push_back({ "server/completion",                  "-dev,  --device <dev1,dev2,...>",               "A comma-separated list of devices to use for offloading (none = don't offload)\n"
+                                                                                                            "Use --list-devices to see a list of available devices"});
+    opts.push_back({ "server/completion",                  "-sm,   --split-mode SPLIT_MODE",                "How to split the model across multiple GPUs, one of:\n"
                                                                                                             "  - none: use one GPU only\n"
                                                                                                             "  - layer (default): split layers and KV across GPUs\n"
                                                                                                             "  - row: split rows across GPUs, store intermediate results and KV in --main-gpu" });
-    opts.push_back({ "server/completion",                  "-mg,   --main-gpu N",                           "the device to use for the model\n"
-                                                                                                            "work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: %d)", llm_params.main_gpu });
-    opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "advanced option to override model metadata by key. may be specified multiple times.\n"
-                                                                                                            "types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
-    opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "set custom jinja chat template (default: template taken from model's metadata)\n"
-                                                                                                            "only commonly used templates are accepted (unless --jinja is set before this flag)\n"
-                                                                                                            "list of built-in templates:\n%s", get_builtin_chat_templates().c_str() });
-    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "set a file to load a custom jinja chat template (default: template taken from model's metadata)"
-                                                                                                            "only commonly used templates are accepted (unless --jinja is set before this flag)\n" });
-    opts.push_back({ "server/completion",                  "       --jinja",                                "use jinja template for chat (default: disabled)" });
-    opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "path to save slot kv cache (default: disabled)" });
-    opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", llm_params.slot_prompt_similarity });
-    opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
-                                                                                                           "when enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", params_.n_tps });
-    opts.push_back({ "server/completion",                  "-t,    --threads N",                            "number of threads to use during generation (default: %d)", llm_params.cpuparams.n_threads });
+    opts.push_back({ "server/completion",                  "-mg,   --main-gpu N",                           "The device to use for the model\n"
+                                                                                                            "Work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: %d)", llm_params.main_gpu });
+    opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "Advanced option to override model metadata by key, may be specified multiple times\n"
+                                                                                                            "Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
+    opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "Set custom jinja chat template (default: template taken from model's metadata)\n"
+                                                                                                            "Only commonly used templates are accepted (unless --jinja is set before this flag)\n"
+                                                                                                            "List of built-in templates:\n%s", get_builtin_chat_templates().c_str() });
+    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "Set a file to load a custom jinja chat template (default: template taken from model's metadata)"
+                                                                                                            "Only commonly used templates are accepted (unless --jinja is set before this flag)\n" });
+    opts.push_back({ "server/completion",                  "       --jinja",                                "Use jinja template for chat (default: disabled)" });
+    opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "Path to save slot kv cache (default: disabled)" });
+    opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "How much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", llm_params.slot_prompt_similarity });
+    opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "Maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
+                                                                                                            "When enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", params_.n_tps });
+    opts.push_back({ "server/completion",                  "-t,    --threads N",                            "Number of threads to use during generation (default: %d)", llm_params.cpuparams.n_threads });
 #ifndef GGML_USE_OPENMP
-    opts.push_back({ "server/completion",                  "-C,    --cpu-mask M",                           "set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: \"\")"});
-    opts.push_back({ "server/completion",                  "-Cr,   --cpu-range lo-hi",                      "range of CPUs for affinity. Complements --cpu-mask"});
-    opts.push_back({ "server/completion",                  "       --cpu-strict <0|1>",                     "use strict CPU placement (default: %u)\n", (unsigned) llm_params.cpuparams.strict_cpu});
-    opts.push_back({ "server/completion",                  "       --prio N",                               "set process/thread priority (default: %d), one of:\n"
+    opts.push_back({ "server/completion",                  "-C,    --cpu-mask M",                           "Set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: \"\")"});
+    opts.push_back({ "server/completion",                  "-Cr,   --cpu-range lo-hi",                      "Range of CPUs for affinity. Complements --cpu-mask"});
+    opts.push_back({ "server/completion",                  "       --cpu-strict <0|1>",                     "Use strict CPU placement (default: %u)\n", (unsigned) llm_params.cpuparams.strict_cpu});
+    opts.push_back({ "server/completion",                  "       --prio N",                               "Set process/thread priority (default: %d), one of:\n"
                                                                                                             "  - 0-normal\n"
                                                                                                             "  - 1-medium\n"
                                                                                                             "  - 2-high\n"
                                                                                                             "  - 3-realtime", llm_params.cpuparams.priority});
-    opts.push_back({ "server/completion",                  "       --poll <0...100>",                       "use polling level to wait for work (0 - no polling, default: %u)\n", (unsigned) llm_params.cpuparams.poll});
+    opts.push_back({ "server/completion",                  "       --poll <0...100>",                       "Use polling level to wait for work (0 - no polling, default: %u)\n", (unsigned) llm_params.cpuparams.poll});
 #endif
-    opts.push_back({ "server/completion",                  "-tb,   --threads-batch N",                      "number of threads to use during batch and prompt processing (default: same as --threads)" });
+    opts.push_back({ "server/completion",                  "-tb,   --threads-batch N",                      "Number of threads to use during batch and prompt processing (default: same as --threads)" });
 #ifndef GGML_USE_OPENMP
-    opts.push_back({ "server/completion",                  "-Cb,   --cpu-mask-batch M",                     "set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)"});
-    opts.push_back({ "server/completion",                  "-Crb,  --cpu-range-batch lo-hi",                "ranges of CPUs for affinity. Complements --cpu-mask-batch"});
-    opts.push_back({ "server/completion",                  "       --cpu-strict-batch <0|1>",               "use strict CPU placement (default: same as --cpu-strict)"});
-    opts.push_back({ "server/completion",                  "       --prio-batch N",                         "set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)"});
-    opts.push_back({ "server/completion",                  "       --poll-batch <0...100>",                 "use polling to wait for work (default: same as --poll"});
+    opts.push_back({ "server/completion",                  "-Cb,   --cpu-mask-batch M",                     "Set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)"});
+    opts.push_back({ "server/completion",                  "-Crb,  --cpu-range-batch lo-hi",                "Ranges of CPUs for affinity. Complements --cpu-mask-batch"});
+    opts.push_back({ "server/completion",                  "       --cpu-strict-batch <0|1>",               "Use strict CPU placement (default: same as --cpu-strict)"});
+    opts.push_back({ "server/completion",                  "       --prio-batch N",                         "Set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)"});
+    opts.push_back({ "server/completion",                  "       --poll-batch <0...100>",                 "Use polling to wait for work (default: same as --poll"});
 #endif
-    opts.push_back({ "server/completion",                  "-c,    --ctx-size N",                           "size of the prompt context (default: %d, 0 = loaded from model)", llm_params.n_ctx });
-    opts.push_back({ "server/completion",                  "       --no-context-shift",                     "disables context shift on infinite text generation (default: %s)", llm_params.ctx_shift ? "disabled" : "enabled" });
-    opts.push_back({ "server/completion",                  "-n,    --predict N",                            "number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", llm_params.n_predict });
-    opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "logical maximum batch size (default: %d)", llm_params.n_batch });
-    opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "physical maximum batch size (default: %d)", llm_params.n_ubatch });
-    opts.push_back({ "server/completion",                  "       --keep N",                               "number of tokens to keep from the initial prompt (default: %d, -1 = all)", llm_params.n_keep });
-    opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", llm_params.escape ? "true" : "false" });
-    opts.push_back({ "server/completion",                  "       --no-escape",                            "do not process escape sequences" });
-    opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
-    opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
-    opts.push_back({ "server/completion",                  "       --temp T",                               "temperature (default: %.1f)", (double)llm_params.sampling.temp });
-    opts.push_back({ "server/completion",                  "       --top-k N",                              "top-k sampling (default: %d, 0 = disabled)", llm_params.sampling.top_k });
-    opts.push_back({ "server/completion",                  "       --top-p P",                              "top-p sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
-    opts.push_back({ "server/completion",                  "       --min-p P",                              "min-p sampling (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.min_p });
-    opts.push_back({ "server/completion",                  "       --xtc-probability N",                    "xtc probability (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.xtc_probability });
-    opts.push_back({ "server/completion",                  "       --xtc-threshold N",                      "xtc threshold (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.xtc_threshold });
-    opts.push_back({ "server/completion",                  "       --typical P",                            "locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.typ_p });
-    opts.push_back({ "server/completion",                  "       --repeat-last-n N",                      "last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", llm_params.sampling.penalty_last_n });
-    opts.push_back({ "server/completion",                  "       --repeat-penalty N",                     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.penalty_repeat });
-    opts.push_back({ "server/completion",                  "       --presence-penalty N",                   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_present });
-    opts.push_back({ "server/completion",                  "       --frequency-penalty N",                  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_freq });
-    opts.push_back({ "server/completion",                  "       --dry-multiplier N",                     "set DRY sampling multiplier (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dry_multiplier });
-    opts.push_back({ "server/completion",                  "       --dry-base N",                           "set DRY sampling base value (default: %.2f)", (double)llm_params.sampling.dry_base });
-    opts.push_back({ "server/completion",                  "       --dry-allowed-length N",                 "set allowed length for DRY sampling (default: %d)", llm_params.sampling.dry_allowed_length });
-    opts.push_back({ "server/completion",                  "       --dry-penalty-last-n N",                 "set DRY penalty for the last n tokens (default: %d, 0 = disable, -1 = context size)", llm_params.sampling.dry_penalty_last_n });
-    opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", default_dry_sequence_breaker_names.c_str() });
-    opts.push_back({ "server/completion",                  "       --dynatemp-range N",                     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dynatemp_range });
-    opts.push_back({ "server/completion",                  "       --dynatemp-exp N",                       "dynamic temperature exponent (default: %.1f)", (double)llm_params.sampling.dynatemp_exponent });
-    opts.push_back({ "server/completion",                  "       --mirostat N",                           "use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", llm_params.sampling.mirostat });
+    opts.push_back({ "server/completion",                  "-c,    --ctx-size N",                           "Size of the prompt context (default: %d, 0 = loaded from model)", llm_params.n_ctx });
+    opts.push_back({ "server/completion",                  "       --no-context-shift",                     "Disables context shift on infinite text generation (default: %s)", llm_params.ctx_shift ? "disabled" : "enabled" });
+    opts.push_back({ "server/completion",                  "-n,    --predict N",                            "Number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", llm_params.n_predict });
+    opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "Logical batch size.\n"
+                                                                                                            "Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: %d)", llm_params.n_batch });
+    opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "Physical batch size, which is the maximum number of tokens that may be processed at a time.\n"
+                                                                                                            "Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: %d)", llm_params.n_ubatch });
+    opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d, -1 = all)", llm_params.n_keep });
+    opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(Process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", llm_params.escape ? "true" : "false" });
+    opts.push_back({ "server/completion",                  "       --no-escape",                            "Do not process escape sequences" });
+    opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "Samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
+    opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "Simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
+    opts.push_back({ "server/completion",                  "       --temp T",                               "Temperature (default: %.1f)", (double)llm_params.sampling.temp });
+    opts.push_back({ "server/completion",                  "       --top-k N",                              "Top-K sampling (default: %d, 0 = disabled)", llm_params.sampling.top_k });
+    opts.push_back({ "server/completion",                  "       --top-p P",                              "Top-P sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
+    opts.push_back({ "server/completion",                  "       --min-p P",                              "Min-P sampling (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.min_p });
+    opts.push_back({ "server/completion",                  "       --xtc-probability N",                    "XTC probability (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.xtc_probability });
+    opts.push_back({ "server/completion",                  "       --xtc-threshold N",                      "XTC threshold (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.xtc_threshold });
+    opts.push_back({ "server/completion",                  "       --typical P",                            "Locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.typ_p });
+    opts.push_back({ "server/completion",                  "       --repeat-last-n N",                      "Last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", llm_params.sampling.penalty_last_n });
+    opts.push_back({ "server/completion",                  "       --repeat-penalty N",                     "Penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.penalty_repeat });
+    opts.push_back({ "server/completion",                  "       --presence-penalty N",                   "Repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_present });
+    opts.push_back({ "server/completion",                  "       --frequency-penalty N",                  "Repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_freq });
+    opts.push_back({ "server/completion",                  "       --dry-multiplier N",                     "Set DRY sampling multiplier (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dry_multiplier });
+    opts.push_back({ "server/completion",                  "       --dry-base N",                           "Set DRY sampling base value (default: %.2f)", (double)llm_params.sampling.dry_base });
+    opts.push_back({ "server/completion",                  "       --dry-allowed-length N",                 "Set allowed length for DRY sampling (default: %d)", llm_params.sampling.dry_allowed_length });
+    opts.push_back({ "server/completion",                  "       --dry-penalty-last-n N",                 "Set DRY penalty for the last n tokens (default: %d, 0 = disable, -1 = context size)", llm_params.sampling.dry_penalty_last_n });
+    opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "Add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", default_dry_sequence_breaker_names.c_str() });
+    opts.push_back({ "server/completion",                  "       --dynatemp-range N",                     "Dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dynatemp_range });
+    opts.push_back({ "server/completion",                  "       --dynatemp-exp N",                       "Dynamic temperature exponent (default: %.1f)", (double)llm_params.sampling.dynatemp_exponent });
+    opts.push_back({ "server/completion",                  "       --mirostat N",                           "Use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", llm_params.sampling.mirostat });
     opts.push_back({ "server/completion",                  "       --mirostat-lr N",                        "Mirostat learning rate, parameter eta (default: %.1f)", (double)llm_params.sampling.mirostat_eta });
     opts.push_back({ "server/completion",                  "       --mirostat-ent N",                       "Mirostat target entropy, parameter tau (default: %.1f)", (double)llm_params.sampling.mirostat_tau });
-    opts.push_back({ "server/completion",                  "-l     --logit-bias TOKEN_ID(+/-)BIAS",         R"(modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello')" });
+    opts.push_back({ "server/completion",                  "-l     --logit-bias TOKEN_ID(+/-)BIAS",         R"(Modifies the likelihood of token appearing in the completion, i.e. "--logit-bias 15043+1" to increase likelihood of token ' Hello', or "--logit-bias 15043-1" to decrease likelihood of token ' Hello')" });
     opts.push_back({ "server/completion",                  "       --grammar GRAMMAR",                      "BNF-like grammar to constrain generations (see samples in grammars/ dir) (default: '%s')", llm_params.sampling.grammar.c_str() });
-    opts.push_back({ "server/completion",                  "       --grammar-file FILE",                    "file to read grammar from" });
+    opts.push_back({ "server/completion",                  "       --grammar-file FILE",                    "File to read grammar from" });
     opts.push_back({ "server/completion",                  "-j,    --json-schema SCHEMA",                   "JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead" });
     opts.push_back({ "server/completion",                  "       --rope-scaling {none,linear,yarn}",      "RoPE frequency scaling method, defaults to linear unless specified by the model" });
     opts.push_back({ "server/completion",                  "       --rope-scale N",                         "RoPE context scaling factor, expands context by a factor of N" });
     opts.push_back({ "server/completion",                  "       --rope-freq-base N",                     "RoPE base frequency, used by NTK-aware scaling (default: loaded from model)" });
     opts.push_back({ "server/completion",                  "       --rope-freq-scale N",                    "RoPE frequency scaling factor, expands context by a factor of 1/N" });
-    opts.push_back({ "server/completion",                  "       --yarn-orig-ctx N",                      "YaRN: original context size of model (default: %d = model training context size)", llm_params.yarn_orig_ctx });
-    opts.push_back({ "server/completion",                  "       --yarn-ext-factor N",                    "YaRN: extrapolation mix factor (default: %.1f, 0.0 = full interpolation)", (double)llm_params.yarn_ext_factor });
-    opts.push_back({ "server/completion",                  "       --yarn-attn-factor N",                   "YaRN: scale sqrt(t) or attention magnitude (default: %.1f)", (double)llm_params.yarn_attn_factor });
-    opts.push_back({ "server/completion",                  "       --yarn-beta-fast N",                     "YaRN: low correction dim or beta (default: %.1f)", (double)llm_params.yarn_beta_fast });
-    opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN: high correction dim or alpha (default: %.1f)", (double)llm_params.yarn_beta_slow });
-    opts.push_back({ "server/completion",                  "-nkvo, --no-kv-offload",                        "disable KV offload" });
-    opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "disable caching prompt" });
-    opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
+    opts.push_back({ "server/completion",                  "       --yarn-orig-ctx N",                      "YaRN original context size of model (default: %d = model training context size)", llm_params.yarn_orig_ctx });
+    opts.push_back({ "server/completion",                  "       --yarn-ext-factor N",                    "YaRN extrapolation mix factor (default: %.1f, 0.0 = full interpolation)", (double)llm_params.yarn_ext_factor });
+    opts.push_back({ "server/completion",                  "       --yarn-attn-factor N",                   "YaRN scale sqrt(t) or attention magnitude (default: %.1f)", (double)llm_params.yarn_attn_factor });
+    opts.push_back({ "server/completion",                  "       --yarn-beta-fast N",                     "YaRN low correction dim or beta (default: %.1f)", (double)llm_params.yarn_beta_fast });
+    opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN high correction dim or alpha (default: %.1f)", (double)llm_params.yarn_beta_slow });
+    opts.push_back({ "server/completion",                  "-nkvo, --no-kv-offload",                        "Disable KV offload" });
+    opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "Disable caching prompt" });
+    opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "Min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
     opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_k) });
     opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_v) });
     opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)llm_params.defrag_thold });
-    opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "number of parallel sequences to decode (default: %d)", llm_params.n_parallel });
-    opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "disable continuous batching" });
-    opts.push_back({ "server/completion",                  "       --mmproj FILE",                          "path to a multimodal projector file for LLaVA" });
+    opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "Number of parallel sequences to decode (default: %d)", llm_params.n_parallel });
+    opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "Disable continuous batching" });
+    opts.push_back({ "server/completion",                  "       --mmproj FILE",                          "Path to a multimodal projector file for LLaVA" });
     if (llama_supports_mlock()) {
-        opts.push_back({ "server/completion",              "       --mlock",                                "force system to keep model in RAM rather than swapping or compressing" });
+        opts.push_back({ "server/completion",              "       --mlock",                                "Force system to keep model in RAM rather than swapping or compressing" });
     }
     if (llama_supports_mmap()) {
-        opts.push_back({ "server/completion",              "       --no-mmap",                              "do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
-        opts.push_back({ "server/completion",              "       --mmap",                                 "apply memory-map model (faster load but may increase pageouts if not using mlock)" });
+        opts.push_back({ "server/completion",              "       --no-mmap",                              "Do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
+        opts.push_back({ "server/completion",              "       --mmap",                                 "Apply memory-map model (faster load but may increase pageouts if not using mlock)" });
     }
-    opts.push_back({ "server/completion",                  "       --numa TYPE",                            "attempt optimizations that help on some NUMA systems\n"
+    opts.push_back({ "server/completion",                  "       --numa TYPE",                            "Attempt optimizations that help on some NUMA systems\n"
                                                                                                             "  - distribute: spread execution evenly over all nodes\n"
                                                                                                             "  - isolate: only spawn threads on CPUs on the node that execution started on\n"
                                                                                                             "  - numactl: use the CPU map provided by numactl\n"
-                                                                                                            "if run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437" });
-    opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "add a control vector" });
-    opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "add a control vector with user defined scaling SCALE" });
-    opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "layer range to apply the control vector(s) to, start and end inclusive" });
-    opts.push_back({ "server/completion",                  "       --spm-infill",                           "use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", llm_params.spm_infill ? "enabled" : "disabled" });
-    opts.push_back({ "server/completion",                  "-sp,   --special",                              "special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
+                                                                                                            "If run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437" });
+    opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "Add a control vector" });
+    opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "Add a control vector with user defined scaling SCALE" });
+    opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "Layer range to apply the control vector(s) to, start and end inclusive" });
+    opts.push_back({ "server/completion",                  "       --spm-infill",                           "Use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", llm_params.spm_infill ? "enabled" : "disabled" });
+    opts.push_back({ "server/completion",                  "-sp,   --special",                              "Special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
     // server // completion //
     // server // completion // speculative //
     opts.push_back({ "server/completion/speculative" });
-    opts.push_back({ "server/completion/speculative",      "       --draft-max, --draft, --draft-n N",      "number of tokens to draft for speculative decoding (default: %d)", llm_params.speculative.n_max });
-    opts.push_back({ "server/completion/speculative",      "       --draft-min, --draft-n-min N",           "minimum number of draft tokens to use for speculative decoding (default: %d)", llm_params.speculative.n_min });
-    opts.push_back({ "server/completion/speculative",      "       --draft-p-min P",                        "minimum speculative decoding probability (greedy) (default: %.1f)", llm_params.speculative.p_min });
-    opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "draft model for speculative decoding (default: unused)" });
-    opts.push_back({ "server/completion/speculative",      "-devd, --device-draft <dev1,dev2,...>",         "comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
-                                                                                                            "use --list-devices to see a list of available devices" });
+    opts.push_back({ "server/completion/speculative",      "       --draft-max, --draft, --draft-n N",      "Number of tokens to draft for speculative decoding (default: %d)", llm_params.speculative.n_max });
+    opts.push_back({ "server/completion/speculative",      "       --draft-min, --draft-n-min N",           "Minimum number of draft tokens to use for speculative decoding (default: %d)", llm_params.speculative.n_min });
+    opts.push_back({ "server/completion/speculative",      "       --draft-p-min P",                        "Minimum speculative decoding probability (greedy) (default: %.1f)", llm_params.speculative.p_min });
+    opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "Draft model for speculative decoding (default: unused)" });
+    opts.push_back({ "server/completion/speculative",      "-devd, --device-draft <dev1,dev2,...>",         "A comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
+                                                                                                            "Use --list-devices to see a list of available devices" });
     opts.push_back({ "server/completion/speculative",      "-ngld, --gpu-layers-draft, --n-gpu-layers-draft N",
-                                                                                                            "number of layers to store in VRAM for the draft model" });
-    opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "minimum n-gram size for lookup cache (default: %d, 0 = disabled)", params_.lookup_ngram_min });
-    opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "path to static lookup cache to use for lookup decoding (not updated by generation)" });
-    opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
+                                                                                                            "Number of layers to store in VRAM for the draft model" });
+    opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "Minimum n-gram size for lookup cache (default: %d, 0 = disabled)", params_.lookup_ngram_min });
+    opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "Path to static lookup cache to use for lookup decoding (not updated by generation)" });
+    opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "Path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
     // server // completion // speculative //
     // server // completion // visual //
     opts.push_back({ "server/completion/visual" });
-    opts.push_back({ "server/completion/visual",           "       --visual-max-image-size N",              "maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: %d, 0 = disabled)", params_.max_image_size});
+    opts.push_back({ "server/completion/visual",           "       --visual-max-image-size N",              "Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: %d, 0 = disabled)", params_.max_image_size});
     // server // completion // visual //
     // server // embedding //
     opts.push_back({ "server/embedding" });
-    opts.push_back({ "server/embedding",                   "       --pooling",                              "pooling type for embeddings, use model default if unspecified" });
+    opts.push_back({ "server/embedding",                   "       --pooling",                              "Pooling type for embeddings, use model default if unspecified" });
     // server // embedding //
     // server // images //
     opts.push_back({ "server/images" });
-    opts.push_back({ "server/images",                      "       --image-max-batch N",                    "maximum batch count (default: %d)", sd_params.max_batch_count});
-    opts.push_back({ "server/images",                      "       --image-max-height N",                   "image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.height});
-    opts.push_back({ "server/images",                      "       --image-max-width N",                    "image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.width});
-    opts.push_back({ "server/images",                      "       --image-guidance N",                     "the value of guidance during the computing phase (default: %f)", sd_params.sampling.guidance });
-    opts.push_back({ "server/images",                      "       --image-strength N",                     "strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model" });
+    opts.push_back({ "server/images",                      "       --image-max-batch N",                    "Maximum batch count (default: %d)", sd_params.max_batch_count});
+    opts.push_back({ "server/images",                      "       --image-max-height N",                   "Image maximum height, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.height});
+    opts.push_back({ "server/images",                      "       --image-max-width N",                    "Image maximum width, in pixel space, must be larger than 256 and be multiples of 64 (default: %d)", sd_params.sampling.width});
+    opts.push_back({ "server/images",                      "       --image-guidance N",                     "The value of guidance during the computing phase (default: %f)", sd_params.sampling.guidance });
+    opts.push_back({ "server/images",                      "       --image-strength N",                     "Strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model" });
     opts.push_back({ "server/images",                      "       --image-sample-method, --image-sampler TYPE",
-                                                                                                            "sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sample_methods().c_str() });
+                                                                                                            "Sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sample_methods().c_str() });
     opts.push_back({ "server/images",                      "       --image-sampling-steps, --image-sample-steps N",
-                                                                                                            "number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
-    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "the scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
-    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "the scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
-    opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "the layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
-    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "the phase to enable SLG (default: %.2f)", sd_params.sampling.slg_start });
-    opts.push_back({ "server/images",                      "       --image-slg-end N",                      "the phase to disable SLG (default: %.2f)\n"
+                                                                                                            "Number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
+    opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "The scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-slg-scale N",                    "The scale of skip-layer guidance(SLG), only for DiT model, automatically retrieve the default value according to --model (0.0 = disabled)" });
+    opts.push_back({ "server/images",                      "       --image-slg-skip-layer",                 "The layers to skip when processing SLG, may be specified multiple times. (default: 7;8;9)" });
+    opts.push_back({ "server/images",                      "       --image-slg-start N",                    "The phase to enable SLG (default: %.2f)", sd_params.sampling.slg_start });
+    opts.push_back({ "server/images",                      "       --image-slg-end N",                      "The phase to disable SLG (default: %.2f)\n"
                                                                                                             "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.sampling.slg_end });
     opts.push_back({ "server/images",                      "       --image-schedule-method, --image-schedule TYPE",
-                                                                                                            "denoiser sigma schedule method, allowed values: %s (default: %s)", get_builtin_sd_schedule_method().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule_method) });
-    opts.push_back({ "server/images",                      "       --image-no-text-encoder-model-offload",  "disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
-    opts.push_back({ "server/images",                      "       --image-clip-l-model PATH",              "path to the CLIP Large (clip-l) text encoder, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-clip-g-model PATH",              "path to the CLIP Generic (clip-g) text encoder, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-t5xxl-model PATH",               "path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-no-vae-model-offload",           "disable vae(taesd) model offload" });
-    opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "path to Variational AutoEncoder (vae), or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sd_params.vae_tiling ? "enabled" : "disabled" });
-    opts.push_back({ "server/images",                      "       --image-no-vae-tiling",                  "disable vae decoder in tiles" });
-    opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "path to the upscale model, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "how many times to run upscaler (default: %d)", sd_params.upscale_repeats });
-    opts.push_back({ "server/images",                      "       --image-no-control-net-model-offload",   "disable control-net model offload" });
-    opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "path to the control net model, or use --model included" });
-    opts.push_back({ "server/images",                      "       --image-control-strength N",             "how strength to apply the control net (default: %f)", sd_params.sampling.control_strength });
-    opts.push_back({ "server/images",                      "       --image-control-canny",                  "indicate to apply canny preprocessor (default: %s)", sd_params.sampling.control_canny ? "enabled" : "disabled" });
+                                                                                                            "Denoiser sigma schedule method, allowed values: %s (default: %s)", get_builtin_sd_schedule_method().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule_method) });
+    opts.push_back({ "server/images",                      "       --image-no-text-encoder-model-offload",  "Disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
+    opts.push_back({ "server/images",                      "       --image-clip-l-model PATH",              "Path to the CLIP Large (clip-l) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-clip-g-model PATH",              "Path to the CLIP Generic (clip-g) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-t5xxl-model PATH",               "Path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-no-vae-model-offload",           "Disable vae(taesd) model offload" });
+    opts.push_back({ "server/images",                      "       --image-vae-model PATH",                 "Path to Variational AutoEncoder (vae), or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-vae-tiling",                     "Indicate to process vae decoder in tiles to reduce memory usage (default: %s)", sd_params.vae_tiling ? "enabled" : "disabled" });
+    opts.push_back({ "server/images",                      "       --image-no-vae-tiling",                  "Disable vae decoder in tiles" });
+    opts.push_back({ "server/images",                      "       --image-taesd-model PATH",               "Path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-upscale-model PATH",             "Path to the upscale model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-upscale-repeats N",              "How many times to run upscaler (default: %d)", sd_params.upscale_repeats });
+    opts.push_back({ "server/images",                      "       --image-no-control-net-model-offload",   "Disable control-net model offload" });
+    opts.push_back({ "server/images",                      "       --image-control-net-model PATH",         "Path to the control net model, or use --model included" });
+    opts.push_back({ "server/images",                      "       --image-control-strength N",             "How strength to apply the control net (default: %f)", sd_params.sampling.control_strength });
+    opts.push_back({ "server/images",                      "       --image-control-canny",                  "Indicate to apply canny preprocessor (default: %s)", sd_params.sampling.control_canny ? "enabled" : "disabled" });
     opts.push_back({ "server/images",                      "       --image-free-compute-memory-immediately",
-                                                                                                            "indicate to free compute memory immediately, which allow generating high resolution image (default: %s)", sd_params.free_compute_immediately ? "enabled" : "disabled" });
+                                                                                                            "Indicate to free compute memory immediately, which allow generating high resolution image (default: %s)", sd_params.free_compute_immediately ? "enabled" : "disabled" });
     // server // images //
     // server //
     // rpc-server //
     opts.push_back({ "rpc-server" });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-host HOST",                 "ip address to rpc server listen (default: %s)", rpc_params.hostname.c_str() });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "port to rpc server listen (default: %d, 0 = disabled)", rpc_params.port });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-main-gpu N",                "the GPU VRAM to use for the rpc server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-host HOST",                 "IP address to RPC server listen (default: %s)", rpc_params.hostname.c_str() });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "Port to RPC server listen (default: %d, 0 = disabled)", rpc_params.port });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-main-gpu N",                "The GPU VRAM to use for the RPC server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "Reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
     // rpc-server //
 
     // clang-format on

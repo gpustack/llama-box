@@ -66,8 +66,6 @@
         LOG_DBG("que %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
-using json = nlohmann::json;
-
 template <typename T>
 static T json_value(const json &body, const std::string &key, const T &default_value) {
     // Fallback null to default value
@@ -343,7 +341,7 @@ static llama_tokens format_infill(const llama_vocab *vocab, const json &input_pr
 }
 
 // Format given chat. If tmpl is empty, we take the template from model metadata
-inline std::string format_chat(const struct llama_model *model, const common_chat_template & tmpl, const std::vector<json> &messages, const std::vector<json> &functions, const std::string &functions_call_mode, const bool use_jinja) {
+inline std::string format_chat(const struct llama_model *model, const common_chat_template &tmpl, const std::vector<json> &messages, const std::vector<json> &functions, const std::string &functions_call_mode, const bool use_jinja) {
     std::vector<common_chat_msg> chat;
     for (const auto &curr_msg : messages) {
         std::string role = json_value(curr_msg, "role", std::string(""));
@@ -712,7 +710,7 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model, const bool chat, const bool chat_tool_support, const bool use_jinja) {
+static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model, const bool chat, const common_chat_template &tmpl, const bool chat_tool_support, const bool use_jinja) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -825,7 +823,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
             llama_params["__oaicompat_completion_chat_tool"] = true;
         }
 
-        const std::string prompt = format_chat(model, params.chat_template, messages, functions, functions_call_mode, use_jinja);
+        const std::string prompt = format_chat(model, tmpl, messages, functions, functions_call_mode, use_jinja);
         if (common_log_verbosity_thold > 2) {
             SRV_INF("rid %s | formatted prompt\n%s\n", rid.c_str(), prompt.c_str());
         }
