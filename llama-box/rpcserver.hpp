@@ -597,9 +597,7 @@ bool rpcserver::init_tensor(const std::vector<uint8_t> &input) {
     if (buffer && buffer->iface.init_tensor) {
         buffer->iface.init_tensor(buffer, tensor);
     } else {
-        SRV_ERR("%s", "failed: null buffer for tensor passed to init_tensor function\n");
-        ggml_free(ctx);
-        return false;
+        SRV_WRN("%s", "failed: null buffer for tensor passed to init_tensor function\n");
     }
     if (tensor->extra != nullptr) {
         // This pointer can either be passed around client/server, or probably better stored server-side and kept track of.
