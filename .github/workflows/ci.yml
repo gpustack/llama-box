@@ -169,7 +169,7 @@ jobs:
           - arch: 'arm64'
             instruction: 'neon'
             distro_container_image: 'gpustack/devel-cpu:ubuntu18.04'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -188,12 +188,6 @@ jobs:
           key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Setup QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v8.1.5
-          platforms: "arm64"
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
@@ -215,7 +209,7 @@ jobs:
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} \
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} \
-            ${{ matrix.instruction == 'neon' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_BLAS_VENDOR=OpenBLAS \
             -DGGML_STATIC=on \
             -DGGML_BLAS=on \
@@ -273,7 +267,7 @@ jobs:
             version: '6.2'
             distro_container_image: 'gpustack/devel-rocm-hip:6.2.4-centos7'
             hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -292,12 +286,6 @@ jobs:
           key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Setup QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v8.1.5
-          platforms: "arm64"
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
@@ -315,8 +303,9 @@ jobs:
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
@@ -384,7 +373,7 @@ jobs:
             version: '11.8'
             distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-rockylinux8'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm64' }}
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -417,8 +406,9 @@ jobs:
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
@@ -470,7 +460,7 @@ jobs:
           - arch: 'amd64'
             version: '2025.0'
             distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -489,12 +479,6 @@ jobs:
           key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Setup QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v8.1.5
-          platforms: "arm64"
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
@@ -531,8 +515,9 @@ jobs:
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
@@ -589,7 +574,7 @@ jobs:
           - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-910b-openeuler20.03'
           - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-ubuntu20.04'
           - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-openeuler20.03'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -608,12 +593,6 @@ jobs:
           key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Setup QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v8.1.5
-          platforms: "arm64"
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
@@ -629,8 +608,8 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
             -DGGML_OPENMP=off \
@@ -681,7 +660,7 @@ jobs:
           - arch: 'amd64'
             version: 'rc3.1'
             distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.0-ubuntu22.04'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -700,12 +679,6 @@ jobs:
           key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Setup QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v8.1.5
-          platforms: "arm64"
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
@@ -719,8 +692,9 @@ jobs:
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
@@ -775,7 +749,7 @@ jobs:
             version: '24.04'
             distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04'
             hip_arch: 'gfx906;gfx926;gfx928'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
         uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
@@ -794,12 +768,6 @@ jobs:
           key: cache-linux-dtk-${{ matrix.arch }}-${{ matrix.version }}
           path: |
             ${{ github.workspace }}/.cache
-      - name: Setup QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v8.1.5
-          platforms: "arm64"
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
@@ -822,8 +790,9 @@ jobs:
             -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
             -DCMAKE_HIP_COMPILER="clang" \
             -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_CUDA_DMMV_X=4096 \
             -DGGML_CUDA_MMV_Y=256 \
             -DGGML_OPENMP=off \
@@ -928,9 +897,9 @@ jobs:
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} `
-            ${{ matrix.instruction == 'neon' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
