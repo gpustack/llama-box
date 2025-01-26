@@ -1,18 +1,13 @@
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index 0ed92b3f..51400bfc 100644
+index 9e627da8..72896d69 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -8933,9 +8933,14 @@ static void ggml_compute_forward_soft_max_f32(
- 
-         float max = -INFINITY;
+@@ -8935,7 +8935,9 @@ static void ggml_compute_forward_soft_max_f32(
          ggml_vec_max_f32(nc, &max, wp);
-+        if (max == -INFINITY) {
-+            max = 0.0;
-+        }
  
          ggml_float sum = ggml_vec_soft_max_f32(nc, dp, wp, max);
 -        assert(sum > 0.0);
-+        if (sum == 0.0) {
++        if (isnan(sum) || sum == 0.0) {
 +            sum = -INFINITY;
 +        }
  
