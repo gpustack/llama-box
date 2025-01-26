@@ -1,64 +1,5 @@
-diff --git a/common/arg.cpp b/common/arg.cpp
-index a6226a34..c82a335a 100644
---- a/common/arg.cpp
-+++ b/common/arg.cpp
-@@ -403,7 +403,7 @@ static void add_rpc_devices(std::string servers) {
-     for (const auto & server : rpc_servers) {
-         ggml_backend_dev_t dev = ggml_backend_rpc_add_device_fn(server.c_str());
-         if (dev) {
--            ggml_backend_device_register(dev);
-+            ggml_backend_device_register(dev, true);
-         } else {
-             throw std::invalid_argument("failed to register RPC device");
-         }
-diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
-index fc9571c8..3b95430e 100644
---- a/ggml/include/ggml-backend.h
-+++ b/ggml/include/ggml-backend.h
-@@ -203,7 +203,7 @@ extern "C" {
-     // Backend registry
-     //
- 
--    GGML_API void ggml_backend_device_register(ggml_backend_dev_t device);
-+    GGML_API void ggml_backend_device_register(ggml_backend_dev_t device, bool front);
- 
-     // Backend (reg) enumeration
-     GGML_API size_t             ggml_backend_reg_count(void);
-diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
-index 955ed505..f536f59f 100644
---- a/ggml/src/ggml-backend-reg.cpp
-+++ b/ggml/src/ggml-backend-reg.cpp
-@@ -210,11 +210,15 @@ struct ggml_backend_registry {
-         }
-     }
- 
--    void register_device(ggml_backend_dev_t device) {
-+    void register_device(ggml_backend_dev_t device, bool front = false) {
- #ifndef NDEBUG
-         GGML_LOG_DEBUG("%s: registered device %s (%s)\n", __func__, ggml_backend_dev_name(device), ggml_backend_dev_description(device));
- #endif
--        devices.push_back(device);
-+        if (front) {
-+            devices.insert(devices.begin(), device);
-+        } else {
-+            devices.push_back(device);
-+        }
-     }
- 
-     ggml_backend_reg_t load_backend(const std::wstring & path, bool silent) {
-@@ -298,8 +302,8 @@ void ggml_backend_register(ggml_backend_reg_t reg) {
-     get_reg().register_backend(reg);
- }
- 
--void ggml_backend_device_register(ggml_backend_dev_t device) {
--    get_reg().register_device(device);
-+void ggml_backend_device_register(ggml_backend_dev_t device, bool front) {
-+    get_reg().register_device(device, front);
- }
- 
- // Backend (reg) enumeration
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 031b4c30..6f60e5a5 100644
+index 031b4c30..18bd0b07 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -1303,10 +1303,12 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
@@ -74,3 +15,36 @@ index 031b4c30..6f60e5a5 100644
          return {dev, &pimpl->gpu_buft_list.at(dev)};
      };
  
+diff --git a/src/llama.cpp b/src/llama.cpp
+index e8cfe501..094157cc 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -9405,6 +9405,7 @@ static struct llama_model * llama_model_load_from_file_impl(
+             model->devices.push_back(*dev);
+         }
+     } else {
++        std::vector<ggml_backend_dev_t> rpc_servers;
+         // use all available devices
+         for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+             ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+@@ -9415,10 +9416,19 @@ static struct llama_model * llama_model_load_from_file_impl(
+                     break;
+ 
+                 case GGML_BACKEND_DEVICE_TYPE_GPU:
+-                    model->devices.push_back(dev);
++                    ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
++                    if (ggml_backend_reg_name(reg) == std::string("RPC")) {
++                        rpc_servers.push_back(dev);
++                    } else {
++                        model->devices.push_back(dev);
++                    }
+                     break;
+             }
+         }
++        // add RPC servers at the front of the list
++        if (!rpc_servers.empty()) {
++            model->devices.insert(model->devices.begin(), rpc_servers.begin(), rpc_servers.end());
++        }
+     }
+ 
+     // if using single GPU mode, remove all except the main GPU
