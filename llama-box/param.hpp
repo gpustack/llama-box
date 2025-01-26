@@ -123,7 +123,7 @@ static void add_rpc_devices(std::string servers) {
     for (const auto &server : rpc_servers) {
         ggml_backend_dev_t dev = ggml_backend_rpc_add_device_fn(server.c_str());
         if (dev) {
-            ggml_backend_device_register(dev);
+            ggml_backend_device_register(dev, true);
         } else {
             throw std::invalid_argument("failed to register RPC device");
         }
