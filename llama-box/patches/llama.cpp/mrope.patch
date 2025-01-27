@@ -44,10 +44,10 @@ index 3b75e760..fec09789 100644
      LLAMA_API bool llama_model_is_recurrent(const struct llama_model * model);
  
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 031b4c30..079b8650 100644
+index 18bd0b07..3a6af700 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -3989,6 +3989,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
+@@ -3991,6 +3991,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
      return model->hparams.dec_start_token_id;
  }
  
