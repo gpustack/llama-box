@@ -269,7 +269,7 @@ static llama_tokens format_infill(const llama_vocab *vocab, const json &input_pr
     auto tokens_prefix = tokenize_mixed(vocab, input_prefix, false, false);
     auto tokens_suffix = tokenize_mixed(vocab, input_suffix, false, false);
 
-    if (llama_token_fim_rep(vocab) != LLAMA_TOKEN_NULL) {
+    if (llama_vocab_fim_rep(vocab) != LLAMA_TOKEN_NULL) {
         // TODO: make project name an input
         static const auto k_fim_repo = common_tokenize(vocab, "myproject\n", false, false);
 
@@ -281,7 +281,7 @@ static llama_tokens format_infill(const llama_vocab *vocab, const json &input_pr
         const std::string text     = json_value(chunk, "text", std::string());
         const std::string filename = json_value(chunk, "filename", std::string("tmp"));
 
-        if (llama_token_fim_sep(vocab) != LLAMA_TOKEN_NULL) {
+        if (llama_vocab_fim_sep(vocab) != LLAMA_TOKEN_NULL) {
             const auto k_fim_file = common_tokenize(vocab, filename + "\n", false, false);
 
             extra_tokens.insert(extra_tokens.end(), llama_vocab_fim_sep(vocab));
@@ -299,11 +299,11 @@ static llama_tokens format_infill(const llama_vocab *vocab, const json &input_pr
         extra_tokens.insert(extra_tokens.end(), chunk_tokens.begin(), chunk_tokens.end());
     }
 
-    if (llama_token_fim_sep(vocab) != LLAMA_TOKEN_NULL) {
+    if (llama_vocab_fim_sep(vocab) != LLAMA_TOKEN_NULL) {
         // TODO: current filename
         static const auto k_fim_file = common_tokenize(vocab, "filename\n", false, false);
 
-        extra_tokens.insert(extra_tokens.end(), llama_token_fim_sep(vocab));
+        extra_tokens.insert(extra_tokens.end(), llama_vocab_fim_sep(vocab));
         extra_tokens.insert(extra_tokens.end(), k_fim_file.begin(), k_fim_file.end());
     }
 
