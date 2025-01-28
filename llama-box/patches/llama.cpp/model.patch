@@ -133,7 +133,7 @@ index 18bd0b07..1283a7c6 100644
          case LLM_ARCH_NOMIC_BERT:
          case LLM_ARCH_STABLELM:
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 094157cc..6c49c4ac 100644
+index 12e8f41f..adfa4fb2 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -2645,7 +2645,7 @@ struct llm_build_context {

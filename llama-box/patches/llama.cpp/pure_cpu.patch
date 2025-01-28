@@ -81,10 +81,10 @@ index 955ed505..e44a8157 100644
      get_reg().register_backend(reg);
  }
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 094157cc..bc530cee 100644
+index 12e8f41f..00adeebe 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9432,7 +9432,7 @@ static struct llama_model * llama_model_load_from_file_impl(
+@@ -9469,7 +9469,7 @@ static struct llama_model * llama_model_load_from_file_impl(
      }
  
      // if using single GPU mode, remove all except the main GPU

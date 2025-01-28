@@ -689,10 +689,10 @@ index 3a4d07ce..527e9334 100644
 +    const std::vector<const llama_chat_function * > & func,
 +    std::string & dest, bool req_func, bool add_ass);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 094157cc..ebba2470 100644
+index 12e8f41f..429eb929 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9953,9 +9953,13 @@ int32_t llama_decode(
+@@ -9990,9 +9990,13 @@ int32_t llama_decode(
  //
  
  int32_t llama_chat_apply_template(
@@ -706,7 +706,7 @@ index 094157cc..ebba2470 100644
                                      bool   add_ass,
                                      char * buf,
                                   int32_t   length) {
-@@ -9968,12 +9972,19 @@ int32_t llama_chat_apply_template(
+@@ -10005,12 +10009,19 @@ int32_t llama_chat_apply_template(
          chat_vec[i] = &chat[i];
      }
  

@@ -24,10 +24,10 @@ index 3b75e760..f3b0ecc4 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 0782d3a4..ab007427 100644
+index 561f8bdb..ef5cd306 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
-@@ -1430,7 +1430,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1435,7 +1435,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
              special_mask_id = LLAMA_TOKEN_NULL;
  
              const int precompiled_charsmap_keyidx = gguf_find_key(ctx, kv(LLM_KV_TOKENIZER_PRECOMPILED_CHARSMAP).c_str());
@@ -36,7 +36,7 @@ index 0782d3a4..ab007427 100644
                  size_t n_precompiled_charsmap = gguf_get_arr_n(ctx, precompiled_charsmap_keyidx);
                  const char * pc = (const char *) gguf_get_arr_data(ctx, precompiled_charsmap_keyidx);
                  precompiled_charsmap.assign(pc, pc + n_precompiled_charsmap);
-@@ -1588,7 +1588,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1593,7 +1593,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                  tokenizer_pre == "megrez") {
                  pre_type = LLAMA_VOCAB_PRE_TYPE_QWEN2;
              } else {
@@ -46,7 +46,7 @@ index 0782d3a4..ab007427 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3076,6 +3077,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3081,6 +3082,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  
