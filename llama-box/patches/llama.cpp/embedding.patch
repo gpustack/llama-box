@@ -11,10 +11,10 @@ index 3b75e760..12ff1a07 100644
      LLAMA_API uint32_t llama_n_ctx      (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_batch    (const struct llama_context * ctx);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 12e8f41f..136cd29f 100644
+index 192b20a2..d1ee56f1 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9382,6 +9382,10 @@ bool llama_supports_rpc(void) {
+@@ -9378,6 +9378,10 @@ bool llama_supports_rpc(void) {
      return ggml_backend_reg_by_name("RPC") != nullptr;
  }
  
@@ -25,7 +25,7 @@ index 12e8f41f..136cd29f 100644
  void llama_backend_init(void) {
      ggml_time_init();
  
-@@ -9590,9 +9594,17 @@ struct llama_context * llama_init_from_model(
+@@ -9586,9 +9590,17 @@ struct llama_context * llama_init_from_model(
  
      // this is necessary due to kv_self.n being padded later during inference
      cparams.n_ctx            = GGML_PAD(cparams.n_ctx, llama_kv_cache_get_padding(cparams));
@@ -43,7 +43,7 @@ index 12e8f41f..136cd29f 100644
  
      // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
      // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
-@@ -9603,6 +9615,10 @@ struct llama_context * llama_init_from_model(
+@@ -9599,6 +9611,10 @@ struct llama_context * llama_init_from_model(
      }
  
      cparams.n_ubatch         = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
