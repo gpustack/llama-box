@@ -4798,6 +4798,27 @@ int main(int argc, char **argv) {
         res.set_chunked_content_provider("text/event-stream; charset=utf-8", on_chunk, on_complete);
     };
 
+    const auto handle_apply_template = [&](const httplib::Request &req, httplib::Response &res) {
+        if (!ctx_server.support_completion_only()) {
+            res.status = httplib::StatusCode::Forbidden_403;
+            res.set_content("You are not allowed to do completion from this model", MIMETYPE_TEXT);
+            return;
+        }
+
+        json request                    = json::parse(req.body);
+        const std::string rid           = res.get_header_value(HEADER_REQUEST_ID);
+        const std::string completion_id = gen_chatcmplid();
+
+        if (!request.contains("messages") || !request.at("messages").is_array()) {
+            res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
+            return;
+        }
+        const auto &tmpl = ctx_server.support_tool_calls && ctx_server.chat_templates.template_tool_use ? *ctx_server.chat_templates.template_tool_use : *ctx_server.chat_templates.template_default;
+        request          = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, true, tmpl, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja);
+
+        res_ok(res, {{"prompt", request.at("prompt")}});
+    };
+
     const auto handle_models = [&](const httplib::Request &, httplib::Response &res) {
         json response{
             {"object", "list"},
@@ -5516,6 +5537,7 @@ int main(int argc, char **argv) {
     if (params.endpoint_infill) {
         svr.Post("/infill", handle_infill);
     }
+    svr.Post("/apply-template", handle_apply_template);
     svr.Post("/completion", handle_completions);
     svr.Get("/v1/models", handle_models);
     svr.Post("/v1/completions", handle_completions);

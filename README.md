@@ -758,6 +758,10 @@ The available endpoints for the LLaMA Box server mode are:
     ]
     ```
 
+- **POST** `/apply-template`: Apply chat template to a conversation, like `/v1/chat/completions` do, but without
+  generating.
+    + This is only work to `Text-To-Text` models.
+
 - **POST** `/completion`: Returns the completion of the given prompt.
     + This is only work to `Text-To-Text` models.
 
