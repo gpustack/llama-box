@@ -4939,7 +4939,7 @@ int main(int argc, char **argv) {
                     }
                     if (result.stop) {
                         if (oaicompat) {
-                            const std::string done = "data: [DONE] \n\n";
+                            const std::string done = "data: [DONE]\n\n";
                             if (!sink.write(done.c_str(), done.size())) {
                                 LOG_WRN("srv        handle_completions: rid %s | failed to send chunk data\n", rid.c_str());
                                 sink.done();
@@ -5062,7 +5062,7 @@ int main(int argc, char **argv) {
                     }
 
                     if (result.stop) {
-                        const std::string done = "data: [DONE] \n\n";
+                        const std::string done = "data: [DONE]\n\n";
                         if (!sink.write(done.c_str(), done.size())) {
                             LOG_WRN("srv   handle_chat_completions: rid %s | failed to send chunk data\n", rid.c_str());
                             sink.done();
@@ -5483,7 +5483,7 @@ int main(int argc, char **argv) {
                         }
                     }
                     if (all_stops) {
-                        const std::string done = "data: [DONE] \n\n";
+                        const std::string done = "data: [DONE]\n\n";
                         if (!sink.write(done.c_str(), done.size())) {
                             LOG_WRN("srv             handle_images: rid %s | failed to send chunk data\n", rid.c_str());
                             sink.done();
