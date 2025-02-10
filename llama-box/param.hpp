@@ -279,6 +279,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "       --lora-init-without-apply",              "Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
     opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --no-flash-attn",                        "Disable Flash Attention" });
     opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --infill",                               "Enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
@@ -697,6 +698,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
 
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
                 params_.llm_params.flash_attn = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--no-flash-attn")) {
+                params_.llm_params.flash_attn = false;
                 continue;
             }
 

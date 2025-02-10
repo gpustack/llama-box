@@ -345,6 +345,7 @@ server:
                                   Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
   -fa,   --flash-attn             Enable Flash Attention (default: disabled)
+         --no-flash-attn          Disable Flash Attention
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 Enable infill endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
