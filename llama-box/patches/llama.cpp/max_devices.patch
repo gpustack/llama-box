@@ -1,3 +1,16 @@
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index dba7be33..1208dee0 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -607,7 +607,7 @@ static bool ggml_is_view_op(enum ggml_op op) {
+ // scheduler
+ 
+ #ifndef GGML_SCHED_MAX_BACKENDS
+-#define GGML_SCHED_MAX_BACKENDS 16
++#define GGML_SCHED_MAX_BACKENDS 128
+ #endif
+ 
+ #ifndef GGML_SCHED_MAX_SPLIT_INPUTS
 diff --git a/src/llama.cpp b/src/llama.cpp
 index 192b20a2..2a06a47c 100644
 --- a/src/llama.cpp
