@@ -749,7 +749,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 std::sregex_token_iterator it{arg_s.begin(), arg_s.end(), regex, -1};
                 std::vector<std::string> split_arg{it, {}};
                 if (split_arg.size() >= llama_max_devices()) {
-                    invalid("--tensor-split");
+                    invalid("--tensor-split exceeds the number of devices");
                 }
                 for (size_t j = 0; j < llama_max_devices(); ++j) {
                     if (j < split_arg.size()) {

@@ -1,0 +1,13 @@
+diff --git a/src/llama.cpp b/src/llama.cpp
+index 192b20a2..2a06a47c 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -9358,7 +9358,7 @@ struct llama_sampler_chain_params llama_sampler_chain_default_params() {
+ }
+ 
+ size_t llama_max_devices(void) {
+-    return 16;
++    return 128;
+ }
+ 
+ bool llama_supports_mmap(void) {
