@@ -14,6 +14,32 @@ index 6dea8e3d..6ca4ed0e 100644
      llama_context * lctx = llama_init_from_model(model, cparams);
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index e809f05d..4b4c013f 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -9322,10 +9322,6 @@ static void ggml_compute_forward_rope_f32(
+     const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
+     const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
+ 
+-    if (is_mrope) {
+-        GGML_ASSERT(sections[0] > 0 || sections[1] > 0 || sections[2] > 0);
+-    }
+-
+     if (is_vision) {
+         GGML_ASSERT(n_dims == ne0/2);
+     }
+@@ -9508,10 +9504,6 @@ static void ggml_compute_forward_rope_f16(
+     const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
+     const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
+ 
+-    if (is_mrope) {
+-        GGML_ASSERT(sections[0] > 0 || sections[1] > 0 || sections[2] > 0);
+-    }
+-
+     if (is_vision) {
+         GGML_ASSERT(n_dims == ne0/2);
+     }
 diff --git a/ggml/src/ggml-cuda/rope.cu b/ggml/src/ggml-cuda/rope.cu
 index 18f691b2..f5a4da3a 100644
 --- a/ggml/src/ggml-cuda/rope.cu
