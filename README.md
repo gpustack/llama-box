@@ -44,16 +44,16 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
   see our [Reranker Collection](https://huggingface.co/collections/gpustack/reranker-6721a234527f6fcd90deedc4).
 - Support speculative decoding: draft model or n-gram lookup.
 - Support RPC server mode, which can serve as a remote inference backend.
-- For none image models, split offloading layers across multiple devices, including remote RPC server.
+- For non-image models, split offloading layers across multiple devices, including remote RPC server.
   ```shell
     $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <none image model> --rpc remote-ip:remote-port --tensor-split 1,2,3
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <non-image model> --rpc remote-ip:remote-port --tensor-split 1,2,3
     $ # Same as --tensor-split 1,2,3,0. 
     $ # The remote RPC server will handle 1/6 of the model, the 1st GPU will handle 1/3 of the model, and the 2nd GPU will handle 1/2 of the model. 
     $ # Nothing to do with the 3rd GPU.
     
     $ # Assume that there are 1 remote RPC servers and 3 available GPUs, launch box as below.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <none image model> --rpc remote-ip:remote-port --tensor-split 0,0,1,1
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <non-image model> --rpc remote-ip:remote-port --tensor-split 0,0,1,1
     $ # The 2nd GPU will handle 1/2 of the model, and the 3rd GPU will handle 1/2 of the model.
     $ # Nothing to do with the remote RPC server and the 1st GPUs.
   ```
