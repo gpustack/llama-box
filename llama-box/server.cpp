@@ -1134,8 +1134,23 @@ struct server_context {
             }
         }
 
-        cache_prompt = (params.cache_prompt || params.lookup_ngram_min > 0 || llm_ctx_draft != nullptr) && llm_ctx_clip == nullptr;
-        SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : "disabled");
+        cache_prompt = params.cache_prompt;
+        // disable prompt caching if using clip model.
+        cache_prompt = cache_prompt && llm_ctx_clip == nullptr;
+        // disable prompt caching if disallowing context shifting.
+        cache_prompt = cache_prompt && llm_params.ctx_shift;
+        // disable prompt caching if using remote backend.
+        for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+            ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+            if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+                ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
+                if (ggml_backend_reg_name(reg) == std::string("RPC")) {
+                    cache_prompt = false;
+                    break;
+                }
+            }
+        }
+        SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : (params.cache_prompt ? "unsupported" : "disabled"));
 
         // sample tokens per second
         if (params.n_tps < 0) {
