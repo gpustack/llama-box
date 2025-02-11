@@ -360,8 +360,8 @@ bool rpcserver::free_buffer(const std::vector<uint8_t> &input) {
     memcpy(&remote_ptr, input.data(), sizeof(remote_ptr));
     auto buffer = reinterpret_cast<ggml_backend_buffer_t>(remote_ptr);
     if (buffers.find(buffer) == buffers.end()) {
-        SRV_ERR("failed: not found remote_ptr = %lu\n", remote_ptr);
-        return false;
+        SRV_WRN("failed: not found remote_ptr = %lu\n", remote_ptr);
+        return true;
     }
     ggml_backend_buffer_free(buffer);
     buffers.erase(buffer);
@@ -381,8 +381,8 @@ bool rpcserver::buffer_clear(const std::vector<uint8_t> &input) {
     memcpy(&value, input.data() + sizeof(uint64_t), sizeof(value));
     auto buffer = reinterpret_cast<ggml_backend_buffer_t>(remote_ptr);
     if (buffers.find(buffer) == buffers.end()) {
-        SRV_ERR("failed: not found remote_ptr = %lu\n", remote_ptr);
-        return false;
+        SRV_WRN("failed: not found remote_ptr = %lu\n", remote_ptr);
+        return true;
     }
     ggml_backend_buffer_clear(buffer, value);
     SRV_DBG("remote_ptr = %lu\n", remote_ptr);
@@ -408,7 +408,7 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
     if (tensor == nullptr) {
-        SRV_ERR("%s", "failed: error deserializing tensor\n");
+        SRV_ERR("failed: error deserializing tensor, id = %lu, name = %s\n", in_tensor->id, in_tensor->name);
         ggml_free(ctx);
         return false;
     }
@@ -453,7 +453,7 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
     if (tensor == nullptr) {
-        SRV_ERR("%s", "failed: error deserializing tensor\n");
+        SRV_ERR("failed: error deserializing tensor, id = %lu, name = %s\n", in_tensor->id, in_tensor->name);
         ggml_free(ctx);
         return false;
     }
@@ -497,7 +497,17 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     ggml_tensor *src         = deserialize_tensor(ctx, rpc_src);
     ggml_tensor *dst         = deserialize_tensor(ctx, rpc_dst);
     if (src == nullptr || dst == nullptr) {
-        SRV_ERR("%s", "failed: error deserializing tensor\n");
+        SRV_ERR("%s", "failed: error deserializing tensor as src or dst is nullptr\n");
+        ggml_free(ctx);
+        return false;
+    }
+
+    auto src_size   = (uint64_t)ggml_nbytes(src);
+    auto dst_data   = (uint64_t)dst->data;
+    auto dst_base   = (uint64_t)ggml_backend_buffer_get_base(dst->buffer);
+    auto dst_buf_sz = (uint64_t)ggml_backend_buffer_get_size(dst->buffer);
+    if (dst_data + src_size > dst_base + dst_buf_sz) {
+        SRV_ERR("failed: out-of-bounds write, src_size = %lu, dst_base = %lu, dst_buf_sz = %lu\n", src_size, dst_base, dst_buf_sz);
         ggml_free(ctx);
         return false;
     }
@@ -549,9 +559,15 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     }
     std::unordered_map<uint64_t, ggml_tensor *> tensor_map;
     for (uint32_t i = 0; i < n_nodes; i++) {
-        int64_t id;
+        uint64_t id;
         memcpy(&id, &nodes[i], sizeof(id));
-        graph->nodes[i] = create_node(id, ctx, tensor_ptrs, tensor_map);
+        ggml_tensor *node = create_node(id, ctx, tensor_ptrs, tensor_map);
+        if (node == nullptr) {
+            SRV_ERR("%s", "failed: error creating node\n");
+            ggml_free(ctx);
+            return false;
+        }
+        graph->nodes[i] = node;
     }
     ggml_status status = ggml_backend_graph_compute(backend, graph);
     // output serialization format: | status (1 byte) |
@@ -661,8 +677,9 @@ ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_t
         result->nb[i] = tensor->nb[i];
     }
     result->buffer = reinterpret_cast<ggml_backend_buffer_t>(tensor->buffer);
+    SRV_DBG("find buffer, id = %lu, name = %s, buffer = %p \n", tensor->id, tensor->name, result->buffer);
     if (result->buffer && buffers.find(result->buffer) == buffers.end()) {
-        SRV_ERR("%s", "failed: buffer not found\n");
+        SRV_ERR("failed: buffer not found, name = %s\n", tensor->name);
         return nullptr;
     }
 
@@ -696,14 +713,19 @@ ggml_tensor *rpcserver::create_node(uint64_t id, struct ggml_context *ctx, const
     const rpc_tensor *tensor   = tensor_ptrs.at(id);
     struct ggml_tensor *result = deserialize_tensor(ctx, tensor);
     if (result == nullptr) {
-        SRV_ERR("failed: error deserializing tensor, id = %lu\n", id);
+        SRV_ERR("failed: error deserializing tensor, id = %lu, name = %s\n", id, tensor->name);
         return nullptr;
     }
     tensor_map[id] = result;
     for (int i = 0; i < GGML_MAX_SRC; i++) {
+        if (tensor->src[i] == 0) {
+            break;
+        }
         result->src[i] = create_node(tensor->src[i], ctx, tensor_ptrs, tensor_map);
     }
-    result->view_src  = create_node(tensor->view_src, ctx, tensor_ptrs, tensor_map);
+    if (tensor->view_src != 0) {
+        result->view_src = create_node(tensor->view_src, ctx, tensor_ptrs, tensor_map);
+    }
     result->view_offs = tensor->view_offs;
 
     SRV_DBG("id = %lu, name = %s, type = %s, op = %s\n", id, tensor->name, ggml_type_name(static_cast<ggml_type>(tensor->type)),
@@ -712,8 +734,12 @@ ggml_tensor *rpcserver::create_node(uint64_t id, struct ggml_context *ctx, const
 }
 
 static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_sockfd_t sockfd) {
+    std::vector<uint8_t> input;
+    std::vector<uint8_t> output;
+
     rpcserver server(bkd, idx, cap);
     while (true) {
+        // receive command
         uint8_t cmd;
         if (!rpc_recv_data(sockfd, &cmd, 1)) {
             break;
@@ -723,8 +749,8 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
             SRV_ERR("unknown command: %d\n", cmd);
             break;
         }
-        std::vector<uint8_t> input;
-        std::vector<uint8_t> output;
+
+        // receive input
         uint64_t input_size;
         if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
             SRV_ERR("cmd %d: failed to receive input size\n", cmd);
@@ -744,68 +770,76 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
                     cmd, input_size);
             break;
         }
+
+        // process command
         bool ok = false;
-        switch (cmd) {
-            case RPC_CMD_ALLOC_BUFFER: {
-                ok = server.alloc_buffer(input, output);
-                break;
+        try {
+            switch (cmd) {
+                case RPC_CMD_ALLOC_BUFFER: {
+                    ok = server.alloc_buffer(input, output);
+                    break;
+                }
+                case RPC_CMD_GET_ALIGNMENT: {
+                    ok = server.get_alignment(output);
+                    break;
+                }
+                case RPC_CMD_GET_MAX_SIZE: {
+                    ok = server.get_max_size(output);
+                    break;
+                }
+                case RPC_CMD_BUFFER_GET_BASE: {
+                    ok = server.buffer_get_base(input, output);
+                    break;
+                }
+                case RPC_CMD_FREE_BUFFER: {
+                    ok = server.free_buffer(input);
+                    break;
+                }
+                case RPC_CMD_BUFFER_CLEAR: {
+                    ok = server.buffer_clear(input);
+                    break;
+                }
+                case RPC_CMD_SET_TENSOR: {
+                    ok = server.set_tensor(input);
+                    break;
+                }
+                case RPC_CMD_GET_TENSOR: {
+                    ok = server.get_tensor(input, output);
+                    break;
+                }
+                case RPC_CMD_COPY_TENSOR: {
+                    ok = server.copy_tensor(input, output);
+                    break;
+                }
+                case RPC_CMD_GRAPH_COMPUTE: {
+                    ok = server.graph_compute(input, output);
+                    break;
+                }
+                case RPC_CMD_GET_DEVICE_MEMORY: {
+                    ok = server.get_device_memory(output);
+                    break;
+                }
+                case RPC_CMD_INIT_TENSOR: {
+                    ok = server.init_tensor(input);
+                    break;
+                }
+                case RPC_CMD_GET_ALLOC_SIZE: {
+                    ok = server.get_alloc_size(input, output);
+                    break;
+                }
+                default: {
+                    SRV_ERR("unknown command: %d\n", cmd);
+                    break;
+                }
             }
-            case RPC_CMD_GET_ALIGNMENT: {
-                ok = server.get_alignment(output);
-                break;
-            }
-            case RPC_CMD_GET_MAX_SIZE: {
-                ok = server.get_max_size(output);
-                break;
-            }
-            case RPC_CMD_BUFFER_GET_BASE: {
-                ok = server.buffer_get_base(input, output);
-                break;
-            }
-            case RPC_CMD_FREE_BUFFER: {
-                ok = server.free_buffer(input);
-                break;
-            }
-            case RPC_CMD_BUFFER_CLEAR: {
-                ok = server.buffer_clear(input);
-                break;
-            }
-            case RPC_CMD_SET_TENSOR: {
-                ok = server.set_tensor(input);
-                break;
-            }
-            case RPC_CMD_GET_TENSOR: {
-                ok = server.get_tensor(input, output);
-                break;
-            }
-            case RPC_CMD_COPY_TENSOR: {
-                ok = server.copy_tensor(input, output);
-                break;
-            }
-            case RPC_CMD_GRAPH_COMPUTE: {
-                ok = server.graph_compute(input, output);
-                break;
-            }
-            case RPC_CMD_GET_DEVICE_MEMORY: {
-                ok = server.get_device_memory(output);
-                break;
-            }
-            case RPC_CMD_INIT_TENSOR: {
-                ok = server.init_tensor(input);
-                break;
-            }
-            case RPC_CMD_GET_ALLOC_SIZE: {
-                ok = server.get_alloc_size(input, output);
-                break;
-            }
-            default: {
-                SRV_ERR("unknown command: %d\n", cmd);
-                break;
-            }
+        } catch (const std::exception &e) {
+            SRV_ERR("cmd %d: exception: %s\n", cmd, e.what());
         }
         if (!ok) {
             break;
         }
+
+        // send output
         uint64_t output_size = output.size();
         if (!rpc_send_data(sockfd, &output_size, sizeof(output_size))) {
             SRV_ERR("cmd %d: failed to send output size, "
@@ -820,8 +854,10 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
             break;
         }
         output.clear();
-        input.clear();
     }
+
+    output.clear();
+    input.clear();
 }
 
 // RPC server entry point
@@ -851,6 +887,7 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
     serv_addr.sin_addr.s_addr = inet_addr(host);
     serv_addr.sin_port        = htons(port);
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        SRV_ERR("failed to bind server socket, host = %s, port = %d\n", host, port);
         return nullptr;
     }
     if (listen(sockfd, 1) < 0) {
@@ -938,7 +975,7 @@ static int rpcserver_start(rpcserver_params &params) {
                 rpcserver_serve(backend, main_gpu, total_mem, cli_socket->fd);
                 LOG_INF("cli %25s: %s:%d\n", "closed", cli_ip, cli_port);
             }).detach();
-        } catch (const std::system_error &e) {
+        } catch (const std::exception &e) {
             SRV_ERR("failed to process %s %d, error = %s\n", cli_ip, cli_port, e.what());
         }
     }
