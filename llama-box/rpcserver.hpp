@@ -111,6 +111,7 @@ enum rpc_cmd {
     RPC_CMD_GET_DEVICE_MEMORY,
     RPC_CMD_INIT_TENSOR,
     RPC_CMD_GET_ALLOC_SIZE,
+    RPC_CMD_SUPPORT_OP,
     RPC_CMD_COUNT,
 };
 
@@ -254,6 +255,7 @@ class rpcserver {
     bool get_device_memory(std::vector<uint8_t> &output);
     bool init_tensor(const std::vector<uint8_t> &input);
     bool get_alloc_size(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
+    bool support_op(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
 
   private:
     size_t get_free_memory() const;
@@ -407,11 +409,6 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
-    if (tensor == nullptr) {
-        SRV_ERR("failed: error deserializing tensor, id = %lu, name = %s\n", in_tensor->id, in_tensor->name);
-        ggml_free(ctx);
-        return false;
-    }
 
     // sanitize tensor->data
     {
@@ -452,11 +449,6 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
-    if (tensor == nullptr) {
-        SRV_ERR("failed: error deserializing tensor, id = %lu, name = %s\n", in_tensor->id, in_tensor->name);
-        ggml_free(ctx);
-        return false;
-    }
 
     // sanitize tensor->data
     {
@@ -496,11 +488,6 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *src         = deserialize_tensor(ctx, rpc_src);
     ggml_tensor *dst         = deserialize_tensor(ctx, rpc_dst);
-    if (src == nullptr || dst == nullptr) {
-        SRV_ERR("%s", "failed: error deserializing tensor as src or dst is nullptr\n");
-        ggml_free(ctx);
-        return false;
-    }
 
     auto src_size   = (uint64_t)ggml_nbytes(src);
     auto dst_data   = (uint64_t)dst->data;
@@ -544,7 +531,7 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     }
     const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
 
-    static size_t buf_size         = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
+    size_t buf_size         = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
     struct ggml_init_params params = {
         /*.mem_size   =*/buf_size,
         /*.mem_buffer =*/nullptr,
@@ -603,11 +590,7 @@ bool rpcserver::init_tensor(const std::vector<uint8_t> &input) {
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
-    if (tensor == nullptr) {
-        SRV_ERR("%s", "failed: null tensor pointer passed to server init_tensor function\n");
-        ggml_free(ctx);
-        return false;
-    }
+
     // Call the backend's buffer_init_tensor function
     ggml_backend_buffer_t buffer = tensor->buffer;
     if (buffer && buffer->iface.init_tensor) {
@@ -641,11 +624,7 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
     };
     struct ggml_context *ctx = ggml_init(params);
     ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
-    if (tensor == nullptr) {
-        SRV_ERR("%s", "failed: null tensor pointer passed to server get_alloc_size function\n");
-        ggml_free(ctx);
-        return false;
-    }
+
     if (tensor->buffer == nullptr) {
         // No buffer allocated.
         buft = ggml_backend_get_default_buffer_type(backend);
@@ -658,6 +637,46 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
     memcpy(output.data(), &alloc_size, sizeof(alloc_size));
     ggml_free(ctx);
     SRV_DBG("alloc_size = %zu\n", alloc_size);
+    return true;
+}
+
+bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
+    // serialization format: | n_tensors (4 bytes) | tensors (n_tensors * sizeof(rpc_tensor)) |
+    if (input.size() < sizeof(uint32_t)) {
+        GGML_LOG_ERROR("[%s] invalid input size\n", __func__);
+        return false;
+    }
+    uint32_t n_tensors;
+    memcpy(&n_tensors, input.data(), sizeof(n_tensors));
+    if (input.size() < sizeof(uint32_t) + n_tensors * sizeof(rpc_tensor)) {
+        GGML_LOG_ERROR("[%s] invalid input size\n", __func__);
+        return false;
+    }
+    const auto * tensors = (const rpc_tensor *)(input.data() + sizeof(uint32_t));
+    GGML_PRINT_DEBUG("[%s] n_tensors: %u\n", __func__, n_tensors);
+
+    size_t buf_size = ggml_tensor_overhead()*n_tensors;
+    struct ggml_init_params params {
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ NULL,
+        /*.no_alloc   =*/ true,
+    };
+    struct ggml_context * ctx = ggml_init(params);
+    ggml_tensor * tensor = deserialize_tensor(ctx, &tensors[n_tensors-1]);
+    for (uint32_t i = 0; i < n_tensors-1; i++) {
+        ggml_tensor * src = deserialize_tensor(ctx, &tensors[i]);
+        tensor->src[i] = src;
+    }
+    bool result = true;
+    if (backend->device->iface.supports_op) {
+        result = backend->device->iface.supports_op(backend->device, tensor);
+    }
+    ggml_free(ctx);
+
+    // output serialization format: | alloc_size (8 bytes) |
+    output.resize(sizeof(uint8_t), 0);
+    output[0] = result;
+    SRV_DBG("result = %d\n", result);
     return true;
 }
 
@@ -679,8 +698,8 @@ ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_t
     result->buffer = reinterpret_cast<ggml_backend_buffer_t>(tensor->buffer);
     SRV_DBG("find buffer, id = %lu, name = %s, buffer = %p \n", tensor->id, tensor->name, result->buffer);
     if (result->buffer && buffers.find(result->buffer) == buffers.end()) {
-        SRV_ERR("failed: buffer not found, name = %s\n", tensor->name);
-        return nullptr;
+        SRV_WRN("failed: buffer not found, name = %s\n", tensor->name);
+        result->buffer = nullptr;
     }
 
     if (result->buffer) {
@@ -825,6 +844,10 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
                 }
                 case RPC_CMD_GET_ALLOC_SIZE: {
                     ok = server.get_alloc_size(input, output);
+                    break;
+                }
+                case RPC_CMD_SUPPORT_OP: {
+                    ok = server.support_op(input, output);
                     break;
                 }
                 default: {
