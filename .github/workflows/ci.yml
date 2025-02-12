@@ -861,7 +861,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl openssl -y
+          choco install ccache ninja curl -y
+          choco install openssl --version 3.4.1 -y
       - name: Setup
         run: |
           $ErrorActionPreference = "Stop"
@@ -951,7 +952,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl openssl -y
+          choco install ccache ninja curl -y
+          choco install openssl --version 3.4.1 -y
       - name: Setup HIP
         run: |
           $ErrorActionPreference = "Stop"
@@ -1062,7 +1064,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl openssl -y
+          choco install ccache ninja curl -y
+          choco install openssl --version 3.4.1 -y
       - name: Setup CUDA
         run: |
           $ErrorActionPreference = "Stop"
@@ -1167,7 +1170,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ninja curl openssl -y
+          choco install ninja curl -y
+          choco install openssl --version 3.4.1 -y
       - name: Setup oneAPI
         run: |
           $ErrorActionPreference = "Stop"
