@@ -531,7 +531,7 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     }
     const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
 
-    size_t buf_size         = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
+    size_t buf_size                = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
     struct ggml_init_params params = {
         /*.mem_size   =*/buf_size,
         /*.mem_buffer =*/nullptr,
@@ -652,20 +652,20 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
         GGML_LOG_ERROR("[%s] invalid input size\n", __func__);
         return false;
     }
-    const auto * tensors = (const rpc_tensor *)(input.data() + sizeof(uint32_t));
+    const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(uint32_t));
     GGML_PRINT_DEBUG("[%s] n_tensors: %u\n", __func__, n_tensors);
 
-    size_t buf_size = ggml_tensor_overhead()*n_tensors;
-    struct ggml_init_params params {
-        /*.mem_size   =*/ buf_size,
-        /*.mem_buffer =*/ NULL,
-        /*.no_alloc   =*/ true,
+    size_t buf_size = ggml_tensor_overhead() * n_tensors;
+    struct ggml_init_params params{
+        /*.mem_size   =*/buf_size,
+        /*.mem_buffer =*/NULL,
+        /*.no_alloc   =*/true,
     };
-    struct ggml_context * ctx = ggml_init(params);
-    ggml_tensor * tensor = deserialize_tensor(ctx, &tensors[n_tensors-1]);
-    for (uint32_t i = 0; i < n_tensors-1; i++) {
-        ggml_tensor * src = deserialize_tensor(ctx, &tensors[i]);
-        tensor->src[i] = src;
+    struct ggml_context *ctx = ggml_init(params);
+    ggml_tensor *tensor      = deserialize_tensor(ctx, &tensors[n_tensors - 1]);
+    for (uint32_t i = 0; i < n_tensors - 1; i++) {
+        ggml_tensor *src = deserialize_tensor(ctx, &tensors[i]);
+        tensor->src[i]   = src;
     }
     bool result = true;
     if (backend->device->iface.supports_op) {
@@ -698,7 +698,9 @@ ggml_tensor *rpcserver::deserialize_tensor(struct ggml_context *ctx, const rpc_t
     result->buffer = reinterpret_cast<ggml_backend_buffer_t>(tensor->buffer);
     SRV_DBG("find buffer, id = %lu, name = %s, buffer = %p \n", tensor->id, tensor->name, result->buffer);
     if (result->buffer && buffers.find(result->buffer) == buffers.end()) {
-        SRV_WRN("failed: buffer not found, name = %s\n", tensor->name);
+        if (common_log_verbosity_thold > 5) {
+            SRV_WRN("failed: buffer not found, name = %s\n", tensor->name);
+        }
         result->buffer = nullptr;
     }
 
