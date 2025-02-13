@@ -177,7 +177,7 @@ chat_completion() {
         printf "\n"
 
         if [[ -n "${TOOL_CALLS}" ]]; then
-            MESSAGES+=("{\"role\":\"assistant\",\"tool_calls\":$TOOL_CALLS}")
+            MESSAGES+=("{\"role\":\"assistant\",\"content\":null,\"tool_calls\":$TOOL_CALLS}")
         fi
         if [[ -n "${CONTENT}" ]]; then
             MESSAGES+=("{\"role\":\"assistant\",\"content\":\"$CONTENT\"}")

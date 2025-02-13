@@ -7,8 +7,10 @@
 
 #include "llama.cpp/common/common.h"
 #define JSON_ASSERT GGML_ASSERT
+#include "llama.cpp/common/chat.hpp"
 #include "llama.cpp/common/json.hpp"
 #include "llama.cpp/common/log.h"
+#include "llama.cpp/common/minja.hpp"
 #include "llama.cpp/include/llama.h"
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
@@ -340,88 +342,6 @@ static llama_tokens format_infill(const llama_vocab *vocab, const json &input_pr
     return embd_inp;
 }
 
-// Format given chat. If tmpl is empty, we take the template from model metadata
-inline std::string format_chat(const struct llama_model *model, const common_chat_template &tmpl, const std::vector<json> &messages, const std::vector<json> &functions, const std::string &functions_call_mode, const bool use_jinja) {
-    std::vector<common_chat_msg> chat;
-    for (const auto &curr_msg : messages) {
-        std::string role = json_value(curr_msg, "role", std::string(""));
-        std::string content;
-        if (curr_msg.contains("content")) {
-            if (curr_msg["content"].is_string()) {
-                content = curr_msg["content"].get<std::string>();
-            } else if (curr_msg["content"].is_array()) {
-                int32_t n_img = 0;
-                for (const json &part : curr_msg["content"]) {
-                    if (part.contains("type") && part.at("type") == "image_url") {
-                        n_img++;
-                        continue;
-                    }
-                    if (part.contains("text")) {
-                        if (!content.empty()) {
-                            content += "\n";
-                        }
-                        for (int i = 0; i < n_img; i++) {
-                            content += "<image>\n";
-                        }
-                        content += part["text"].get<std::string>();
-                        n_img = 0;
-                    }
-                }
-                for (int i = 0; i < n_img; i++) {
-                    content += "\n<image>";
-                }
-            } else {
-                throw std::runtime_error("Invalid 'content' field");
-            }
-        } else if (curr_msg.contains("tool_calls")) {
-            role += "_tool_call";
-            if (curr_msg["tool_calls"].is_array()) {
-                for (const json &part : curr_msg["tool_calls"]) {
-                    if (!part.contains("type") || part.at("type") != "function") {
-                        continue;
-                    }
-                    if (!part.contains("function") || !part.at("function").is_object()) {
-                        continue;
-                    }
-                    const json &func = part.at("function");
-                    if (!func.contains("name") || !func.at("name").is_string()) {
-                        continue;
-                    }
-                    if (!func.contains("arguments") || !func.at("arguments").is_string()) {
-                        continue;
-                    }
-                    std::string name      = func.at("name").get<std::string>();
-                    std::string arguments = func.at("arguments").get<std::string>();
-                    if (!content.empty()) {
-                        content += "\n";
-                    }
-                    content += "{\"name\":\"" + name + "\",\"arguments\":" + arguments + "}";
-                }
-            } else {
-                throw std::runtime_error("Invalid 'tool_calls' field");
-            }
-        } else {
-            throw std::runtime_error("Missing 'content' or 'tool_calls' in 'messages' item");
-        }
-        chat.push_back({role, content});
-    }
-
-    // NB(thxCode): common_chat_func is a patch.
-    std::vector<common_chat_func> func;
-    for (const auto &curr_func : functions) {
-        std::string name = json_value(curr_func, "name", std::string(""));
-        if (name.empty()) {
-            throw std::runtime_error("Missing 'name' in 'function'");
-        }
-        std::string description = json_value(curr_func, "description", std::string(""));
-        std::string parameters  = curr_func.dump(-1, ' ', false, json::error_handler_t::replace);
-        func.push_back({name, description, parameters});
-    }
-
-    // NB(thxCode): common_chat_apply_template is a patch.
-    return common_chat_apply_template(model, tmpl, chat, func, !functions.empty() && functions_call_mode == "required", true, use_jinja);
-}
-
 //
 // base64 utils (TODO: move to common in the future)
 //
@@ -710,7 +630,7 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
 // OAI utils
 //
 
-static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const struct llama_model *model, const bool chat, const common_chat_template &tmpl, const bool chat_tool_support, const bool use_jinja) {
+static json oaicompat_completions_request(const struct common_params &params, const std::string &rid, const json &body, const llama_model *model, const bool chat, const bool support_tool_calls, const bool use_jinja, const common_chat_templates &chat_templates) {
     // Print the request for debugging
     {
         json body_cp = body;
@@ -740,168 +660,62 @@ static json oaicompat_completions_request(const struct common_params &params, co
     llama_params["top_p"]             = json_value(body, "top_p", 1.0f);
 
     // Handle "tools" and "tool_choice" field
-    llama_params["function_call"] = "none";
-    if (chat && chat_tool_support) {
-        // "tools" and "functions"
+    llama_params["tool_choice"] = "none";
+    if (chat && support_tool_calls) {
+        // "tools" and "functions", migrate "functions" to "tools"
+        json available_tools = json::array();
         if (body.contains("tools") && !body.contains("functions")) {
             const json &tools = body.at("tools");
             if (!tools.is_array()) {
                 throw std::runtime_error("Illegal param: \"tools\" must be an array");
             }
-            json functions = json::array();
-            for (const auto &tool : tools) {
+            for (const json &tool : tools) {
                 if (!tool.contains("function")) {
                     continue;
                 }
-                functions.push_back(tool.at("function"));
-            }
-            if (!functions.empty()) {
-                llama_params["functions"]     = functions;
-                llama_params["function_call"] = "auto";
+                const json &func = tool.at("function");
+                if (!func.contains("name") || !func.at("name").is_string()) {
+                    continue;
+                }
+                available_tools.push_back(tool);
             }
         } else if (body.contains("functions")) {
             const json &functions = body.at("functions");
             if (!functions.is_array()) {
                 throw std::runtime_error("Illegal param: \"functions\" must be an array");
             }
-            if (!functions.empty()) {
-                llama_params["functions"]     = functions;
-                llama_params["function_call"] = "auto";
-            }
-        }
-        // "tool_choice" and "function_call"
-        if (body.contains("tool_choice") && !body.contains("function_call")) {
-            const json &tool_choice = body.at("tool_choice");
-            if (tool_choice.is_object() && tool_choice.contains("function")) {
-                llama_params["function_call"] = tool_choice.at("function");
-            } else if (tool_choice.is_string()) {
-                llama_params["function_call"] = tool_choice;
-            } else {
-                throw std::runtime_error(R"(Illegal param: "tool_choice" must be a string or an object)");
-            }
-        } else if (body.contains("function_call")) {
-            const json &function_call = body.at("function_call");
-            if (!function_call.is_string() && !function_call.is_object()) {
-                throw std::runtime_error(R"(Illegal param: "function_call" must be a string or an object)");
-            }
-            llama_params["function_call"] = function_call;
-        }
-    }
-
-    // Apply chat template to the list of messages
-    if (chat) {
-        const json &messages = body.at("messages");
-        bool chat_vision     = false;
-        for (const json &msg : messages) {
-            if (!msg.contains("content") || !msg.at("content").is_array()) {
-                continue;
-            }
-            for (const json &part : msg.at("content")) {
-                if (part.contains("type") && part.at("type") == "image_url") {
-                    chat_vision = true;
-                    break;
-                }
-            }
-        }
-
-        json functions                  = json::array();
-        std::string functions_call_mode = "none";
-        if (llama_params.at("function_call").is_object()) {
-            const std::string func_name = llama_params.at("function_call").at("name").get<std::string>();
-            for (const auto &func : llama_params.at("functions")) {
-                if (func.at("name").get<std::string>() == func_name) {
-                    functions.push_back(func);
-                    functions_call_mode = "required";
-                    break;
-                }
-            }
-        } else if (llama_params.at("function_call").get<std::string>() != "none") {
-            functions           = llama_params.at("functions");
-            functions_call_mode = llama_params.at("function_call").get<std::string>();
-        }
-        if (!functions.empty()) {
-            llama_params["__oaicompat_completion_chat_tool"] = true;
-        }
-
-        const std::string prompt = format_chat(model, tmpl, messages, functions, functions_call_mode, use_jinja);
-        if (common_log_verbosity_thold > 2) {
-            SRV_INF("rid %s | formatted prompt\n%s\n", rid.c_str(), prompt.c_str());
-        }
-        llama_params["prompt"] = prompt;
-        if (chat_vision) {
-            llama_params["__oaicompat_completion_chat_vision"] = true;
-            // Extract the image messages,
-            // see https://platform.openai.com/docs/guides/vision
-            json images = json::array();
-            for (const json &msg : messages) {
-                if (!msg.contains("role")) {
+            for (const json &func : functions) {
+                if (!func.contains("name") || !func.at("name").is_string()) {
                     continue;
                 }
-                for (const json &part : msg.at("content")) {
-                    if (!part.contains("type") || part.at("type") != "image_url") {
-                        continue;
-                    }
-                    std::string img = json_value(part.at("image_url"), "url", std::string());
-                    if (img.find("data:image/") != std::string::npos) {
-                        const std::string split = "base64,";
-                        const size_t idx        = img.find(split);
-                        if (idx == std::string::npos) {
-                            throw std::runtime_error("Illegal param: invalid image URL, must be a base64-encoded image");
-                        }
-                        img = img.substr(idx + split.length());
-                        if (img.empty()) {
-                            throw std::runtime_error("Illegal param: empty image base64-encoded data");
-                        }
-                        try {
-                            const std::vector<uint8_t> img_buff = base64_decode(img);
-                            images.push_back(img_buff);
-                        } catch (const std::exception &e) {
-                            throw std::runtime_error("Illegal param: invalid image base64-encoded data");
-                        }
-                        continue;
-                    }
-                    std::string host, path;
-                    if (auto pos = img.find("://"); pos == std::string::npos) {
-                        throw std::runtime_error("Illegal param: invalid image URL, must be a data URI or a valid URL");
-                    } else {
-                        pos = img.find('/', pos + 3);
-                        if (pos == std::string::npos) {
-                            host = img;
-                            path = "/";
-                        } else {
-                            host = img.substr(0, pos);
-                            path = img.substr(pos);
-                        }
-                    }
-                    httplib::Client cli(host);
-                    cli.set_connection_timeout(15, 0);                      // 15 seconds
-                    cli.set_read_timeout(300, 0);                           // 5 minutes
-                    cli.set_keep_alive(false);                              // close connection after request
-                    cli.set_follow_location(true);                          // follow redirects
-                    cli.set_default_headers({{"User-Agent", "llama-box"}}); // set user-agent
-                    cli.set_url_encode(true);                               // encode URL
-                    cli.set_tcp_nodelay(true);                              // disable Nagle's algorithm
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-                    cli.enable_server_certificate_verification(false); // disable SSL verification
-#endif
-                    httplib::Result res = cli.Get(path);
-                    if (!res || res->status != httplib::StatusCode::OK_200) {
-                        throw std::runtime_error("Illegal param: failed to fetch image from URL: " + img + ", status: " + std::to_string(res ? res->status : -1) + ", reason: " + (res ? res->reason : "unknown"));
-                    }
-                    const std::vector<uint8_t> img_buff(res->body.begin(), res->body.end());
-                    images.push_back(img_buff);
-                }
+                available_tools.push_back(json{
+                    {"type", "function"},
+                    {"function", func},
+                });
             }
-            llama_params["multi_modal_data"] = json{{"images", images}};
         }
-    } else if (body.contains("prompt")) {
-        llama_params["prompt"] = body.at("prompt");
-    } else {
-        throw std::runtime_error("Illegal param: missing required field: prompt");
+        if (!available_tools.empty()) {
+            llama_params["tools"]       = available_tools;
+            llama_params["tool_choice"] = "auto";
+            // "tool_choice" and "function_call", migrate "function_call" to "tool_choice"
+            if (body.contains("tool_choice") && !body.contains("function_call")) {
+                const json &tool_choice = body.at("tool_choice");
+                if (tool_choice.is_object() && tool_choice.contains("function")) {
+                    llama_params["tool_choice"] = tool_choice.at("function");
+                } else if (tool_choice.is_string()) {
+                    llama_params["tool_choice"] = tool_choice;
+                } else {
+                    throw std::runtime_error(R"(Illegal param: "tool_choice" must be a string or an object)");
+                }
+            } else if (body.contains("function_call")) {
+                const json &function_call = body.at("function_call");
+                if (!function_call.is_string() && !function_call.is_object()) {
+                    throw std::runtime_error(R"(Illegal param: "function_call" must be a string or an object)");
+                }
+                llama_params["tool_choice"] = function_call;
+            }
+        }
     }
-
-    // Handle "max_tokens" field
-    llama_params["n_predict"] = json_value(body, "max_tokens", -1);
 
     // Handle "stop" field
     if (body.contains("stop") && body.at("stop").is_string()) {
@@ -923,6 +737,196 @@ static json oaicompat_completions_request(const struct common_params &params, co
             throw std::runtime_error(R"(Illegal param: "response_format" must be one of "text" or "json_object", but got: )" + response_type);
         }
     }
+
+    bool stream = json_value(body, "stream", false);
+
+    // Apply chat template to the list of messages
+    if (chat) {
+        std::vector<common_chat_msg> common_messages;
+        json images = json::array();
+
+        json messages = body.at("messages"); // copy message
+        for (json &msg : messages) {
+            std::string role = json_value(msg, "role", std::string(""));
+            std::string content;
+            if (msg.contains("content") && !msg.at("content").is_null()) {
+                if (msg.at("content").is_string()) {
+                    content = msg.at("content").get<std::string>();
+                } else if (msg.at("content").is_array()) {
+                    int32_t n_img = 0;
+                    for (const json &part : msg.at("content")) {
+                        if (part.contains("type") && part.at("type") == "image_url") {
+                            // process image
+                            llama_params["__oaicompat_completion_chat_vision"] = true;
+                            std::string img                                    = json_value(part.at("image_url"), "url", std::string());
+                            if (img.find("data:image/") != std::string::npos) {
+                                const std::string split = "base64,";
+                                const size_t idx        = img.find(split);
+                                if (idx == std::string::npos) {
+                                    throw std::runtime_error("Illegal param: invalid image URL, must be a base64-encoded image");
+                                }
+                                img = img.substr(idx + split.length());
+                                if (img.empty()) {
+                                    throw std::runtime_error("Illegal param: empty image base64-encoded data");
+                                }
+                                try {
+                                    const std::vector<uint8_t> img_buff = base64_decode(img);
+                                    images.push_back(img_buff);
+                                } catch (const std::exception &e) {
+                                    throw std::runtime_error("Illegal param: invalid image base64-encoded data");
+                                }
+                            } else {
+                                std::string host, path;
+                                if (size_t pos = img.find("://"); pos == std::string::npos) {
+                                    throw std::runtime_error("Illegal param: invalid image URL, must be a data URI or a valid URL");
+                                } else {
+                                    pos = img.find('/', pos + 3);
+                                    if (pos == std::string::npos) {
+                                        host = img;
+                                        path = "/";
+                                    } else {
+                                        host = img.substr(0, pos);
+                                        path = img.substr(pos);
+                                    }
+                                }
+                                httplib::Client cli(host);
+                                cli.set_connection_timeout(15, 0);                      // 15 seconds
+                                cli.set_read_timeout(300, 0);                           // 5 minutes
+                                cli.set_keep_alive(false);                              // close connection after request
+                                cli.set_follow_location(true);                          // follow redirects
+                                cli.set_default_headers({{"User-Agent", "llama-box"}}); // set user-agent
+                                cli.set_url_encode(true);                               // encode URL
+                                cli.set_tcp_nodelay(true);                              // disable Nagle's algorithm
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+                                cli.enable_server_certificate_verification(false); // disable SSL verification
+#endif
+                                httplib::Result res = cli.Get(path);
+                                if (!res || res->status != httplib::StatusCode::OK_200) {
+                                    throw std::runtime_error("Illegal param: failed to fetch image from URL: " + img + ", status: " + std::to_string(res ? res->status : -1) + ", reason: " + (res ? res->reason : "unknown"));
+                                }
+                                const std::vector<uint8_t> img_buff(res->body.begin(), res->body.end());
+                                images.push_back(img_buff);
+                            }
+                            n_img++;
+                            continue;
+                        }
+                        if (part.contains("text")) {
+                            if (!content.empty()) {
+                                content += "\n";
+                            }
+                            for (int i = 0; i < n_img; i++) {
+                                content += "<image>\n";
+                            }
+                            content += part.at("text").get<std::string>();
+                            n_img = 0;
+                        }
+                    }
+                    for (int i = 0; i < n_img; i++) {
+                        content += "\n<image>";
+                    }
+                } else {
+                    throw std::runtime_error("Invalid 'content' field");
+                }
+                msg["content"] = content; // updated
+                common_messages.push_back({role, content, {}});
+            } else if (msg.contains("tool_calls") && !msg.at("tool_calls").is_null()) {
+                if (msg.at("tool_calls").is_array()) {
+                    for (const json &part : msg.at("tool_calls")) {
+                        if (!part.contains("type") || part.at("type") != "function") {
+                            continue;
+                        }
+                        if (!part.contains("function") || !part.at("function").is_object()) {
+                            continue;
+                        }
+                        const json &func = part.at("function");
+                        if (!func.contains("name") || !func.at("name").is_string()) {
+                            continue;
+                        }
+                        if (!func.contains("arguments") || !func.at("arguments").is_string()) {
+                            continue;
+                        }
+                        std::string name      = func.at("name").get<std::string>();
+                        std::string arguments = func.at("arguments").get<std::string>();
+                        if (!content.empty()) {
+                            content += "\n";
+                        }
+                        content += "{\"name\":\"" + name + "\",\"arguments\":" + arguments + "}";
+                    }
+                } else {
+                    throw std::runtime_error("Invalid 'tool_calls' field");
+                }
+                common_messages.push_back({"tool_call", content, {}});
+            } else {
+                throw std::runtime_error("Missing 'content' or 'tool_calls' in 'messages' item");
+            }
+        }
+        llama_params["multi_modal_data"] = json{{"images", images}};
+
+        json tools              = json::array();
+        std::string tool_choice = "none";
+        bool tool_parallel      = json_value(body, "parallel_tool_calls", false);
+        if (llama_params.at("tool_choice").is_object()) {
+            const std::string func_name = json_value(llama_params.at("tool_choice"), "name", std::string());
+            for (const json &tool : llama_params.at("tools")) {
+                if (tool.at("function").at("name").get<std::string>() == func_name) {
+                    tools.push_back(tool);
+                    tool_choice = "required";
+                    break;
+                }
+            }
+        } else if (llama_params.at("tool_choice").get<std::string>() != "none") {
+            tools       = llama_params.at("tools");
+            tool_choice = llama_params.at("tool_choice").get<std::string>();
+        }
+        llama_params["__oaicompat_completion_chat_tool"] = !tools.empty();
+
+        std::string prompt;
+        {
+            const common_chat_template &tmpl = !tools.empty() && chat_templates.template_tool_use
+                                                   ? *chat_templates.template_tool_use
+                                                   : *chat_templates.template_default;
+            if (use_jinja) {
+                common_chat_inputs inputs;
+                inputs.messages                                    = messages;
+                inputs.tools                                       = tools;
+                inputs.tool_choice                                 = tool_choice;
+                inputs.parallel_tool_calls                         = tmpl.original_caps().supports_parallel_tool_calls && tool_parallel;
+                inputs.stream                                      = stream;
+                inputs.json_schema                                 = json_value(llama_params, "json_schema", json());
+                common_chat_params chat_params                     = common_chat_params_init(tmpl, inputs);
+                llama_params["__oaicompat_completion_chat_format"] = chat_params.format;
+                llama_params["parallel_tool_calls"]                = inputs.parallel_tool_calls;
+                llama_params["grammar"]                            = chat_params.grammar;
+                llama_params["grammar_lazy"]                       = chat_params.grammar_lazy;
+                auto grammar_triggers                              = json::array();
+                for (const common_grammar_trigger &trigger : chat_params.grammar_triggers) {
+                    grammar_triggers.push_back({
+                        {"word", trigger.word},
+                        {"at_start", trigger.at_start},
+                    });
+                }
+                llama_params["grammar_triggers"] = grammar_triggers;
+                llama_params["preserved_tokens"] = chat_params.preserved_tokens;
+                for (const auto &stop : chat_params.additional_stops) {
+                    llama_params["stop"].push_back(stop);
+                }
+                prompt = chat_params.prompt;
+            } else {
+                prompt = common_chat_apply_template(tmpl, common_messages, true, use_jinja);
+            }
+        }
+        llama_params["prompt"] = prompt;
+        if (common_log_verbosity_thold > 2) {
+            SRV_INF("rid %s | formatted prompt\n%s\n", rid.c_str(), prompt.c_str());
+        }
+    } else if (body.contains("prompt")) {
+        llama_params["prompt"] = body.at("prompt");
+    } else {
+        throw std::runtime_error("Illegal param: missing required field: prompt");
+    }
+
+    // Handle "max_tokens" field
+    llama_params["n_predict"] = json_value(body, "max_tokens", -1);
 
     // Handle "n" field
     int n_choices = json_value(body, "n", 1);
@@ -958,7 +962,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     }
 
     // Handle "stream_options" field
-    if (json_value(llama_params, "stream", false)) {
+    if (stream) {
         if (!body.contains("stream_options")) {
             llama_params["stream_options"] = json{{"include_usage", true}};
         } else if (body.at("stream_options").is_object()) {

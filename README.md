@@ -24,18 +24,21 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - LLaVA Series
         - MiniCPM VL Series
         - Qwen2 VL Series
+        - GLM-Edge-V Series
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
       $ # The box will resize the image automatically when the image size exceeds 1344x1344.
     ```
     + Support [OpenAI Function calling API](https://platform.openai.com/docs/guides/function-calling).
-        - Qwen2 Series
         - LLaMA3 Series
         - Granite Series
         - Mistral Series
-        - Hermes Series
+        - Hermes2 / Qwen2 Series
         - ChatGLM4 Series
+        - CommandR Series
+        - FunctionaryV3 Series
+        - DeepSeekR1 Series
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
   see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
@@ -357,7 +360,7 @@ server:
                                   For image models, indicate which device should be able to offload
   -ngl,  --gpu-layers,  --n-gpu-layers N
                                   Number of layers to store in VRAM
-                                  '-ngl 0' means no offloading
+                                  -ngl 0 means no offloading
          --no-warmup              Skip warming up the model with an empty run
          --warmup                 Enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving
 
@@ -371,19 +374,18 @@ server/completion:
                                     - layer (default): split layers and KV across GPUs
                                     - row: split rows across GPUs, store intermediate results and KV in --main-gpu
   -mg,   --main-gpu N             The device to use for the model
-                                  Work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: 0)
+                                  Work with --split-mode none|row, or indicate the device to offload projector model specified by --mmproj (default: 0)
          --override-kv KEY=TYPE:VALUE
                                   Advanced option to override model metadata by key, may be specified multiple times
                                   Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
-         --chat-template JINJA_TEMPLATE
-                                  Set custom jinja chat template (default: template taken from model's metadata)
-                                  Only commonly used templates are accepted (unless --jinja is set before this flag)
-                                  List of built-in templates:
-                                  chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, zephyr
+         --chat-template BUILTIN  Set built-in chat template (default: analyze from model's metadata)
+                                  Only built-in templates are accepted, implicit reset --jinja setting
+                                  List of built-in templates: chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, zephyr
+         --jinja                  Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)
          --chat-template-file FILE
-                                  Set a file to load a custom jinja chat template (default: template taken from model's metadata)Only commonly used templates are accepted (unless --jinja is set before this flag)
+                                  Set jinja chat template (default: take from model's metadata)
+                                  Required --jinja set before
                                   
-         --jinja                  Use jinja template for chat (default: disabled)
          --slot-save-path PATH    Path to save slot kv cache (default: disabled)
   -sps,  --slot-prompt-similarity N
                                   How much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
@@ -641,8 +643,8 @@ The available endpoints for the LLaMA Box server mode are:
     + `llamabox:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
     + `llamabox:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
     + `llamabox:kv_cache_tokens`: (Gauge) KV-cache tokens.
-    + `llamabox:requests_processing`: (Gauge) Number of request processing.
-    + `llamabox:requests_deferred`: (Gauge) Number of request deferred.
+    + `llamabox:requests_processing`: (Gauge) Number of requests processing.
+    + `llamabox:requests_deferred`: (Gauge) Number of requests deferred.
 
     ```
     RESPONSE : (text/plain)

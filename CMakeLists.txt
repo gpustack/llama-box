@@ -48,6 +48,7 @@ set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama: build server example" FORCE)
 
 # 3rd party libs
 set(LLAMA_CURL OFF CACHE BOOL "llama: use libcurl to download model from an URL" FORCE)
+set(LLAMA_LLGUIDANCE OFF CACHE BOOL "llama-common: include LLGuidance library for structured output in common utils" FORCE)
 
 # change the default for these ggml options
 if (NOT DEFINED GGML_LLAMAFILE)

@@ -76,7 +76,7 @@ const std::vector<ggml_type> kv_cache_types = {
     GGML_TYPE_Q5_1,
 };
 
-static std::string get_all_cache_kv_types() {
+static std::string get_all_cache_kv_types_string() {
     std::ostringstream msg;
     for (const auto &type : kv_cache_types) {
         msg << ggml_type_name(type) << (&type == &kv_cache_types.back() ? "" : ", ");
@@ -93,15 +93,19 @@ static ggml_type parse_cache_kv_type(const std::string &s) {
     throw std::runtime_error("Unsupported cache type: " + s);
 }
 
-static std::string get_builtin_chat_templates() {
-    std::vector<const char *> supported_tmpl;
+static std::vector<const char *> get_builtin_chat_templates() {
+    std::vector<const char *> tmpls;
     int32_t res = llama_chat_builtin_templates(nullptr, 0);
-    supported_tmpl.resize(res);
-    llama_chat_builtin_templates(supported_tmpl.data(), supported_tmpl.size());
+    tmpls.resize(res);
+    llama_chat_builtin_templates(tmpls.data(), tmpls.size());
+    return tmpls;
+}
 
+static std::string get_builtin_chat_templates_string() {
+    std::vector<const char *> tmpls = get_builtin_chat_templates();
     std::ostringstream msg;
-    for (const auto &tmpl : supported_tmpl) {
-        msg << tmpl << (&tmpl == &supported_tmpl.back() ? "" : ", ");
+    for (const auto &tmpl : tmpls) {
+        msg << tmpl << (&tmpl == &tmpls.back() ? "" : ", ");
     }
     return msg.str();
 }
@@ -290,7 +294,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "-ts,   --tensor-split SPLIT",                   "Fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1\n"
                                                                                                             "For image models, indicate which device should be able to offload"});
     opts.push_back({ "server",                             "-ngl,  --gpu-layers,  --n-gpu-layers N",        "Number of layers to store in VRAM\n"
-                                                                                                            "'-ngl 0' means no offloading"});
+                                                                                                            "-ngl 0 means no offloading"});
     opts.push_back({ "server",                             "       --no-warmup",                            "Skip warming up the model with an empty run" });
     opts.push_back({ "server",                             "       --warmup",                               "Enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving" });
     // server // completion //
@@ -302,15 +306,15 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                                                             "  - layer (default): split layers and KV across GPUs\n"
                                                                                                             "  - row: split rows across GPUs, store intermediate results and KV in --main-gpu" });
     opts.push_back({ "server/completion",                  "-mg,   --main-gpu N",                           "The device to use for the model\n"
-                                                                                                            "Work with --split-mode none|row', or indicate the device to offload projector model specified by '--mmproj' (default: %d)", llm_params.main_gpu });
+                                                                                                            "Work with --split-mode none|row, or indicate the device to offload projector model specified by --mmproj (default: %d)", llm_params.main_gpu });
     opts.push_back({ "server/completion",                  "       --override-kv KEY=TYPE:VALUE",           "Advanced option to override model metadata by key, may be specified multiple times\n"
                                                                                                             "Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false" });
-    opts.push_back({ "server/completion",                  "       --chat-template JINJA_TEMPLATE",         "Set custom jinja chat template (default: template taken from model's metadata)\n"
-                                                                                                            "Only commonly used templates are accepted (unless --jinja is set before this flag)\n"
-                                                                                                            "List of built-in templates:\n%s", get_builtin_chat_templates().c_str() });
-    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "Set a file to load a custom jinja chat template (default: template taken from model's metadata)"
-                                                                                                            "Only commonly used templates are accepted (unless --jinja is set before this flag)\n" });
-    opts.push_back({ "server/completion",                  "       --jinja",                                "Use jinja template for chat (default: disabled)" });
+    opts.push_back({ "server/completion",                  "       --chat-template BUILTIN",                "Set built-in chat template (default: analyze from model's metadata)\n"
+                                                                                                            "Only built-in templates are accepted, implicit reset --jinja setting\n"
+                                                                                                            "List of built-in templates: %s", get_builtin_chat_templates_string().c_str() });
+    opts.push_back({ "server/completion",                  "       --jinja",                                "Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)" });
+    opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "Set jinja chat template (default: take from model's metadata)\n"
+                                                                                                            "Required --jinja set before\n" });
     opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "Path to save slot kv cache (default: disabled)" });
     opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "How much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", llm_params.slot_prompt_similarity });
     opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "Maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
@@ -349,11 +353,12 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "Simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
     opts.push_back({ "server/completion",                  "       --temp T",                               "Temperature (default: %.1f)", (double)llm_params.sampling.temp });
     opts.push_back({ "server/completion",                  "       --top-k N",                              "Top-K sampling (default: %d, 0 = disabled)", llm_params.sampling.top_k });
-    opts.push_back({ "server/completion",                  "       --top-p P",                              "Top-P sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
-    opts.push_back({ "server/completion",                  "       --min-p P",                              "Min-P sampling (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.min_p });
+    opts.push_back({ "server/completion",                  "       --top-p N",                              "Top-P sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
+    opts.push_back({ "server/completion",                  "       --min-p N",                              "Min-P sampling (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.min_p });
+    opts.push_back({ "server/completion",                  "       --top-nsigma N",                         "Top-N-Sigma sampling (default: %.1f, -1.0 = disabled)", (double)llm_params.sampling.top_n_sigma });
     opts.push_back({ "server/completion",                  "       --xtc-probability N",                    "XTC probability (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.xtc_probability });
     opts.push_back({ "server/completion",                  "       --xtc-threshold N",                      "XTC threshold (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.xtc_threshold });
-    opts.push_back({ "server/completion",                  "       --typical P",                            "Locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.typ_p });
+    opts.push_back({ "server/completion",                  "       --typical N",                            "Locally typical sampling, parameter p (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.typ_p });
     opts.push_back({ "server/completion",                  "       --repeat-last-n N",                      "Last n tokens to consider for penalize (default: %d, 0 = disabled, -1 = ctx_size)", llm_params.sampling.penalty_last_n });
     opts.push_back({ "server/completion",                  "       --repeat-penalty N",                     "Penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)llm_params.sampling.penalty_repeat });
     opts.push_back({ "server/completion",                  "       --presence-penalty N",                   "Repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.penalty_present });
@@ -384,8 +389,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "-nkvo, --no-kv-offload",                        "Disable KV offload" });
     opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "Disable caching prompt" });
     opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "Min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
-    opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_k) });
-    opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V, allowed values: %s (default: %s)", get_all_cache_kv_types().c_str(), ggml_type_name(llm_params.cache_type_v) });
+    opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types_string().c_str(), ggml_type_name(llm_params.cache_type_k) });
+    opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V, allowed values: %s (default: %s)", get_all_cache_kv_types_string().c_str(), ggml_type_name(llm_params.cache_type_v) });
     opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)llm_params.defrag_thold });
     opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "Number of parallel sequences to decode (default: %d)", llm_params.n_parallel });
     opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "Disable continuous batching" });
@@ -412,7 +417,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion/speculative" });
     opts.push_back({ "server/completion/speculative",      "       --draft-max, --draft, --draft-n N",      "Number of tokens to draft for speculative decoding (default: %d)", llm_params.speculative.n_max });
     opts.push_back({ "server/completion/speculative",      "       --draft-min, --draft-n-min N",           "Minimum number of draft tokens to use for speculative decoding (default: %d)", llm_params.speculative.n_min });
-    opts.push_back({ "server/completion/speculative",      "       --draft-p-min P",                        "Minimum speculative decoding probability (greedy) (default: %.1f)", llm_params.speculative.p_min });
+    opts.push_back({ "server/completion/speculative",      "       --draft-p-min N",                        "Minimum speculative decoding probability (greedy) (default: %.1f)", llm_params.speculative.p_min });
     opts.push_back({ "server/completion/speculative",      "-md,   --model-draft FNAME",                    "Draft model for speculative decoding (default: unused)" });
     opts.push_back({ "server/completion/speculative",      "-devd, --device-draft <dev1,dev2,...>",         "A comma-separated list of devices to use for offloading the draft model (none = don't offload)\n"
                                                                                                             "Use --list-devices to see a list of available devices" });
@@ -541,14 +546,27 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
             }
 
             if (!strcmp(flag, "--list-devices")) {
-                printf("Available devices:\n");
+                std::vector<ggml_backend_dev_t> rpc_devices;
+                std::vector<ggml_backend_dev_t> all_devices;
                 for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
-                    auto *dev = ggml_backend_dev_get(j);
+                    ggml_backend_device *dev = ggml_backend_dev_get(j);
                     if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-                        size_t free, total;
-                        ggml_backend_dev_memory(dev, &free, &total);
-                        printf("  %s: %s (%zu MiB, %zu MiB free)\n", ggml_backend_dev_name(dev), ggml_backend_dev_description(dev), total / 1024 / 1024, free / 1024 / 1024);
+                        ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
+                        if (ggml_backend_reg_name(reg) == std::string("RPC")) {
+                            rpc_devices.push_back(dev);
+                        } else {
+                            all_devices.push_back(dev);
+                        }
                     }
+                }
+                // insert RPC devices in front
+                all_devices.insert(all_devices.begin(), rpc_devices.begin(), rpc_devices.end());
+                fprintf(stderr, "available devices:\n");
+                for (size_t j = 0; j < all_devices.size(); ++j) {
+                    ggml_backend_device *dev = all_devices[j];
+                    size_t free, total;
+                    ggml_backend_dev_memory(dev, &free, &total);
+                    fprintf(stderr, "  %s: %s (%zu MiB, %zu MiB free)\n", ggml_backend_dev_name(dev), ggml_backend_dev_description(dev), total >> 20, free >> 20);
                 }
                 exit(0);
             }
@@ -862,8 +880,18 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                     invalid("--chat-template");
                 }
                 std::string t(arg);
-                params_.llm_params.enable_chat_template = true;
-                params_.llm_params.chat_template        = t;
+                std::vector<const char *> tmpls = get_builtin_chat_templates();
+                if (std::find(tmpls.begin(), tmpls.end(), t) == tmpls.end()) {
+                    invalid("--chat-template, use one of the built-in templates");
+                }
+                params_.llm_params.chat_template = t;
+                params_.llm_params.use_jinja     = false;
+                continue;
+            }
+
+            if (!strcmp(flag, "--jinja")) {
+                params_.llm_params.chat_template = "";
+                params_.llm_params.use_jinja     = true;
                 continue;
             }
 
@@ -871,15 +899,21 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--chat-template-file");
                 }
+                if (!params_.llm_params.use_jinja) {
+                    invalid("--chat-template-file, --jinja must be set before");
+                }
                 char *arg = argv[i++];
                 std::ifstream file(arg);
                 if (!file) {
-                    invalid("--chat-template-file");
+                    invalid("--chat-template-file, failed to open file");
                 }
                 std::string t;
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), std::back_inserter(t));
-                params_.llm_params.enable_chat_template = true;
-                params_.llm_params.chat_template        = t;
+                std::vector<const char *> tmpls = get_builtin_chat_templates();
+                if (std::find(tmpls.begin(), tmpls.end(), t) != tmpls.end()) {
+                    invalid("--chat-template-file, set --chat-template directly if using a built-in template");
+                }
+                params_.llm_params.chat_template = t;
                 continue;
             }
 
@@ -1143,6 +1177,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
+            if (!strcmp(flag, "--top-nsigma")) {
+                if (i == argc) {
+                    missing("--top-nsigma");
+                }
+                char *arg                               = argv[i++];
+                params_.llm_params.sampling.top_n_sigma = std::stof(std::string(arg));
+                continue;
+            }
+
             if (!strcmp(flag, "--xtc-probability")) {
                 if (i == argc) {
                     missing("--xtc-probability");
@@ -1351,7 +1394,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 char *arg = argv[i++];
                 std::ifstream file(arg);
                 if (!file) {
-                    invalid("--grammar-file");
+                    invalid("--grammar-file, failed to open file");
                 }
                 std::copy(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(),
                           std::back_inserter(params_.llm_params.sampling.grammar));
@@ -1709,10 +1752,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 char *arg              = argv[i++];
                 params_.max_image_size = std::stoi(std::string(arg));
                 if (params_.max_image_size != 0 && params_.max_image_size < 224) {
-                    invalid("--visual-max-image-size");
+                    invalid("--visual-max-image-size, must be at least 224");
                 }
                 if (params_.max_image_size % 14 != 0) {
-                    invalid("--visual-max-image-size");
+                    invalid("--visual-max-image-size, must be a multiple of 14");
                 }
                 continue;
             }
@@ -1750,7 +1793,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 char *arg                         = argv[i++];
                 params_.sd_params.max_batch_count = std::stoi(std::string(arg));
                 if (params_.sd_params.max_batch_count < 1) {
-                    invalid("--image-max-batch");
+                    invalid("--image-max-batch, must be at least 1");
                 }
                 continue;
             }
@@ -1762,10 +1805,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 char *arg                         = argv[i++];
                 params_.sd_params.sampling.height = std::stoi(std::string(arg));
                 if (params_.sd_params.sampling.height < 256) {
-                    invalid("--image-max-height");
+                    invalid("--image-max-height, must be at least 256");
                 }
                 if (params_.sd_params.sampling.height % 64 != 0) {
-                    invalid("--image-max-height");
+                    invalid("--image-max-height, must be a multiple of 64");
                 }
                 continue;
             }
@@ -1777,10 +1820,10 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 char *arg                        = argv[i++];
                 params_.sd_params.sampling.width = std::stoi(std::string(arg));
                 if (params_.sd_params.sampling.width < 256) {
-                    invalid("--image-max-width");
+                    invalid("--image-max-width, must be at least 256");
                 }
                 if (params_.sd_params.sampling.width % 64 != 0) {
-                    invalid("--image-max-width");
+                    invalid("--image-max-width, must be a multiple of 64");
                 }
                 continue;
             }
@@ -2144,7 +2187,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     }
 
     if (params_.endpoint_images) {
-        params_.llm_params.enable_chat_template   = false;
         params_.sd_params.model                   = params_.llm_params.model;
         params_.sd_params.model_alias             = params_.llm_params.model_alias;
         params_.sd_params.seed                    = params_.llm_params.sampling.seed;

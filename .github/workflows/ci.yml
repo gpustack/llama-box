@@ -861,7 +861,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl -y
+          choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
       - name: Setup
         run: |
@@ -881,7 +881,7 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
@@ -952,7 +952,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl -y
+          choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
       - name: Setup HIP
         run: |
@@ -987,7 +987,7 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
           $ErrorActionPreference = "Stop"
@@ -1064,7 +1064,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ccache ninja curl -y
+          choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
       - name: Setup CUDA
         run: |
@@ -1102,7 +1102,7 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}\\.cache\\ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           $ErrorActionPreference = "Stop"
@@ -1157,20 +1157,18 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
-        # doesn't support ccache,
-        # as the oneAPI need to configure the environment variables via setvars.bat.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
           key: cache-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}\build
+            ${{ github.workspace }}\.cache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          choco install ninja curl -y
+          choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
       - name: Setup oneAPI
         run: |
@@ -1200,6 +1198,8 @@ jobs:
           
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
+        env:
+          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
