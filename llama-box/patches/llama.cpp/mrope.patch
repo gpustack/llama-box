@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 6dea8e3d..6ca4ed0e 100644
+index 8661e164..5111eb8d 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -945,6 +945,11 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -946,6 +946,11 @@ struct common_init_result common_init_from_params(common_params & params) {
  
      auto cparams = common_context_params_to_llama(params);
  
@@ -15,10 +15,10 @@ index 6dea8e3d..6ca4ed0e 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index e809f05d..4b4c013f 100644
+index 0cbf8318..65d32b9c 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -9322,10 +9322,6 @@ static void ggml_compute_forward_rope_f32(
+@@ -9406,10 +9406,6 @@ static void ggml_compute_forward_rope_f32(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -29,7 +29,7 @@ index e809f05d..4b4c013f 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne0/2);
      }
-@@ -9508,10 +9504,6 @@ static void ggml_compute_forward_rope_f16(
+@@ -9592,10 +9588,6 @@ static void ggml_compute_forward_rope_f16(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -56,7 +56,7 @@ index 18f691b2..f5a4da3a 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/include/llama.h b/include/llama.h
-index 3b75e760..fec09789 100644
+index 1f5f3a09..6138f273 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -526,6 +526,9 @@ extern "C" {
@@ -70,10 +70,10 @@ index 3b75e760..fec09789 100644
      LLAMA_API bool llama_model_is_recurrent(const struct llama_model * model);
  
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 18bd0b07..3a6af700 100644
+index 0f4b62c4..f9175e75 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -3991,6 +3991,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
+@@ -4013,6 +4013,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
      return model->hparams.dec_start_token_id;
  }
  

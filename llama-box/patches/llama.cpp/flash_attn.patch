@@ -1,8 +1,8 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 192b20a2..cecb4f73 100644
+index 607f2786..820598b6 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9557,8 +9557,8 @@ struct llama_context * llama_init_from_model(
+@@ -9574,8 +9574,8 @@ struct llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {
