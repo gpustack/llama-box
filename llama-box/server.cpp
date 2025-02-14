@@ -282,6 +282,9 @@ struct server_slot {
     llama_token tool_call_start_token = LLAMA_TOKEN_NULL;
     std::vector<std::string> tool_call_start_words;
     size_t tool_call_start_words_longest_length = 0;
+    // non-jinja too calls
+    std::vector<json> generated_tool_calls = {};
+    std::string tool_call_start_found_word = "";
 
     void reset() {
         SLT_DBG(*this, "%s", "\n");
@@ -362,6 +365,8 @@ struct server_slot {
         tool_call_start_token = LLAMA_TOKEN_NULL;
         tool_call_start_words.clear();
         tool_call_start_words_longest_length = 0;
+        generated_tool_calls.clear();
+        tool_call_start_found_word.clear();
     }
 
     bool is_non_causal() const {
@@ -930,6 +935,14 @@ struct server_context {
     // tool calls
     common_chat_templates chat_templates;
     bool support_tool_calls = false;
+    // non-jinja tool calls
+    llama_token tool_call_start_token              = LLAMA_TOKEN_NULL;
+    std::vector<std::string> tool_call_start_words = {};
+    size_t tool_call_start_words_longest_length    = 0;
+    bool tool_call_start_trim                      = false;
+    llama_token tool_call_end_token                = LLAMA_TOKEN_NULL;
+    std::vector<std::string> tool_call_end_words   = {};
+    bool tool_call_end_trim                        = false;
 
     ~server_context() {
         for (server_slot &slot : slots) {
@@ -1259,7 +1272,59 @@ struct server_context {
                     {"assistant", "Hi! How can I help you today?", {}},
                     {"user", "What is the weather like today?", {}},
                 };
-                example_prompt = common_chat_apply_template(tmpl, messages, true, llm_params.use_jinja);
+                // NB(thxCode): common_chat_func is a patch.
+                std::vector<common_chat_func> funcs = {
+                    {"get_weather", "", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
+                    {"get_temperature", "Return the temperature according to the location.", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
+                };
+                // NB(thxCode): common_chat_apply_template2 is a patch.
+                example_prompt = common_chat_apply_template2(llm_model, tmpl, messages, funcs, /* req_func */ false, /* add_ass */ true);
+                // NB(thxCode): llama_chat_template_alias is a patch.
+                std::string alias = llama_chat_template_alias(tmpl.source().c_str());
+                if (alias == "chatml" || alias == "chatglm4") {
+                    // <tool_call>
+                    // {"name":"","arguments":{}}
+                    // </tool_call>
+                    support_tool_calls           = true;
+                    std::vector<llama_token> ids = common_tokenize(llm_vocab, "<tool_call>", false, true);
+                    if (ids.size() == 1) {
+                        tool_call_start_token = ids[0];
+                    } else {
+                        tool_call_start_words                = {"<tool_call>", "</tool_call>\n"};
+                        tool_call_start_words_longest_length = 12;
+                        tool_call_start_trim                 = true;
+                    }
+                    ids = common_tokenize(llm_vocab, "</tool_call>", false, true);
+                    if (ids.size() == 1) {
+                        tool_call_end_token = ids[0];
+                    } else {
+                        tool_call_end_words = {"</tool_call>", "</tool_call>\n", "</tool_call> "};
+                        tool_call_end_trim  = true;
+                    }
+                } else if (starts_with(alias, "mistral-")) {
+                    // [TOOL_CALLS][{"name":"","arguments":{}}]
+                    support_tool_calls           = true;
+                    std::vector<llama_token> ids = common_tokenize(llm_vocab, "[TOOL_CALLS]", false, true);
+                    if (ids.size() == 1) {
+                        tool_call_start_token = ids[0];
+                    } else {
+                        tool_call_start_words                = {"[TOOL_CALLS]"};
+                        tool_call_start_words_longest_length = 12;
+                        tool_call_start_trim                 = true;
+                    }
+                    tool_call_end_words = {"}]", "}]\n", "}] "};
+                } else if (alias == "llama3") {
+                    // {"name":"","arguments":{}}
+                    support_tool_calls    = true;
+                    tool_call_start_words = {"{\""};
+                    tool_call_end_words   = {"}}", "}}\n", "}} "};
+                } else if (alias == "granite") {
+                    // <tool_call>[{"name":"","arguments":{}}]
+                    support_tool_calls    = true;
+                    tool_call_start_words = {"<tool_call>"};
+                    tool_call_start_trim  = true;
+                    tool_call_end_words   = {"}]", "}]\n", "}] "};
+                }
             }
 
             SRV_INF("chat template, built-in: %s, jinja rendering: %s, tool call: %s, example:\n%s\n",
@@ -1986,7 +2051,7 @@ struct server_context {
             }
 
             // check if there is any chat tool to predict
-            if (send_text && slot.oaicompat_completion_chat_tool) {
+            if (send_text && slot.oaicompat_completion_chat_tool && llm_params.use_jinja) {
                 if (!slot.tool_call_start_found) {
                     if (!slot.tool_call_start_words.empty()) {
                         // stop sending text if the start word found
@@ -2013,6 +2078,108 @@ struct server_context {
                     }
                 } else {
                     send_text = false;
+                }
+            }
+            if (send_text && slot.oaicompat_completion_chat_tool && !llm_params.use_jinja) {
+                if (!slot.tool_call_start_found) {
+                    if (!tool_call_start_words.empty()) {
+                        // stop sending text if the start word found
+                        if (str_test.length() <= slot.tool_call_start_words_longest_length + 2) {
+                            send_text = false;
+                        } else {
+                            for (const std::string &word : tool_call_start_words) {
+                                if (size_t start_pos = str_test.find(word); start_pos != std::string::npos) {
+                                    stop_pos                        = start_pos;
+                                    slot.tool_call_start_found      = true;
+                                    slot.tool_call_start_found_word = word;
+                                    break;
+                                }
+                            }
+                        }
+                    } else if (tool_call_start_token != LLAMA_TOKEN_NULL) {
+                        // stop sending text if the start token found
+                        for (const llama_token &tok : result.toks) {
+                            if (tok == tool_call_start_token) {
+                                send_text                  = false;
+                                slot.tool_call_start_found = true;
+                                slot.generated_text        = "";
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    send_text = false;
+                    std::string functions_str;
+                    if (!tool_call_end_words.empty()) {
+                        for (const std::string &word : tool_call_end_words) {
+                            if (!ends_with(str_test, word)) {
+                                continue;
+                            }
+                            functions_str = str_test;
+                            if (tool_call_start_trim && !slot.tool_call_start_found_word.empty()) {
+                                functions_str = functions_str.substr(slot.tool_call_start_found_word.length());
+                            }
+                            if (tool_call_end_trim) {
+                                functions_str = functions_str.substr(0, functions_str.length() - word.length());
+                            }
+                            break;
+                        }
+                    } else if (tool_call_end_token != LLAMA_TOKEN_NULL) {
+                        for (auto i = int(result.toks.size()) - 1; i >= 0; --i) {
+                            if (result.toks[i] == tool_call_end_token) {
+                                functions_str = str_test;
+                                functions_str = functions_str.substr(0, functions_str.length() - token_str.size());
+                                break;
+                            }
+                        }
+                    }
+                    if (!functions_str.empty()) {
+                        slot.tool_call_start_found = false;
+                        try {
+                            auto append_tool_calls = [&](json &function) {
+                                if (!function.is_object()) {
+                                    throw std::runtime_error("function is an object");
+                                }
+                                if (!function.contains("name")) {
+                                    throw std::runtime_error("function does not contain \"name\" field");
+                                }
+                                if (!function.contains("arguments")) {
+                                    throw std::runtime_error("function does not contain \"arguments\" field");
+                                }
+                                if (!function.at("arguments").is_string()) {
+                                    function["arguments"] = function.at("arguments").dump(-1, ' ', false, json::error_handler_t::replace);
+                                }
+                                json tool_call = json{
+                                    {"type", "function"},
+                                    {"function", function},
+                                    {"id", gen_callid()},
+                                };
+                                slot.generated_tool_calls.push_back(tool_call);
+                            };
+                            json functions = json::parse(functions_str);
+                            if (functions.is_array()) {
+                                for (auto &function : functions) {
+                                    append_tool_calls(function);
+                                }
+                            } else {
+                                append_tool_calls(functions);
+                            }
+                            if (!slot.tool_call_parallel) {
+                                slot.stop           = STOP_TYPE_EOS;
+                                slot.has_next_token = false;
+                            }
+                            // eat the rest of the text
+                            result.text_to_send = slot.generated_text.substr(pos, stop_pos);
+                            slot.n_sent_text += result.text_to_send.size();
+                        } catch (const std::exception &e) {
+                            SLT_ERR(slot, "failed to parse tool call: %s, fallback\n", e.what());
+                        }
+                    }
+                }
+
+                // check if there is EOT and send latest content
+                if (!send_text && slot.oaicompat_completion_chat_tool) {
+                    send_text = llama_vocab_is_eog(llm_vocab, result.toks[result.toks.size() - 1]);
                 }
             }
 
@@ -2307,7 +2474,7 @@ struct server_context {
         if (!slot.oaicompat_completion_chat_tool) {
             res.data["content"] = !slot.params.stream ? slot.generated_text : "";
             res.data["tokens"]  = !slot.params.stream ? slot.generated_tokens : llama_tokens{};
-        } else {
+        } else if (llm_params.use_jinja) {
             common_chat_msg msg = common_chat_parse(slot.generated_text, slot.oaicompat_completion_chat_format);
             if (!msg.tool_calls.empty()) {
                 res.data["stop_type"] = "tool_calls";
@@ -2326,6 +2493,14 @@ struct server_context {
                     });
                 }
                 res.data["tool_calls"] = tool_calls;
+            } else {
+                res.data["content"] = !slot.params.stream ? slot.generated_text : "";
+                res.data["tokens"]  = !slot.params.stream ? slot.generated_tokens : llama_tokens{};
+            }
+        } else {
+            if (!slot.generated_tool_calls.empty()) {
+                res.data["stop_type"]  = "tool_calls";
+                res.data["tool_calls"] = slot.generated_tool_calls;
             } else {
                 res.data["content"] = !slot.params.stream ? slot.generated_text : "";
                 res.data["tokens"]  = !slot.params.stream ? slot.generated_tokens : llama_tokens{};

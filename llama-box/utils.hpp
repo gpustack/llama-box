@@ -660,6 +660,8 @@ static json oaicompat_completions_request(const struct common_params &params, co
     llama_params["top_p"]             = json_value(body, "top_p", 1.0f);
 
     // Handle "tools" and "tool_choice" field
+    // NB(thxCode): common_chat_func is a patch.
+    std::vector<common_chat_func> common_funcs;
     llama_params["tool_choice"] = "none";
     if (chat && support_tool_calls) {
         // "tools" and "functions", migrate "functions" to "tools"
@@ -678,6 +680,10 @@ static json oaicompat_completions_request(const struct common_params &params, co
                     continue;
                 }
                 available_tools.push_back(tool);
+                std::string name        = json_value(func, "name", std::string());
+                std::string description = json_value(func, "description", std::string());
+                std::string parameters  = func.dump(-1, ' ', false, json::error_handler_t::replace);
+                common_funcs.push_back({name, description, parameters});
             }
         } else if (body.contains("functions")) {
             const json &functions = body.at("functions");
@@ -692,6 +698,10 @@ static json oaicompat_completions_request(const struct common_params &params, co
                     {"type", "function"},
                     {"function", func},
                 });
+                std::string name        = json_value(func, "name", std::string());
+                std::string description = json_value(func, "description", std::string());
+                std::string parameters  = func.dump(-1, ' ', false, json::error_handler_t::replace);
+                common_funcs.push_back({name, description, parameters});
             }
         }
         if (!available_tools.empty()) {
@@ -912,7 +922,8 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 }
                 prompt = chat_params.prompt;
             } else {
-                prompt = common_chat_apply_template(tmpl, common_messages, true, use_jinja);
+                // NB(thxCode): common_chat_apply_template2 is a patch.
+                prompt = common_chat_apply_template2(model, tmpl, common_messages, common_funcs, tool_choice == "required", /* add_ass */ true);
             }
         }
         llama_params["prompt"] = prompt;
