@@ -5,7 +5,7 @@
 [![](https://img.shields.io/github/downloads/gpustack/llama-box/total)](https://github.com/gpustack/llama-box/releases)
 
 LLaMA Box is an LM inference server(pure API, w/o frontend assets) based on
-the [llama.cpp](https://github.com/ggerganov/llama.cpp)
+the [llama.cpp](https://github.com/ggml-org/llama.cpp)
 and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 ## Agenda
@@ -477,7 +477,7 @@ server/completion:
                                     - distribute: spread execution evenly over all nodes
                                     - isolate: only spawn threads on CPUs on the node that execution started on
                                     - numactl: use the CPU map provided by numactl
-                                  If run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437
+                                  If run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggml-org/llama.cpp/issues/1437
          --control-vector FILE    Add a control vector
          --control-vector-scaled FILE SCALE
                                   Add a control vector with user defined scaling SCALE
@@ -932,7 +932,7 @@ The available endpoints for the LLaMA Box server mode are:
     + This is only work to `Reranker` models, like [bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3).
     + This endpoint is only available if the `--rerank` flag is provided.
     + This is unavailable for the GGUF files created
-      before [llama.cpp#pr9510](https://github.com/ggerganov/llama.cpp/pull/9510).
+      before [llama.cpp#pr9510](https://github.com/ggml-org/llama.cpp/pull/9510).
     + This endpoint supports `normalize: false` to return the original `relevance_score` score.
       ```
       REQUEST: (application/json)
@@ -953,7 +953,7 @@ that mean, no installation required (I can live with `docker run`),
 no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple RESTful API.
 
 So we are inspired by
-the [llama.cpp/chat.sh](https://github.com/ggerganov/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
+the [llama.cpp/chat.sh](https://github.com/ggml-org/llama.cpp/blob/e6f291d15844398f8326940fe5ad7f2e02b5aa56/examples/server/chat.sh)
 and adjust it to interact with LLaMA Box.
 
 All you need is a Bash shell, curl and jq.

@@ -1,5 +1,5 @@
 diff --git a/ggml/include/ggml-metal.h b/ggml/include/ggml-metal.h
-index 669c1f84..f5d1892c 100644
+index a6106944..cfb8b0f3 100644
 --- a/ggml/include/ggml-metal.h
 +++ b/ggml/include/ggml-metal.h
 @@ -61,6 +61,8 @@ GGML_BACKEND_API void ggml_backend_metal_capture_next_compute(ggml_backend_t bac
@@ -12,7 +12,7 @@ index 669c1f84..f5d1892c 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 944d90af..f833dd36 100644
+index 0add6b51..b79afefe 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -2161,7 +2161,21 @@ static void ggml_metal_encode_node(

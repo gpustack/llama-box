@@ -84,7 +84,7 @@ index 98b9a446..5a21654d 100644
  // If the built-in template is not supported, we default to chatml
  // If the custom "tmpl" is not supported, we throw an error
 diff --git a/include/llama.h b/include/llama.h
-index 1f5f3a09..5a9ec25f 100644
+index b0726cbe..256eedf9 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -380,6 +380,11 @@ extern "C" {
@@ -108,7 +108,7 @@ index 1f5f3a09..5a9ec25f 100644
 +
 +    /// Apply chat template. Inspired by hf apply_chat_template() on python.
 +    /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
-+    /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
++    /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 +    /// @param model A llama model to use for this chat.
 +    /// @param tmpl A Jinja template to use for this chat. If this is nullptr, the model’s default chat template will be used instead.
 +    /// @param chat Pointer to a list of multiple llama_chat_message
@@ -134,9 +134,9 @@ index 1f5f3a09..5a9ec25f 100644
 +
      /// Apply chat template. Inspired by hf apply_chat_template() on python.
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
-     /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
+     /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 028a6479..eddf761b 100644
+index 028a6479..3bf888f3 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -171,6 +171,472 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
@@ -170,7 +170,7 @@ index 028a6479..eddf761b 100644
 +        return llm_chat_apply_template(tmpl, chat, dest, add_ass);
 +    }
 +
-+    // Taken from the research: https://github.com/ggerganov/llama.cpp/issues/5527
++    // Taken from the research: https://github.com/ggml-org/llama.cpp/issues/5527
 +    std::stringstream ss;
 +    if (tmpl == LLM_CHAT_TEMPLATE_CHATML) {
 +        if (!func.empty()) {
