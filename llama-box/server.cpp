@@ -4176,7 +4176,7 @@ struct server_context {
 };
 
 static void log_server_request(const httplib::Request &req, httplib::Response &res) {
-    if (req.path == "/v1/health") {
+    if (req.path == "/health") {
         return;
     }
 
@@ -4191,7 +4191,7 @@ static void log_server_request(const httplib::Request &req, httplib::Response &r
 }
 
 static void log_server_response(const httplib::Request &req, const httplib::Response &res) {
-    if (req.path == "/v1/health") {
+    if (req.path == "/health") {
         return;
     }
 
@@ -4202,7 +4202,7 @@ static void log_server_response(const httplib::Request &req, const httplib::Resp
 }
 
 static void log_server_exception(const httplib::Request &req, httplib::Response &res, const std::string &err_msg) {
-    if (req.path == "/v1/health") {
+    if (req.path == "/health") {
         return;
     }
 
