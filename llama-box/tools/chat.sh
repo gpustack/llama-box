@@ -129,7 +129,8 @@ chat_completion() {
             else
                 TOOL_CALLS=''
             fi
-            CONTENT_SEG="$(echo "${LINE}" | jq -cr '.choices[0].delta.content')"
+            CONTENT_SEG="$(echo "${LINE}" | jq -cr '.choices[0].delta.content'; echo -n "#")"
+            CONTENT_SEG="${CONTENT_SEG:0:${#CONTENT_SEG}-2}"
             if [[ "${CONTENT_SEG}" != "null" ]]; then
                 if [[ "${PRE_CONTENT: -1}" == "\\" ]] && [[ "${CONTENT_SEG}" =~ ^b|n|r|t|\\|\'|\"$ ]]; then
                     printf "\b "
