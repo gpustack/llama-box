@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-rpc/ggml-rpc.cpp b/ggml/src/ggml-rpc/ggml-rpc.cpp
-index 97873acc..11c37986 100644
+index 97873acc..8a42a793 100644
 --- a/ggml/src/ggml-rpc/ggml-rpc.cpp
 +++ b/ggml/src/ggml-rpc/ggml-rpc.cpp
 @@ -86,6 +86,7 @@ enum rpc_cmd {
@@ -135,25 +135,26 @@ index 97873acc..11c37986 100644
              default: {
                  fprintf(stderr, "Unknown command: %d\n", cmd);
                  return;
-@@ -1436,10 +1518,24 @@ static ggml_backend_buffer_type_t ggml_backend_rpc_device_get_buffer_type(ggml_b
+@@ -1436,10 +1518,25 @@ static ggml_backend_buffer_type_t ggml_backend_rpc_device_get_buffer_type(ggml_b
  }
  
  static bool ggml_backend_rpc_device_supports_op(ggml_backend_dev_t dev, const struct ggml_tensor * op) {
-+    static std::unordered_map<std::string, std::unordered_map<uint64_t, bool>> cache;
-+
++    static std::unordered_map<std::string, std::unordered_map<std::string, bool>> caches;
 +    ggml_backend_rpc_device_context * ctx = (ggml_backend_rpc_device_context *)dev->context;
-+    if (cache.find(ctx->endpoint) == cache.end()) {
-+        cache[ctx->endpoint] = std::unordered_map<uint64_t, bool>();
-+    }
-+    uint64_t id = reinterpret_cast<uint64_t>(op);
-+    bool result = false;
-+    if (cache[ctx->endpoint].find(id) != cache[ctx->endpoint].end()) {
-+        result = cache[ctx->endpoint][id];
-+    } else {
-+        result = ggml_backend_rpc_support_op(ctx->endpoint.c_str(), op);
-+        cache[ctx->endpoint][id] = result;
-+    }
 +
++    auto &cache = caches[ctx->endpoint];
++    std::string key = op->name;
++    for (int i = 0; i < GGML_MAX_DIMS; i++) {
++        key += std::to_string(op->ne[i]);
++    }
++    key += std::to_string(op->type);
++
++    auto it = cache.find(key);
++    if (it != cache.end()) {
++        return it->second;
++    }
++    bool result = ggml_backend_rpc_support_op(ctx->endpoint.c_str(), op);
++    cache[key] = result;
 +    return result;
 +
      GGML_UNUSED(dev);
