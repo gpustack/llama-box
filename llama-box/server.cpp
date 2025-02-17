@@ -1290,7 +1290,7 @@ struct server_context {
                     if (ids.size() == 1) {
                         tool_call_start_token = ids[0];
                     } else {
-                        tool_call_start_words                = {"<tool_call>", "</tool_call>\n"};
+                        tool_call_start_words                = {"<tool_call>", "<tool_call>\n"};
                         tool_call_start_words_longest_length = 12;
                         tool_call_start_trim                 = true;
                     }
@@ -2084,7 +2084,7 @@ struct server_context {
                 if (!slot.tool_call_start_found) {
                     if (!tool_call_start_words.empty()) {
                         // stop sending text if the start word found
-                        if (str_test.length() <= slot.tool_call_start_words_longest_length + 2) {
+                        if (str_test.length() <= tool_call_start_words_longest_length + 2) {
                             send_text = false;
                         } else {
                             for (const std::string &word : tool_call_start_words) {
