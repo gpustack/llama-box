@@ -4491,7 +4491,7 @@ int main(int argc, char **argv) {
                         {
                             {"name", "n_busy_slots_per_decode"},
                             {"help", "Average number of busy slots per llama_decode() call."},
-                            {"value", (float)n_busy_slots_total / (float)n_decode_total},
+                            {"value", (float)n_busy_slots_total / std::max((float)n_decode_total, 1.f)},
                         },
                     },
                 },
