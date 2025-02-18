@@ -931,6 +931,10 @@ struct rpcserver_params {
 };
 
 static int rpcserver_start(rpcserver_params &params) {
+#if defined(GGML_USE_METAL)
+    // NB(thxCode): disable residency set for Metal backend to avoid memory leak.
+    setenv("GGML_METAL_NO_RESIDENCY", "1", 1);
+#endif
     ggml_backend_t backend;
     if (params.main_gpu < 0) {
         SRV_INF("%s", "using CPU backend\n");
