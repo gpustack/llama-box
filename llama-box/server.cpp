@@ -1742,7 +1742,7 @@ struct server_context {
         slot.params.llm_params.top_k              = json_value(data, "top_k", defaults.llm_params.top_k);
         slot.params.llm_params.top_p              = json_value(data, "top_p", defaults.llm_params.top_p);
         slot.params.llm_params.min_p              = json_value(data, "min_p", defaults.llm_params.min_p);
-        slot.params.llm_params.top_n_sigma        = json_value(data, "top_nsigma", defaults.llm_params.top_n_sigma);
+        slot.params.llm_params.top_n_sigma        = json_value(data, "top_n_sigma", defaults.llm_params.top_n_sigma);
         slot.params.llm_params.xtc_probability    = json_value(data, "xtc_probability", defaults.llm_params.xtc_probability);
         slot.params.llm_params.xtc_threshold      = json_value(data, "xtc_threshold", defaults.llm_params.xtc_threshold);
         slot.params.llm_params.typ_p              = json_value(data, "typical_p", defaults.llm_params.typ_p);
@@ -2370,6 +2370,7 @@ struct server_context {
             {"top_k", slot.params.llm_params.top_k},
             {"top_p", slot.params.llm_params.top_p},
             {"min_p", slot.params.llm_params.min_p},
+            {"top_n_sigma", slot.params.llm_params.top_n_sigma},
             {"xtc_probability", slot.params.llm_params.xtc_probability},
             {"xtc_threshold", slot.params.llm_params.xtc_threshold},
             {"typical_p", slot.params.llm_params.typ_p},
