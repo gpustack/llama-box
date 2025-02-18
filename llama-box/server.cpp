@@ -5754,7 +5754,7 @@ int main(int argc, char **argv) {
         ctx_server.clean(svr);
         return 1;
     }
-    SRV_INF("listening, hostname = %s, port = %d, n_threads = %d + %d\n",
+    SRV_INF("listening, hostname = %s, port = %d, n_threads_http = %d + %d\n",
             llm_params.hostname.c_str(), llm_params.port, n_threads_http, n_threads_http_addition);
 
     // run the HTTP server in a thread
