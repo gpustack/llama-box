@@ -18,7 +18,6 @@
 #include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
 
-#include "chat-template.hpp"
 #include "param.hpp"
 #include "ratelimiter.hpp"
 #include "rpcserver.hpp"
@@ -933,7 +932,7 @@ struct server_context {
     ggml_threadpool *threadpool_batch = nullptr;
 
     // tool calls
-    common_chat_templates chat_templates;
+    common_chat_templates_ptr chat_templates;
     bool support_tool_calls = false;
     // non-jinja tool calls
     llama_token tool_call_start_token              = LLAMA_TOKEN_NULL;
@@ -1212,75 +1211,14 @@ struct server_context {
 
         // chat template
         {
-            chat_templates = common_chat_templates_from_model(llm_model, llm_params.chat_template);
-            GGML_ASSERT(chat_templates.template_default.get() != nullptr);
+            chat_templates = common_chat_templates_init(llm_model, llm_params.chat_template);
 
-            common_chat_template tmpl = chat_templates.template_tool_use ? *chat_templates.template_tool_use : *chat_templates.template_default;
-            support_tool_calls        = tmpl.original_caps().supports_tool_calls;
+            // NB(thxCode): common_chat_templates_supports_tool_calls is a patch.
+            support_tool_calls = common_chat_templates_supports_tool_calls(chat_templates.get());
 
-            std::string example_prompt;
-            if (llm_params.use_jinja) {
-                common_chat_inputs inputs;
-                inputs.messages            = json::array({
-                    {
-                        {"role", "system"},
-                        {"content", "You are a helpful assistant."},
-                    },
-                    {
-                        {"role", "user"},
-                        {"content", "Hello."},
-                    },
-                    {
-                        {"role", "assistant"},
-                        {"content", "Hi! How can I help you today?"},
-                    },
-                    {
-                        {"role", "user"},
-                        {"content", "What is the weather like today?"},
-                    },
-                });
-                inputs.tool_choice         = "none";
-                inputs.tools               = json::array({
-                    {
-                        {"type", "function"},
-                        {
-                            "function",
-                            {
-                                {"name", "get_weather"},
-                                {"parameters", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
-                            },
-                        },
-                    },
-                    {
-                        {"type", "function"},
-                        {
-                            "function",
-                            {
-                                {"name", "get_temperature"},
-                                {"description", "Return the temperature according to the location."},
-                                {"parameters", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
-                            },
-                        },
-                    },
-                });
-                common_chat_params example = common_chat_params_init(tmpl, inputs);
-                example_prompt             = example.prompt.get<std::string>();
-            } else {
-                std::vector<common_chat_msg> messages = {
-                    {"system", "You are a helpful assistant.", {}},
-                    {"user", "Hello.", {}},
-                    {"assistant", "Hi! How can I help you today?", {}},
-                    {"user", "What is the weather like today?", {}},
-                };
-                // NB(thxCode): common_chat_func is a patch.
-                std::vector<common_chat_func> funcs = {
-                    {"get_weather", "", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
-                    {"get_temperature", "Return the temperature according to the location.", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
-                };
-                // NB(thxCode): common_chat_apply_template2 is a patch.
-                example_prompt = common_chat_apply_template2(llm_model, tmpl, messages, funcs, /* req_func */ false, /* add_ass */ true);
+            if (!llm_params.use_jinja) {
                 // NB(thxCode): llama_chat_template_alias is a patch.
-                std::string alias = llama_chat_template_alias(tmpl.source().c_str());
+                std::string alias = llama_chat_template_alias(common_chat_templates_source(chat_templates.get()));
                 if (alias == "chatml" || alias == "chatglm4") {
                     // <tool_call>
                     // {"name":"","arguments":{}}
@@ -1327,11 +1265,37 @@ struct server_context {
                 }
             }
 
+            std::string prompt;
+            {
+                common_chat_templates_inputs inputs;
+                inputs.messages = std::vector<common_chat_msg>({
+                    {"system", "You are a helpful assistant.", {}, {}, "", "", ""},
+                    {"user", "Hello.", {}, {}, "", "", ""},
+                    {"assistant", "Hi! How can I help you today?", {}, {}, "", "", ""},
+                    {"user", "What is the weather like in Beijing?", {}, {}, "", "", ""},
+                });
+                if (support_tool_calls) {
+                    inputs.messages.push_back({"assistant", "", {}, {{"get_weather", R"({"location":"Beijing"})", "123456789"}}, "", "", ""});
+                    inputs.messages.push_back({"tool", R"({"weather":"Sunny"})", {}, {}, "", "", "123456789"});
+                    inputs.messages.push_back({"assistant", "The weather is Sunny.", {}, {}, "", "", "123456789"});
+                    inputs.tools = std::vector<common_chat_tool>({
+                        {"get_weather", "", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
+                        {"get_temperature", "Return the temperature according to the location.", R"({"type":"object","properties":{"location":{"type":"string"}}})"},
+                    });
+                }
+                inputs.tool_choice           = COMMON_CHAT_TOOL_CHOICE_NONE;
+                inputs.add_generation_prompt = true;
+                inputs.use_jinja             = llm_params.use_jinja;
+                // NB(thxCode): common_chat_templates_apply2 is a patch.
+                common_chat_params example = common_chat_templates_apply2(llm_model, chat_templates.get(), inputs);
+                prompt                     = example.prompt;
+            }
+
             SRV_INF("chat template, built-in: %s, jinja rendering: %s, tool call: %s, example:\n%s\n",
                     llm_params.chat_template.empty() || !llm_params.use_jinja ? "true" : "false",
                     llm_params.use_jinja ? "enabled" : "disabled",
                     support_tool_calls ? "supported" : "unsupported",
-                    example_prompt.c_str());
+                    prompt.c_str());
         }
 
         return true;
@@ -1785,10 +1749,6 @@ struct server_context {
         }
 
         // process "json_schema" and "grammar"
-        if (data.contains("json_schema") && !data.at("json_schema").is_null() && data.contains("grammar") && !data.at("grammar").is_null()) {
-            send_error(task, R"(either "json_schema" or "grammar" can be specified, but not both)", ERROR_TYPE_INVALID_REQUEST);
-            return false;
-        }
         if (data.contains("json_schema") && !data.contains("grammar")) {
             try {
                 auto schema                    = json_value(data, "json_schema", json::object());
@@ -2480,7 +2440,7 @@ struct server_context {
             if (!msg.tool_calls.empty()) {
                 res.data["stop_type"] = "tool_calls";
                 json tool_calls       = json::array();
-                for (const common_tool_call &tc : msg.tool_calls) {
+                for (const common_chat_tool_call &tc : msg.tool_calls) {
                     tool_calls.push_back({
                         {"type", "function"},
                         {
@@ -4990,7 +4950,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, /* chat */ true, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja, ctx_server.chat_templates);
+        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, /* chat */ true, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja, ctx_server.chat_templates.get());
 
         res_ok(res, {{"prompt", request.at("prompt")}});
     };
@@ -5053,7 +5013,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (oaicompat) {
-            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, /* chat */ false, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja, ctx_server.chat_templates);
+            request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, /* chat */ false, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja, ctx_server.chat_templates.get());
         }
 
         // construct task
@@ -5181,7 +5141,7 @@ int main(int argc, char **argv) {
             res_error(res, format_error_response("\"messages\" must be provided and must be an array", ERROR_TYPE_INVALID_REQUEST));
             return;
         }
-        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, /* chat */ true, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja, ctx_server.chat_templates);
+        request = oaicompat_completions_request(ctx_server.llm_params, rid, request, ctx_server.llm_model, /* chat */ true, ctx_server.support_tool_calls, ctx_server.llm_params.use_jinja, ctx_server.chat_templates.get());
 
         // construct task
         std::vector<server_task> tasks = ctx_server.create_tasks_inference(rid, request, SERVER_TASK_TYPE_COMPLETION, tps);
