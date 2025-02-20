@@ -1002,14 +1002,16 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
         {"model", json_value(request, "model", std::string(DEFAULT_OAICOMPAT_MODEL))},
     };
 
-    bool chat             = json_value(request, "__oaicompat_completion_chat", false);
-    int completion_tokens = 0;
-    int prompt_tokens     = 0;
-    int drafted_tokens    = 0;
-    double ttft           = 0.0;
-    double tpot           = 0.0;
-    double tps            = 0.0;
-    double dta            = 0.0;
+    bool chat                              = json_value(request, "__oaicompat_completion_chat", false);
+    int prompt_tokens                      = 0;
+    int prompt_cached_tokens               = 0;
+    int completion_tokens                  = 0;
+    int completion_drafted_tokens          = 0;
+    int completion_drafted_accepted_tokens = 0;
+    double ttft                            = 0.0;
+    double tpot                            = 0.0;
+    double tps                             = 0.0;
+    double dta                             = 0.0;
 
     // Construct choices field
     json choices = json::array();
@@ -1065,15 +1067,16 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
 
         choices.push_back(choice);
 
-        completion_tokens += json_value(ret, "tokens_predicted", 0);
         prompt_tokens += json_value(ret, "tokens_evaluated", 0);
-        json ts = json_value(ret, "timings", json::object());
-        ttft += json_value(ts, "prompt_ms", 0.0);
-        tpot += json_value(ts, "predicted_per_token_ms", 0.0);
-        tps += json_value(ts, "predicted_per_second", 0.0);
-        if (ts.contains("drafted_n")) {
-            drafted_tokens += json_value(ts, "drafted_n", 0);
-            dta += json_value(ts, "drafted_accepted_p", 0.0);
+        prompt_cached_tokens += json_value(ret, "tokens_evaluated_cached", 0);
+        completion_tokens += json_value(ret, "tokens_predicted", 0);
+        completion_drafted_tokens += json_value(ret, "tokens_drafted", 0);
+        completion_drafted_accepted_tokens += json_value(ret, "tokens_drafted_accepted", 0);
+        {
+            json ts = json_value(ret, "timings", json::object());
+            ttft += json_value(ts, "prompt_ms", 0.0);
+            tpot += json_value(ts, "predicted_per_token_ms", 0.0);
+            tps += json_value(ts, "predicted_per_second", 0.0);
         }
     }
     res["choices"] = choices;
@@ -1092,21 +1095,36 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
             tps           = tps / rs;
 
             json usage = json{
-                {"completion_tokens", completion_tokens},
                 {"prompt_tokens", prompt_tokens},
+                {"completion_tokens", completion_tokens},
                 {"total_tokens", completion_tokens + prompt_tokens},
-                {"time_to_first_token_ms", ttft},
-                {"time_per_output_token_ms", tpot},
-                {"tokens_per_second", tps},
+                {
+                    "prompt_tokens_details",
+                    {
+                        {"cached_tokens", prompt_cached_tokens},
+                    },
+                },
+                {
+                    "completion_tokens_details",
+                    {
+                        {"reasoning_tokens", 0},
+                        {"accepted_prediction_tokens", completion_drafted_accepted_tokens},
+                        {"rejected_prediction_tokens", completion_drafted_tokens - completion_drafted_accepted_tokens},
+                    },
+                },
             };
-            if (drafted_tokens > 0) {
-                dta                              = dta / rs;
-                usage["draft_tokens"]            = drafted_tokens;
+            // additional details for usage
+            usage["time_to_first_token_ms"]   = ttft;
+            usage["time_per_output_token_ms"] = tpot;
+            usage["tokens_per_second"]        = tps;
+            if (completion_drafted_tokens > 0) {
+                dta                              = float(completion_drafted_accepted_tokens) / float(completion_drafted_tokens);
+                usage["draft_tokens"]            = completion_drafted_tokens;
                 usage["draft_tokens_acceptance"] = dta;
             }
 
             res["usage"] = usage;
-            SRV_INF("rid %s | prompt_tokens: %d, completion_tokens: %d, draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, completion_tokens, drafted_tokens, ttft, tpot, tps, dta);
+            SRV_INF("rid %s | prompt_tokens: %d, prompt_cached_tokens: %d, completion_tokens: %d, completion_draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, prompt_cached_tokens, completion_tokens, completion_drafted_tokens, ttft, tpot, tps, dta * 100);
         }
     }
 

@@ -461,9 +461,6 @@ struct server_slot {
             const int32_t n_decoded_with_drafted = n_decoded + n_drafted - n_drafted_accepted;
             ret["predicted_per_token_ms"]        = t_token_generation / n_decoded_with_drafted;
             ret["predicted_per_second"]          = 1e3 / t_token_generation * n_decoded_with_drafted;
-            ret["drafted_n"]                     = n_drafted;
-            ret["drafted_accepted_n"]            = n_drafted_accepted;
-            ret["drafted_accepted_p"]            = float(n_drafted_accepted) / float(n_drafted);
         }
 
         return ret;
@@ -2424,7 +2421,7 @@ struct server_context {
              {"model", llm_params.model_alias},
              {"tokens_predicted", slot.n_decoded},
              {"tokens_evaluated", slot.n_prompt_tokens},
-             {"tokens_cached", slot.n_past},
+             {"tokens_evaluated_cached", slot.n_prompt_tokens - slot.n_prompt_tokens_processed},
              {"generation_settings", get_formated_generation(slot)},
              {"has_new_line", slot.has_new_line},
              {"truncated", slot.truncated},
@@ -2432,6 +2429,10 @@ struct server_context {
              {"stopping_word", slot.stopping_word},
              {"timings", slot.get_formated_timings()},
         };
+        if (slot.n_drafted > 0) {
+            res.data["tokens_drafted"]          = slot.n_drafted;
+            res.data["tokens_drafted_accepted"] = slot.n_drafted_accepted;
+        }
         if (!slot.oaicompat_completion_chat_tool) {
             res.data["content"] = !slot.params.stream ? slot.generated_text : "";
             res.data["tokens"]  = !slot.params.stream ? slot.generated_tokens : llama_tokens{};
@@ -3673,11 +3674,11 @@ struct server_context {
                         if (j < sz_draft && tok == slot.sampled_draft[j]) {
                             accept = true;
                         }
+                        slot.push_token_into_result(llm_ctx, tok_idx, tok, result);
                         slot.n_decoded += 1;
                         if (!accept) {
                             break;
                         }
-                        slot.push_token_into_result(llm_ctx, tok_idx, tok, result);
                         slot.n_drafted_accepted += 1;
                     }
                 } else {
