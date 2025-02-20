@@ -81,6 +81,10 @@ if (GGML_CANN)
         link_directories(
                 ${CANN_INSTALL_DIR}/lib64
                 ${CANN_INSTALL_DIR}/runtime/lib64/stub)
+        include_directories(
+                ${CANN_INSTALL_DIR}/${CMAKE_SYSTEM_PROCESSOR}-linux/include
+                ${CANN_INSTALL_DIR}/${CMAKE_SYSTEM_PROCESSOR}-linux/include/aclnn
+                ${CANN_INSTALL_DIR}/acllib/include)
     endif ()
 endif ()
 if (GGML_MUSA)
