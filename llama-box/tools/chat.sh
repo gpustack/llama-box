@@ -46,7 +46,7 @@ TOP_LOGPROBS="${TOP_LOGPROBS:-"null"}"
 MAX_TOKENS="${MAX_TOKENS:-"null"}"
 PRESENCE_PENALTY="${PRESENCE_PENALTY:-"0.0"}"
 RESPONSE_FORMAT="${RESPONSE_FORMAT:-"text"}"
-SEED="${SEED:-"null"}"
+SEED="${SEED:-"$(date +%s)"}"
 STOP="${STOP:-"null"}"
 TEMP="${TEMP:-"1"}"
 TOP_P="${TOP_P:-"1"}"
@@ -54,6 +54,9 @@ MAX_TOKENS_PER_SECOND="${MAX_TOKENS_PER_SECOND:-"0"}"
 
 chat_completion() {
     PROMPT="$(trim_trailing "$1")"
+    if [[ -z "${PROMPT}" ]]; then
+        return
+    fi
     if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
         DATA="$(cat "${PROMPT:1}")"
         while IFS= read -r LINE; do
@@ -129,7 +132,10 @@ chat_completion() {
             else
                 TOOL_CALLS=''
             fi
-            CONTENT_SEG="$(echo "${LINE}" | jq -cr '.choices[0].delta.content'; echo -n "#")"
+            CONTENT_SEG="$(
+                echo "${LINE}" | jq -cr '.choices[0].delta.content'
+                echo -n "#"
+            )"
             CONTENT_SEG="${CONTENT_SEG:0:${#CONTENT_SEG}-2}"
             if [[ "${CONTENT_SEG}" != "null" ]]; then
                 if [[ "${PRE_CONTENT: -1}" == "\\" ]] && [[ "${CONTENT_SEG}" =~ ^b|n|r|t|\\|\'|\"$ ]]; then
@@ -181,7 +187,7 @@ chat_completion() {
             MESSAGES+=("{\"role\":\"assistant\",\"content\":null,\"tool_calls\":$TOOL_CALLS}")
         fi
         if [[ -n "${CONTENT}" ]]; then
-            MESSAGES+=("{\"role\":\"assistant\",\"content\":\"$CONTENT\"}")
+            MESSAGES+=("{\"role\":\"assistant\",\"content\":$(jq -Rs . <<<"${CONTENT}")}")
         fi
         if [[ "${#TOOL_RESULTS[@]}" -gt 0 ]]; then
             MESSAGES+=("${TOOL_RESULTS[@]}")
@@ -226,6 +232,9 @@ if [[ "${#@}" -ge 1 ]]; then
 else
     while true; do
         read -r -e -p "> " PROMPT
+        if [[ "${PROMPT}" == "exit" || "${PROMPT}" == "quit" ]]; then
+            break
+        fi
         chat_completion "${PROMPT}"
     done
 fi

@@ -33,7 +33,7 @@ PREVIEW_FASTER="${PREVIEW_FASTER:-"true"}"
 SAMPLE_METHOD="${SAMPLE_METHOD:-"null"}"
 SAMPLING_STEPS="${SAMPLING_STEPS:-"10"}"
 SCHEDULE_METHOD="${SCHEDULE_METHOD:-"default"}"
-SEED="${SEED:-"null"}"
+SEED="${SEED:-"$(date +%s)"}"
 GUIDANCE="${GUIDANCE:-"3.5"}"
 CFG_SCALE="${CFG_SCALE:-"4.5"}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-""}"
@@ -236,6 +236,9 @@ if [[ "${#@}" -ge 1 ]]; then
 else
     while true; do
         read -r -e -p "> " PROMPT
+        if [[ "${PROMPT}" == "exit" || "${PROMPT}" == "quit" ]]; then
+            break
+        fi
         image_generate "${PROMPT}"
     done
 fi
