@@ -425,11 +425,12 @@ server/completion:
          --sampling-seq SEQUENCE  Simplified sequence for samplers that will be used (default: edkypmxt)
          --temp T                 Temperature (default: 0.8)
          --top-k N                Top-K sampling (default: 40, 0 = disabled)
-         --top-p P                Top-P sampling (default: 0.9, 1.0 = disabled)
-         --min-p P                Min-P sampling (default: 0.1, 0.0 = disabled)
+         --top-p N                Top-P sampling (default: 0.9, 1.0 = disabled)
+         --min-p N                Min-P sampling (default: 0.1, 0.0 = disabled)
+         --top-nsigma N           Top-N-Sigma sampling (default: -1.0, -1.0 = disabled)
          --xtc-probability N      XTC probability (default: 0.0, 0.0 = disabled)
          --xtc-threshold N        XTC threshold (default: 0.1, 1.0 = disabled)
-         --typical P              Locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
+         --typical N              Locally typical sampling, parameter p (default: 1.0, 1.0 = disabled)
          --repeat-last-n N        Last n tokens to consider for penalize (default: 64, 0 = disabled, -1 = ctx_size)
          --repeat-penalty N       Penalize repeat sequence of tokens (default: 1.0, 1.0 = disabled)
          --presence-penalty N     Repeat alpha presence penalty (default: 0.0, 0.0 = disabled)
@@ -477,7 +478,7 @@ server/completion:
                                     - distribute: spread execution evenly over all nodes
                                     - isolate: only spawn threads on CPUs on the node that execution started on
                                     - numactl: use the CPU map provided by numactl
-                                  If run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggml-org/llama.cpp/issues/1437
+                                  If run without this previously, it is recommended to drop the system page cache before using this, see https://github.com/ggerganov/llama.cpp/issues/1437
          --control-vector FILE    Add a control vector
          --control-vector-scaled FILE SCALE
                                   Add a control vector with user defined scaling SCALE
@@ -491,8 +492,8 @@ server/completion/speculative:
          --draft-max, --draft, --draft-n N
                                   Number of tokens to draft for speculative decoding (default: 16)
          --draft-min, --draft-n-min N
-                                  Minimum number of draft tokens to use for speculative decoding (default: 5)
-         --draft-p-min P          Minimum speculative decoding probability (greedy) (default: 0.9)
+                                  Minimum number of draft tokens to use for speculative decoding (default: 0)
+         --draft-p-min N          Minimum speculative decoding probability (greedy) (default: 0.8)
   -md,   --model-draft FNAME      Draft model for speculative decoding (default: unused)
   -devd, --device-draft <dev1,dev2,...>
                                   A comma-separated list of devices to use for offloading the draft model (none = don't offload)
