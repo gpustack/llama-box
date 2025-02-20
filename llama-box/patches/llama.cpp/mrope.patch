@@ -1,12 +1,12 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index d2b0d50e..ffe32fc0 100644
+index d2b0d50e..1382498a 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -944,6 +944,11 @@ struct common_init_result common_init_from_params(common_params & params) {
  
      auto cparams = common_context_params_to_llama(params);
  
-+    if (llama_model_needs_mrope(model)) {
++    if (llama_model_rope_type(model) == LLAMA_ROPE_TYPE_MROPE) {
 +        LOG_INF("%s: model requires M-RoPE, increasing batch size by 4x\n", __func__);
 +        cparams.n_batch *= 4;
 +    }
@@ -55,32 +55,3 @@ index 18f691b2..f5a4da3a 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne00/2);
      }
-diff --git a/include/llama.h b/include/llama.h
-index b0726cbe..29cfd133 100644
---- a/include/llama.h
-+++ b/include/llama.h
-@@ -526,6 +526,9 @@ extern "C" {
-     // to the decoder to start generating output sequence. For other models, it returns -1.
-     LLAMA_API llama_token llama_model_decoder_start_token(const struct llama_model * model);
- 
-+    // Returns true if the model needs M-RoPE (like Qwen2VL, etc.)
-+    LLAMA_API bool llama_model_needs_mrope(const struct llama_model * model);
-+
-     // Returns true if the model is recurrent (like Mamba, RWKV, etc.)
-     LLAMA_API bool llama_model_is_recurrent(const struct llama_model * model);
- 
-diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 0f4b62c4..f9175e75 100644
---- a/src/llama-model.cpp
-+++ b/src/llama-model.cpp
-@@ -4013,6 +4013,10 @@ llama_token llama_model_decoder_start_token(const struct llama_model * model) {
-     return model->hparams.dec_start_token_id;
- }
- 
-+bool llama_model_needs_mrope(const struct llama_model * model) {
-+    return std::any_of(model->hparams.rope_sections.begin(), model->hparams.rope_sections.end(), [](const int32_t & x) { return x != 0; });
-+}
-+
- bool llama_model_is_recurrent(const struct llama_model * model) {
-     switch (model->arch) {
-         case LLM_ARCH_MAMBA:  return true;

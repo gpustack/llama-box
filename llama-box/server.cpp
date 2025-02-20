@@ -4132,8 +4132,7 @@ struct server_context {
     }
 
     bool need_mrope() const {
-        // NB(thxCode): llama_model_needs_mrope is a patch.
-        return llm_model != nullptr && llama_model_needs_mrope(llm_model);
+        return llm_model != nullptr && llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
     }
 };
 
