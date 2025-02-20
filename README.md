@@ -36,9 +36,9 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - Mistral Series
         - Hermes2 / Qwen2 Series
         - ChatGLM4 Series
-        - CommandR Series
-        - FunctionaryV3 Series
-        - DeepSeekR1 Series
+        - CommandR Series (w/ `--jinja`)
+        - FunctionaryV3 Series (w/ `--jinja`)
+        - DeepSeekR1 Series (w/ `--jinja`, experimental)
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
   see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
