@@ -1008,6 +1008,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
     int completion_tokens                  = 0;
     int completion_drafted_tokens          = 0;
     int completion_drafted_accepted_tokens = 0;
+    int completion_reasoning_tokens        = 0;
     double ttft                            = 0.0;
     double tpot                            = 0.0;
     double tps                             = 0.0;
@@ -1072,6 +1073,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
         completion_tokens += json_value(ret, "tokens_predicted", 0);
         completion_drafted_tokens += json_value(ret, "tokens_drafted", 0);
         completion_drafted_accepted_tokens += json_value(ret, "tokens_drafted_accepted", 0);
+        completion_reasoning_tokens += json_value(ret, "tokens_reasoning", 0);
         {
             json ts = json_value(ret, "timings", json::object());
             ttft += json_value(ts, "prompt_ms", 0.0);
@@ -1107,7 +1109,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
                 {
                     "completion_tokens_details",
                     {
-                        {"reasoning_tokens", 0},
+                        {"reasoning_tokens", completion_reasoning_tokens},
                         {"accepted_prediction_tokens", completion_drafted_accepted_tokens},
                         {"rejected_prediction_tokens", completion_drafted_tokens - completion_drafted_accepted_tokens},
                     },
@@ -1124,7 +1126,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
             }
 
             res["usage"] = usage;
-            SRV_INF("rid %s | prompt_tokens: %d, prompt_cached_tokens: %d, completion_tokens: %d, completion_draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, prompt_cached_tokens, completion_tokens, completion_drafted_tokens, ttft, tpot, tps, dta * 100);
+            SRV_INF("rid %s | prompt_tokens: %d, prompt_cached_tokens: %d, completion_tokens: %d, completion_reasoning_tokens: %d, completion_draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, prompt_cached_tokens, completion_tokens, completion_reasoning_tokens, completion_drafted_tokens, ttft, tpot, tps, dta * 100);
         }
     }
 
