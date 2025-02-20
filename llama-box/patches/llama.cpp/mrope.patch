@@ -15,10 +15,10 @@ index d2b0d50e..1382498a 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index dbef5df2..d514e1c7 100644
+index f27b9817..27fb32d2 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -9406,10 +9406,6 @@ static void ggml_compute_forward_rope_f32(
+@@ -9423,10 +9423,6 @@ static void ggml_compute_forward_rope_f32(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -29,7 +29,7 @@ index dbef5df2..d514e1c7 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne0/2);
      }
-@@ -9592,10 +9588,6 @@ static void ggml_compute_forward_rope_f16(
+@@ -9609,10 +9605,6 @@ static void ggml_compute_forward_rope_f16(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
