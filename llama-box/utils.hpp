@@ -1011,6 +1011,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
     int completion_reasoning_tokens        = 0;
     double ttft                            = 0.0;
     double tpot                            = 0.0;
+    double pps                             = 0.0;
     double tps                             = 0.0;
     double dta                             = 0.0;
 
@@ -1078,6 +1079,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
             json ts = json_value(ret, "timings", json::object());
             ttft += json_value(ts, "prompt_ms", 0.0);
             tpot += json_value(ts, "predicted_per_token_ms", 0.0);
+            pps += json_value(ts, "prompt_per_second", 0.0);
             tps += json_value(ts, "predicted_per_second", 0.0);
         }
     }
@@ -1094,6 +1096,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
             const auto rs = double(result.size());
             ttft          = ttft / rs;
             tpot          = tpot / rs;
+            pps           = pps / rs;
             tps           = tps / rs;
 
             json usage = json{
@@ -1118,6 +1121,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
             // additional details for usage
             usage["time_to_first_token_ms"]   = ttft;
             usage["time_per_output_token_ms"] = tpot;
+            usage["prompt_tokens_per_second"] = pps;
             usage["tokens_per_second"]        = tps;
             if (completion_drafted_tokens > 0) {
                 dta                              = float(completion_drafted_accepted_tokens) / float(completion_drafted_tokens);
@@ -1126,7 +1130,7 @@ static json oaicompat_completions_response(const std::string &rid, const json &r
             }
 
             res["usage"] = usage;
-            SRV_INF("rid %s | prompt_tokens: %d, prompt_cached_tokens: %d, completion_tokens: %d, completion_reasoning_tokens: %d, completion_draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, prompt_cached_tokens, completion_tokens, completion_reasoning_tokens, completion_drafted_tokens, ttft, tpot, tps, dta * 100);
+            SRV_INF("rid %s | prompt_tokens: %d, prompt_cached_tokens: %d, completion_tokens: %d, completion_reasoning_tokens: %d, completion_draft_tokens: %d, ttft: %.2fms, tpot: %.2fms, pps: %.2f, tps: %.2f, dta: %.2f%%\n", rid.c_str(), prompt_tokens, prompt_cached_tokens, completion_tokens, completion_reasoning_tokens, completion_drafted_tokens, ttft, tpot, pps, tps, dta * 100);
         }
     }
 

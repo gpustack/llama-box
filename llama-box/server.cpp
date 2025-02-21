@@ -418,25 +418,9 @@ struct server_slot {
 
     void release() {
         if (is_processing()) {
-            /* STABLE DIFFUSION */
-
-            if (oaicompat_image) {
-                SLT_INF(*this, "%s", "stop processing\n");
-
-                t_last_used        = ggml_time_us();
-                t_image_generation = double(ggml_time_us() - t_start_generate_image) / 1e3;
-                state              = SLOT_STATE_IDLE;
-                callback_on_release(id);
-                return;
-            }
-
-            /* LLAMA */
-
-            SLT_INF(*this, "stop processing: n_past = %d, truncated = %s\n", n_past, truncated ? "true" : "false");
-
-            t_last_used        = ggml_time_us();
-            t_token_generation = double(ggml_time_us() - t_start_generation) / 1e3;
-            state              = SLOT_STATE_IDLE;
+            SLT_INF(*this, "%s", "stop processing\n");
+            t_last_used = ggml_time_us();
+            state       = SLOT_STATE_IDLE;
             callback_on_release(id);
         }
     }
@@ -457,10 +441,10 @@ struct server_slot {
         /* LLAMA */
 
         json ret = json{
-            {"prompt_n", n_prompt_tokens_processed},
+            {"prompt_n", n_prompt_tokens},
             {"prompt_ms", t_prompt_processing},
-            {"prompt_per_token_ms", t_prompt_processing / n_prompt_tokens_processed},
-            {"prompt_per_second", 1e3 / t_prompt_processing * n_prompt_tokens_processed},
+            {"prompt_per_token_ms", t_prompt_processing / n_prompt_tokens},
+            {"prompt_per_second", 1e3 / t_prompt_processing * n_prompt_tokens},
 
             {"predicted_n", n_decoded},
             {"predicted_ms", t_token_generation},
@@ -2021,6 +2005,8 @@ struct server_context {
     }
 
     bool process_token(completion_token_output &result, server_slot &slot) {
+        slot.t_token_generation = double(ggml_time_us() - slot.t_start_generation) / 1e3;
+
         // remember which tokens were sampled - used for repetition penalties during sampling
         slot.sampled.clear();
         std::string token_str;
@@ -2261,7 +2247,7 @@ struct server_context {
 
         if (slot.has_new_line) {
             // if we have already seen a new line, we stop after a certain time limit
-            if (slot.params.t_max_predict_ms > 0 && (ggml_time_us() - slot.t_start_generation > 1000.0f * slot.params.t_max_predict_ms)) {
+            if (slot.params.t_max_predict_ms > 0 && (float(ggml_time_us() - slot.t_start_generation) > float(1000.0f * slot.params.t_max_predict_ms))) {
                 slot.stop           = STOP_TYPE_LIMIT;
                 slot.has_next_token = false;
 
@@ -3271,6 +3257,8 @@ struct server_context {
                     send_error(slot, "failed to get result image from generation stream", ERROR_TYPE_SERVER);
                     continue;
                 }
+
+                slot.t_image_generation = double(ggml_time_us() - slot.t_start_generate_image) / 1e3;
                 slot.release();
                 send_image(slot, progress.first + 1, progress.second + 1, generated_image);
 
@@ -3423,13 +3411,11 @@ struct server_context {
                             continue;
                         }
 
-                        slot.t_start_process_prompt = ggml_time_us();
-                        slot.t_start_generation     = 0;
-                        slot.n_past                 = 0;
-                        slot.n_past_mmd             = 0;
-                        slot.st_pos_id              = 0;
-                        slot.n_prompt_tokens        = int32_t(prompt_tokens.size());
-                        slot.state                  = SLOT_STATE_PROCESSING_PROMPT;
+                        slot.n_past          = 0;
+                        slot.n_past_mmd      = 0;
+                        slot.st_pos_id       = 0;
+                        slot.n_prompt_tokens = int32_t(prompt_tokens.size());
+                        slot.state           = SLOT_STATE_PROCESSING_PROMPT;
 
                         if (slot.oaicompat_completion_chat_vision && !preprocess_multi_modal_data(slot, n_batch)) {
                             slot.release();
@@ -3557,6 +3543,8 @@ struct server_context {
                         }
 
                         slot.n_prompt_tokens_processed = 0;
+                        slot.t_start_process_prompt    = ggml_time_us();
+                        slot.t_start_generation        = 0;
                     }
 
                     // non-causal tasks require to fit the entire prompt in the physical batch
