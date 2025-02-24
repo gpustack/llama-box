@@ -49,7 +49,7 @@ RESPONSE_FORMAT="${RESPONSE_FORMAT:-"text"}"
 SEED="${SEED:-"$(date +%s)"}"
 STOP="${STOP:-"null"}"
 TEMP="${TEMP:-"1"}"
-TOP_P="${TOP_P:-"1"}"
+TOP_P="${TOP_P:-"0.95"}"
 MAX_TOKENS_PER_SECOND="${MAX_TOKENS_PER_SECOND:-"0"}"
 
 chat_completion() {

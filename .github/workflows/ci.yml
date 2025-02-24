@@ -299,7 +299,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
@@ -403,7 +403,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -687,7 +687,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA_ALL_QUANTS=on \
+            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -779,7 +779,7 @@ jobs:
           export LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:\${LD_LIBRARY_PATH}"
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="hipcc" \
             -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
             -DCMAKE_CXX_COMPILER="hipcc" \
@@ -1000,7 +1000,7 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
@@ -1113,7 +1113,7 @@ jobs:
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
             -DGGML_OPENMP=off `

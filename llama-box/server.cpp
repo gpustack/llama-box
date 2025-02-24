@@ -6,6 +6,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/common/json-schema-to-grammar.h"
@@ -699,6 +700,7 @@ struct server_task_queue {
 
     // End the start_loop routine
     void terminate() {
+        QUE_WRN("%s", "terminating\n");
         std::unique_lock<std::mutex> lock(mutex_tasks);
         running = false;
         condition_tasks.notify_all();
@@ -720,7 +722,7 @@ struct server_task_queue {
             while (true) {
                 std::unique_lock<std::mutex> lock(mutex_tasks);
                 if (!running) {
-                    QUE_DBG("%s", "terminate\n");
+                    QUE_WRN("%s", "terminated\n");
                     return;
                 }
                 if (queue_tasks.empty()) {
@@ -743,7 +745,7 @@ struct server_task_queue {
             {
                 std::unique_lock<std::mutex> lock(mutex_tasks);
                 if (!running) {
-                    QUE_DBG("%s", "terminate\n");
+                    QUE_WRN("%s", "terminated\n");
                     return;
                 }
                 if (queue_tasks.empty()) {
@@ -5846,10 +5848,12 @@ int main(int argc, char **argv) {
     }
     state.store(SERVER_STATE_READY);
 
-    ctx_server.queue_tasks.on_new_task(
-        std::bind(&server_context::process_single_task, &ctx_server, std::placeholders::_1));
-    ctx_server.queue_tasks.on_update_slots(
-        std::bind(&server_context::update_slots, &ctx_server));
+    ctx_server.queue_tasks.on_new_task([&](server_task task) {
+        ctx_server.process_single_task(std::move(task));
+    });
+    ctx_server.queue_tasks.on_update_slots([&]() {
+        ctx_server.update_slots();
+    });
     shutdown_handler = [&](int) {
         ctx_server.queue_tasks.terminate();
     };

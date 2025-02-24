@@ -13,6 +13,7 @@
 #include "llama.cpp/include/llama.h"
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
+#define CPPHTTPLIB_TCP_NODELAY true
 #include "llama.cpp/examples/server/httplib.h"
 
 #include "stablediffusion.hpp"
