@@ -1,5 +1,5 @@
 diff --git a/common/sampling.cpp b/common/sampling.cpp
-index 37a0d9c8..3d46dd48 100644
+index 37a0d9c8..0a624f23 100644
 --- a/common/sampling.cpp
 +++ b/common/sampling.cpp
 @@ -196,7 +196,7 @@ struct common_sampler * common_sampler_init(const struct llama_model * model, co
