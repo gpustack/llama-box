@@ -658,6 +658,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     // Handle default field
     llama_params["model"]             = json_value(body, "model", params.model_alias);
     llama_params["frequency_penalty"] = json_value(body, "frequency_penalty", 0.0f);
+    llama_params["presence_penalty"]  = json_value(body, "presence_penalty", 0.0f);
     llama_params["temperature"]       = json_value(body, "temperature", 1.0f);
     llama_params["top_p"]             = json_value(body, "top_p", 1.0f);
 

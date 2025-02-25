@@ -41,7 +41,7 @@ index 37a0d9c8..0a624f23 100644
                          break;
                      case COMMON_SAMPLER_TYPE_PENALTIES:
 -                        llama_sampler_chain_add(result->chain, llama_sampler_init_penalties(params.penalty_last_n, params.penalty_repeat, params.penalty_freq, params.penalty_present));
-+                        params.penalty_repeat != 1.0f ? llama_sampler_chain_add(result->chain, llama_sampler_init_penalties(params.penalty_last_n, params.penalty_repeat, params.penalty_freq, params.penalty_present)) : void();
++                        params.penalty_freq != 0.0f || params.penalty_present != 0.0f ? llama_sampler_chain_add(result->chain, llama_sampler_init_penalties(params.penalty_last_n, params.penalty_repeat, params.penalty_freq, params.penalty_present)) : void();
                          break;
                      default:
                          GGML_ASSERT(false && "unknown sampler type");
