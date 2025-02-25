@@ -951,7 +951,7 @@ The available endpoints for the LLaMA Box server mode are:
 ## Tools
 
 It was so hard to find a Chat UI that was directly compatible with OpenAI,
-that mean, no installation required (I can live with `docker run`),
+that mean, no installation required (we can live with `docker run`),
 no tokens (or optional), no [Ollama](https://github.com/ollama/ollama) required, just a simple RESTful API.
 
 So we are inspired by
@@ -982,6 +982,12 @@ $ IMAGE=/path/to/image.png ./llama-box/tools/image_edit.sh "A lovely cat"
 
 $ # interactive image editing
 $ IMAGE=/path/to/image.png ./llama-box/tools/image_generate.sh
+```
+
+And we also provide a tool for batch testing with the LLaMA Box.
+
+```shell
+$ ./llama-box/tools/batch.sh
 ```
 
 ## License
