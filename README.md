@@ -21,10 +21,11 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
-        - LLaVA Series
+        - LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
         - MiniCPM VL Series
         - Qwen2 VL Series
-        - GLM-Edge-V Series
+        - GLM-Edge-V Series (w/ `--chat-template llava`)
+        - Granite VL Series
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
