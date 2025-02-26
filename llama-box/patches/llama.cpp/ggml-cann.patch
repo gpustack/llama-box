@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index d410c024..d350ed9a 100644
+index d410c024..92ea2da8 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,7 @@
@@ -28,7 +28,7 @@ index d410c024..d350ed9a 100644
  
          size_t free, total;
          ggml_backend_cann_get_device_memory(id, &free, &total);
-@@ -147,6 +154,369 @@ const ggml_cann_device_info& ggml_cann_info() {
+@@ -147,6 +154,373 @@ const ggml_cann_device_info& ggml_cann_info() {
  }
  
  //#define DEBUG_CANN_MALLOC
@@ -99,7 +99,7 @@ index d410c024..d350ed9a 100644
 +     */
 +    void* alloc(size_t size, size_t* actual_size) override {
 +        const size_t max_reuse_margin = 1ull << 25;  // 32MB
-+        const size_t mix_free_margin = 1ull << 24;   // 16MB
++        const size_t max_free_margin = 1ull << 24;   // 16MB
 +        const size_t alignment = 128;
 +        size = GGML_PAD(size, alignment);
 +        if (size == 0) {
@@ -139,8 +139,10 @@ index d410c024..d350ed9a 100644
 +#endif
 +                continue;
 +            }
-+            if (!disable_clean && size > mix_free_margin &&
-+                size - b_size >= mix_free_margin) {
++            if (!disable_clean &&
++                b_size > max_free_margin &&
++                size > max_free_margin &&
++                size - b_size <= max_free_margin) {
 +                // free the buffer if the size is needed to be freed
 +                ACL_CHECK(aclrtFree(b_ptr));
 +                pool_size -= b_size;
@@ -284,7 +286,7 @@ index d410c024..d350ed9a 100644
 +     */
 +    void* alloc(size_t size, size_t* actual_size) override {
 +        const size_t max_reuse_margin = 1ull << 25;  // 32MB
-+        const size_t mix_free_margin = 1ull << 24;   // 16MB
++        const size_t max_free_margin = 1ull << 24;   // 16MB
 +        const size_t alignment = 128;
 +        size = GGML_PAD(size, alignment);
 +        if (size == 0) {
@@ -326,8 +328,10 @@ index d410c024..d350ed9a 100644
 +#endif
 +                continue;
 +            }
-+            if (!disable_clean && size > mix_free_margin &&
-+                size - b.size >= mix_free_margin) {
++            if (!disable_clean &&
++                b.size > max_free_margin &&
++                size > max_free_margin &&
++                size - b.size <= max_free_margin) {
 +                // free the buffer if the size is needed to be freed
 +                ACL_CHECK(aclrtFree(b.ptr));
 +                pool_size -= b.size;
@@ -398,7 +402,7 @@ index d410c024..d350ed9a 100644
  /**
   * @brief A pool of CANN buffers(legacy).
   *
-@@ -471,7 +841,15 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -471,7 +845,15 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
   */
  std::unique_ptr<ggml_cann_pool> ggml_backend_cann_context::new_pool_for_device(
      int device) {
@@ -407,15 +411,15 @@ index d410c024..d350ed9a 100644
 +    if (!disable_vmm && ggml_cann_info().devices[device].vmm) {
 +        return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_vmm(device));
 +    }
-+    bool disable_buf_prio = (getenv("GGML_CANN_DISABLE_BUF_PRIO_POOL") != nullptr);
-+    if (!disable_buf_prio) {
++    bool enable_buf_prio = (getenv("GGML_CANN_ENABLE_BUF_PRIO_POOL") != nullptr);
++    if (enable_buf_prio) {
 +        return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_buf_prio(device));
 +    }
 +    return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_buf(device));
  }
  
  // cann buffer
-@@ -1019,7 +1397,11 @@ ggml_backend_cann_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
+@@ -1019,7 +1401,11 @@ ggml_backend_cann_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
  
      ggml_cann_set_device(buft_ctx->device);
  
