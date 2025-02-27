@@ -558,18 +558,47 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=8.0.rc2.alpha003-910b.
-        #     8.0 ==> 8.0.rc2.alpha003, Ubuntu 20.04, OpenEuler 20.03
-        arch:
-          - 'amd64'
-          - 'arm64'
-        version:
-          - '8.0'
-        distro_container_image:
-          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-910b-ubuntu20.04'
-          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-910b-openeuler20.03'
-          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-ubuntu20.04'
-          - 'gpustack/devel-ascendai-cann:8.0.rc2.alpha003-310p-openeuler20.03'
+        # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=8.0.0.beta1-910b.
+        #     8.0     ==> 8.0.0.beta1,   Ubuntu 20.04
+        #     8.0.rc3 ==> 8.0.rc3.beta1, Ubuntu 20.04
+        #     8.0.rc2 ==> 8.0.rc2.beta1, Ubuntu 20.04
+        include:
+          - arch: 'amd64'
+            version: '8.0'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0.rc3'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-910b-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0.rc2'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0.rc3'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-310p-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0.rc2'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0.rc3'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-910b-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0.rc2'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0.rc3'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-310p-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0.rc2'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
@@ -586,7 +615,7 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ matrix.distro_container_image }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
+          key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}-${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
           path: |
             ${{ github.workspace }}/.cache
       - name: Build
@@ -639,12 +668,12 @@ jobs:
           
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ${{ github.workspace }}/build/bin/llama-box
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, 'openeuler20.03') && '-openeuler20.03' || '' }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
+          name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
 
   linux-musa:
     strategy:
