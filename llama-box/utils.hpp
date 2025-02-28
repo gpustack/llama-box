@@ -190,7 +190,7 @@ static std::vector<llama_tokens> tokenize_input_prompts(const llama_vocab *vocab
                 // array of objects
                 result.push_back(tokenize_mixed(vocab, p, add_special, parse_special));
             } else {
-                throw std::runtime_error("Illegal param: element of \"prompt\" must be a string, a list of tokens, or a list of mixed strings & tokens");
+                throw std::runtime_error("Illegal param: \"prompt\" must be a string, a list of tokens, or a list of mixed strings & tokens");
             }
         }
     } else {
@@ -725,7 +725,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 } else if (tc.is_string()) {
                     chat_tool_choice = common_chat_tool_choice_parse_oaicompat(tc.get<std::string>());
                 } else {
-                    throw std::runtime_error(R"(Illegal param: "tool_choice" must be a string or an object)");
+                    throw std::runtime_error("Illegal param: \"tool_choice\" must be a string or an object");
                 }
                 chat_tools = available_chat_tools;
             } else if (body.contains("function_call")) {
@@ -742,7 +742,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 } else if (fc.is_string()) {
                     chat_tool_choice = common_chat_tool_choice_parse_oaicompat(fc.get<std::string>());
                 } else {
-                    throw std::runtime_error(R"(Illegal param: "function_call" must be a string or an object)");
+                    throw std::runtime_error("Illegal param: \"function_call\" must be a string or an object");
                 }
                 chat_tools = available_chat_tools;
             }
@@ -761,7 +761,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     json json_schema    = json_value(body, "json_schema", json());
     std::string grammar = json_value(body, "grammar", std::string());
     if (!json_schema.is_null() && !grammar.empty()) {
-        throw std::runtime_error(R"(Illegal param: use both "json_schema" and "grammar")");
+        throw std::runtime_error("Illegal param: use both \"json_schema\" and \"grammar\"");
     }
     if (body.contains("response_format")) {
         json response_format      = json_value(body, "response_format", json::object());
@@ -772,7 +772,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
             json schema = json_value(response_format, "json_schema", json::object());
             json_schema = json_value(schema, "schema", json::object());
         } else if (!response_type.empty() && response_type != "text") {
-            throw std::runtime_error(R"(Illegal param: "response_format" must be one of "text" or "json_object", but got: )" + response_type);
+            throw std::runtime_error("Illegal param: \"response_format\" must be one of 'text' or 'json_object', but got: " + response_type);
         }
     }
 
@@ -801,22 +801,22 @@ static json oaicompat_completions_request(const struct common_params &params, co
                                 const std::string split = "base64,";
                                 const size_t idx        = img.find(split);
                                 if (idx == std::string::npos) {
-                                    throw std::runtime_error("Illegal param: invalid image URL, must be a base64-encoded image");
+                                    throw std::runtime_error("Illegal param: \"image_url\" must be a valid base64-encoded image");
                                 }
                                 img = img.substr(idx + split.length());
                                 if (img.empty()) {
-                                    throw std::runtime_error("Illegal param: empty image base64-encoded data");
+                                    throw std::runtime_error("Illegal param: \"image_url\" is an empty image base64-encoded data");
                                 }
                                 try {
                                     const std::vector<uint8_t> img_buff = base64_decode(img);
                                     images.push_back(img_buff);
                                 } catch (const std::exception &e) {
-                                    throw std::runtime_error("Illegal param: invalid image base64-encoded data");
+                                    throw std::runtime_error("Illegal param: \"image_url\" must be a valid base64-encoded image");
                                 }
                             } else {
                                 std::string host, path;
                                 if (size_t pos = img.find("://"); pos == std::string::npos) {
-                                    throw std::runtime_error("Illegal param: invalid image URL, must be a data URI or a valid URL");
+                                    throw std::runtime_error("Illegal param: \"image_url\" must be a data URI or a valid URL");
                                 } else {
                                     pos = img.find('/', pos + 3);
                                     if (pos == std::string::npos) {
@@ -840,7 +840,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
 #endif
                                 httplib::Result res = cli.Get(path);
                                 if (!res || res->status != httplib::StatusCode::OK_200) {
-                                    throw std::runtime_error("Illegal param: failed to fetch image from URL: " + img + ", status: " + std::to_string(res ? res->status : -1) + ", reason: " + (res ? res->reason : "unknown"));
+                                    throw std::runtime_error("Illegal param: invalid \"image_url\", failed to fetch image from URL: " + img + ", status: " + std::to_string(res ? res->status : -1) + ", reason: " + (res ? res->reason : "unknown"));
                                 }
                                 const std::vector<uint8_t> img_buff(res->body.begin(), res->body.end());
                                 images.push_back(img_buff);
@@ -863,7 +863,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
                         content += "\n<image>";
                     }
                 } else {
-                    throw std::runtime_error("Illegal param: invalid \"content\" field");
+                    throw std::runtime_error("Illegal param: invalid \"content\"");
                 }
                 msg["content"] = content; // updated
                 chat_messages.push_back({role, content, {}, {}, "", "", ""});
@@ -894,10 +894,10 @@ static json oaicompat_completions_request(const struct common_params &params, co
                     }
                     chat_messages.push_back({role, "", {}, chat_tcs, "", "", ""});
                 } else {
-                    throw std::runtime_error("Illegal param: invalid \"tool_calls\" field");
+                    throw std::runtime_error("Illegal param: invalid \"tool_calls\"");
                 }
             } else {
-                throw std::runtime_error(R"(Illegal param: missing "content" or "tool_calls" in "messages" item)");
+                throw std::runtime_error("Illegal param: missing 'content' or 'tool_calls' in \"messages\" item");
             }
         }
         llama_params["multi_modal_data"] = json{{"images", images}};
@@ -914,7 +914,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
             inputs.use_jinja             = use_jinja;
             inputs.parallel_tool_calls   = support_tool_calls && json_value(body, "parallel_tool_calls", true);
             if (!chat_tools.empty() && chat_tool_choice != COMMON_CHAT_TOOL_CHOICE_NONE && !grammar.empty()) {
-                throw std::runtime_error(R"(Illegal param: cannot use custom "grammar" constraints with tools.)");
+                throw std::runtime_error("Illegal param: cannot use custom \"grammar\" constraints with tools");
             }
             common_chat_params chat_params                     = common_chat_templates_apply2(model, chat_tmpls, inputs);
             llama_params["__oaicompat_completion_chat_format"] = chat_params.format;
@@ -942,7 +942,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
     } else if (body.contains("prompt")) {
         llama_params["prompt"] = body.at("prompt");
     } else {
-        throw std::runtime_error("Illegal param: missing required field \"prompt\"");
+        throw std::runtime_error("Illegal param: missing \"prompt\"");
     }
 
     // Handle "max_tokens" field
@@ -951,13 +951,13 @@ static json oaicompat_completions_request(const struct common_params &params, co
     // Handle "n" field
     int n_choices = json_value(body, "n", 1);
     if (n_choices != 1) {
-        throw std::runtime_error("Illegal param: only one completion choice is allowed");
+        throw std::runtime_error("Illegal param: \"n\" must be 1");
     }
 
     // Handle "logprobs" field
     if (chat) {
         if (!body.contains("logprobs") && body.contains("top_logprobs")) {
-            throw std::runtime_error(R"(Illegal param: "top_logprobs" requires "logprobs" to be set)");
+            throw std::runtime_error("Illegal param: \"top_logprobs\" requires \"logprobs\" to be set");
         }
         if (json_value(body, "logprobs", false)) {
             llama_params["n_probs"] = std::min(json_value(body, "top_logprobs", 1), 20);
@@ -990,7 +990,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
                 llama_params["stream_options"]["include_usage"] = true;
             }
         } else {
-            throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+            throw std::runtime_error("Illegal param: invalid \"stream_options\"");
         }
     }
 
@@ -1169,7 +1169,7 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
     if (body.contains("encoding_format")) {
         std::string encoding_format = body.at("encoding_format").get<std::string>();
         if (encoding_format != "float" && encoding_format != "base64") {
-            throw std::runtime_error("Illegal param: encoding_format must be one of 'float' or 'base64'");
+            throw std::runtime_error("Illegal param: \"encoding_format\" must be one of 'float' or 'base64'");
         }
         llama_params["encoding_format"] = encoding_format;
     } else {
@@ -1182,10 +1182,16 @@ static json oaicompat_embeddings_request(const struct common_params &params, con
 static json oaicompat_embeddings_response(const std::string &rid, const json &request, const json &result) {
     const bool use_base64 = json_value(request, "encoding_format", std::string("float")) == "base64";
 
-    int prompt_tokens = 0;
-    json data         = json::array();
+    int total_tokens      = 0;
+    int min_prompt_tokens = 0;
+    int max_prompt_tokens = 0;
+    json data             = json::array();
     for (const auto &ret : result) {
-        prompt_tokens += ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
+        int tke = ret.contains("tokens_evaluated") ? ret.at("tokens_evaluated").get<int>() : 0;
+        total_tokens += tke;
+        min_prompt_tokens = min_prompt_tokens == 0 ? tke : std::min(min_prompt_tokens, tke);
+        max_prompt_tokens = std::max(max_prompt_tokens, tke);
+
         json item = json{
             {"index", ret.at("index")},
             {"object", "embedding"},
@@ -1209,12 +1215,14 @@ static json oaicompat_embeddings_response(const std::string &rid, const json &re
     // Add usage field
     {
         json usage = json{
-            {"prompt_tokens", prompt_tokens},
-            {"total_tokens", prompt_tokens},
+            {"prompt_tokens", total_tokens},
+            {"total_tokens", total_tokens},
+            {"min_prompt_tokens", min_prompt_tokens},
+            {"max_prompt_tokens", max_prompt_tokens},
         };
 
         res["usage"] = usage;
-        SRV_INF("rid %s | prompt_tokens: %d\n", rid.c_str(), prompt_tokens);
+        SRV_INF("rid %s | total_tokens: %d, min_prompt_tokens: %d, max_prompt_tokens: %d\n", rid.c_str(), total_tokens, min_prompt_tokens, max_prompt_tokens);
     }
 
     return res;
@@ -1233,7 +1241,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     // Handle "response_format" field
     std::string response_format = json_value(body, "response_format", std::string("b64_json"));
     if (response_format != "b64_json") {
-        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
+        throw std::runtime_error("Illegal param: \"response_format\" must be 'b64_json'");
     }
 
     json llama_params;
@@ -1253,7 +1261,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     {
         auto batch_count = json_value(body, "n", 1);
         if (batch_count > params.max_batch_count) {
-            throw std::runtime_error("Illegal param: n must be less than or equal to " + std::to_string(params.max_batch_count));
+            throw std::runtime_error("Illegal param: \"n\" must be less than or equal to " + std::to_string(params.max_batch_count));
         }
         llama_params["batch_count"] = batch_count;
     }
@@ -1262,7 +1270,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     if (!body.contains("sampler") && !body.contains("sample_method")) {
         std::string quality = json_value(body, "quality", std::string("standard"));
         if (quality != "null" && quality != "hd" && quality != "standard") {
-            throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+            throw std::runtime_error("Illegal param: \"quality\" must be one of 'hd' or 'standard'");
         }
         llama_params["sample_method"]   = params.sampling.sample_method;
         llama_params["sampling_steps"]  = params.sampling.sampling_steps;
@@ -1275,7 +1283,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
         if (body.contains("style")) {
             std::string style = json_value(body, "style", std::string("vivid"));
             if (style != "vivid" && style != "natural") {
-                throw std::runtime_error("Illegal param: style must be one of 'vivid' or 'natural'");
+                throw std::runtime_error("Illegal param: \"style\" must be one of 'vivid' or 'natural'");
             }
             if (style == "vivid") {
                 if (llama_params.contains("negative_prompt")) {
@@ -1338,21 +1346,21 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
     {
         auto pos = size.find('x');
         if (pos == std::string::npos) {
-            throw std::runtime_error("Illegal param: size must be in the format 'widthxheight'");
+            throw std::runtime_error("Illegal param: \"size\" must be in the format '{width}x{height}'");
         }
         auto width  = std::stoi(size.substr(0, pos));
         auto height = std::stoi(size.substr(pos + 1));
         if (width < 256 || height < 256) {
-            throw std::runtime_error("Illegal param: width and height must be at least 256");
+            throw std::runtime_error("Illegal param: width and height of \"size\" must be at least 256");
         }
         if (width > params.sampling.width) {
-            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.sampling.width));
+            throw std::runtime_error("Illegal param: width of \"size\" must be at most " + std::to_string(params.sampling.width));
         }
         if (height > params.sampling.height) {
-            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.sampling.height));
+            throw std::runtime_error("Illegal param: height of \"size\" must be at most " + std::to_string(params.sampling.height));
         }
         if (width % 64 != 0 || height % 64 != 0) {
-            throw std::runtime_error("Illegal param: width and height must be multiples of 64");
+            throw std::runtime_error("Illegal param: width and height of \"size\" must be multiples of 64");
         }
         llama_params["width"]  = width;
         llama_params["height"] = height;
@@ -1371,7 +1379,7 @@ static json oaicompat_images_generations_request(const struct stablediffusion_pa
                     llama_params["stream_options"]["include_usage"] = true;
                 }
             } else {
-                throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+                throw std::runtime_error("Illegal param: invalid \"stream_options\"");
             }
         }
     }
@@ -1399,7 +1407,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     // Handle "response_format" field
     std::string response_format = json_value(body, "response_format", std::string("b64_json"));
     if (response_format != "b64_json") {
-        throw std::runtime_error("Illegal param: response_format must be 'b64_json'");
+        throw std::runtime_error("Illegal param: \"response_format\" must be 'b64_json'");
     }
 
     json llama_params;
@@ -1427,7 +1435,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     {
         auto batch_count = json_value(body, "n", 1);
         if (batch_count > params.max_batch_count) {
-            throw std::runtime_error("Illegal param: n must be less than or equal to " + std::to_string(params.max_batch_count));
+            throw std::runtime_error("Illegal param: \"n\" must be less than or equal to " + std::to_string(params.max_batch_count));
         }
         llama_params["batch_count"] = batch_count;
     }
@@ -1436,7 +1444,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     if (!body.contains("sampler") && !body.contains("sample_method")) {
         std::string quality = json_value(body, "quality", std::string("standard"));
         if (quality != "null" && quality != "hd" && quality != "standard") {
-            throw std::runtime_error("Illegal param: quality must be one of 'hd' or 'standard'");
+            throw std::runtime_error("Illegal param: \"quality\" must be one of 'hd' or 'standard'");
         }
         llama_params["sample_method"]   = params.sampling.sample_method;
         llama_params["sampling_steps"]  = params.sampling.sampling_steps;
@@ -1493,18 +1501,18 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
     {
         auto pos = size.find('x');
         if (pos == std::string::npos) {
-            throw std::runtime_error("Illegal param: size must be in the format 'widthxheight'");
+            throw std::runtime_error("Illegal param: \"size\" must be in the format '{width}x{height}'");
         }
         auto width  = std::stoi(size.substr(0, pos));
         auto height = std::stoi(size.substr(pos + 1));
         if (width < 256 || height < 256) {
-            throw std::runtime_error("Illegal param: width and height must be at least 256");
+            throw std::runtime_error("Illegal param: width and height of \"size\" must be at least 256");
         }
         if (width > params.sampling.width) {
-            throw std::runtime_error("Illegal param: width must be at most " + std::to_string(params.sampling.width));
+            throw std::runtime_error("Illegal param: width of \"size\" must be at most " + std::to_string(params.sampling.width));
         }
         if (height > params.sampling.height) {
-            throw std::runtime_error("Illegal param: height must be at most " + std::to_string(params.sampling.height));
+            throw std::runtime_error("Illegal param: height of \"size\" must be at most " + std::to_string(params.sampling.height));
         }
         llama_params["width"]  = width;
         llama_params["height"] = height;
@@ -1523,7 +1531,7 @@ static json oaicompat_images_edits_request(const struct stablediffusion_params &
                     llama_params["stream_options"]["include_usage"] = true;
                 }
             } else {
-                throw std::runtime_error("Illegal param: invalid type for \"stream_options\" field");
+                throw std::runtime_error("Illegal param: invalid \"stream_options\"");
             }
         }
     }
@@ -1632,7 +1640,7 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
         } else if (doc.is_object() && doc.contains("text")) {
             prompt.push_back(doc.at("text").get<std::string>());
         } else {
-            throw std::runtime_error("Illegal param: documents must be an array of strings or objects with a 'text' field");
+            throw std::runtime_error("Illegal param: \"documents\" must be an array of strings or objects with 'text'");
         }
     }
     // Add the query again for reranking
@@ -1648,7 +1656,7 @@ static json jinaaicompat_rerank_request(const struct common_params &params, cons
     if (top_n > documents_size) {
         top_n = documents_size;
     } else if (top_n <= 0) {
-        throw std::runtime_error("Illegal param: top_n must be greater than 0");
+        throw std::runtime_error("Illegal param: \"top_n\" must be greater than 0");
     }
     llama_params["top_n"] = top_n;
 
@@ -1697,9 +1705,11 @@ static json jinaicompat_rerank_response(const std::string &rid, const json &requ
         documents = request.at("__oaicompat_rerank_documents");
     }
 
-    int prompt_tokens = 0;
-    int32_t start     = 0;
-    auto end          = int32_t(result.size() - 3);
+    int total_tokens      = 0;
+    int min_prompt_tokens = 0;
+    int max_prompt_tokens = 0;
+    int32_t start         = 0;
+    auto end              = int32_t(result.size() - 3);
     jinaicompat_rerank_response_sort(result, start, end);
 
     json data      = json::array();
@@ -1725,7 +1735,9 @@ static json jinaicompat_rerank_response(const std::string &rid, const json &requ
         }
 
         int32_t tke = json_value(ret, "tokens_evaluated", 0);
-        prompt_tokens += tke;
+        total_tokens += tke;
+        min_prompt_tokens = min_prompt_tokens == 0 ? tke : std::min(min_prompt_tokens, tke);
+        max_prompt_tokens = std::max(max_prompt_tokens, tke);
 
         int32_t idx = json_value(ret, "index", 0);
         json item   = json{
@@ -1752,12 +1764,14 @@ static json jinaicompat_rerank_response(const std::string &rid, const json &requ
     // Add usage field
     {
         json usage = json{
-            {"prompt_tokens", prompt_tokens},
-            {"total_tokens", prompt_tokens},
+            {"prompt_tokens", total_tokens},
+            {"total_tokens", total_tokens},
+            {"min_prompt_tokens", min_prompt_tokens},
+            {"max_prompt_tokens", max_prompt_tokens},
         };
 
         res["usage"] = usage;
-        SRV_INF("rid %s | prompt_tokens: %d\n", rid.c_str(), prompt_tokens);
+        SRV_INF("rid %s | total_tokens: %d, min_prompt_tokens: %d, max_prompt_tokens: %d\n", rid.c_str(), total_tokens, min_prompt_tokens, max_prompt_tokens);
     }
 
     return res;

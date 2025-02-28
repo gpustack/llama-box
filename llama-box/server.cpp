@@ -1528,20 +1528,20 @@ struct server_context {
                     control_img_buffer = stbi_load_from_memory((const stbi_uc *)control_img.c_str(), (int)control_img.length(), &cw, &ch, &cc, 3);
                     if (control_img_buffer == nullptr) {
                         auto reason = stbi_failure_reason();
-                        SLT_ERR(slot, "failed to load control: %s\n", reason);
-                        send_error(task, "failed to load control", ERROR_TYPE_INVALID_REQUEST);
+                        SLT_ERR(slot, "failed to load control image: %s\n", reason);
+                        send_error(task, "failed to load control image", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (cc < 3) {
                         stbi_image_free(control_img_buffer);
-                        send_error(task, "control must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
+                        send_error(task, "control image must be at least 3 channels", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (cw <= 0 || ch <= 0) {
-                        send_error(task, "control width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
+                        send_error(task, "control image width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
-                    SLT_WRN(slot, "control changes width and height from %dx%d to %dx%d\n", slot.params.sd_params.width, slot.params.sd_params.height, cw, ch);
+                    SLT_WRN(slot, "control image changes width and height from %dx%d to %dx%d\n", slot.params.sd_params.width, slot.params.sd_params.height, cw, ch);
                     slot.params.sd_params.height = ch;
                     slot.params.sd_params.width  = cw;
                 }
@@ -1617,8 +1617,8 @@ struct server_context {
                     if (mask_img_buffer == nullptr) {
                         free_images_1;
                         auto reason = stbi_failure_reason();
-                        SLT_ERR(slot, "failed to load mask: %s\n", reason);
-                        send_error(task, "failed to load mask", ERROR_TYPE_INVALID_REQUEST);
+                        SLT_ERR(slot, "failed to load mask image: %s\n", reason);
+                        send_error(task, "failed to load mask image", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
 #define free_images_2 \
@@ -1626,12 +1626,12 @@ struct server_context {
     stbi_image_free(mask_img_buffer);
                     if (mc < 1) {
                         free_images_2;
-                        send_error(task, "mask must be at least 1 channels", ERROR_TYPE_INVALID_REQUEST);
+                        send_error(task, "mask image must be at least 1 channels", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (mw <= 0 || mh <= 0) {
                         free_images_2;
-                        send_error(task, "mask width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
+                        send_error(task, "mask image width and height cannot be zero", ERROR_TYPE_INVALID_REQUEST);
                         return false;
                     }
                     if (mw != slot.params.sd_params.width || mh != slot.params.sd_params.height) {
@@ -1641,7 +1641,7 @@ struct server_context {
                         auto *resized_mask_buffer = (uint8_t *)malloc(rw * rh * 1);
                         if (resized_mask_buffer == nullptr) {
                             free_images_2;
-                            send_error(task, "failed to create resized mask buffer", ERROR_TYPE_INVALID_REQUEST);
+                            send_error(task, "failed to create resized mask image buffer", ERROR_TYPE_INVALID_REQUEST);
                             return false;
                         }
                         if (!stbir_resize(mask_img_buffer, mw, mh, 0,
@@ -1655,9 +1655,9 @@ struct server_context {
                                           STBIR_COLORSPACE_SRGB,                        // sRGB
                                           nullptr)) {
                             auto reason = stbi_failure_reason();
-                            SLT_ERR(slot, "failed to resize mask: %s\n", reason);
+                            SLT_ERR(slot, "failed to resize mask image: %s\n", reason);
                             free_images_2;
-                            send_error(task, "failed to resize mask", ERROR_TYPE_INVALID_REQUEST);
+                            send_error(task, "failed to resize mask image", ERROR_TYPE_INVALID_REQUEST);
                             return false;
                         }
                         stbi_image_free(mask_img_buffer);
@@ -1710,7 +1710,7 @@ struct server_context {
                 if (data.at("lora").is_array()) {
                     slot_lora_adapters = parse_lora_request(llm_params.lora_adapters, data.at("lora"));
                 } else {
-                    send_error(task, "failed to parse \"lora\" parameter: must be an array", ERROR_TYPE_INVALID_REQUEST);
+                    send_error(task, "Illegal param: \"lora\": must be an array", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
             } else {
@@ -1722,7 +1722,7 @@ struct server_context {
             }
             slot.lora_adapters = slot_lora_adapters;
         } catch (const std::exception &e) {
-            send_error(task, std::string("failed to parse \"lora\" parameter: ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
+            send_error(task, std::string("Illegal param: \"lora\": ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
             return false;
         }
 
@@ -1763,11 +1763,11 @@ struct server_context {
 
         // process "llm_params" parameters
         if (slot.params.llm_params.penalty_last_n < -1) {
-            send_error(task, "Illegal param: repeat_last_n must be >= -1", ERROR_TYPE_INVALID_REQUEST);
+            send_error(task, "Illegal param: \"repeat_last_n\" must be >= -1", ERROR_TYPE_INVALID_REQUEST);
             return false;
         }
         if (slot.params.llm_params.dry_penalty_last_n < -1) {
-            send_error(task, "Illegal param: dry_penalty_last_n must be >= -1", ERROR_TYPE_INVALID_REQUEST);
+            send_error(task, "Illegal param: \"dry_penalty_last_n\" must be >= -1", ERROR_TYPE_INVALID_REQUEST);
             return false;
         }
         if (slot.params.llm_params.penalty_last_n == -1) {
@@ -1787,7 +1787,7 @@ struct server_context {
                 auto schema                    = json_value(data, "json_schema", json::object());
                 slot.params.llm_params.grammar = json_schema_to_grammar(schema);
             } catch (const std::exception &e) {
-                send_error(task, std::string("\"json_schema\": ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
+                send_error(task, std::string("Illegal param: \"json_schema\": ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
                 return false;
             }
         } else {
@@ -1935,7 +1935,7 @@ struct server_context {
             if (slot.smpl == nullptr) {
                 // for now, the only error that may happen here is invalid
                 // grammar
-                send_error(task, "failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
+                send_error(task, "Illegal param: \"grammar\": failed to parse", ERROR_TYPE_INVALID_REQUEST);
                 return false;
             }
 
@@ -1952,7 +1952,7 @@ struct server_context {
                 slot.smpl_draft = common_sampler_init(llm_model_draft, params_draft);
                 if (slot.smpl_draft == nullptr) {
                     // for now, the only error that may happen here is invalid grammar
-                    send_error(task, "failed to parse grammar", ERROR_TYPE_INVALID_REQUEST);
+                    send_error(task, "Illegal param: \"grammar\": failed to parse", ERROR_TYPE_INVALID_REQUEST);
                     return false;
                 }
             }
@@ -1966,7 +1966,8 @@ struct server_context {
             if (task.tps > 0) {
                 slot.token_bkt = new token_bucket(task.tps, task.tps);
                 if (slot.token_bkt == nullptr) {
-                    send_error(task, "failed to create token bucket", ERROR_TYPE_SERVER);
+                    SLT_ERR(slot, "%s", "failed to create token bucket\n");
+                    send_error(task, "Server error: failed to create token bucket", ERROR_TYPE_SERVER);
                     return false;
                 }
             }
@@ -2179,10 +2180,10 @@ struct server_context {
                                         throw std::runtime_error("function is an object");
                                     }
                                     if (!function.contains("name")) {
-                                        throw std::runtime_error("function does not contain \"name\" field");
+                                        throw std::runtime_error("function does not contain \"name\"");
                                     }
                                     if (!function.contains("arguments")) {
-                                        throw std::runtime_error("function does not contain \"arguments\" field");
+                                        throw std::runtime_error("function does not contain \"arguments\"");
                                     }
                                     if (!function.at("arguments").is_string()) {
                                         function["arguments"] = function.at("arguments").dump(-1, ' ', false, json::error_handler_t::replace);
@@ -3088,7 +3089,7 @@ struct server_context {
                     llama_state_seq_load_file(llm_ctx, filepath.c_str(), slot->id, slot->cache_tokens.data(), slot->cache_tokens.size(), &token_count);
                 if (nread == 0) {
                     slot->cache_tokens.resize(0);
-                    send_error(task, "unable to restore slot, no available space in KV cache or invalid slot save file", ERROR_TYPE_INVALID_REQUEST);
+                    send_error(task, "Illegal param: unable to restore slot, no available space in KV cache or invalid slot save file", ERROR_TYPE_INVALID_REQUEST);
                     break;
                 }
                 slot->cache_tokens.resize(token_count);
@@ -3198,8 +3199,9 @@ struct server_context {
                 SLT_DBG(slot, "%s", "creating image generation stream\n");
                 slot.sdsstream = sd_ctx->generate_stream(slot.prompt_string.c_str(), slot.params.sd_params);
                 if (slot.sdsstream == nullptr) {
+                    SLT_ERR(slot, "%s", "failed to create image generation stream\n");
                     slot.release();
-                    send_error(slot, "failed to create image generation stream", ERROR_TYPE_SERVER);
+                    send_error(slot, "Server error: failed to create image generation stream", ERROR_TYPE_SERVER);
                     continue;
                 }
 
@@ -3230,7 +3232,7 @@ struct server_context {
                 } catch (const std::exception &e) {
                     SLT_ERR(slot, "failed to apply lora adapters: %s\n", e.what());
                     slot.release();
-                    send_error(slot, "failed to apply lora adapters", ERROR_TYPE_SERVER);
+                    send_error(slot, "Server error: failed to apply lora adapters", ERROR_TYPE_SERVER);
                     continue;
                 }
 
@@ -3255,8 +3257,9 @@ struct server_context {
                 slot.n_image_generated_steps = progress.second;
                 generated_image              = sd_ctx->result_image_stream(slot.sdsstream);
                 if (generated_image.data == nullptr) {
+                    SLT_ERR(slot, "%s", "failed to get result image from generation stream\n");
                     slot.release();
-                    send_error(slot, "failed to get result image from generation stream", ERROR_TYPE_SERVER);
+                    send_error(slot, "Sever error: failed to get result image from generation stream", ERROR_TYPE_SERVER);
                     continue;
                 }
 
@@ -3277,11 +3280,11 @@ struct server_context {
         for (server_slot &slot : slots) {
             if (slot.is_processing() && slot.n_past + 1 >= slot.n_ctx) {
                 if (!llm_params.ctx_shift) {
+                    SLT_ERR(slot, "context shift is disabled: processing %d tokens exceed ctx size\n", slot.n_past + 1);
                     // this check is redundant (for good)
-                    // we should never get here, because generation should already stopped in
-                    // process_token()
+                    // we should never get here, because generation should already stopped in process_token()
                     slot.release();
-                    send_error(slot, "context shift is disabled", ERROR_TYPE_SERVER);
+                    send_error(slot, "Server error: context shift is disabled: processing " + std::to_string(slot.n_past + 1) + " tokens exceed ctx size", ERROR_TYPE_SERVER);
                     continue;
                 }
 
@@ -3402,10 +3405,10 @@ struct server_context {
                             slot.release();
                             switch (slot.task_type) {
                                 case SERVER_TASK_TYPE_EMBEDDING:
-                                    send_error(slot, "empty input", ERROR_TYPE_INVALID_REQUEST);
+                                    send_error(slot, "Illegal param: \"input\": empty", ERROR_TYPE_INVALID_REQUEST);
                                     break;
                                 case SERVER_TASK_TYPE_RERANK:
-                                    send_error(slot, "empty query", ERROR_TYPE_INVALID_REQUEST);
+                                    send_error(slot, "Illegal param: \"query\" empty", ERROR_TYPE_INVALID_REQUEST);
                                     break;
                                 default:
                                     send_completion(slot);
@@ -3420,23 +3423,24 @@ struct server_context {
                         slot.state           = SLOT_STATE_PROCESSING_PROMPT;
 
                         if (slot.oaicompat_completion_chat_vision && !preprocess_multi_modal_data(slot, n_batch)) {
+                            SLT_ERR(slot, "%s", "failed to preprocess multi-modal images\n");
                             slot.release();
-                            send_error(slot, "failed to preprocess multi-modal images", ERROR_TYPE_SERVER);
+                            send_error(slot, "Server error: failed to preprocess multi-modal images", ERROR_TYPE_SERVER);
                             continue;
                         }
 
                         SLT_INF(slot, "new prompt, n_ctx_slot = %d, n_keep = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep, slot.n_prompt_tokens);
 
                         if (slot.is_non_causal()) {
-                            if (slot.n_prompt_tokens > n_ubatch) {
-                                slot.release();
-                                send_error(slot, "input is too large to process, please increase the physical batch size", ERROR_TYPE_SERVER);
-                                continue;
-                            }
-
                             if (slot.n_prompt_tokens > slot.n_ctx) {
                                 slot.release();
-                                send_error(slot, "input is larger than the max context size. skipping", ERROR_TYPE_INVALID_REQUEST);
+                                send_error(slot, "Illegal param: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed the context size, try increasing the context size or reducing prefill tokens", ERROR_TYPE_INVALID_REQUEST);
+                                continue;
+                            }
+                            if (slot.n_prompt_tokens > n_ubatch) {
+                                SLT_ERR(slot, "prefill %d tokens exceed the processing batch, try increasing the physical batch size\n", slot.n_prompt_tokens);
+                                slot.release();
+                                send_error(slot, "Server error: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed the processing batch, try increasing the physical batch size", ERROR_TYPE_SERVER);
                                 continue;
                             }
                         } else {
@@ -3446,7 +3450,7 @@ struct server_context {
                                 //       context shift should be applied only during the generation phase
                                 if (slot.n_prompt_tokens >= slot.n_ctx) {
                                     slot.release();
-                                    send_error(slot, "the request exceeds the available context size. try increasing the context size or enable context shift", ERROR_TYPE_INVALID_REQUEST);
+                                    send_error(slot, "Illegal param: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed the context size, try increasing the context size or enabling context shift", ERROR_TYPE_INVALID_REQUEST);
                                     continue;
                                 }
                             }
@@ -3677,13 +3681,10 @@ struct server_context {
             metrics.on_decoded(slots);
             if (ret != 0) {
                 if (n_batch == 1 || ret < 0) {
-                    // if you get here, it means the KV cache is full - try
-                    // increasing it via the context size
-                    SRV_ERR("failed to decode the batch: KV cache is full - try increasing it via the context size, i = %d, n_batch = %d, ret = %d\n", i, n_batch, ret);
-
+                    SRV_ERR("failed to decode, i = %d, n_tokens = %d, n_batch = %d, ret = %d\n", i, n_tokens, n_batch, ret);
                     for (auto &slot : slots) {
                         slot.release();
-                        send_error(slot, "decoding exceeds the available context size. try increasing the context size.");
+                        send_error(slot, "Server error: failed to decode", ERROR_TYPE_SERVER);
                     }
                     break; // break loop of n_batch
                 }
@@ -3786,8 +3787,9 @@ struct server_context {
                     common_batch_clear(batch_draft);
                     common_batch_add(batch_draft, result.toks[result.toks.size() - 1], pos, {slot.id}, true);
                     if (llama_decode(llm_ctx_draft, batch_draft)) {
+                        SLT_ERR(slot, "%s", "failed to decode with draft model\n");
                         slot.release();
-                        send_error(slot, "failed to draft decode", ERROR_TYPE_SERVER);
+                        send_error(slot, "Server error: failed to decode with draft model", ERROR_TYPE_SERVER);
                         continue; // continue loop of slots
                     }
                     slot.n_drafted += 1;
@@ -4076,7 +4078,7 @@ struct server_context {
                 }
                 int m = std::max(w, h);
                 if (params.max_image_size > 0 && m > params.max_image_size) {
-                    SLT_INF(slot, "image dimensions exceeded the maximum size: %d, resizing image\n", params.max_image_size);
+                    SLT_INF(slot, "image dimensions exceed the maximum size: %d, resizing image\n", params.max_image_size);
                     float nr  = float(params.max_image_size) / float(m);
                     int nw    = std::max(int(std::ceil(float(w) * nr)), 1);
                     int nh    = std::max(int(std::ceil(float(h) * nr)), 1);
@@ -4965,12 +4967,12 @@ int main(int argc, char **argv) {
                 // { "text": string, "filename": string }
                 if (!chunk.contains("text") || !chunk.at("text").is_string()) {
                     res_error(res,
-                              format_error_response("extra_context chunk must contain a \"text\" field with a string value", ERROR_TYPE_INVALID_REQUEST));
+                              format_error_response("extra_context chunk must contain \"text\" with a string value", ERROR_TYPE_INVALID_REQUEST));
                     return;
                 }
                 // filename is optional
                 if (chunk.contains("filename") && !chunk.at("filename").is_string()) {
-                    res_error(res, format_error_response("extra_context chunk's \"filename\" field must be a string", ERROR_TYPE_INVALID_REQUEST));
+                    res_error(res, format_error_response("extra_context chunk's \"filename\" must be a string", ERROR_TYPE_INVALID_REQUEST));
                     return;
                 }
             }
