@@ -125,7 +125,7 @@ LLaMA Box supports the following platforms.
 > - **"AMD ROCm/HIP 6.2"** amd64 releases are built on CentOS 7 (glibc 2.17).
 > - **"Intel oneAPI 2025.0"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"Huawei Ascend CANN 8.0"** amd64/arm64 releases are built on Ubuntu 20.04 (glibc 2.31).
->   - Before v0.0.122 (included), **Huawei Ascend CANN 8.0** is backed by Ascend CANN 8.0.rc2.alpha0003.
+>   - Before v0.0.122 (included), **Huawei Ascend CANN 8.0** is backed by Ascend CANN 8.0.rc2.alpha003.
 >   - Since v0.0.123, **"Huawei Ascend CANN 8.0"** no longer releases the OpenEuler-based archive.
 > - **"Hygon DTK 24.04"** amd64 releases are built on Ubuntu 20.04 (glibc 2.31).
 > - **"Moore Threads MUSA rc3.1"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
