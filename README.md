@@ -348,8 +348,8 @@ server:
          --lora-init-without-apply
                                   Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
-  -fa,   --flash-attn             Enable Flash Attention (default: disabled)
-         --no-flash-attn          Disable Flash Attention
+         --no-flash-attn          Disable Flash Attention, which can increase (V)RAM but reduce computation
+  -fa,   --flash-attn             Enable Flash Attention, which can reduce (V)RAM but increase computation
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
          --infill                 Enable infill endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
@@ -362,8 +362,8 @@ server:
   -ngl,  --gpu-layers,  --n-gpu-layers N
                                   Number of layers to store in VRAM
                                   -ngl 0 means no offloading
-         --no-warmup              Skip warming up the model with an empty run
-         --warmup                 Enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving
+         --no-warmup              Disable warm up the model with an empty run
+         --warmup                 Enable warm up the model with an empty run, which is used to occupy the (V)RAM before serving
 
 server/completion:
 
@@ -413,15 +413,16 @@ server/completion:
          --prio-batch N           Set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   Use polling to wait for work (default: same as --poll
   -c,    --ctx-size N             Size of the prompt context (default: 4096, 0 = loaded from model)
-         --no-context-shift       Disables context shift on infinite text generation (default: disabled)
+         --no-context-shift       Disable context shift on infinite text generation and long prompt embedding
+         --context-shift          Enable context shift on infinite text generation and long prompt embedding
   -n,    --predict N              Number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
   -b,    --batch-size N           Logical batch size.
                                   Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: 2048)
   -ub,   --ubatch-size N          Physical batch size, which is the maximum number of tokens that may be processed at a time.
                                   Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: 512)
          --keep N                 Number of tokens to keep from the initial prompt (default: 0, -1 = all)
+         --no-escape              Disable process escape sequences
   -e,    --escape                 Process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
-         --no-escape              Do not process escape sequences
          --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_k;typ_p;top_p;min_p;xtc;temperature)
          --sampling-seq SEQUENCE  Simplified sequence for samplers that will be used (default: edkypmxt)
          --temp T                 Temperature (default: 0.8)
@@ -473,8 +474,8 @@ server/completion:
   -nocb, --no-cont-batching       Disable continuous batching
          --mmproj FILE            Path to a multimodal projector file for LLaVA
          --mlock                  Force system to keep model in RAM rather than swapping or compressing
-         --no-mmap                Do not memory-map model (slower load but may reduce pageouts if not using mlock)
-         --mmap                   Apply memory-map model (faster load but may increase pageouts if not using mlock)
+         --no-mmap                Disable memory-map model, slower load but may reduce pageouts if not using mlock
+         --mmap                   Enable memory-map model, faster load but may increase pageouts if not using mlock
          --numa TYPE              Attempt optimizations that help on some NUMA systems
                                     - distribute: spread execution evenly over all nodes
                                     - isolate: only spawn threads on CPUs on the node that execution started on
@@ -514,7 +515,8 @@ server/completion/visual:
 
 server/embedding:
 
-         --pooling                Pooling type for embeddings, use model default if unspecified
+         --pooling {none,mean,cls,last,rank}
+                                  Pooling type for embeddings, use model default if unspecified
 
 server/images:
 

@@ -28,6 +28,7 @@ struct llama_box_params {
     rpcserver_params rpc_params;
     stablediffusion_params sd_params;
 
+    bool force_context_shift = false; // use context shift even if not allowed
     bool cache_prompt        = true;
     bool endpoint_infill     = false;
     bool endpoint_images     = false;
@@ -282,8 +283,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server",                             "       --lora-scaled FILE SCALE",               "Apply LoRA adapter with user defined scaling S (implies --no-mmap)" });
     opts.push_back({ "server",                             "       --lora-init-without-apply",              "Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", llm_params.lora_init_without_apply ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
-    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention (default: %s)", llm_params.flash_attn ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --no-flash-attn",                        "Disable Flash Attention" });
+    opts.push_back({ "server",                             "       --no-flash-attn",                        "Disable Flash Attention, which can increase (V)RAM but reduce computation" });
+    opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention, which can reduce (V)RAM but increase computation" });
     opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --infill",                               "Enable infill endpoint (default: %s)", params_.endpoint_infill? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
@@ -295,8 +296,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                                                             "For image models, indicate which device should be able to offload"});
     opts.push_back({ "server",                             "-ngl,  --gpu-layers,  --n-gpu-layers N",        "Number of layers to store in VRAM\n"
                                                                                                             "-ngl 0 means no offloading"});
-    opts.push_back({ "server",                             "       --no-warmup",                            "Skip warming up the model with an empty run" });
-    opts.push_back({ "server",                             "       --warmup",                               "Enable warming up the model with an empty run, which is used to occupy the (V)RAM before serving" });
+    opts.push_back({ "server",                             "       --no-warmup",                            "Disable warm up the model with an empty run" });
+    opts.push_back({ "server",                             "       --warmup",                               "Enable warm up the model with an empty run, which is used to occupy the (V)RAM before serving" });
     // server // completion //
     opts.push_back({ "server/completion" });
     opts.push_back({ "server/completion",                  "-dev,  --device <dev1,dev2,...>",               "A comma-separated list of devices to use for offloading (none = don't offload)\n"
@@ -340,15 +341,16 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --poll-batch <0...100>",                 "Use polling to wait for work (default: same as --poll"});
 #endif
     opts.push_back({ "server/completion",                  "-c,    --ctx-size N",                           "Size of the prompt context (default: %d, 0 = loaded from model)", llm_params.n_ctx });
-    opts.push_back({ "server/completion",                  "       --no-context-shift",                     "Disables context shift on infinite text generation (default: %s)", llm_params.ctx_shift ? "disabled" : "enabled" });
+    opts.push_back({ "server/completion",                  "       --no-context-shift",                     "Disable context shift on infinite text generation and long prompt embedding" });
+    opts.push_back({ "server/completion",                  "       --context-shift",                        "Enable context shift on infinite text generation and long prompt embedding" });
     opts.push_back({ "server/completion",                  "-n,    --predict N",                            "Number of tokens to predict (default: %d, -1 = infinity, -2 = until context filled)", llm_params.n_predict });
     opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "Logical batch size.\n"
                                                                                                             "Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: %d)", llm_params.n_batch });
     opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "Physical batch size, which is the maximum number of tokens that may be processed at a time.\n"
                                                                                                             "Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: %d)", llm_params.n_ubatch });
     opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d, -1 = all)", llm_params.n_keep });
+    opts.push_back({ "server/completion",                  "       --no-escape",                            "Disable process escape sequences" });
     opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(Process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", llm_params.escape ? "true" : "false" });
-    opts.push_back({ "server/completion",                  "       --no-escape",                            "Do not process escape sequences" });
     opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "Samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
     opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "Simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
     opts.push_back({ "server/completion",                  "       --temp T",                               "Temperature (default: %.1f)", (double)llm_params.sampling.temp });
@@ -399,8 +401,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
         opts.push_back({ "server/completion",              "       --mlock",                                "Force system to keep model in RAM rather than swapping or compressing" });
     }
     if (llama_supports_mmap()) {
-        opts.push_back({ "server/completion",              "       --no-mmap",                              "Do not memory-map model (slower load but may reduce pageouts if not using mlock)" });
-        opts.push_back({ "server/completion",              "       --mmap",                                 "Apply memory-map model (faster load but may increase pageouts if not using mlock)" });
+        opts.push_back({ "server/completion",              "       --no-mmap",                              "Disable memory-map model, slower load but may reduce pageouts if not using mlock" });
+        opts.push_back({ "server/completion",              "       --mmap",                                 "Enable memory-map model, faster load but may increase pageouts if not using mlock" });
     }
     opts.push_back({ "server/completion",                  "       --numa TYPE",                            "Attempt optimizations that help on some NUMA systems\n"
                                                                                                             "  - distribute: spread execution evenly over all nodes\n"
@@ -433,7 +435,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server // completion // visual //
     // server // embedding //
     opts.push_back({ "server/embedding" });
-    opts.push_back({ "server/embedding",                   "       --pooling",                              "Pooling type for embeddings, use model default if unspecified" });
+    opts.push_back({ "server/embedding",                   "       --pooling {none,mean,cls,last,rank}",    "Pooling type for embeddings, use model default if unspecified" });
     // server // embedding //
     // server // images //
     opts.push_back({ "server/images" });
@@ -1071,7 +1073,14 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
             }
 
             if (!strcmp(flag, "--no-context-shift")) {
+                params_.force_context_shift  = false;
                 params_.llm_params.ctx_shift = false;
+                continue;
+            }
+
+            if (!strcmp(flag, "--context-shift")) {
+                params_.force_context_shift  = true;
+                params_.llm_params.ctx_shift = true;
                 continue;
             }
 

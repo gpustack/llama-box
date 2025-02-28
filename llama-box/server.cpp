@@ -3431,16 +3431,16 @@ struct server_context {
 
                         SLT_INF(slot, "new prompt, n_ctx_slot = %d, n_keep = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep, slot.n_prompt_tokens);
 
-                        if (slot.is_non_causal()) {
+                        if (slot.is_non_causal() && !params.force_context_shift) {
                             if (slot.n_prompt_tokens > slot.n_ctx) {
                                 slot.release();
-                                send_error(slot, "Illegal param: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed the context size, try increasing the context size or reducing prefill tokens", ERROR_TYPE_INVALID_REQUEST);
+                                send_error(slot, "Illegal param: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed n_ctx_per_seq, try increasing total context size, adjusting RoPE, enabling context shifting, reducing parallel or reducing prefill tokens", ERROR_TYPE_INVALID_REQUEST);
                                 continue;
                             }
                             if (slot.n_prompt_tokens > n_ubatch) {
-                                SLT_ERR(slot, "prefill %d tokens exceed the processing batch, try increasing the physical batch size\n", slot.n_prompt_tokens);
+                                SLT_ERR(slot, "prefill %d tokens exceed n_ubatch, try increasing the physical batch size\n", slot.n_prompt_tokens);
                                 slot.release();
-                                send_error(slot, "Server error: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed the processing batch, try increasing the physical batch size", ERROR_TYPE_SERVER);
+                                send_error(slot, "Server error: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed n_ubatch, try increasing the physical batch size", ERROR_TYPE_SERVER);
                                 continue;
                             }
                         } else {
@@ -3450,7 +3450,7 @@ struct server_context {
                                 //       context shift should be applied only during the generation phase
                                 if (slot.n_prompt_tokens >= slot.n_ctx) {
                                     slot.release();
-                                    send_error(slot, "Illegal param: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed the context size, try increasing the context size or enabling context shift", ERROR_TYPE_INVALID_REQUEST);
+                                    send_error(slot, "Illegal param: prefill " + std::to_string(slot.n_prompt_tokens) + " tokens exceed n_ctx_per_seq, try increasing total context size or enabling context shift", ERROR_TYPE_INVALID_REQUEST);
                                     continue;
                                 }
                             }
@@ -3694,7 +3694,7 @@ struct server_context {
                 n_batch /= 2;
                 i -= n_batch;
 
-                SRV_WRN("failed to find free space in the KV cache, retrying with smaller batch size - try increasing it via the context size or enable defragmentation, i = %d, n_batch = %d, ret = %d\n", i, n_batch, ret);
+                SRV_WRN("failed to find free space in the KV cache, retrying with smaller batch size - try increasing it via total context size or enabling defragmentation, i = %d, n_batch = %d, ret = %d\n", i, n_batch, ret);
 
                 continue; // continue loop of n_batch
             }
