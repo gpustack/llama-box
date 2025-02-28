@@ -11,7 +11,7 @@ index 47919602..3b93637e 100644
      LLAMA_API uint32_t llama_n_ctx      (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_batch    (const struct llama_context * ctx);
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 607f2786..4542a04f 100644
+index 607f2786..7a51573a 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -9395,6 +9395,10 @@ bool llama_supports_rpc(void) {
@@ -25,32 +25,24 @@ index 607f2786..4542a04f 100644
  void llama_backend_init(void) {
      ggml_time_init();
  
-@@ -9603,9 +9607,17 @@ struct llama_context * llama_init_from_model(
- 
-     // this is necessary due to kv_self.n being padded later during inference
-     cparams.n_ctx            = GGML_PAD(cparams.n_ctx, llama_kv_cache_get_padding(cparams));
-+    if (!hparams.causal_attn) {
-+        LLAMA_LOG_WARN("%s: adjust n_ctx of the none causal attention model to the minimum value between given n_ctx and n_ctx_train\n", __func__);
-+        cparams.n_ctx        = std::min(cparams.n_ctx, hparams.n_ctx_train);
-+    }
- 
-     // with causal attention, the batch size is limited by the context size
-     cparams.n_batch          = hparams.causal_attn ? std::min(cparams.n_ctx, params.n_batch) : params.n_batch;
-+    if (!hparams.causal_attn) {
-+        LLAMA_LOG_WARN("%s: align n_batch of the none causal attention model to n_ctx\n", __func__);
-+        cparams.n_batch      = cparams.n_ctx;
-+    }
- 
-     // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
-     // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
-@@ -9616,6 +9628,10 @@ struct llama_context * llama_init_from_model(
+@@ -9653,6 +9657,20 @@ struct llama_context * llama_init_from_model(
+         cparams.causal_attn = params.attention_type == LLAMA_ATTENTION_TYPE_CAUSAL;
      }
  
-     cparams.n_ubatch         = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
-+    if (!hparams.causal_attn) {
-+        LLAMA_LOG_WARN("%s: align n_ubatch of the none causal attention model to n_ctx\n", __func__);
++    if (!cparams.causal_attn) {
++        bool is_rope_customized = rope_scaling_type != hparams.rope_scaling_type_train ||
++            cparams.rope_freq_base != hparams.rope_freq_base_train ||
++            cparams.rope_freq_scale != hparams.rope_freq_scale_train ||
++           (rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_YARN && params.yarn_orig_ctx != 0 && cparams.n_ctx_orig_yarn != hparams.n_ctx_orig_yarn);
++        if (!is_rope_customized) {
++            LLAMA_LOG_WARN("%s: adjust n_ctx of the none causal attention model to the minimum value between given n_ctx(%d) and n_ctx_train(%d), you might change RoPE to extend this limitation\n", __func__, cparams.n_ctx, hparams.n_ctx_train);
++            cparams.n_ctx        = std::min(cparams.n_ctx, hparams.n_ctx_train);
++        }
++        LLAMA_LOG_WARN("%s: adjust n_batch(%d) and n_ubatch(%d) of the none causal attention model to n_ctx(%d), avoid calculation errors\n", __func__, cparams.n_batch, cparams.n_ubatch, cparams.n_ctx);
++        cparams.n_batch      = cparams.n_ctx;
 +        cparams.n_ubatch     = cparams.n_ctx;
 +    }
++
+     const uint32_t n_ctx_per_seq = cparams.n_ctx / cparams.n_seq_max;
  
-     cparams.n_ctx_orig_yarn  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
-                                hparams.n_ctx_orig_yarn != 0 ? hparams.n_ctx_orig_yarn :
+     LLAMA_LOG_INFO("%s: n_seq_max     = %u\n",   __func__, cparams.n_seq_max);
