@@ -930,7 +930,7 @@ jobs:
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.4/reference/system-requirements.html.
+        # see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html.
         include:
           - arch: 'amd64'
             version: '6.2'
@@ -957,18 +957,27 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
+      - name: Setup HIP Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: toolbox-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\.toolbox
       - name: Setup HIP
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
-          curl.exe --retry 5 --retry-delay 5 `
-            --output "${{ runner.temp }}\installer.exe" `
-            --url "${{ matrix.distro_binary_installer }}"
+          if (!(Test-Path -Path "${{ github.workspace }}\.toolbox\installer.exe")) {
+            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
+            curl.exe --retry 5 --retry-delay 5 `
+              --output "${{ github.workspace }}\.toolbox\installer.exe" `
+              --url "${{ matrix.distro_binary_installer }}"
+          }
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
-          Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
+          Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-install'
 
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify AMD ROCm HIP SDK"
@@ -1033,7 +1042,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
+        # see https://developer.nvidia.com/cuda-12-4-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_local,
+        #     https://developer.nvidia.com/cuda-11-8-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2019&target_type=exe_local.
         #     12.4 ==> 12.4.0, Windows Server 2022.
         #     11.8 ==> 11.8.0, Windows Server 2019.
         # build fat binary,
@@ -1041,11 +1051,11 @@ jobs:
         include:
           - arch: 'amd64'
             version: '12.4'
-            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.0/network_installers/cuda_12.4.0_windows_network.exe'
+            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.0/network_installers/cuda_12.4.0_551.61_windows.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
           - arch: 'amd64'
             version: '11.8'
-            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/11.8.0/network_installers/cuda_11.8.0_windows_network.exe'
+            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/11.8.0/network_installers/cuda_11.8.0_522.06_windows.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: ${{ matrix.version == '11.8' && 'windows-2019' || 'windows-2022' }}
     steps:
@@ -1068,20 +1078,29 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
+      - name: Setup CUDA Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: toolbox-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\.toolbox
       - name: Setup CUDA
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
-          curl.exe --retry 5 --retry-delay 5 `
-            --output "${{ runner.temp }}\installer.exe" `
-            --url "${{ matrix.distro_binary_installer }}"
+          if (!(Test-Path -Path "${{ github.workspace }}\.toolbox\installer.exe")) {
+            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
+            curl.exe --retry 5 --retry-delay 5 `
+              --output "${{ github.workspace }}\.toolbox\installer.exe" `
+              --url "${{ matrix.distro_binary_installer }}"
+          }
           
           # https://docs.nvidia.com/cuda/archive/12.4.0/cuda-installation-guide-microsoft-windows/index.html
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
-          Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
-            -ArgumentList '-n','-s','cudart_${{ matrix.version }}','nvcc_${{ matrix.version }}','nvrtc_${{ matrix.version }}','nvrtc_dev_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','nvtx_${{ matrix.version }}','thrust_${{ matrix.version }}','visual_studio_integration_${{ matrix.version }}'
+          Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
+            -ArgumentList '-s','cudart_${{ matrix.version }}','nvcc_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','thrust_${{ matrix.version }}','visual_studio_integration_${{ matrix.version }}'
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify NVIDIA CUDA SDK"
           & 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' --version
@@ -1145,12 +1164,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=online.
+        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=offline.
         #     2025.0 ==> 2025.0.0, Windows Server 2022.
         include:
           - arch: 'amd64'
             version: '2025.0'
-            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b380d914-366b-4b77-a74a-05e3c38b3514/intel-oneapi-base-toolkit-2025.0.0.882.exe'
+            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b380d914-366b-4b77-a74a-05e3c38b3514/intel-oneapi-base-toolkit-2025.0.0.882_offline.exe'
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -1172,18 +1191,27 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
+      - name: Setup CUDA Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: toolbox-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\.toolbox
       - name: Setup oneAPI
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download Intel oneAPI SDK"
-          curl.exe --retry 5 --retry-delay 5 `
-            --output "${{ runner.temp }}\installer.exe" `
-            --url "${{ matrix.distro_binary_installer }}"
+          if (!(Test-Path -Path "${{ github.workspace }}\.toolbox\installer.exe")) {
+            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download Intel oneAPI SDK"
+            curl.exe --retry 5 --retry-delay 5 `
+              --output "${{ github.workspace }}\.toolbox\installer.exe" `
+              --url "${{ matrix.distro_binary_installer }}"
+          }
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install Intel oneAPI SDK"
-          Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
+          Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel:intel.oneapi.win.dnnl:intel.oneapi.win.tbb.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
 
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify Intel oneAPI SDK"
