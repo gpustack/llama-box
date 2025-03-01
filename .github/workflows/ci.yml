@@ -1034,14 +1034,14 @@ jobs:
       fail-fast: false
       matrix:
         # see https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network.
-        #     12.4 ==> 12.4.1, Windows Server 2022.
+        #     12.4 ==> 12.4.0, Windows Server 2022.
         #     11.8 ==> 11.8.0, Windows Server 2019.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         include:
           - arch: 'amd64'
             version: '12.4'
-            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.1/network_installers/cuda_12.4.1_windows_network.exe'
+            distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.0/network_installers/cuda_12.4.0_windows_network.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
           - arch: 'amd64'
             version: '11.8'
@@ -1078,9 +1078,10 @@ jobs:
             --output "${{ runner.temp }}\installer.exe" `
             --url "${{ matrix.distro_binary_installer }}"
           
+          # https://docs.nvidia.com/cuda/archive/12.4.0/cuda-installation-guide-microsoft-windows/index.html
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
           Start-Process "${{ runner.temp }}\installer.exe" -NoNewWindow -Wait `
-            -ArgumentList '-s','nvcc_${{ matrix.version }}','cudart_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','thrust_${{ matrix.version }}','visual_studio_integration_${{ matrix.version }}'
+            -ArgumentList '-n','-s','cudart_${{ matrix.version }}','nvcc_${{ matrix.version }}','nvrtc_${{ matrix.version }}','nvrtc_dev_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','nvtx_${{ matrix.version }}','thrust_${{ matrix.version }}','visual_studio_integration_${{ matrix.version }}'
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify NVIDIA CUDA SDK"
           & 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' --version
