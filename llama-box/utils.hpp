@@ -709,12 +709,12 @@ static json oaicompat_completions_request(const struct common_params &params, co
         if (!chat_tools.empty()) {
             chat_tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
             // "tool_choice" and "function_call", migrate "function_call" to "tool_choice"
-            std::vector<common_chat_tool> available_chat_tools;
             if (body.contains("tool_choice") && !body.contains("function_call")) {
                 const json &tc = body.at("tool_choice");
                 if (tc.is_object() && tc.contains("function")) {
                     const json &fc       = tc.at("function");
                     const std::string fn = json_value(fc, "name", std::string());
+                    std::vector<common_chat_tool> available_chat_tools;
                     for (const common_chat_tool &t : chat_tools) {
                         if (t.name == fn) {
                             available_chat_tools.push_back(t);
@@ -722,16 +722,17 @@ static json oaicompat_completions_request(const struct common_params &params, co
                             break;
                         }
                     }
+                    chat_tools = available_chat_tools;
                 } else if (tc.is_string()) {
                     chat_tool_choice = common_chat_tool_choice_parse_oaicompat(tc.get<std::string>());
                 } else {
                     throw std::runtime_error("Illegal param: \"tool_choice\" must be a string or an object");
                 }
-                chat_tools = available_chat_tools;
             } else if (body.contains("function_call")) {
                 const json &fc = body.at("function_call");
                 if (fc.is_object()) {
                     const std::string fn = json_value(fc, "name", std::string());
+                    std::vector<common_chat_tool> available_chat_tools;
                     for (const common_chat_tool &t : chat_tools) {
                         if (t.name == fn) {
                             available_chat_tools.push_back(t);
@@ -739,12 +740,12 @@ static json oaicompat_completions_request(const struct common_params &params, co
                             break;
                         }
                     }
+                    chat_tools = available_chat_tools;
                 } else if (fc.is_string()) {
                     chat_tool_choice = common_chat_tool_choice_parse_oaicompat(fc.get<std::string>());
                 } else {
                     throw std::runtime_error("Illegal param: \"function_call\" must be a string or an object");
                 }
-                chat_tools = available_chat_tools;
             }
         }
     }
