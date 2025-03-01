@@ -1102,7 +1102,7 @@ jobs:
           # https://docs.nvidia.com/cuda/archive/12.4.0/cuda-installation-guide-microsoft-windows/index.html
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
-            -ArgumentList '-s','cudart_${{ matrix.version }}','nvcc_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','thrust_${{ matrix.version }}','visual_studio_integration_${{ matrix.version }}'
+            -ArgumentList '-s','cudart_${{ matrix.version }}','nvcc_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','thrust_${{ matrix.version }}'
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify NVIDIA CUDA SDK"
           & 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' --version
