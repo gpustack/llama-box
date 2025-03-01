@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index d410c024..9755dea7 100644
+index b8d272cd..43df8169 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,8 @@
@@ -467,7 +467,7 @@ index d410c024..9755dea7 100644
  }
  
  // cann buffer
-@@ -1019,7 +1438,11 @@ ggml_backend_cann_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
+@@ -1020,7 +1439,11 @@ ggml_backend_cann_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
  
      ggml_cann_set_device(buft_ctx->device);
  

@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
-index dba7be33..1208dee0 100644
+index 184f99af..6553ffbc 100644
 --- a/ggml/src/ggml-backend.cpp
 +++ b/ggml/src/ggml-backend.cpp
-@@ -607,7 +607,7 @@ static bool ggml_is_view_op(enum ggml_op op) {
+@@ -608,7 +608,7 @@ static bool ggml_is_view_op(enum ggml_op op) {
  // scheduler
  
  #ifndef GGML_SCHED_MAX_BACKENDS

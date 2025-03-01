@@ -12,10 +12,10 @@ index ab13669c..e5f694e1 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index 47919602..95f43e21 100644
+index ee6e7391..f4eddb0b 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -949,6 +949,7 @@ extern "C" {
+@@ -950,6 +950,7 @@ extern "C" {
      LLAMA_API llama_token llama_vocab_sep(const struct llama_vocab * vocab); // sentence separator
      LLAMA_API llama_token llama_vocab_nl (const struct llama_vocab * vocab); // next-line
      LLAMA_API llama_token llama_vocab_pad(const struct llama_vocab * vocab); // padding
@@ -24,10 +24,10 @@ index 47919602..95f43e21 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index ad9ffe66..915cec15 100644
+index 163ff64f..9cbbfff0 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
-@@ -1435,7 +1435,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1442,7 +1442,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
              special_mask_id = LLAMA_TOKEN_NULL;
  
              const int precompiled_charsmap_keyidx = gguf_find_key(ctx, kv(LLM_KV_TOKENIZER_PRECOMPILED_CHARSMAP).c_str());
@@ -36,9 +36,9 @@ index ad9ffe66..915cec15 100644
                  size_t n_precompiled_charsmap = gguf_get_arr_n(ctx, precompiled_charsmap_keyidx);
                  const char * pc = (const char *) gguf_get_arr_data(ctx, precompiled_charsmap_keyidx);
                  precompiled_charsmap.assign(pc, pc + n_precompiled_charsmap);
-@@ -1593,7 +1593,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
-                 tokenizer_pre == "megrez") {
-                 pre_type = LLAMA_VOCAB_PRE_TYPE_QWEN2;
+@@ -1604,7 +1604,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+                 pre_type = LLAMA_VOCAB_PRE_TYPE_GPT4O;
+                 clean_spaces = false;
              } else {
 -                throw std::runtime_error(format("unknown pre-tokenizer type: '%s'", tokenizer_pre.c_str()));
 +                LLAMA_LOG_WARN("%s: missing or unknown pre-tokenizer type, using: 'default'\n", __func__);
@@ -46,7 +46,7 @@ index ad9ffe66..915cec15 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3081,6 +3082,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3092,6 +3093,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  

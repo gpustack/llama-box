@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
-index d1c2d76d..4159e13c 100644
+index c36c12d6..1b1dc734 100644
 --- a/ggml/src/ggml-backend-impl.h
 +++ b/ggml/src/ggml-backend-impl.h
 @@ -207,6 +207,9 @@ extern "C" {

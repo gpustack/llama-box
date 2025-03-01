@@ -336,7 +336,7 @@ index 76d4a785..42200cf5 100644
  
      // {
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index ce6f6194..9bd7b326 100644
+index 002c4196..80c0ca54 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -39,7 +39,7 @@ struct clip_image_f32_batch {
