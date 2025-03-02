@@ -24,6 +24,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
         - MiniCPM VL Series
         - Qwen2 VL Series
+        - Qwen2.5 VL Series (experimental, [llama.cpp#11483](https://github.com/ggml-org/llama.cpp/issues/11483))
         - GLM-Edge-V Series (w/ `--chat-template llava`)
         - Granite VL Series
     ```shell
