@@ -23,7 +23,9 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
         - LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
         - MiniCPM VL Series
-        - Qwen2 VL Series (experimental in Qwen2.5 VL, [llama.cpp#11483](https://github.com/ggml-org/llama.cpp/issues/11483))
+        - Qwen2 VL Series (experimental in [Qwen2.5 VL](https://huggingface.co/IAILabs/Qwen2.5-VL-7B-Instruct-GGUF-WIP/tree/3fbd9875f07c15feeb99c33e098143d4bad69ad1), see [llama.cpp#11483](https://github.com/ggml-org/llama.cpp/issues/11483))
+            + Before v0.0.123 (included), only the CUDA backend can offload the project model.
+            + Since v0.0.124, both the CUDA and Metal backends can offload the project model.
         - GLM-Edge-V Series (w/ `--chat-template llava`)
         - Granite VL Series
     ```shell
@@ -123,11 +125,11 @@ LLaMA Box supports the following platforms.
 > - **"AMD ROCm/HIP 6.2"** amd64 releases are built on CentOS 7 (glibc 2.17).
 > - **"Intel oneAPI 2025.0"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"Huawei Ascend CANN 8.0"** amd64/arm64 releases are built on Ubuntu 20.04 (glibc 2.31).
->   - Before v0.0.122 (included), **Huawei Ascend CANN 8.0** is backed by Ascend CANN 8.0.rc2.alpha003.
->   - Since v0.0.123, **"Huawei Ascend CANN 8.0"** no longer releases the OpenEuler-based archive.
+>     + Before v0.0.122 (included), **Huawei Ascend CANN 8.0** is backed by Ascend CANN 8.0.rc2.alpha003.
+>     + Since v0.0.123, **"Huawei Ascend CANN 8.0"** no longer releases the OpenEuler-based archive.
 > - **"Hygon DTK 24.04"** amd64 releases are built on Ubuntu 20.04 (glibc 2.31).
 > - **"Moore Threads MUSA rc3.1"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
->   - Before v0.0.117 (included), **Moore Threads MUSA rc3.1** is backed by Moore Threads MUSA rc3.1.0.
+>     + Before v0.0.117 (included), **Moore Threads MUSA rc3.1** is backed by Moore Threads MUSA rc3.1.0.
 > - _"AVX2"_ amd64 releases are built on CentOS 7 (glibc 2.17).
 > - _"Advanced SIMD (NEON)"_ amd64 releases are built on Ubuntu 18.04 (glibc 2.27).
 > - _"AVX512"_ arm64 releases are built on RockyLinux 8.9 (glibc 2.28).

@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 76d4a785..42200cf5 100644
+index 76d4a785..c7974b00 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -9,25 +9,25 @@
@@ -161,7 +161,7 @@ index 76d4a785..42200cf5 100644
          idx = gguf_find_key(ctx, KEY_HAS_QWEN2VL_MERGER);
          if (idx != -1) {
              new_clip->has_qwen2vl_merger = gguf_get_val_bool(ctx, idx);
-+#ifndef GGML_USE_CUDA
++#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_METAL)
 +            if (!ggml_backend_is_cpu(new_clip->backend)) {
 +                ggml_backend_free(new_clip->backend);
 +                new_clip->backend = ggml_backend_cpu_init();
