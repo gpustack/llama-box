@@ -24,8 +24,8 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
         - MiniCPM VL Series
         - Qwen2 VL Series (experimental in [Qwen2.5 VL](https://huggingface.co/IAILabs/Qwen2.5-VL-7B-Instruct-GGUF-WIP/tree/3fbd9875f07c15feeb99c33e098143d4bad69ad1), see [llama.cpp#11483](https://github.com/ggml-org/llama.cpp/issues/11483))
-            + Before v0.0.123 (included), only the CUDA backend can offload the project model.
-            + Since v0.0.124, both the CUDA and Metal backends can offload the project model.
+            + Before v0.0.123 (included), only the CUDA backend can offload the projector model.
+            + Since v0.0.124, both the CUDA and Metal backends can offload the projector model.
         - GLM-Edge-V Series (w/ `--chat-template llava`)
         - Granite VL Series
     ```shell
