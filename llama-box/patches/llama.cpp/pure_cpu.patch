@@ -13,10 +13,10 @@ index c36c12d6..1b1dc734 100644
  
      // Add backend dynamic loading support to the backend
 diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
-index 955ed505..e44a8157 100644
+index 23ddf41d..d0132afe 100644
 --- a/ggml/src/ggml-backend-reg.cpp
 +++ b/ggml/src/ggml-backend-reg.cpp
-@@ -154,31 +154,42 @@ struct ggml_backend_registry {
+@@ -153,31 +153,42 @@ struct ggml_backend_registry {
  
      ggml_backend_registry() {
  #ifdef GGML_USE_CUDA
