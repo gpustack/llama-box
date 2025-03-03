@@ -1698,6 +1698,16 @@ struct server_context {
 
         /* LLAMA */
 
+        if (task.type == SERVER_TASK_TYPE_EMBEDDING || task.type == SERVER_TASK_TYPE_RERANK) {
+            slot.prompt_tokens = task.prompt_tokens;
+
+            slot.state = SLOT_STATE_STARTED;
+
+            SLT_INF(slot, "%s", "processing task\n");
+
+            return true;
+        }
+
         slot.oaicompat_completion             = json_value(data, "__oaicompat_completion", false);
         slot.oaicompat_completion_chat        = json_value(data, "__oaicompat_completion_chat", false);
         slot.oaicompat_completion_chat_format = json_value(data, "__oaicompat_completion_chat_format", COMMON_CHAT_FORMAT_CONTENT_ONLY);
@@ -3618,16 +3628,18 @@ struct server_context {
 
                         GGML_ASSERT(batch.n_tokens > 0);
 
-                        common_sampler_reset(slot.smpl);
-                        if (llm_ctx_draft != nullptr) {
-                            common_sampler_reset(slot.smpl_draft);
-                        }
-
-                        // Process all prompt tokens through sampler system
-                        for (const llama_token &token : prompt_tokens) {
-                            common_sampler_accept(slot.smpl, token, false);
+                        if (!slot.is_non_causal()) {
+                            common_sampler_reset(slot.smpl);
                             if (llm_ctx_draft != nullptr) {
-                                common_sampler_accept(slot.smpl_draft, token, false);
+                                common_sampler_reset(slot.smpl_draft);
+                            }
+
+                            // Process all prompt tokens through sampler system
+                            for (const llama_token &token : prompt_tokens) {
+                                common_sampler_accept(slot.smpl, token, false);
+                                if (llm_ctx_draft != nullptr) {
+                                    common_sampler_accept(slot.smpl_draft, token, false);
+                                }
                             }
                         }
 
