@@ -262,6 +262,8 @@ jobs:
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
         # see https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.4/reference/system-requirements.html.
+        # support rocWMMA yet,
+        # see https://rocm.docs.amd.com/projects/rocWMMA/en/latest/install/installation.html.
         include:
           - arch: 'amd64'
             version: '6.2'
@@ -299,7 +301,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
@@ -940,6 +942,9 @@ jobs:
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
         # see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html.
+        # not support rocWMMA yet,
+        # see https://rocm.docs.amd.com/projects/rocWMMA/en/latest/install/installation.html,
+        #     https://github.com/ROCm/rocWMMA/issues/391.
         include:
           - arch: 'amd64'
             version: '6.2'
