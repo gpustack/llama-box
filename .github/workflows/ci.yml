@@ -841,6 +841,88 @@ jobs:
         with:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
+  linux-vulkan:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see https://vulkan.lunarg.com/sdk/home.
+        #     1.3 ==> 1.3.296, Ubuntu 22.04.
+        include:
+          - arch: 'amd64'
+            version: '1.3'
+            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.3.296-ubuntu22.04'
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
+    steps:
+      - name: Maximize Docker Build Space
+        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+        with:
+          deep-clean: false
+          root-reserve-mb: 20480
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-linux-vulkan-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}/.cache
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+        run: |
+          echo "===== SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          mkdir -p ${{ github.workspace }}/.cache
+          echo "===== BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_VULKAN=on \
+            -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
+          cat ${{ github.workspace }}/build/llama-box/CMakeFiles/llama-box.dir/link.txt || true
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/*.zip
+          name: llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}
 
   windows:
     strategy:
@@ -886,7 +968,7 @@ jobs:
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
-          } else {
+          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
@@ -904,8 +986,8 @@ jobs:
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} `
@@ -1005,7 +1087,7 @@ jobs:
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
-          } else {
+          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
@@ -1030,8 +1112,8 @@ jobs:
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1137,7 +1219,7 @@ jobs:
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
-          } else {
+          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
@@ -1159,8 +1241,8 @@ jobs:
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1267,8 +1349,8 @@ jobs:
             -DGGML_SYCL=on -DGGML_SYCL_F16=on `
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_CXX_COMPILER=icx `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_NATIVE=off `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1290,6 +1372,114 @@ jobs:
           path: ${{ github.workspace }}\\out\\*.zip
           name: llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
+  windows-vulkan:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see https://vulkan.lunarg.com/sdk/home.
+        #     1.3 ==> 1.3.296.0, Windows Server 2022.
+        include:
+          - arch: 'amd64'
+            version: '1.3'
+            distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe'
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-windows-vulkan-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\.cache
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install sccache ninja curl -y
+          choco install openssl --version 3.4.1 -y
+      - name: Setup Vulkan Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: toolbox-windows-vulkan-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\.toolbox
+      - name: Setup Vulkan
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          if ( -not (Test-Path -PathType Leaf -Path "${{ github.workspace }}\.toolbox\installer.exe" -ErrorAction Ignore | Out-Null) ) {
+            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download LunarG Vulkan SDK"
+            New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
+            curl.exe --retry 5 --retry-delay 5 `
+              --output "${{ github.workspace }}\.toolbox\installer.exe" `
+              --url "${{ matrix.distro_binary_installer }}"
+          }
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install LunarG Vulkan SDK"
+          Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
+            -ArgumentList '--accept-licenses','--default-answer','--confirm-command install'
+
+          $vulkanPath = "$(Resolve-Path -Path 'C:\VulkanSDK\*\bin' | Split-Path)"
+          "VULKAN_SDK=${vulkanPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "${vulkanPath}\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          
+          if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build
+        env:
+          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+          
+          Write-Host "VULKAN_SDK=${env:VULKAN_SDK}"
+          
+          Write-Host "===== BUILD ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          $env:CMAKE_PREFIX_PATH = "${env:VULKAN_SDK}"
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_VULKAN=on `
+            -DGGML_NATIVE=off `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+
+          Write-Host "===== PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\*.zip
+          name: llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}
+
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     permissions:
@@ -1307,10 +1497,12 @@ jobs:
       - linux-cann
       - linux-musa
       - linux-dtk
+      - linux-vulkan
       - windows
       - windows-hip
       - windows-cuda
       - windows-oneapi
+      - windows-vulkan
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4

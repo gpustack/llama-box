@@ -39,6 +39,9 @@
 #ifdef GGML_USE_CANN
 #include "llama.cpp/ggml/include/ggml-cann.h"
 #endif
+#ifdef GGML_USE_VULKAN
+#include "llama.cpp/ggml/include/ggml-vulkan.h"
+#endif
 #ifdef GGML_USE_SYCL
 #include "llama.cpp/ggml/include/ggml-sycl.h"
 #endif
@@ -174,6 +177,12 @@ static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     backend = ggml_backend_cann_init(gpu);
     if (!backend) {
         SRV_ERR("ggml_backend_cann_init(%d) failed\n", gpu);
+    }
+#elif GGML_USE_VULKAN
+    SRV_INF("using VULKAN backend, gpu: %d\n", gpu);
+    backend = ggml_backend_vk_init(gpu);
+    if (!backend) {
+        SRV_ERR("ggml_backend_vk_init(%d) failed\n", gpu);
     }
 #elif GGML_USE_SYCL
     SRV_INF("using SYCL backend, gpu: %d\n", gpu);
