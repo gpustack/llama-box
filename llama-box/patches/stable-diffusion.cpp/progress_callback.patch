@@ -1,0 +1,28 @@
+diff --git a/model.cpp b/model.cpp
+index b880107..e7ca9fa 100644
+--- a/model.cpp
++++ b/model.cpp
+@@ -1886,7 +1886,7 @@ bool ModelLoader::load_tensors(on_new_tensor_cb_t on_new_tensor_cb, ggml_backend
+             return true;
+         };
+         int tensor_count = 0;
+-        int64_t t1       = ggml_time_ms();
++        unsigned percentage = 0;
+         for (auto& tensor_storage : processed_tensor_storages) {
+             if (tensor_storage.file_index != file_index) {
+                 ++tensor_count;
+@@ -1968,9 +1968,11 @@ bool ModelLoader::load_tensors(on_new_tensor_cb_t on_new_tensor_cb, ggml_backend
+                     ggml_backend_tensor_set(dst_tensor, convert_buffer.data(), 0, ggml_nbytes(dst_tensor));
+                 }
+             }
+-            int64_t t2 = ggml_time_ms();
+-            pretty_progress(++tensor_count, processed_tensor_storages.size(), (t2 - t1) / 1000.0f);
+-            t1 = t2;
++            unsigned curr_percentage = ++tensor_count * 100 / processed_tensor_storages.size();
++            if (curr_percentage > percentage) {
++                LOG_INFO("loaded %3u%% model tensors into buffer\n", curr_percentage);
++                percentage = curr_percentage;
++            }
+         }
+ 
+         if (zip != NULL) {
