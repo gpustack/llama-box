@@ -305,6 +305,7 @@ jobs:
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -1024,9 +1025,9 @@ jobs:
         #     https://llvm.org/docs/AMDGPUUsage.html.
         # official gpu support list,
         # see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html.
-        # not support rocWMMA yet,
-        # see https://rocm.docs.amd.com/projects/rocWMMA/en/latest/install/installation.html,
-        #     https://github.com/ROCm/rocWMMA/issues/391.
+        # might support rocWMMA, try to build it,
+        # see https://github.com/ROCm/rocWMMA/issues/391#issuecomment-2072931720,
+        #     https://github.com/ggml-org/llama.cpp/pull/12230.
         include:
           - arch: 'amd64'
             version: '6.2'
@@ -1079,6 +1080,9 @@ jobs:
 
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify AMD ROCm HIP SDK"
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] clone AMD ROCm rocWMMA source"
+          git clone https://github.com/rocm/rocwmma --branch rocm-6.2.4 --depth 1
 
           $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
           "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -1109,9 +1113,10 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
+            -DCMAKE_CXX_FLAGS="-I$($PWD.Path.Replace('\', '/'))/rocwmma/library/include/" `
             -DGGML_NATIVE=off `
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `

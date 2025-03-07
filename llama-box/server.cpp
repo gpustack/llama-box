@@ -9,19 +9,15 @@
 #include <utility>
 
 #include "llama.cpp/common/common.h"
-#include "llama.cpp/common/json-schema-to-grammar.h"
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/common/sampling.h"
-#include "llama.cpp/common/speculative.h"
 #include "llama.cpp/examples/llava/clip.h"
 #include "llama.cpp/examples/llava/llava.h"
-#include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
 
 #include "param.hpp"
 #include "ratelimiter.hpp"
-#include "rpcserver.hpp"
 #include "utils.hpp"
 
 // mime type for sending response
@@ -1810,30 +1806,6 @@ struct server_context {
 
         // process "grammar_trigger" and "preserved_tokens"
         {
-            const auto grammar_triggers = data.find("grammar_triggers");
-            if (grammar_triggers != data.end()) {
-                for (const json &t : *grammar_triggers) {
-                    common_grammar_trigger trigger;
-                    trigger.word     = t.at("word");
-                    trigger.at_start = t.at("at_start");
-
-                    std::vector<llama_token> ids = common_tokenize(llm_vocab, trigger.word, /* add_special= */ false, /* parse_special= */ true);
-                    if (ids.size() == 1) {
-                        SLT_DBG(slot, "grammar trigger token: %d (`%s`)\n", ids[0], trigger.word.c_str());
-                        slot.params.llm_params.grammar_trigger_tokens.push_back(ids[0]);
-                        slot.params.llm_params.preserved_tokens.insert(ids[0]);
-                        slot.tool_call_start_token = ids[0];
-                        continue;
-                    }
-                    SLT_DBG(slot, "grammar trigger word: `%s`\n", trigger.word.c_str());
-                    slot.params.llm_params.grammar_trigger_words.push_back(trigger);
-                    slot.tool_call_start_words.push_back(trigger.word);
-                    slot.tool_call_start_words_longest_length = std::max(slot.tool_call_start_words_longest_length, trigger.word.size());
-                }
-                if (!slot.tool_call_start_words.empty()) {
-                    slot.tool_call_start_words_longest_length = slot.tool_call_start_words_longest_length + int32_t(std::ceil(float(slot.tool_call_start_words_longest_length) / 3.0));
-                }
-            }
             const auto preserved_tokens = data.find("preserved_tokens");
             if (preserved_tokens != data.end()) {
                 for (const json &t : *preserved_tokens) {
@@ -1847,15 +1819,47 @@ struct server_context {
                     }
                 }
             }
-            if (slot.params.llm_params.grammar_lazy) {
-                GGML_ASSERT(!slot.params.llm_params.grammar_trigger_tokens.empty() || !slot.params.llm_params.grammar_trigger_words.empty());
+            const auto grammar_triggers = data.find("grammar_triggers");
+            if (grammar_triggers != data.end()) {
+                for (const auto &t : *grammar_triggers) {
+                    auto ct = common_grammar_trigger::from_json(t);
+                    if (ct.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
+                        const auto &word = ct.value;
+                        auto ids         = common_tokenize(llm_vocab, word, /* add_special= */ false, /* parse_special= */ true);
+                        if (ids.size() == 1) {
+                            auto token = ids[0];
+                            if (std::find(slot.params.llm_params.preserved_tokens.begin(), slot.params.llm_params.preserved_tokens.end(), (llama_token)token) == slot.params.llm_params.preserved_tokens.end()) {
+                                throw std::runtime_error("grammar trigger word should be marked as preserved token: " + word);
+                            }
+                            SLT_DBG(slot, "grammar trigger token: %d (`%s`)\n", token, word.c_str());
+                            common_grammar_trigger trigger;
+                            trigger.type  = COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN;
+                            trigger.value = (llama_token)token;
+                            slot.params.llm_params.grammar_triggers.push_back(trigger);
+                            slot.tool_call_start_token = token;
+                        } else {
+                            SLT_DBG(slot, "grammar trigger word: `%s`\n", word.c_str());
+                            slot.params.llm_params.grammar_triggers.push_back({COMMON_GRAMMAR_TRIGGER_TYPE_WORD, word});
+                            slot.tool_call_start_words.push_back(word);
+                            slot.tool_call_start_words_longest_length = std::max(slot.tool_call_start_words_longest_length, word.size());
+                        }
+                    } else {
+                        slot.params.llm_params.grammar_triggers.push_back(ct);
+                    }
+                }
+                if (!slot.tool_call_start_words.empty()) {
+                    slot.tool_call_start_words_longest_length = slot.tool_call_start_words_longest_length + int32_t(std::ceil(float(slot.tool_call_start_words_longest_length) / 3.0));
+                }
+            }
+            if (slot.params.llm_params.grammar_lazy && slot.params.llm_params.grammar_triggers.empty()) {
+                throw std::runtime_error("error: no triggers set for lazy grammar!");
             }
         }
 
         // process "n_predict"
         if (slot.n_predict > 0 && slot.params.n_predict > slot.n_predict) {
             // Might be better to reject the request with a 400 ?
-            SLT_WRN(slot, "n_predict = %d exceeds server configuration, setting to %d", slot.n_predict, slot.n_predict);
+            SLT_WRN(slot, "n_predict = %d exceeds server configuration, setting to %d\n", slot.n_predict, slot.n_predict);
             slot.params.n_predict = slot.n_predict;
         }
 
@@ -2023,9 +2027,9 @@ struct server_context {
         // remember which tokens were sampled - used for repetition penalties during sampling
         slot.sampled.clear();
         std::string token_str;
-        const std::vector<llama_token> &trigger_tokens = slot.params.llm_params.grammar_trigger_tokens;
         for (const llama_token &tok : result.toks) {
-            token_str += common_token_to_piece(llm_ctx, tok, llm_params.special || std::find(trigger_tokens.begin(), trigger_tokens.end(), tok) != trigger_tokens.end());
+            // accept_special_token
+            token_str += common_token_to_piece(llm_ctx, tok, llm_params.special || slot.params.llm_params.preserved_tokens.find(tok) != slot.params.llm_params.preserved_tokens.end());
             slot.sampled.push_back(tok);
             // check if the token is a reasoning token
             if (support_reasoning) {
@@ -2402,9 +2406,9 @@ struct server_context {
             });
         }
 
-        std::vector<std::string> grammar_trigger_words;
-        for (const auto &trigger : slot.params.llm_params.grammar_trigger_words) {
-            grammar_trigger_words.push_back(trigger.word);
+        auto grammar_triggers = json::array();
+        for (const auto &trigger : slot.params.llm_params.grammar_triggers) {
+            grammar_triggers.push_back(trigger.to_json<json>());
         }
 
         return json{
@@ -2444,8 +2448,8 @@ struct server_context {
             {"n_probs", slot.params.llm_params.n_probs},
             {"min_keep", slot.params.llm_params.min_keep},
             {"grammar", slot.params.llm_params.grammar},
-            {"grammar_trigger_words", grammar_trigger_words},
-            {"grammar_trigger_tokens", slot.params.llm_params.grammar_trigger_tokens},
+            {"grammar_lazy", slot.params.llm_params.grammar_lazy},
+            {"grammar_triggers", grammar_triggers},
             {"preserved_tokens", slot.params.llm_params.preserved_tokens},
             {"chat_format", common_chat_format_name(slot.oaicompat_completion_chat_format)},
             {"samplers", samplers},
@@ -3223,16 +3227,8 @@ struct server_context {
                 SLT_INF(slot, "created image generation stream, %.2fs\n", slot.t_image_processing / 1e3);
             }
 
-            server_slot *slot_batched = nullptr;
-
             for (server_slot &slot : slots) {
                 if (slot.state != SLOT_STATE_GENERATING) {
-                    continue;
-                }
-
-                if (!slot_batched) {
-                    slot_batched = &slot;
-                } else if (!slot_batched->can_batch_with(slot)) {
                     continue;
                 }
 
@@ -3530,7 +3526,7 @@ struct server_context {
                                             llama_kv_cache_seq_add(llm_ctx, slot.id, head_c, -1, kv_shift);
                                             if (llm_ctx_draft != nullptr) {
                                                 llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, head_p, head_c);
-                                                llama_kv_cache_seq_add(llm_ctx_draft, slot.id, head_c, -1, kv_shift);
+                                                llama_kv_cache_seq_add(llm_ctx_draft, slot.id, head_c, head_c + n_match, kv_shift);
                                             }
 
                                             for (size_t i = 0; i < n_match; i++) {

@@ -5,12 +5,13 @@
 #include <string>
 #include <vector>
 
-#include "llama.cpp/common/common.h"
-#define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/chat.h"
-#include "llama.cpp/common/json.hpp"
+#include "llama.cpp/common/common.h"
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/include/llama.h"
+
+#define JSON_ASSERT GGML_ASSERT
+#include "llama.cpp/common/json.hpp"
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
 #define CPPHTTPLIB_TCP_NODELAY true
@@ -68,7 +69,7 @@
         LOG_DBG("que %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 template <typename T>
 static T json_value(const json &body, const std::string &key, const T &default_value) {
@@ -770,8 +771,8 @@ static json oaicompat_completions_request(const struct common_params &params, co
         if (response_type == "json_object") {
             json_schema = json_value(response_format, "schema", json::object());
         } else if (response_type == "json_schema") {
-            json schema = json_value(response_format, "json_schema", json::object());
-            json_schema = json_value(schema, "schema", json::object());
+            json schema_wrapper = json_value(response_format, "json_schema", json::object());
+            json_schema         = json_value(schema_wrapper, "schema", json::object());
         } else if (!response_type.empty() && response_type != "text") {
             throw std::runtime_error("Illegal param: \"response_format\" must be one of 'text' or 'json_object', but got: " + response_type);
         }
@@ -911,7 +912,7 @@ static json oaicompat_completions_request(const struct common_params &params, co
             inputs.tool_choice           = chat_tool_choice;
             inputs.json_schema           = json_schema.is_null() ? "" : json_schema.dump();
             inputs.grammar               = grammar;
-            inputs.add_generation_prompt = true;
+            inputs.add_generation_prompt = json_value(body, "add_generation_prompt", true);
             inputs.use_jinja             = use_jinja;
             inputs.parallel_tool_calls   = support_tool_calls && json_value(body, "parallel_tool_calls", true);
             if (!chat_tools.empty() && chat_tool_choice != COMMON_CHAT_TOOL_CHOICE_NONE && !grammar.empty()) {
@@ -922,12 +923,9 @@ static json oaicompat_completions_request(const struct common_params &params, co
             llama_params["parallel_tool_calls"]                = inputs.parallel_tool_calls;
             llama_params["grammar"]                            = chat_params.grammar;
             llama_params["grammar_lazy"]                       = chat_params.grammar_lazy;
-            json grammar_triggers                              = json::array();
+            auto grammar_triggers                              = json::array();
             for (const common_grammar_trigger &trigger : chat_params.grammar_triggers) {
-                grammar_triggers.push_back({
-                    {"word", trigger.word},
-                    {"at_start", trigger.at_start},
-                });
+                grammar_triggers.push_back(trigger.to_json<json>());
             }
             llama_params["grammar_triggers"] = grammar_triggers;
             llama_params["preserved_tokens"] = chat_params.preserved_tokens;
