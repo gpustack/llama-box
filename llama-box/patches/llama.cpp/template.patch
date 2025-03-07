@@ -1,8 +1,8 @@
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 028a6479..e3e9a100 100644
+index de445869..692648ea 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
-@@ -57,6 +57,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
+@@ -58,6 +58,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
      { "rwkv-world",        LLM_CHAT_TEMPLATE_RWKV_WORLD        },
      { "granite",           LLM_CHAT_TEMPLATE_GRANITE           },
      { "gigachat",          LLM_CHAT_TEMPLATE_GIGACHAT          },
@@ -12,7 +12,7 @@ index 028a6479..e3e9a100 100644
      { "megrez",            LLM_CHAT_TEMPLATE_MEGREZ            },
  };
  
-@@ -165,6 +168,8 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -166,6 +169,8 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
          return LLM_CHAT_TEMPLATE_GRANITE;
      } else if (tmpl_contains("message['role'] + additional_special_tokens[0] + message['content'] + additional_special_tokens[1]")) {
          return LLM_CHAT_TEMPLATE_GIGACHAT;
@@ -21,7 +21,7 @@ index 028a6479..e3e9a100 100644
      } else if (tmpl_contains("<|role_start|>")) {
          return LLM_CHAT_TEMPLATE_MEGREZ;
      }
-@@ -556,7 +561,62 @@ int32_t llm_chat_apply_template(
+@@ -557,7 +562,62 @@ int32_t llm_chat_apply_template(
          if (add_ass) {
              ss << "assistant<|role_sep|>";
          }

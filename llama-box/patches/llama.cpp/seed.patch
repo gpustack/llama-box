@@ -1,5 +1,5 @@
 diff --git a/src/llama-sampling.cpp b/src/llama-sampling.cpp
-index f40bf2db..edc27826 100644
+index c25977ca..90a9c759 100644
 --- a/src/llama-sampling.cpp
 +++ b/src/llama-sampling.cpp
 @@ -17,6 +17,53 @@

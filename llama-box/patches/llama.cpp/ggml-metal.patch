@@ -12,10 +12,10 @@ index a6106944..cfb8b0f3 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 9eb9a0db..b9b85495 100644
+index 1158b285..1471c1fb 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -1385,11 +1385,6 @@ static void ggml_metal_encode_node(
+@@ -1386,11 +1386,6 @@ static void ggml_metal_encode_node(
              } break;
      }
  
@@ -27,7 +27,7 @@ index 9eb9a0db..b9b85495 100644
      const int64_t  ne00 = src0 ? src0->ne[0] : 0;
      const int64_t  ne01 = src0 ? src0->ne[1] : 0;
      const int64_t  ne02 = src0 ? src0->ne[2] : 0;
-@@ -2199,7 +2194,21 @@ static void ggml_metal_encode_node(
+@@ -2213,7 +2208,21 @@ static void ggml_metal_encode_node(
  
                  // find the break-even point where the matrix-matrix kernel becomes more efficient compared
                  // to the matrix-vector kernel
@@ -50,7 +50,7 @@ index 9eb9a0db..b9b85495 100644
  
                  // first try to use small-batch mat-mv kernels
                  // these should be efficient for BS [2, ~8]
-@@ -2208,20 +2217,8 @@ static void ggml_metal_encode_node(
+@@ -2222,20 +2231,8 @@ static void ggml_metal_encode_node(
                       (
                        (
                         src0t == GGML_TYPE_F16  || // TODO: helper function
@@ -72,7 +72,7 @@ index 9eb9a0db..b9b85495 100644
                       )
                      )
                     ) {
-@@ -2233,7 +2230,7 @@ static void ggml_metal_encode_node(
+@@ -2247,7 +2244,7 @@ static void ggml_metal_encode_node(
                      //       my current hypothesis is that the work grid is not evenly divisible for different nsg
                      //       values and there can be some tail effects when nsg is high. need to confirm this
                      //
@@ -81,7 +81,7 @@ index 9eb9a0db..b9b85495 100644
                      const int nxpsg  = ne11 < 3 ? 16 : 8; // num threads along row per simdgroup
                      const int nypsg  = 32/nxpsg;          // num threads along col per simdgroup (i.e. a simdgroup processes that many src0 rows at a time)
                      const int r0ptg  = nypsg*nsg;         // num src0 rows per threadgroup
-@@ -3058,7 +3055,7 @@ static void ggml_metal_encode_node(
+@@ -3075,7 +3072,7 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
@@ -90,7 +90,7 @@ index 9eb9a0db..b9b85495 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -5073,4 +5070,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+@@ -5128,4 +5125,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
      return &g_ggml_backend_metal_reg;
  }
  
