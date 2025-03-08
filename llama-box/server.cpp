@@ -384,7 +384,7 @@ struct server_slot {
         return state != SLOT_STATE_IDLE;
     }
 
-    bool can_batch_with(server_slot &other_slot) {
+    bool can_batch_with(server_slot &other_slot) const {
         return is_non_causal() == other_slot.is_non_causal() &&
                are_lora_equal(lora_adapters, other_slot.lora_adapters);
     }
@@ -2263,14 +2263,6 @@ struct server_context {
         }
 
         if (slot.has_new_line) {
-            // if we have already seen a new line, we stop after a certain time limit
-            if (slot.params.t_max_predict_ms > 0 && (float(ggml_time_us() - slot.t_start_generation) > float(1000.0f * slot.params.t_max_predict_ms))) {
-                slot.stop           = STOP_TYPE_LIMIT;
-                slot.has_next_token = false;
-
-                SLT_DBG(slot, "stopped by time limit, n_decoded = %d, t_max_predict_ms = %d ms\n", slot.n_decoded, (int)slot.params.t_max_predict_ms);
-            }
-
             // require that each new line has a whitespace prefix (i.e. indentation) of at least slot.params.n_indent
             if (slot.params.n_indent > 0) {
                 // check the current indentation
@@ -2308,6 +2300,14 @@ struct server_context {
         // check if there is a new line in the generated text
         if (result.text_to_send.find('\n') != std::string::npos) {
             slot.has_new_line = true;
+
+            // if we have seen a new line, we stop after a certain time limit, but only upon another new line
+            if (slot.params.t_max_predict_ms > 0 && (float(ggml_time_us() - slot.t_start_generation) > float(1000.0f * slot.params.t_max_predict_ms))) {
+                slot.stop           = STOP_TYPE_LIMIT;
+                slot.has_next_token = false;
+
+                SLT_DBG(slot, "stopped by time limit, n_decoded = %d, t_max_predict_ms = %d ms\n", slot.n_decoded, (int)slot.params.t_max_predict_ms);
+            }
         }
 
         // if context shift is disabled, we stop when it reaches the context limit
@@ -3227,8 +3227,16 @@ struct server_context {
                 SLT_INF(slot, "created image generation stream, %.2fs\n", slot.t_image_processing / 1e3);
             }
 
+            server_slot *slot_batched = nullptr;
+
             for (server_slot &slot : slots) {
                 if (slot.state != SLOT_STATE_GENERATING) {
+                    continue;
+                }
+
+                if (!slot_batched) {
+                    slot_batched = &slot;
+                } else if (!slot_batched->can_batch_with(slot)) {
                     continue;
                 }
 
