@@ -1,8 +1,8 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 1b10219c..cb97ec3f 100644
+index 62ca26ad..14e0c0e4 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
-@@ -344,6 +344,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
+@@ -347,6 +347,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
      delete tmpls;
  }
  
@@ -16,7 +16,7 @@ index 1b10219c..cb97ec3f 100644
  bool common_chat_templates_was_explicit(const struct common_chat_templates * tmpls) {
      return tmpls->has_explicit_template;
  }
-@@ -1653,6 +1660,83 @@ static common_chat_params common_chat_templates_apply_jinja(
+@@ -1668,6 +1675,83 @@ static common_chat_params common_chat_templates_apply_jinja(
      return common_chat_params_init_generic(tmpl, params);
  }
  
@@ -100,7 +100,7 @@ index 1b10219c..cb97ec3f 100644
  // Legacy template route (adhoc C++ implementation of known templates), forward to llama_chat_apply_template.
  static common_chat_params common_chat_templates_apply_legacy(
      const struct common_chat_templates * tmpls,
-@@ -1711,6 +1795,17 @@ static common_chat_params common_chat_templates_apply_legacy(
+@@ -1726,6 +1810,17 @@ static common_chat_params common_chat_templates_apply_legacy(
      return params;
  }
  
@@ -119,10 +119,10 @@ index 1b10219c..cb97ec3f 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
 diff --git a/common/chat.h b/common/chat.h
-index e77bef82..4681971e 100644
+index 9aad84e8..733556aa 100644
 --- a/common/chat.h
 +++ b/common/chat.h
-@@ -97,10 +97,15 @@ common_chat_templates_ptr common_chat_templates_init(
+@@ -98,10 +98,15 @@ common_chat_templates_ptr common_chat_templates_init(
                                             const std::string & bos_token_override = "",
                                             const std::string & eos_token_override = "");
  
@@ -700,10 +700,10 @@ index 2f6a0e3e..97b5b4f2 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 607f2786..3fbe9bd7 100644
+index 4a4e9149..cafa854f 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -10002,6 +10002,49 @@ int32_t llama_decode(
+@@ -10149,6 +10149,49 @@ int32_t llama_decode(
  // chat templates
  //
  

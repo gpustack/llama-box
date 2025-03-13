@@ -1,5 +1,5 @@
 diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
-index 97a1e7e5..306d80ad 100644
+index 28f2bbc8..fcba26c4 100644
 --- a/src/llama-arch.cpp
 +++ b/src/llama-arch.cpp
 @@ -16,6 +16,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
@@ -10,7 +10,7 @@ index 97a1e7e5..306d80ad 100644
      { LLM_ARCH_BERT,             "bert"             },
      { LLM_ARCH_NOMIC_BERT,       "nomic-bert"       },
      { LLM_ARCH_JINA_BERT_V2,     "jina-bert-v2"     },
-@@ -403,6 +404,23 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
+@@ -404,6 +405,23 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
              { LLM_TENSOR_ATTN_Q,          "blk.%d.attn_q" },
              { LLM_TENSOR_ATTN_K,          "blk.%d.attn_k" },
              { LLM_TENSOR_ATTN_V,          "blk.%d.attn_v" },
@@ -35,7 +35,7 @@ index 97a1e7e5..306d80ad 100644
              { LLM_TENSOR_LAYER_OUT_NORM,  "blk.%d.layer_output_norm" },
              { LLM_TENSOR_FFN_DOWN,        "blk.%d.ffn_down" },
 diff --git a/src/llama-arch.h b/src/llama-arch.h
-index 122fdceb..7fc5e788 100644
+index 2ec2e236..16b644d8 100644
 --- a/src/llama-arch.h
 +++ b/src/llama-arch.h
 @@ -20,6 +20,7 @@ enum llm_arch {
@@ -47,10 +47,10 @@ index 122fdceb..7fc5e788 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_JINA_BERT_V2,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 1da4eae7..8f5ca815 100644
+index 9f75589d..255379ef 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -618,6 +618,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
+@@ -619,6 +619,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                  // TODO: become GGUF KV parameter
                  hparams.f_max_alibi_bias = 8.0f;
              } break;
@@ -67,7 +67,7 @@ index 1da4eae7..8f5ca815 100644
          case LLM_ARCH_BERT:
              {
                  ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-@@ -1833,14 +1843,15 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1851,14 +1861,15 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                          layer.ffn_up_b = create_tensor(tn(LLM_TENSOR_FFN_UP, "bias", i),     {n_ff}, 0);
                      }
                  } break;
@@ -85,7 +85,7 @@ index 1da4eae7..8f5ca815 100644
  
                          cls   = create_tensor(tn(LLM_TENSOR_CLS, "weight"), {n_embd, n_embd}, TENSOR_NOT_REQUIRED);
                          cls_b = create_tensor(tn(LLM_TENSOR_CLS, "bias"),   {n_embd},         TENSOR_NOT_REQUIRED);
-@@ -1855,8 +1866,8 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1873,8 +1884,8 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                      for (int i = 0; i < n_layer; ++i) {
                          auto & layer = layers[i];
  
@@ -96,7 +96,7 @@ index 1da4eae7..8f5ca815 100644
                              layer.bq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "bias", i),   {n_embd}, 0);
  
                              layer.wk = create_tensor(tn(LLM_TENSOR_ATTN_K,   "weight", i), {n_embd, n_embd_gqa}, 0);
-@@ -1866,6 +1877,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1884,6 +1895,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                              layer.bv = create_tensor(tn(LLM_TENSOR_ATTN_V,   "bias", i),   {n_embd_gqa}, 0);
                          } else {
                              layer.wqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "weight", i), {n_embd, n_embd + 2*n_embd_gqa}, 0);
@@ -104,7 +104,7 @@ index 1da4eae7..8f5ca815 100644
                          }
  
                          layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT,      "weight", i), {n_embd, n_embd}, 0);
-@@ -1873,12 +1885,16 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1891,12 +1903,16 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                          layer.attn_out_norm   = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "weight", i), {n_embd}, 0);
                          layer.attn_out_norm_b = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "bias", i),   {n_embd}, 0);
  
@@ -124,7 +124,7 @@ index 1da4eae7..8f5ca815 100644
                              layer.ffn_down_b = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd}, 0);
                          } else {
                              layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
-@@ -3909,6 +3925,7 @@ enum llama_rope_type llama_model_rope_type(const struct llama_model * model) {
+@@ -3957,6 +3973,7 @@ enum llama_rope_type llama_model_rope_type(const struct llama_model * model) {
          case LLM_ARCH_FALCON:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
@@ -133,7 +133,7 @@ index 1da4eae7..8f5ca815 100644
          case LLM_ARCH_NOMIC_BERT:
          case LLM_ARCH_STABLELM:
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 607f2786..8b510e3d 100644
+index 4a4e9149..d6d7d792 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -2645,7 +2645,7 @@ struct llm_build_context {
@@ -182,7 +182,7 @@ index 607f2786..8b510e3d 100644
                  cur = llm_build_ffn(ctx0, lctx, cur,
                          model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   NULL,
                          NULL,                      NULL,                        NULL,
-@@ -8222,6 +8234,7 @@ static struct ggml_cgraph * llama_build_graph(
+@@ -8365,6 +8377,7 @@ static struct ggml_cgraph * llama_build_graph(
              {
                  result = llm.build_refact();
              } break;

@@ -1,8 +1,8 @@
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 607f2786..55c2d03b 100644
+index 4a4e9149..07fcad53 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -9438,10 +9438,7 @@ static struct llama_model * llama_model_load_from_file_impl(
+@@ -9585,10 +9585,7 @@ static struct llama_model * llama_model_load_from_file_impl(
              unsigned percentage = (unsigned) (100 * progress);
              while (percentage > *cur_percentage_p) {
                  *cur_percentage_p = percentage;
