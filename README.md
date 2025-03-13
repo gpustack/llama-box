@@ -28,6 +28,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
             + Since v0.0.124, both the CUDA and Metal backends can offload the projector model.
         - GLM-Edge-V Series (w/ `--chat-template llava`)
         - Granite VL Series
+        - Gemma3 VL Series
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344

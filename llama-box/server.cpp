@@ -4057,6 +4057,23 @@ struct server_context {
             return true;
         }
 
+        // NB(thxCode): clip_is_gemma3 is a patch.
+        if (clip_is_gemma3(llm_ctx_clip)) {
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|start_of_image|>"), false)) {
+                return false;
+            }
+            llama_set_causal_attn(llm_ctx, false);
+            if (!llava_decode_img_embd(img_embd)) {
+                SLT_ERR(slot, "%s", "failed to decode image");
+                return false;
+            }
+            llama_set_causal_attn(llm_ctx, true);
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|end_of_image|>"), false)) {
+                return false;
+            }
+            return true;
+        }
+
         if (!llava_decode_img_embd(img_embd)) {
             SLT_ERR(slot, "%s", "failed to decode image");
             return false;
