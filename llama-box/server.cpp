@@ -1739,7 +1739,7 @@ struct server_context {
 
         slot.params.stream        = json_value(data, "stream", false);
         slot.params.return_tokens = json_value(data, "return_tokens", false);
-        slot.params.n_predict     = json_value(data, "n_predict", llm_params.n_predict);
+        slot.params.n_predict     = std::min(json_value(data, "n_predict", llm_params.n_predict), slot.n_ctx);
         slot.params.n_indent      = json_value(data, "n_indent", 0);
         slot.params.n_keep        = json_value(data, "n_keep", llm_params.n_keep);
         slot.params.n_discard     = json_value(data, "n_discard", 0);
@@ -2022,7 +2022,7 @@ struct server_context {
 
         slot.state = SLOT_STATE_STARTED;
 
-        SLT_INF(slot, "processing task, max_tps = %s\n", slot.token_bkt ? std::to_string(slot.token_bkt->capacity).c_str() : "N/A");
+        SLT_INF(slot, "processing task, max_tps = %s\n", slot.token_bkt ? std::to_string(slot.token_bkt->capacity).c_str() : "n/a");
 
         return true;
     }
@@ -2528,7 +2528,7 @@ struct server_context {
              {"model", llm_params.model_alias},
              {"tokens_predicted", slot.n_decoded},
              {"tokens_evaluated", slot.n_prompt_tokens},
-             {"tokens_evaluated_cached", slot.n_prompt_tokens - slot.n_prompt_tokens_processed},
+             {"tokens_evaluated_cached", slot.n_past - slot.n_prompt_tokens_processed},
              {"tokens_drafted", slot.n_drafted},
              {"tokens_drafted_accepted", slot.n_drafted_accepted},
              {"tokens_reasoning", slot.n_reasoning},
@@ -3313,7 +3313,8 @@ struct server_context {
                 const int n_left    = slot.n_past - n_keep;
                 const int n_discard = slot.params.n_discard ? slot.params.n_discard : (n_left / 2);
 
-                SLT_WRN(slot, "slot context shift, n_keep = %d, n_left = %d, n_discard = %d\n", n_keep, n_left, n_discard);
+                SLT_WRN(slot, "decoding context shift, n_keep = %d, n_discard = %d, kv cache move [%d, %d) -> [%d, %d)\n",
+                        n_keep, n_discard, n_keep + n_discard, slot.n_past, n_keep, n_keep + n_discard);
 
                 llama_kv_cache_seq_rm(llm_ctx, slot.id, n_keep, n_keep + n_discard);
                 llama_kv_cache_seq_add(llm_ctx, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
@@ -3498,10 +3499,10 @@ struct server_context {
 
                                 prompt_tokens = std::move(new_tokens);
 
+                                SLT_WRN(slot, "input truncated, n_ctx = %d, n_keep = %d, n_prompt_tokens = %d -> %d\n", slot.n_ctx, slot.params.n_keep, slot.n_prompt_tokens, int32_t(prompt_tokens.size()));
+
                                 slot.truncated       = true;
                                 slot.n_prompt_tokens = int32_t(prompt_tokens.size());
-
-                                SLT_WRN(slot, "input truncated, n_ctx = %d, n_keep = %d, n_left = %d, n_prompt_tokens = %d\n", slot.n_ctx, slot.params.n_keep, n_left, slot.n_prompt_tokens);
 
                                 GGML_ASSERT(slot.n_prompt_tokens < slot.n_ctx);
                             }
@@ -3555,7 +3556,7 @@ struct server_context {
                                         }
                                     }
 
-                                    SLT_DBG(slot, "after context reuse, new slot.n_past = %d\n", slot.n_past);
+                                    SLT_DBG(slot, "context reused, n_past = %d\n", slot.n_past);
                                 }
                             }
                         }
@@ -3630,7 +3631,7 @@ struct server_context {
                         slot.n_past++;
                     }
 
-                    SLT_INF(slot, "prompt processing, n_past = %d, n_tokens = %d, n_prompt_tokens = %d, n_preprocessed_tokens = %d\n", slot.n_past, batch.n_tokens, slot.n_prompt_tokens, slot.n_prompt_tokens - slot.n_prompt_tokens_processed);
+                    SLT_INF(slot, "prompt processing, n_past = %d, n_prompt_tokens = %d, n_cached_tokens = %d\n", slot.n_past, slot.n_prompt_tokens, slot.n_past - slot.n_prompt_tokens_processed);
 
                     // entire prompt has been processed
                     if (slot.n_past == slot.n_prompt_tokens) {
@@ -3703,23 +3704,42 @@ struct server_context {
             metrics.on_decoded(slots);
             if (ret != 0) {
                 if (n_batch == 1 || ret < 0) {
-                    SRV_ERR("failed to decode, i = %d, n_tokens = %d, n_batch = %d, ret = %d\n", i, n_tokens, n_batch, ret);
+                    SRV_ERR("failed to decode, "
+                            "the cause is complex and requires further investigation, "
+                            "now, eject all requests mount on slots and clean up, "
+                            "i = %d, n_tokens = %d, n_batch = %d, ret = %d\n",
+                            i, n_tokens, n_batch, ret);
                     for (auto &slot : slots) {
+                        slot.cache_tokens.clear();
                         slot.release();
-                        send_error(slot, "Server error: failed to decode", ERROR_TYPE_SERVER);
+                        send_error(slot, "Server error: failed to decode, try a gain later", ERROR_TYPE_SERVER);
+                    }
+                    llama_kv_cache_clear(llm_ctx);
+                    if (llm_ctx_draft != nullptr) {
+                        llama_kv_cache_clear(llm_ctx_draft);
                     }
                     break; // break loop of n_batch
                 }
 
-                // retry with half the batch size to try to find a free slot in
-                // the KV cache
-                n_batch /= 2;
+                int32_t n_batch_previous = n_batch;
+                int32_t i_previous       = i;
+                // retry with half the batch size to try to find a free slot in the KV cache
+                n_batch >>= 4;
+                if (n_batch == 0) {
+                    n_batch = 1;
+                }
                 i -= n_batch;
 
-                SRV_WRN("failed to find free space in the KV cache, retrying with smaller batch size - try increasing it via total context size or enabling defragmentation, i = %d, n_batch = %d, ret = %d\n", i, n_batch, ret);
+                SRV_WRN("failed to decode, "
+                        "cannot find free space in the KV cache, "
+                        "try increasing it via total context size or turn up KV cache defragmentation, "
+                        "now, retry with smaller n_batch in next, "
+                        "i = %d, n_batch = %d -> %d, ret = %d\n",
+                        i_previous, n_batch_previous, n_batch, ret);
 
                 continue; // continue loop of n_batch
             }
+
             if (llm_ctx_draft != nullptr && batch_draft.n_tokens > 0) {
                 const int32_t n_draft_tokens = std::min(n_batch, batch_draft.n_tokens - i);
 
