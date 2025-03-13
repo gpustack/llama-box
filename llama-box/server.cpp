@@ -1457,6 +1457,16 @@ struct server_context {
         return ret;
     }
 
+    bool can_be_detokenized(const std::vector<llama_token> &tokens) {
+        const int32_t n_vocab = llama_vocab_n_tokens(llm_vocab);
+        for (const auto &token : tokens) {
+            if (token < 0 || token >= n_vocab) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool launch_slot_with_task(server_slot &slot, const server_task &task) {
         // sampling parameter defaults are loaded from the global server context (but individual requests can still override them)
         slot_params defaults;
@@ -1700,6 +1710,11 @@ struct server_context {
         /* LLAMA */
 
         if (task.type == SERVER_TASK_TYPE_EMBEDDING || task.type == SERVER_TASK_TYPE_RERANK) {
+            if (!can_be_detokenized(task.prompt_tokens)) {
+                send_error(task, "Illegal param: \"prompt\" contains invalid tokens", ERROR_TYPE_INVALID_REQUEST);
+                return false;
+            }
+
             slot.prompt_tokens = task.prompt_tokens;
 
             slot.state = SLOT_STATE_STARTED;
@@ -1875,6 +1890,10 @@ struct server_context {
                 slot.prompt_string           = data.at("prompt").get<std::string>();
                 slot.prompt_multi_modal_data = data.at("multi_modal_data");
             } else {
+                if (!can_be_detokenized(task.prompt_tokens)) {
+                    send_error(task, "Illegal param: \"prompt\" contains invalid tokens", ERROR_TYPE_INVALID_REQUEST);
+                    return false;
+                }
                 slot.prompt_tokens = task.prompt_tokens;
             }
         }
