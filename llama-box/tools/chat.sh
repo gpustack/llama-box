@@ -156,8 +156,8 @@ chat_completion() {
                 fi
                 CONTENT+="${CONTENT_SEG}"
             fi
-            USAGE="$(echo "${LINE}" | jq -cr '.usage')"
-            if [[ "${USAGE}" != "null" ]]; then
+            if echo "${LINE}" | jq -e '.usage != null' >/dev/null; then
+                USAGE="$(echo "${LINE}" | jq -cr '.usage')"
                 printf "\n------------------------"
                 printf "\n- TTFT : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_to_first_token_ms')"
                 printf "\n- TBT  : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_per_output_token_ms')"

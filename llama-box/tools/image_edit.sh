@@ -61,37 +61,40 @@ parse() {
     fi
     RESULT_JSON="/tmp/image_edit_${TIME}.json"
     printf "%s" "${LINE}" >"${RESULT_JSON}"
-    printf "%i: %3.2f%%...\r" "$(jq -cr ".data[0] | .index" "${RESULT_JSON}")" "$(jq -cr ".data[0] | .progress" "${RESULT_JSON}")"
-    if [[ "$(jq -cr ".data[0] | .b64_json" "${RESULT_JSON}")" == "null" ]]; then
-        return 0
+    if jq -e ".data | length > 0" "${RESULT_JSON}" >/dev/null; then
+        printf "%i: %3.2f%%...\r" "$(jq -cr ".data[0] | .index" "${RESULT_JSON}")" "$(jq -cr ".data[0] | .progress" "${RESULT_JSON}")"
+        if [[ "$(jq -cr ".data[0] | .b64_json" "${RESULT_JSON}")" == "null" ]]; then
+            return 0
+        fi
+        RESULT_PNG_IDX="$(jq -cr ".data[0] | .index" "${RESULT_JSON}")"
+        RESULT_PNG_PROGRESSED_STEPS="$(jq -cr ".data[0] | .progressed_steps" "${RESULT_JSON}")"
+        RESULT_PNG_B64="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}_${RESULT_PNG_PROGRESSED_STEPS}.png.b64"
+        if [[ ! -f "${RESULT_PNG_B64}" ]]; then
+            touch "${RESULT_PNG_B64}"
+            jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >"${RESULT_PNG_B64}"
+        else
+            jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >>"${RESULT_PNG_B64}"
+        fi
+        set +e
+        RESULT_PNG="/tmp/image_edit_${TIME}_${RESULT_PNG_IDX}.png"
+        if command -v gbase64 >/dev/null; then
+            gbase64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
+        else
+            base64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
+        fi
+        if [[ "$(uname -s)" =~ Darwin ]]; then
+            osascript "${ROOT_DIR}/image_view.scpt" "image_edit_${TIME}_${RESULT_PNG_IDX}.png" "file://${RESULT_PNG}" >/dev/null 2>&1
+        fi
+        if [[ "$(jq -cr ".data[0] | .finish_reason" "${RESULT_JSON}")" != "stop" ]]; then
+            return 0
+        fi
+        printf "\n"
+        echo "Generated image: ${RESULT_PNG}"
+        set -e
     fi
-    RESULT_PNG_IDX="$(jq -cr ".data[0] | .index" "${RESULT_JSON}")"
-    RESULT_PNG_PROGRESSED_STEPS="$(jq -cr ".data[0] | .progressed_steps" "${RESULT_JSON}")"
-    RESULT_PNG_B64="/tmp/image_generate_${TIME}_${RESULT_PNG_IDX}_${RESULT_PNG_PROGRESSED_STEPS}.png.b64"
-    if [[ ! -f "${RESULT_PNG_B64}" ]]; then
-        touch "${RESULT_PNG_B64}"
-        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >"${RESULT_PNG_B64}"
-    else
-        jq -cr ".data[0] | .b64_json" "${RESULT_JSON}" >>"${RESULT_PNG_B64}"
-    fi
-    set +e
-    RESULT_PNG="/tmp/image_edit_${TIME}_${RESULT_PNG_IDX}.png"
-    if command -v gbase64 >/dev/null; then
-        gbase64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
-    else
-        base64 -d "${RESULT_PNG_B64}" >"${RESULT_PNG}"
-    fi
-    if [[ "$(uname -s)" =~ Darwin ]]; then
-        osascript "${ROOT_DIR}/image_view.scpt" "image_edit_${TIME}_${RESULT_PNG_IDX}.png" "file://${RESULT_PNG}" >/dev/null 2>&1
-    fi
-    if [[ "$(jq -cr ".data[0] | .finish_reason" "${RESULT_JSON}")" != "stop" ]]; then
-        return 0
-    fi
-    printf "\n"
-    echo "Generated image: ${RESULT_PNG}"
-    set -e
-    USAGE="$(jq -cr '.usage' "${RESULT_JSON}")"
-    if [[ "${USAGE}" != "null" ]]; then
+
+    if jq -e ".usage != null" "${RESULT_JSON}" >/dev/null; then
+        USAGE="$(jq -cr '.usage' "${RESULT_JSON}")"
         printf "\n------------------------"
         printf "\n- TTP  : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_to_process_ms')"
         printf "\n- TPG  : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_per_generation_ms')"
@@ -100,6 +103,7 @@ parse() {
         printf "\n- TC   : %10.2fs   -" "${ELAPSED}"
         printf "\n------------------------\n"
     fi
+
     return 0
 }
 
