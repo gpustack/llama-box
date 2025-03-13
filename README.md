@@ -998,7 +998,14 @@ $ IMAGE=/path/to/image.png ./llama-box/tools/image_generate.sh
 And we also provide a tool for batch testing with the LLaMA Box.
 
 ```shell
+$ # warm up once then test within (16 12 8 6 5 4 3 2 1) parallel requests used preset prompts
 $ ./llama-box/tools/batch.sh
+
+$ # testing with 10 parallel requests used preset prompts
+$ ./llama-box/tools/batch.sh 10
+
+$ # testing with 10 parallel requests used a random prompt owned 1000 characters
+$ ./llama-box/tools/batch.sh 10 RANDOM_1000
 ```
 
 ## License
