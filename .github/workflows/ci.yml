@@ -671,6 +671,7 @@ jobs:
           - arch: 'amd64'
             version: 'rc3.1'
             distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.1-ubuntu22.04'
+            musa_arch: '21;22;31'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Docker Build Space
@@ -693,6 +694,7 @@ jobs:
       - name: Build
         env:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          MUSA_ARCHITECTURES: "${{ matrix.musa_arch }}"
         run: |
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
@@ -702,7 +704,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on \
+            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_MUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -730,6 +732,7 @@ jobs:
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
             --env CCACHE_DIR \
+            --env MUSA_ARCHITECTURES \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -847,8 +850,12 @@ jobs:
       fail-fast: false
       matrix:
         # see https://vulkan.lunarg.com/sdk/home.
+        #     1.4 ==> 1.4.304, Ubuntu 22.04.
         #     1.3 ==> 1.3.296, Ubuntu 22.04.
         include:
+          - arch: 'amd64'
+            version: '1.4'
+            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.4.304-ubuntu22.04'
           - arch: 'amd64'
             version: '1.3'
             distro_container_image: 'gpustack/devel-lunarg-vulkan:1.3.296-ubuntu22.04'
@@ -1382,8 +1389,12 @@ jobs:
       fail-fast: false
       matrix:
         # see https://vulkan.lunarg.com/sdk/home.
+        #     1.4 ==> 1.4.304.1, Windows Server 2022.
         #     1.3 ==> 1.3.296.0, Windows Server 2022.
         include:
+          - arch: 'amd64'
+            version: '1.4'
+            distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.4.304.1/windows/VulkanSDK-1.4.304.1-Installer.exe'
           - arch: 'amd64'
             version: '1.3'
             distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe'

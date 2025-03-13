@@ -1047,8 +1047,13 @@ struct server_context {
                 SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
                 llm_params.n_ctx = 2048;
             }
-            // NB(thxCode): clip_model_load is a patch.
-            llm_ctx_clip = clip_model_load(llm_params.mmproj.c_str(), /* verbosity */ common_log_verbosity_thold, llm_params.n_gpu_layers, params_.max_image_size);
+            // NB(thxCode): clip_context_params is a patch.
+            clip_context_params llm_params_clip{
+                /* max_image_size */ params_.max_image_size,
+                /* use_gpu */ llm_params.n_gpu_layers != 0,
+                /* verbosity */ common_log_verbosity_thold,
+            };
+            llm_ctx_clip = clip_init(llm_params.mmproj.c_str(), llm_params_clip);
             if (llm_ctx_clip == nullptr) {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.c_str());
                 return false;
@@ -1834,8 +1839,9 @@ struct server_context {
                             SLT_DBG(slot, "grammar trigger token: %d (`%s`)\n", token, word.c_str());
                             common_grammar_trigger trigger;
                             trigger.type  = COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN;
-                            trigger.value = (llama_token)token;
-                            slot.params.llm_params.grammar_triggers.push_back(trigger);
+                            trigger.value = word;
+                            trigger.token = token;
+                            slot.params.llm_params.grammar_triggers.push_back(std::move(trigger));
                             slot.tool_call_start_token = token;
                         } else {
                             SLT_DBG(slot, "grammar trigger word: `%s`\n", word.c_str());
@@ -4016,13 +4022,20 @@ struct server_context {
                 return false;
             }
             if (n_img_embd > 1) {
-                size_t n_img_embd_col = clip_uhd_num_image_embeds_col(llm_ctx_clip);
-                if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<slice>"), false)) {
+                const size_t n_img_embd_col = clip_uhd_num_image_embeds_col(llm_ctx_clip);
+                const int32_t version       = clip_is_minicpmv(llm_ctx_clip);
+                if (version < 3 && !preprocess_multi_modal_data_text(slot, n_batch, std::string("<slice>"), false)) {
                     return false;
+                }
+                std::string ifmt = "<slice>";
+                std::string ofmt = "</slice>";
+                if (version < 3) {
+                    ifmt = "<image>";
+                    ofmt = "</image>";
                 }
                 for (size_t i = 0; i < (n_img_embd - 1) / n_img_embd_col; ++i) {
                     for (size_t j = 0; j < n_img_embd_col; ++j) {
-                        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<image>"), false)) {
+                        if (!preprocess_multi_modal_data_text(slot, n_batch, ifmt, false)) {
                             return false;
                         }
                         img_embd_sliced = slice_minicpmv_image_embed(img_embd);
@@ -4032,12 +4045,12 @@ struct server_context {
                             SLT_ERR(slot, "%s", "failed to decode sliced image");
                             return false;
                         }
-                        if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</image>"), false)) {
+                        if (!preprocess_multi_modal_data_text(slot, n_batch, ofmt, false)) {
                             return false;
                         }
                     }
                 }
-                if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("</slice>"), false)) {
+                if (version < 3 && !preprocess_multi_modal_data_text(slot, n_batch, std::string("</slice>"), false)) {
                     return false;
                 }
             }
