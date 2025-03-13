@@ -21,28 +21,28 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 - Compatible with [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat).
     + Support [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision).
-        - LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
-        - MiniCPM VL Series
-        - Qwen2 VL Series (experimental in [Qwen2.5 VL](https://huggingface.co/IAILabs/Qwen2.5-VL-7B-Instruct-GGUF-WIP/tree/3fbd9875f07c15feeb99c33e098143d4bad69ad1), see [llama.cpp#11483](https://github.com/ggml-org/llama.cpp/issues/11483))
+        - [x] LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
+        - [x] MiniCPM VL Series
+        - [x] Qwen2 VL Series (experimental in [Qwen2.5 VL](https://huggingface.co/IAILabs/Qwen2.5-VL-7B-Instruct-GGUF-WIP/tree/3fbd9875f07c15feeb99c33e098143d4bad69ad1), see [llama.cpp#11483](https://github.com/ggml-org/llama.cpp/issues/11483))
             + Before v0.0.123 (included), only the CUDA backend can offload the projector model.
             + Since v0.0.124, both the CUDA and Metal backends can offload the projector model.
-        - GLM-Edge-V Series (w/ `--chat-template llava`)
-        - Granite VL Series
-        - Gemma3 VL Series
+        - [x] GLM-Edge-V Series (w/ `--chat-template llava`)
+        - [x] Granite VL Series
+        - [ ] Gemma3 VL Series
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
       $ # The box will resize the image automatically when the image size exceeds 1344x1344.
     ```
     + Support [OpenAI Function calling API](https://platform.openai.com/docs/guides/function-calling).
-        - LLaMA3 Series
-        - Granite Series
-        - Mistral Series
-        - Hermes2 / Qwen2 Series
-        - ChatGLM4 Series
-        - CommandR Series (w/ `--jinja`)
-        - FunctionaryV3 Series (w/ `--jinja`)
-        - DeepSeekR1 Series (w/ `--jinja`, experimental)
+        - [x] LLaMA3 Series
+        - [x] Granite Series
+        - [x] Mistral Series
+        - [x] Hermes2 / Qwen2 Series
+        - [x] ChatGLM4 Series
+        - [x] CommandR Series (w/ `--jinja`)
+        - [x] FunctionaryV3 Series (w/ `--jinja`)
+        - [x] DeepSeekR1 Series (w/ `--jinja`, experimental)
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
   see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
