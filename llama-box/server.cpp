@@ -1182,7 +1182,7 @@ struct server_context {
             }
             params.n_tps = ceil(1e3 / (double(ggml_time_us() - t_start_decoding) / 1e3) * n_check_decoded);
             common_sampler_free(check_smpl);
-            llama_kv_cache_clear(llm_ctx);
+            llama_kv_self_clear(llm_ctx);
             llama_synchronize(llm_ctx);
             llama_perf_context_reset(llm_ctx);
             SRV_INF("sampled tokens per second, tps = %d\n", params.n_tps);
@@ -3061,8 +3061,8 @@ struct server_context {
                     {"t_tokens_generation", metrics.t_tokens_generation},
                     {"n_decode_total", metrics.n_decode_total},
                     {"n_busy_slots_total", metrics.n_busy_slots_total},
-                    {"kv_cache_tokens_count", llm_ctx ? llama_get_kv_cache_token_count(llm_ctx) : 0},
-                    {"kv_cache_used_cells", llm_ctx ? llama_get_kv_cache_used_cells(llm_ctx) : 0},
+                    {"kv_cache_tokens_count", llm_ctx ? llama_kv_self_n_tokens(llm_ctx) : 0},
+                    {"kv_cache_used_cells", llm_ctx ? llama_kv_self_used_cells(llm_ctx) : 0},
                     {"slots", slots_data},
                 };
 
@@ -3161,9 +3161,9 @@ struct server_context {
 
                 // Erase token cache
                 const size_t n_erased = slot->cache_tokens.size();
-                llama_kv_cache_seq_rm(llm_ctx, slot->id, -1, -1);
+                llama_kv_self_seq_rm(llm_ctx, slot->id, -1, -1);
                 if (llm_ctx_draft != nullptr) {
-                    llama_kv_cache_seq_rm(llm_ctx_draft, slot->id, -1, -1);
+                    llama_kv_self_seq_rm(llm_ctx_draft, slot->id, -1, -1);
                 }
                 slot->cache_tokens.clear();
 
@@ -3206,10 +3206,10 @@ struct server_context {
                 SRV_DBG("%s", "all slots are idle\n");
                 if (!cache_prompt) {
                     if (llm_ctx != nullptr) {
-                        llama_kv_cache_clear(llm_ctx);
+                        llama_kv_self_clear(llm_ctx);
                     }
                     if (llm_ctx_draft != nullptr) {
-                        llama_kv_cache_clear(llm_ctx_draft);
+                        llama_kv_self_clear(llm_ctx_draft);
                     }
                 }
                 return;
@@ -3335,11 +3335,11 @@ struct server_context {
                 SLT_WRN(slot, "decoding context shift, n_keep = %d, n_discard = %d, kv cache move [%d, %d) -> [%d, %d)\n",
                         n_keep, n_discard, n_keep + n_discard, slot.n_past, n_keep, n_keep + n_discard);
 
-                llama_kv_cache_seq_rm(llm_ctx, slot.id, n_keep, n_keep + n_discard);
-                llama_kv_cache_seq_add(llm_ctx, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
+                llama_kv_self_seq_rm(llm_ctx, slot.id, n_keep, n_keep + n_discard);
+                llama_kv_self_seq_add(llm_ctx, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
                 if (llm_ctx_draft != nullptr) {
-                    llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, n_keep, n_keep + n_discard);
-                    llama_kv_cache_seq_add(llm_ctx_draft, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
+                    llama_kv_self_seq_rm(llm_ctx_draft, slot.id, n_keep, n_keep + n_discard);
+                    llama_kv_self_seq_add(llm_ctx_draft, slot.id, n_keep + n_discard, slot.n_past, -n_discard);
                 }
 
                 if (cache_prompt && !slot.oaicompat_completion_chat_vision) {
@@ -3556,11 +3556,11 @@ struct server_context {
 
                                             const int64_t kv_shift = (int64_t)head_p - (int64_t)head_c;
 
-                                            llama_kv_cache_seq_rm(llm_ctx, slot.id, head_p, head_c);
-                                            llama_kv_cache_seq_add(llm_ctx, slot.id, head_c, -1, kv_shift);
+                                            llama_kv_self_seq_rm(llm_ctx, slot.id, head_p, head_c);
+                                            llama_kv_self_seq_add(llm_ctx, slot.id, head_c, -1, kv_shift);
                                             if (llm_ctx_draft != nullptr) {
-                                                llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, head_p, head_c);
-                                                llama_kv_cache_seq_add(llm_ctx_draft, slot.id, head_c, head_c + n_match, kv_shift);
+                                                llama_kv_self_seq_rm(llm_ctx_draft, slot.id, head_p, head_c);
+                                                llama_kv_self_seq_add(llm_ctx_draft, slot.id, head_c, head_c + n_match, kv_shift);
                                             }
 
                                             for (size_t i = 0; i < n_match; i++) {
@@ -3603,17 +3603,17 @@ struct server_context {
 
                     // keep only the common part
                     int32_t slot_npast = slot.n_past;
-                    if (!llama_kv_cache_seq_rm(llm_ctx, slot.id, slot_npast, -1)) {
+                    if (!llama_kv_self_seq_rm(llm_ctx, slot.id, slot_npast, -1)) {
                         // could not partially delete (likely using a on-Transformer model)
-                        llama_kv_cache_seq_rm(llm_ctx, slot.id, -1, -1);
+                        llama_kv_self_seq_rm(llm_ctx, slot.id, -1, -1);
                         // there is no common part left
                         slot.n_past     = 0;
                         slot.n_past_mmd = 0;
                         slot.st_pos_id  = 0;
                     }
                     if (llm_ctx_draft != nullptr) {
-                        if (!llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, slot_npast, -1)) {
-                            llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, -1, -1);
+                        if (!llama_kv_self_seq_rm(llm_ctx_draft, slot.id, slot_npast, -1)) {
+                            llama_kv_self_seq_rm(llm_ctx_draft, slot.id, -1, -1);
                         }
                     }
                     SLT_DBG(slot, "kv cache rm [%d, end)\n", slot_npast);
@@ -3733,9 +3733,9 @@ struct server_context {
                         slot.release();
                         send_error(slot, "Server error: failed to decode, try a gain later", ERROR_TYPE_SERVER);
                     }
-                    llama_kv_cache_clear(llm_ctx);
+                    llama_kv_self_clear(llm_ctx);
                     if (llm_ctx_draft != nullptr) {
-                        llama_kv_cache_clear(llm_ctx_draft);
+                        llama_kv_self_clear(llm_ctx_draft);
                     }
                     break; // break loop of n_batch
                 }
@@ -3841,7 +3841,7 @@ struct server_context {
 
                 if (llm_ctx_draft != nullptr) {
                     llama_pos pos = slot.n_past + slot.n_drafted_accepted;
-                    llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, pos, -1);
+                    llama_kv_self_seq_rm(llm_ctx_draft, slot.id, pos, -1);
 
                     slot.sampled_draft.clear();
 
@@ -3882,7 +3882,7 @@ struct server_context {
                     }
                 } else if (params.lookup_ngram_min > 0) {
                     llama_pos pos = slot.n_past + slot.n_drafted_accepted;
-                    llama_kv_cache_seq_rm(llm_ctx, slot.id, pos, -1);
+                    llama_kv_self_seq_rm(llm_ctx, slot.id, pos, -1);
 
                     slot.sampled_draft.clear();
 
@@ -4122,9 +4122,9 @@ struct server_context {
 
     bool preprocess_multi_modal_data(server_slot &slot, int32_t n_batch) const {
         // remove previous memory
-        llama_kv_cache_seq_rm(llm_ctx, slot.id, -1, -1);
+        llama_kv_self_seq_rm(llm_ctx, slot.id, -1, -1);
         if (llm_ctx_draft != nullptr) {
-            llama_kv_cache_seq_rm(llm_ctx_draft, slot.id, -1, -1);
+            llama_kv_self_seq_rm(llm_ctx_draft, slot.id, -1, -1);
         }
 
         const std::string image_sign = "<image>";
@@ -4308,8 +4308,8 @@ struct server_context {
     }
 
     bool support_completion_only() const {
-        // NB(thxCode): llama_supports_embedding_only is a patch.
-        return llm_ctx != nullptr && !llama_supports_embedding_only(llm_ctx);
+        // NB(thxCode): llama_causal_attn is a patch.
+        return llm_ctx != nullptr && llama_causal_attn(llm_ctx);
     }
 
     bool support_embedding() const {
@@ -4317,8 +4317,8 @@ struct server_context {
     }
 
     bool support_embedding_only() const {
-        // NB(thxCode): llama_supports_embedding_only is a patch.
-        return llm_ctx != nullptr && llama_supports_embedding_only(llm_ctx);
+        // NB(thxCode): llama_causal_attn is a patch.
+        return llm_ctx != nullptr && !llama_causal_attn(llm_ctx);
     }
 
     bool support_image() const {
