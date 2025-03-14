@@ -1,39 +1,28 @@
 diff --git a/include/llama.h b/include/llama.h
-index d62792c0..2cfef8da 100644
+index e5286f06..eeb5aa6d 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -455,6 +455,7 @@ extern "C" {
-     LLAMA_API bool llama_supports_mlock      (void);
+@@ -457,6 +457,7 @@ extern "C" {
      LLAMA_API bool llama_supports_gpu_offload(void);
      LLAMA_API bool llama_supports_rpc        (void);
-+    LLAMA_API bool llama_supports_embedding_only (const struct llama_context * ctx);
  
++    LLAMA_API bool llama_causal_attn    (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_ctx      (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_batch    (const struct llama_context * ctx);
-diff --git a/src/llama.cpp b/src/llama.cpp
-index 4a4e9149..e00fa2ed 100644
---- a/src/llama.cpp
-+++ b/src/llama.cpp
-@@ -9542,6 +9542,10 @@ bool llama_supports_rpc(void) {
-     return ggml_backend_reg_by_name("RPC") != nullptr;
- }
+     LLAMA_API uint32_t llama_n_ubatch   (const struct llama_context * ctx);
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 89fb33cb..6dc9a5ce 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -94,6 +94,20 @@ llama_context::llama_context(
  
-+bool llama_supports_embedding_only(const struct llama_context * ctx) {
-+    return !ctx->cparams.causal_attn;
-+}
-+
- void llama_backend_init(void) {
-     ggml_time_init();
- 
-@@ -9800,6 +9804,20 @@ struct llama_context * llama_init_from_model(
-         cparams.causal_attn = params.attention_type == LLAMA_ATTENTION_TYPE_CAUSAL;
-     }
+     cparams.n_ubatch = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
  
 +    if (!cparams.causal_attn) {
 +        bool is_rope_customized = rope_scaling_type != hparams.rope_scaling_type_train ||
-+            cparams.rope_freq_base != hparams.rope_freq_base_train ||
-+            cparams.rope_freq_scale != hparams.rope_freq_scale_train ||
-+           (rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_YARN && params.yarn_orig_ctx != 0 && cparams.n_ctx_orig_yarn != hparams.n_ctx_orig_yarn);
++                                  cparams.rope_freq_base != hparams.rope_freq_base_train ||
++                                  cparams.rope_freq_scale != hparams.rope_freq_scale_train ||
++                                  (rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_YARN && params.yarn_orig_ctx != 0 && cparams.n_ctx_orig_yarn != hparams.n_ctx_orig_yarn);
 +        if (!is_rope_customized) {
 +            LLAMA_LOG_WARN("%s: adjust n_ctx of the none causal attention model to the minimum value between given n_ctx(%d) and n_ctx_train(%d), you might change RoPE to extend this limitation\n", __func__, cparams.n_ctx, hparams.n_ctx_train);
 +            cparams.n_ctx        = std::min(cparams.n_ctx, hparams.n_ctx_train);
@@ -46,3 +35,37 @@ index 4a4e9149..e00fa2ed 100644
      const uint32_t n_ctx_per_seq = cparams.n_ctx / cparams.n_seq_max;
  
      LLAMA_LOG_INFO("%s: n_seq_max     = %u\n",   __func__, cparams.n_seq_max);
+@@ -401,6 +415,10 @@ const llama_model & llama_context::get_model() const {
+     return model;
+ }
+ 
++bool llama_context::causal_attn() const {
++    return cparams.causal_attn;
++}
++
+ uint32_t llama_context::n_ctx() const {
+     return cparams.n_ctx;
+ }
+@@ -2309,6 +2327,10 @@ void llama_free(llama_context * ctx) {
+     delete ctx;
+ }
+ 
++bool llama_causal_attn(const struct llama_context * ctx) {
++    return ctx->causal_attn();
++}
++
+ uint32_t llama_n_ctx(const llama_context * ctx) {
+     return ctx->n_ctx();
+ }
+diff --git a/src/llama-context.h b/src/llama-context.h
+index 88df8950..8af38dff 100644
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -29,6 +29,7 @@ struct llama_context {
+ 
+     const llama_model & get_model() const;
+ 
++    bool     causal_attn()   const;
+     uint32_t n_ctx()         const;
+     uint32_t n_ctx_per_seq() const;
+     uint32_t n_batch()       const;

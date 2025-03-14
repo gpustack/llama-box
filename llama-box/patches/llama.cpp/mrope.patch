@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 6448b7b0..1c3240b9 100644
+index 8487e383..9dd0af92 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -948,6 +948,11 @@ struct common_init_result common_init_from_params(common_params & params) {

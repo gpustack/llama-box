@@ -1,8 +1,8 @@
-diff --git a/src/llama.cpp b/src/llama.cpp
-index 4a4e9149..ae3b7972 100644
---- a/src/llama.cpp
-+++ b/src/llama.cpp
-@@ -9721,8 +9721,8 @@ struct llama_context * llama_init_from_model(
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 89fb33cb..bb31a5c1 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -2284,8 +2284,8 @@ llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {
@@ -12,4 +12,4 @@ index 4a4e9149..ae3b7972 100644
 +        params.type_v = GGML_TYPE_F16;
      }
  
-     llama_context * ctx = new llama_context(*model);
+     try {
