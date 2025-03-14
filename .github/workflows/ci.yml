@@ -171,11 +171,10 @@ jobs:
             distro_container_image: 'gpustack/devel-cpu:ubuntu18.04'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -271,11 +270,10 @@ jobs:
             hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -385,11 +383,10 @@ jobs:
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -470,11 +467,10 @@ jobs:
             distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -587,11 +583,10 @@ jobs:
             distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -674,11 +669,10 @@ jobs:
             musa_arch: '21;22;31'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -765,11 +759,10 @@ jobs:
             hip_arch: 'gfx906;gfx926;gfx928'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -861,11 +854,10 @@ jobs:
             distro_container_image: 'gpustack/devel-lunarg-vulkan:1.3.296-ubuntu22.04'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
-      - name: Maximize Docker Build Space
-        uses: gpustack/.github/.github/actions/maximize-docker-build-space@main
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
         with:
           deep-clean: false
-          root-reserve-mb: 8192
       - name: Checkout
         uses: actions/checkout@v4
         with:
