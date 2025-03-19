@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 8487e383..9dd0af92 100644
+index 18ffb4e7..f4ca8d4c 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -948,6 +948,11 @@ struct common_init_result common_init_from_params(common_params & params) {
@@ -15,10 +15,10 @@ index 8487e383..9dd0af92 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.c_str());
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index f2ab4c5d..e7370492 100644
+index 75dc96b4..dd5b1c9f 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -10663,10 +10663,6 @@ static void ggml_compute_forward_rope_f32(
+@@ -10726,10 +10726,6 @@ static void ggml_compute_forward_rope_f32(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -29,7 +29,7 @@ index f2ab4c5d..e7370492 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne0/2);
      }
-@@ -10849,10 +10845,6 @@ static void ggml_compute_forward_rope_f16(
+@@ -10912,10 +10908,6 @@ static void ggml_compute_forward_rope_f16(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -56,7 +56,7 @@ index 18f691b2..f5a4da3a 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/ggml/src/ggml-metal/ggml-metal-impl.h b/ggml/src/ggml-metal/ggml-metal-impl.h
-index a58c474e..49ccc128 100644
+index 1e954b4c..73446eb9 100644
 --- a/ggml/src/ggml-metal/ggml-metal-impl.h
 +++ b/ggml/src/ggml-metal/ggml-metal-impl.h
 @@ -117,6 +117,11 @@ typedef struct {
@@ -82,10 +82,10 @@ index a58c474e..49ccc128 100644
  
  typedef struct {
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index e51a4169..7f39f5e7 100644
+index af65e7d9..b14b2335 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -1257,16 +1257,7 @@ static bool ggml_metal_supports_op(const struct ggml_backend_metal_device_contex
+@@ -1264,16 +1264,7 @@ static bool ggml_metal_supports_op(const struct ggml_backend_metal_device_contex
          case GGML_OP_NORM:
              return has_simdgroup_reduction && (op->ne[0] % 4 == 0 && ggml_is_contiguous_1(op->src[0]));
          case GGML_OP_ROPE:
@@ -103,7 +103,7 @@ index e51a4169..7f39f5e7 100644
          case GGML_OP_IM2COL:
              return op->src[0]->type == GGML_TYPE_F16;
          case GGML_OP_POOL_1D:
-@@ -3216,6 +3207,7 @@ static void ggml_metal_encode_node(
+@@ -3338,6 +3329,7 @@ static void ggml_metal_encode_node(
                  float attn_factor;
                  float beta_fast;
                  float beta_slow;
@@ -111,7 +111,7 @@ index e51a4169..7f39f5e7 100644
  
                  memcpy(&freq_base,   (const int32_t *) dst->op_params +  5, sizeof(float));
                  memcpy(&freq_scale,  (const int32_t *) dst->op_params +  6, sizeof(float));
-@@ -3223,8 +3215,11 @@ static void ggml_metal_encode_node(
+@@ -3345,8 +3337,11 @@ static void ggml_metal_encode_node(
                  memcpy(&attn_factor, (const int32_t *) dst->op_params +  8, sizeof(float));
                  memcpy(&beta_fast,   (const int32_t *) dst->op_params +  9, sizeof(float));
                  memcpy(&beta_slow,   (const int32_t *) dst->op_params + 10, sizeof(float));
@@ -123,7 +123,7 @@ index e51a4169..7f39f5e7 100644
  
                  id<MTLComputePipelineState> pipeline = nil;
  
-@@ -3268,6 +3263,9 @@ static void ggml_metal_encode_node(
+@@ -3390,6 +3385,9 @@ static void ggml_metal_encode_node(
                      /*.attn_factor =*/ attn_factor,
                      /*.beta_fast   =*/ beta_fast,
                      /*.beta_slow   =*/ beta_slow,
@@ -133,7 +133,7 @@ index e51a4169..7f39f5e7 100644
                  };
  
                  [encoder setComputePipelineState:pipeline];
-@@ -3287,7 +3285,6 @@ static void ggml_metal_encode_node(
+@@ -3409,7 +3407,6 @@ static void ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
@@ -142,10 +142,10 @@ index e51a4169..7f39f5e7 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-metal/ggml-metal.metal b/ggml/src/ggml-metal/ggml-metal.metal
-index ad9d42a3..6b191d4d 100644
+index 3cef81b7..64da1a2e 100644
 --- a/ggml/src/ggml-metal/ggml-metal.metal
 +++ b/ggml/src/ggml-metal/ggml-metal.metal
-@@ -2403,37 +2403,98 @@ kernel void kernel_rope_norm(
+@@ -2624,37 +2624,98 @@ kernel void kernel_rope_norm(
  
      device const int32_t * pos = (device const int32_t *) src1;
  

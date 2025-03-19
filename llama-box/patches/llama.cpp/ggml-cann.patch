@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index b8d272cd..43df8169 100644
+index 68cd9920..7326cf5f 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,8 @@

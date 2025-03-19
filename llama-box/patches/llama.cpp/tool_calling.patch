@@ -139,7 +139,7 @@ index 9aad84e8..733556aa 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index e5286f06..0988869c 100644
+index 6a44be40..3daf28e2 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -382,6 +382,11 @@ extern "C" {
@@ -154,7 +154,7 @@ index e5286f06..0988869c 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -1100,6 +1105,35 @@ extern "C" {
+@@ -1104,6 +1109,35 @@ extern "C" {
      // Chat templates
      //
  
