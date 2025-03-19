@@ -4183,7 +4183,7 @@ struct httpserver {
             n_prefilling                  = int32_t(tokenized_prompt.size());
             if (n_prefilling >= n_ctx && params.llm_params.ctx_shift) {
                 SRV_WRN("rid %s | prompt tokens size exceeds the context size, force context shift\n", req->get_rid());
-                tokenized_prompt.erase(tokenized_prompt.begin() + n_prefilling + 1 - n_ctx, tokenized_prompt.end());
+                tokenized_prompt.erase(tokenized_prompt.begin(), tokenized_prompt.end() - n_ctx + 1);
                 n_prefilling = int32_t(tokenized_prompt.size());
             }
             tokenized_prompts.emplace_back(std::move(tokenized_prompt));
@@ -4280,7 +4280,7 @@ struct httpserver {
             n_prefilling                  = int32_t(tokenized_prompt.size());
             if (n_prefilling >= n_ctx && params.llm_params.ctx_shift) {
                 SRV_WRN("rid %s | prompt tokens size exceeds the context size, force context shift\n", req->get_rid());
-                tokenized_prompt.erase(tokenized_prompt.begin() + n_prefilling + 1 - n_ctx, tokenized_prompt.end());
+                tokenized_prompt.erase(tokenized_prompt.begin(), tokenized_prompt.end() - n_ctx + 1);
                 n_prefilling = int32_t(tokenized_prompt.size());
             }
             tokenized_prompts.emplace_back(std::move(tokenized_prompt));
