@@ -29,10 +29,9 @@ SIZE="${SIZE:-"512x512"}"
 QUALITY="${QUALITY:-"standard"}"
 STYLE="${STYLE:-"null"}"
 PREVIEW="${PREVIEW:-"true"}"
-PREVIEW_FASTER="${PREVIEW_FASTER:-"true"}"
-SAMPLE_METHOD="${SAMPLE_METHOD:-"null"}"
-SAMPLING_STEPS="${SAMPLING_STEPS:-"10"}"
-SCHEDULE_METHOD="${SCHEDULE_METHOD:-"default"}"
+SAMPLE_METHOD="${SAMPLE_METHOD:-${SAMPLER:-"null"}}"
+SAMPLING_STEPS="${SAMPLING_STEPS:-${SAMPLE_STEPS:-"10"}}"
+SCHEDULE_METHOD="${SCHEDULE_METHOD:-${SCHEDULER:-${SCHEDULE:-"default"}}}"
 SEED="${SEED:-"$(date +%s)"}"
 GUIDANCE="${GUIDANCE:-"3.5"}"
 CFG_SCALE="${CFG_SCALE:-"4.5"}"
@@ -123,7 +122,6 @@ image_generate() {
             --argjson cfg_scale "${CFG_SCALE}" \
             --argjson negative_prompt "\"${NEGATIVE_PROMPT}\"" \
             --argjson preview "${PREVIEW}" \
-            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -137,8 +135,7 @@ image_generate() {
                   negative_prompt: $negative_prompt,
                   stream: true,
                   stream_options: {
-                    preview: $preview,
-                    preview_faster: $preview_faster
+                    preview: $preview
                   }
                 } * .')"
     elif [[ "${STYLE}" != "null" ]]; then
@@ -149,7 +146,6 @@ image_generate() {
             --argjson quality "\"${QUALITY}\"" \
             --argjson style "\"${STYLE}\"" \
             --argjson preview "${PREVIEW}" \
-            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -158,8 +154,7 @@ image_generate() {
                   style: $style,
                   stream: true,
                   stream_options: {
-                    preview: $preview,
-                    preview_faster: $preview_faster
+                    preview: $preview
                   }
                 } * .')"
     else
@@ -169,7 +164,6 @@ image_generate() {
             --argjson size "\"${SIZE}\"" \
             --argjson quality "\"${QUALITY}\"" \
             --argjson preview "${PREVIEW}" \
-            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -177,8 +171,7 @@ image_generate() {
                   quality: $quality,
                   stream: true,
                   stream_options: {
-                    preview: $preview,
-                    preview_faster: $preview_faster
+                    preview: $preview
                   }
                 } * .')"
     fi
@@ -215,7 +208,6 @@ echo "SIZE              : ${SIZE}"
 echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "STYLE             : ${STYLE} // ONE OF [natural, vivid]"
 echo "PREVIEW           : ${PREVIEW}"
-echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
 echo "SAMPLE_METHOD     : ${SAMPLE_METHOD} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm, ddim_trailing, tcd]"
 echo "SAMPLING_STEPS    : ${SAMPLING_STEPS} // AVAILABLE FOR SAMPLE_METHOD"
 echo "SCHEDULE_METHOD   : ${SCHEDULE_METHOD} // AVAILABLE FOR SAMPLE_METHOD, ONE OF [default, discrete, karras, exponential, ays, gits]"

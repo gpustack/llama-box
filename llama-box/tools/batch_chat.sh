@@ -19,6 +19,7 @@ min_p=${MIN_P:-0.05}
 top_k=${TOP_K:-40}
 max_tokens=${MAX_TOKENS:-1024}
 seed=${SEED:-$(date +%s)}
+stream=${STREAM:-false}
 
 function request() {
     rm -rf /tmp/request_*.json
@@ -72,18 +73,45 @@ function request() {
             --argjson top_k "${top_k}" \
             --argjson max_tokens "${max_tokens}" \
             --argjson seed "${seed}" \
+            --argjson stream "${stream}" \
             '{
                temperature: $temperature,
                top_p: $top_p,
                min_p: $min_p,
                top_k: $top_k,
                max_tokens: $max_tokens,
-               seed: $seed
+               seed: $seed,
+               stream: $stream,
              } * .')"
         echo "${data}" >"/tmp/request_$i.json"
-        curl -ks "${api_url}"/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            --data "@/tmp/request_$i.json" >"/tmp/response_$i.json" &
+        # normal
+        if [[ "${stream}" != "true" ]]; then
+            curl -ks --request POST \
+                --url "${api_url}"/v1/chat/completions \
+                --header "Content-Type: application/json" \
+                --data "@/tmp/request_$i.json" >"/tmp/response_$i.json" &
+            continue
+        fi
+        # stream
+        # read chunk data from response,
+        # pass all data until seeing the ".usage" field
+        curl -ks --no-buffer --request POST \
+            --url "${api_url}/v1/chat/completions" \
+            --header "Content-Type: application/json" \
+            --data "@/tmp/request_$i.json" | while IFS= read -r LINE; do
+            if [[ ! "${LINE}" = data:* ]]; then
+                if [[ "${LINE}" =~ error:.* ]]; then
+                    LINE="${LINE:7}"
+                    echo "${LINE}" >"/tmp/response_$i.json"
+                fi
+                continue
+            fi
+            if [[ "${LINE}" =~ data:\ \[DONE\].* ]]; then
+                break
+            fi
+            LINE="${LINE:5}"
+            echo "${LINE}" >"/tmp/response_$i.json"
+        done &
     done
     wait
 
@@ -132,13 +160,13 @@ function request() {
     printf " %2d (%2d) |%8d ms |%7d (%7d, %7d) |%9.2f tps |%9.2f tps |%9.2f tps \n" "$cc" "$oks" $tt $tts $pts $dts "$tps" "$avg_pps" "$avg_dps"
 }
 
-echo "API_URL=${api_url} TEMP=${temp} TOP_P=${top_p} MIN_P=${min_p} TOP_K=${top_k} MAX_TOKENS=${max_tokens} SEED=${seed}"
+echo "STREAM=${stream} API_URL=${api_url} TEMP=${temp} TOP_P=${top_p} MIN_P=${min_p} TOP_K=${top_k} MAX_TOKENS=${max_tokens} SEED=${seed}"
 echo " cc (ok) |    cost    | tokens (prefill, decoded) |  throughput  | avg. prefill | avg. decoded  "
 echo "---------|------------|---------------------------|--------------|--------------|-------------- "
 if [[ -n "${1:-}" ]]; then
     request "${1}" "${2:-}"
 else
-    batches=(1 16 12 8 6 5 4 3 2 1)
+    batches=(1 16 12 8 4 1)
     for ((j = 0; j < ${#batches[@]}; j++)); do
         if [[ $j == 0 ]]; then
             request "${batches[$j]}" "${2:-}" >/dev/null 2>&1

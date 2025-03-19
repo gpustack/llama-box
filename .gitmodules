@@ -5,3 +5,7 @@
 	path = stable-diffusion.cpp
 	url = https://github.com/thxcode/stable-diffusion.cpp
 	branch = dev-dcf91f9e-4
+[submodule "libhv"]
+	path = libhv
+	url = https://github.com/ithewei/libhv
+	branch = master

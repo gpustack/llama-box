@@ -30,10 +30,9 @@ QUALITY="${QUALITY:-"standard"}"
 IMAGE="${IMAGE:-""}"
 MASK="${MASK:-""}"
 PREVIEW="${PREVIEW:-"true"}"
-PREVIEW_FASTER="${PREVIEW_FASTER:-"true"}"
-SAMPLE_METHOD="${SAMPLE_METHOD:-"null"}"
-SAMPLING_STEPS="${SAMPLING_STEPS:-"10"}"
-SCHEDULE_METHOD="${SCHEDULE_METHOD:-"default"}"
+SAMPLE_METHOD="${SAMPLE_METHOD:-${SAMPLER:-"null"}}"
+SAMPLING_STEPS="${SAMPLING_STEPS:-${SAMPLE_STEPS:-"10"}}"
+SCHEDULE_METHOD="${SCHEDULE_METHOD:-${SCHEDULER:-${SCHEDULE:-"default"}}}"
 SEED="${SEED:-"$(date +%s)"}"
 GUIDANCE="${GUIDANCE:-"3.5"}"
 STRENGTH="${STRENGTH:-"0.75"}"
@@ -140,7 +139,6 @@ image_edit() {
             --argjson image "\"${IMAGE}\"" \
             --argjson mask "\"${MASK}\"" \
             --argjson preview "${PREVIEW}" \
-            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -157,7 +155,6 @@ image_edit() {
                   mask: $mask,
                   stream: true,
                   stream_options_preview: $preview,
-                  stream_options_preview_faster: $preview_faster,
                   stream_options_chunk_result: true,
                   stream_options_chunk_size: 1048576
                 } * .')"
@@ -170,7 +167,6 @@ image_edit() {
             --argjson image "\"${IMAGE}\"" \
             --argjson mask "\"${MASK}\"" \
             --argjson preview "${PREVIEW}" \
-            --argjson preview_faster "${PREVIEW_FASTER}" \
             '{
                   n: $n,
                   response_format: $response_format,
@@ -180,7 +176,6 @@ image_edit() {
                   mask: $mask,
                   stream: true,
                   stream_options_preview: $preview,
-                  stream_options_preview_faster: $preview_faster,
                   stream_options_chunk_result: true,
                   stream_options_chunk_size: 1048576
                 } * .')"
@@ -218,7 +213,6 @@ image_edit() {
                 --form "mask=@${MASK}" \
                 --form "stream=true" \
                 --form "stream_options_preview=${PREVIEW}" \
-                --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
                 --form "stream_options_chunk_result=true" \
                 --form "stream_options_chunk_size=1048576")
         else
@@ -246,7 +240,6 @@ image_edit() {
                 --form "image=@${IMAGE}" \
                 --form "stream=true" \
                 --form "stream_options_preview=${PREVIEW}" \
-                --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
                 --form "stream_options_chunk_result=true" \
                 --form "stream_options_chunk_size=1048576")
         fi
@@ -269,7 +262,6 @@ image_edit() {
             --form "mask=@${MASK}" \
             --form "stream=true" \
             --form "stream_options_preview=${PREVIEW}" \
-            --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
             --form "stream_options_chunk_result=true" \
             --form "stream_options_chunk_size=1048576")
     else
@@ -290,7 +282,6 @@ image_edit() {
             --form "image=@${IMAGE}" \
             --form "stream=true" \
             --form "stream_options_preview=${PREVIEW}" \
-            --form "stream_options_preview_faster=${PREVIEW_FASTER}" \
             --form "stream_options_chunk_result=true" \
             --form "stream_options_chunk_size=1048576")
     fi
@@ -310,7 +301,6 @@ echo "QUALITY           : ${QUALITY} // ONE OF [standard, hd]"
 echo "IMAGE             : ${IMAGE}"
 echo "MASK              : ${MASK}"
 echo "PREVIEW           : ${PREVIEW}"
-echo "PREVIEW_FASTER    : ${PREVIEW_FASTER}"
 echo "SAMPLE_METHOD     : ${SAMPLE_METHOD} // OVERRIDE \"QUALITY\" and \"STYLE\" IF NOT NULL, ONE OF [euler_a, euler, heun, dpm2, dpm++2s_a, dpm++2mv2, ipndm, ipndm_v, lcm, ddim_trailing, tcd]"
 echo "SAMPLING_STEPS    : ${SAMPLING_STEPS} // AVAILABLE FOR SAMPLE_METHOD"
 echo "SCHEDULE_METHOD   : ${SCHEDULE_METHOD} // AVAILABLE FOR SAMPLE_METHOD, ONE OF [default, discrete, karras, exponential, ays, gits]"

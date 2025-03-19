@@ -343,6 +343,7 @@ general:
 
 server:
 
+         --v2                     Switch to use v2 engine (experimental)
          --host HOST              IP address to listen (default: 127.0.0.1)
          --port PORT              Port to listen (default: 8080)
   -to    --timeout N              Server read/write timeout in seconds (default: 600)
@@ -998,14 +999,14 @@ $ IMAGE=/path/to/image.png ./llama-box/tools/image_generate.sh
 And we also provide a tool for batch testing with the LLaMA Box.
 
 ```shell
-$ # warm up once then test within (16 12 8 6 5 4 3 2 1) parallel requests used preset prompts
-$ ./llama-box/tools/batch.sh
+$ # warm up once then test within (16 12 8 4 1) parallel requests used preset prompts
+$ ./llama-box/tools/batch_chat.sh
 
 $ # testing with 10 parallel requests used preset prompts
-$ ./llama-box/tools/batch.sh 10
+$ ./llama-box/tools/batch_chat.sh 10
 
 $ # testing with 10 parallel requests used a random prompt owned 1000 characters
-$ ./llama-box/tools/batch.sh 10 RANDOM_1000
+$ ./llama-box/tools/batch_chat.sh 10 RANDOM_1000
 ```
 
 ## License

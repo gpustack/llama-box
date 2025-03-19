@@ -20,6 +20,8 @@
 #include "ratelimiter.hpp"
 #include "utils.hpp"
 
+#include "llama-box-v2/engine.h"
+
 // mime type for sending response
 #define MIMETYPE_TEXT "text/plian; charset=utf-8"
 #define MIMETYPE_JSON "application/json; charset=utf-8"
@@ -3456,11 +3458,12 @@ struct server_context {
                             continue;
                         }
 
-                        slot.n_past          = 0;
-                        slot.n_past_mmd      = 0;
-                        slot.st_pos_id       = 0;
-                        slot.n_prompt_tokens = int32_t(prompt_tokens.size());
-                        slot.state           = SLOT_STATE_PROCESSING_PROMPT;
+                        slot.n_past                 = 0;
+                        slot.n_past_mmd             = 0;
+                        slot.st_pos_id              = 0;
+                        slot.n_prompt_tokens        = int32_t(prompt_tokens.size());
+                        slot.state                  = SLOT_STATE_PROCESSING_PROMPT;
+                        slot.t_start_process_prompt = ggml_time_us();
 
                         if (slot.oaicompat_completion_chat_vision && !preprocess_multi_modal_data(slot, n_batch)) {
                             SLT_ERR(slot, "%s", "failed to preprocess multi-modal images\n");
@@ -3589,7 +3592,6 @@ struct server_context {
                         }
 
                         slot.n_prompt_tokens_processed = 0;
-                        slot.t_start_process_prompt    = ggml_time_us();
                         slot.t_start_generation        = 0;
                     }
 
@@ -4385,6 +4387,18 @@ inline void signal_handler(int signal) {
 }
 
 int main(int argc, char **argv) {
+    for (int i = 1; i < argc;) {
+        const char *flag = argv[i++];
+
+        if (*flag != '-') {
+            continue;
+        }
+
+        if (!strcmp(flag, "--v2")) {
+            return engine_start(argc, argv);
+        }
+    }
+
 #if __linux__ && defined(GGML_USE_HIP)
     // NB(thxCode): this is a workaround for the issue that the ROCm runtime occupies the CPU 100% utilization,
     // see https://github.com/gpustack/gpustack/issues/844.
@@ -4412,7 +4426,7 @@ int main(int argc, char **argv) {
         },
         nullptr);
 
-    llama_box_params params;
+    llama_box_params params{};
     if (!llama_box_params_parse(argc, argv, params)) {
         llama_box_params_print_usage(argc, argv, params);
         return 1;
