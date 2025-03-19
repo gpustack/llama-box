@@ -7,8 +7,11 @@ int engine_start(int argc, char **argv) {
     setenv("GPU_MAX_HW_QUEUES", "1", 1);
 #endif
 
+#if defined(_WIN32)
+    _putenv_s("LLAMA_BOX_V2", "1");
+#else
     setenv("LLAMA_BOX_V2", "1", 1);
-
+#endif
     // init log
     common_log_set_prefix(common_log_main(), true);
     common_log_set_timestamps(common_log_main(), true);

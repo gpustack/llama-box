@@ -11,6 +11,7 @@
 #include <utility>
 #include <variant>
 
+#include "hv/HttpClient.h"
 #include "hv/HttpServer.h"
 #include "hv/hasync.h"
 #include "hv/hlog.h"
@@ -22,7 +23,6 @@
 #include "llama.cpp/common/sampling.h"
 #include "llama.cpp/examples/llava/clip.h"
 #include "llama.cpp/examples/llava/llava.h"
-#include "llama.cpp/examples/server/httplib.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "stable-diffusion.cpp/model.h"
 #include "stable-diffusion.cpp/stable-diffusion.h"
@@ -964,7 +964,7 @@ static inline std::unique_ptr<clip_image_u8> get_clip_image(std::vector<uint8_t>
 
     std::unique_ptr<clip_image_u8> img = std::make_unique<clip_image_u8>();
 
-    int m = std::max(w, h);
+    int m = MAX(w, h);
     if (max_image_size < 0 || m <= max_image_size) {
         img->nx  = w;
         img->ny  = h;
@@ -973,8 +973,8 @@ static inline std::unique_ptr<clip_image_u8> get_clip_image(std::vector<uint8_t>
     }
 
     float nr = float(max_image_size) / float(m);
-    int nw   = std::max(int(std::ceil(float(w) * nr)), 1);
-    int nh   = std::max(int(std::ceil(float(h) * nr)), 1);
+    int nw   = MAX(int(std::ceil(float(w) * nr)), 1);
+    int nh   = MAX(int(std::ceil(float(h) * nr)), 1);
 
     auto *ndt    = (uint8_t *)malloc(nw * nh * 3);
     bool resized = stbir_resize(
@@ -1095,23 +1095,26 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const Htt
                                         path = img.substr(pos);
                                     }
                                 }
-                                // TODO: FIXME, use libuv.
-                                httplib::Client cli(host);
-                                cli.set_connection_timeout(15, 0);                      // 15 seconds
-                                cli.set_read_timeout(300, 0);                           // 5 minutes
-                                cli.set_keep_alive(false);                              // close connection after request
-                                cli.set_follow_location(true);                          // follow redirects
-                                cli.set_default_headers({{"User-Agent", "llama-box"}}); // set user-agent
-                                cli.set_url_encode(true);                               // encode URL
-                                cli.set_tcp_nodelay(true);                              // disable Nagle's algorithm
+                                auto req                   = std::make_unique<HttpRequest>();
+                                req->url                   = img;
+                                req->connect_timeout       = 15;
+                                req->timeout               = 300;
+                                req->headers["User-Agent"] = "llama-box";
+                                req->method                = HTTP_GET;
+                                auto cli                   = http_client_new();
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-                                cli.enable_server_certificate_verification(false); // disable SSL verification
+                                hssl_ctx_opt_t ssl_param;
+                                ssl_param.verify_peer = 0;
+                                http_client_new_ssl_ctx(cli, &ssl_param);
 #endif
-                                httplib::Result res = cli.Get(path);
-                                if (!res || res->status != httplib::StatusCode::OK_200) {
-                                    throw std::invalid_argument("Illegal param: invalid \"image_url\", failed to fetch image from URL: " + img + ", status: " + std::to_string(res ? res->status : -1) + ", reason: " + (res ? res->reason : "unknown"));
+                                auto resp = std::make_unique<HttpResponse>();
+                                if (int ret = http_client_send(cli, req.get(), resp.get()); ret != 0) {
+                                    throw std::invalid_argument("Illegal param: invalid \"image_url\", failed to fetch image from URL: " + img + ", result: " + std::string(http_client_strerror(ret)));
                                 }
-                                std::vector<uint8_t> img_buff(res->body.begin(), res->body.end());
+                                if (http_status sc = resp->status_code; sc != HTTP_STATUS_OK) {
+                                    throw std::invalid_argument("Illegal param: invalid \"image_url\", failed to fetch image from URL: " + img + ", status: " + std::string(http_status_str(sc)));
+                                }
+                                std::vector<uint8_t> img_buff(resp->body.begin(), resp->body.end());
                                 std::unique_ptr<clip_image_u8> clip_img = get_clip_image(std::move(img_buff), hparams.max_image_size);
                                 ptr->images.push_back(std::move(clip_img));
                             }
@@ -1406,7 +1409,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const Htt
                     }
                     ptr->sampling.grammar_triggers.push_back({COMMON_GRAMMAR_TRIGGER_TYPE_WORD, word, LLAMA_TOKEN_NULL});
                     ptr->tool_call_start_words.push_back(word);
-                    ptr->tool_call_start_words_longest_length = std::max(ptr->tool_call_start_words_longest_length, word.length());
+                    ptr->tool_call_start_words_longest_length = MAX(ptr->tool_call_start_words_longest_length, word.length());
                     continue;
                 }
                 ptr->sampling.grammar_triggers.push_back(t);
@@ -1540,7 +1543,7 @@ static inline std::unique_ptr<rerank_req> get_rerank_req(const HttpContextPtr &c
         }
     }
 
-    ptr->top_n = int32_t(std::min(json_value(req, "top_n", ptr->documents.size()), ptr->documents.size()));
+    ptr->top_n = int32_t(MIN(json_value(req, "top_n", ptr->documents.size()), ptr->documents.size()));
     if (ptr->top_n <= 0) {
         throw std::invalid_argument("Illegal param: \"top_n\" must be greater than 0");
     }
@@ -2418,8 +2421,8 @@ struct embeddings_task : btask {
         }
         sort_rerank_results(results, 0, n_seq - 1 - (dreq->normalize ? 2 : 0));
         if (dreq->normalize) {
-            float scr_max = std::max(embeds[n_seq - 2][0], results[0].at("score").get<float>());
-            float scr_min = std::min(embeds[n_seq - 1][0], results[n_seq - 3].at("score").get<float>());
+            float scr_max = MAX(embeds[n_seq - 2][0], results[0].at("score").get<float>());
+            float scr_min = MIN(embeds[n_seq - 1][0], results[n_seq - 3].at("score").get<float>());
             float scr_dst = scr_max - scr_min;
             float a = 0.001, b = 0.998;
             if (scr_dst < 1e-6 || dreq->query.get<std::string>() == dreq->documents[json_value(results[0], "index", 0)].get<std::string>()) {
@@ -2855,7 +2858,7 @@ struct httpserver {
                 }
                 if (!tool_call_start_words.empty()) {
                     for (const std::string &word : tool_call_start_words) {
-                        tool_call_start_words_longest_length = std::max(tool_call_start_words_longest_length, word.length());
+                        tool_call_start_words_longest_length = MAX(tool_call_start_words_longest_length, word.length());
                     }
                     tool_call_start_words_longest_length = tool_call_start_words_longest_length + int32_t(std::ceil(float(tool_call_start_words_longest_length) / 3.0));
                 }
@@ -2925,7 +2928,7 @@ struct httpserver {
         // sample tokens per second
         if (params.n_tps < 0) {
             SRV_INF("%s", "sampling tokens per second, this will take some time...\n");
-            const int32_t n_check            = std::min(int32_t(llama_n_ctx(llm_ctx)), params.llm_params.n_ubatch);
+            const int32_t n_check            = MIN(int32_t(llama_n_ctx(llm_ctx)), params.llm_params.n_ubatch);
             llama_tokens check_prompt_tokens = {llama_vocab_bos(llm_vocab)};
             common_sampler *check_smpl       = common_sampler_init(llm_model, params.llm_params.sampling);
             int64_t t_start_decoding         = ggml_time_us();
@@ -3154,7 +3157,7 @@ struct httpserver {
                         }
                         // set probability for top n_probs tokens
                         task->generated_top_probs.emplace_back();
-                        for (size_t i = 0; i < std::min(n_vocab, n_probs); i++) {
+                        for (size_t i = 0; i < MIN(n_vocab, n_probs); i++) {
                             task->generated_top_probs[task->generated_top_probs.size() - 1].emplace_back(cur[i].id, cur[i].p);
                         }
                     }
@@ -3531,8 +3534,8 @@ struct httpserver {
                                 }
                             }
                             task->n_prefilled += n_pos;
-                            task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : std::min(task->n_min_prefilled, n_pos);
-                            task->n_max_prefilled = std::max(task->n_max_prefilled, n_pos);
+                            task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : MIN(task->n_min_prefilled, n_pos);
+                            task->n_max_prefilled = MAX(task->n_max_prefilled, n_pos);
 
                             seq_batches.emplace_back(seq_id, batch.n_tokens - 1);
                         }
@@ -4067,8 +4070,8 @@ struct httpserver {
                 {"max_batch_count", params.sd_params.max_batch_count},
                 {"max_height", params.sd_params.sampling.height},
                 {"max_width", params.sd_params.sampling.width},
-                {"default_height", std::min(img_size.first, params.sd_params.sampling.height)},
-                {"default_width", std::min(img_size.second, params.sd_params.sampling.width)},
+                {"default_height", MIN(img_size.first, params.sd_params.sampling.height)},
+                {"default_width", MIN(img_size.second, params.sd_params.sampling.width)},
                 {"guidance", params.sd_params.sampling.guidance},
                 {"strength", params.sd_params.sampling.strength},
                 {"sample_method", sd_sample_method_to_argument(params.sd_params.sampling.sample_method)},

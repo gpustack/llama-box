@@ -1068,7 +1068,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                                  = argv[i++];
                 params_.hs_params.llm_params.sampling.temp = std::stof(std::string(arg));
-                params_.hs_params.llm_params.sampling.temp = std::max(params_.hs_params.llm_params.sampling.temp, 0.0f);
+                params_.hs_params.llm_params.sampling.temp = MAX(params_.hs_params.llm_params.sampling.temp, 0.0f);
                 continue;
             }
 
@@ -1144,7 +1144,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (params_.hs_params.llm_params.sampling.penalty_last_n < -1) {
                     invalid("--repeat-last-n");
                 }
-                params_.hs_params.llm_params.sampling.n_prev = std::max(params_.hs_params.llm_params.sampling.n_prev, params_.hs_params.llm_params.sampling.penalty_last_n);
+                params_.hs_params.llm_params.sampling.n_prev = MAX(params_.hs_params.llm_params.sampling.n_prev, params_.hs_params.llm_params.sampling.penalty_last_n);
                 continue;
             }
 

@@ -8,7 +8,7 @@
 
 set(BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(WITH_HTTP_CLIENT OFF CACHE BOOL "" FORCE)
+set(WITH_HTTP_CLIENT ON CACHE BOOL "" FORCE)
 set(ENABLE_UDS OFF CACHE BOOL "" FORCE)
 
 #
@@ -68,6 +68,7 @@ if (LLAMA_OPENSSL)
     find_package(OpenSSL)
     if (OpenSSL_FOUND)
         message(STATUS "OpenSSL found: ${OPENSSL_LIBRARIES}")
+        set(WITH_OPENSSL ON)
         target_link_libraries(${TARGET} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
         target_compile_definitions(${TARGET} PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
     else ()
