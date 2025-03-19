@@ -927,8 +927,12 @@ static json oaicompat_completions_request(const struct common_params &params, co
             for (const common_grammar_trigger &trigger : chat_params.grammar_triggers) {
                 grammar_triggers.push_back(trigger.to_json<json>());
             }
-            llama_params["grammar_triggers"] = grammar_triggers;
-            llama_params["preserved_tokens"] = chat_params.preserved_tokens;
+            if (!grammar_triggers.empty()) {
+                llama_params["grammar_triggers"] = grammar_triggers;
+            }
+            if (!chat_params.preserved_tokens.empty()) {
+                llama_params["preserved_tokens"] = chat_params.preserved_tokens;
+            }
             for (const auto &stop : chat_params.additional_stops) {
                 llama_params["stop"].push_back(stop);
             }

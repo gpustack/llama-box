@@ -2105,8 +2105,10 @@ struct server_context {
             // check if there is any chat tool to predict
             if (send_text && slot.oaicompat_completion_chat_tool && (!support_reasoning /* unsupported reasoning */ || slot.reasoning_finished /* finished reasoning */)) {
                 if (llm_params.use_jinja) {
-                    if (!slot.tool_call_start_found) {
-                        if (slot.tool_call_start_token != LLAMA_TOKEN_NULL) {
+                    bool has_tool_call_start_token = slot.tool_call_start_token != LLAMA_TOKEN_NULL;
+                    bool has_tool_call_start_words = !slot.tool_call_start_words.empty();
+                    if (!slot.tool_call_start_found && (has_tool_call_start_token || has_tool_call_start_words)) {
+                        if (has_tool_call_start_token) {
                             // stop sending text if the start token found
                             for (const llama_token &tok : result.toks) {
                                 if (tok == slot.tool_call_start_token) {
@@ -2115,7 +2117,7 @@ struct server_context {
                                     break;
                                 }
                             }
-                        } else if (!slot.tool_call_start_words.empty()) {
+                        } else {
                             // stop sending text if the start word found
                             if (str_test.length() <= slot.tool_call_start_words_longest_length) {
                                 send_text = false;
