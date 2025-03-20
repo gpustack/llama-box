@@ -2551,7 +2551,7 @@ struct server_context {
              {"model", llm_params.model_alias},
              {"tokens_predicted", slot.n_decoded},
              {"tokens_evaluated", slot.n_prompt_tokens},
-             {"tokens_evaluated_cached", slot.n_past - slot.n_prompt_tokens_processed},
+             {"tokens_evaluated_cached", slot.n_past == 0 ? 0 : slot.n_past - slot.n_prompt_tokens_processed},
              {"tokens_drafted", slot.n_drafted},
              {"tokens_drafted_accepted", slot.n_drafted_accepted},
              {"tokens_reasoning", slot.n_reasoning},
@@ -3654,7 +3654,7 @@ struct server_context {
                         slot.n_past++;
                     }
 
-                    SLT_INF(slot, "prompt processing, n_past = %d, n_prompt_tokens = %d, n_cached_tokens = %d\n", slot.n_past, slot.n_prompt_tokens, slot.n_past - slot.n_prompt_tokens_processed);
+                    SLT_INF(slot, "prompt processing, n_past = %d, n_prompt_tokens = %d, n_cached_tokens = %d\n", slot.n_past, slot.n_prompt_tokens, slot.n_past == 0 ? 0 : slot.n_past - slot.n_prompt_tokens_processed);
 
                     // entire prompt has been processed
                     if (slot.n_past == slot.n_prompt_tokens) {
@@ -3735,7 +3735,7 @@ struct server_context {
                     for (auto &slot : slots) {
                         slot.cache_tokens.clear();
                         slot.release();
-                        send_error(slot, "Server error: failed to decode, try a gain later", ERROR_TYPE_SERVER);
+                        send_error(slot, "Server error: failed to decode, try again later", ERROR_TYPE_SERVER);
                     }
                     llama_kv_self_clear(llm_ctx);
                     if (llm_ctx_draft != nullptr) {
