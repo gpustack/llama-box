@@ -567,19 +567,32 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=8.0.0.beta1-910b.
-        #     8.0     ==> 8.0.rc2.beta1, Ubuntu 20.04
+        #     8.0.0       ==> 8.0.0.beta1, Ubuntu 20.04
+        #     8.0.rc2     ==> 8.0.rc2.beta1, Ubuntu 20.04
         include:
           - arch: 'amd64'
             version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04'
           - arch: 'amd64'
             version: '8.0'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0.rc2'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+          - arch: 'amd64'
+            version: '8.0.rc2'
             distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
           - arch: 'arm64'
             version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04'
           - arch: 'arm64'
             version: '8.0'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0.rc2'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+          - arch: 'arm64'
+            version: '8.0.rc2'
             distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
