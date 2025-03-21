@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index 68cd9920..7326cf5f 100644
+index 68cd9920..436b536c 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,8 @@
@@ -24,7 +24,7 @@ index 68cd9920..7326cf5f 100644
  
          size_t free, total;
          ggml_backend_cann_get_device_memory(id, &free, &total);
-@@ -147,6 +150,412 @@ const ggml_cann_device_info& ggml_cann_info() {
+@@ -147,6 +150,408 @@ const ggml_cann_device_info& ggml_cann_info() {
  }
  
  //#define DEBUG_CANN_MALLOC
@@ -37,12 +37,13 @@ index 68cd9920..7326cf5f 100644
 +    /**
 +     * @brief The maximum reuse margin for a buffer.
 +     */
-+    static const size_t max_reuse_margin = 1ull << 26;  // 64MB
++    static const size_t max_reuse_margin = 1ull << 22;  // 4MB
 +
 +    /**
-+     * @brief The maximum free margin for a buffer.
++     * @brief The minimum free margin for a buffer.
 +     */
-+    static const size_t max_free_margin = 1ull << 22;   // 4MB
++    static const size_t min_free_margin = 1ull << 20;   // 1MB
++
 +
 +    /**
 +     * @brief The alignment for buffer allocation.
@@ -122,10 +123,10 @@ index 68cd9920..7326cf5f 100644
 +        }
 +
 +        void* ptr = nullptr;
-+        std::vector<ggml_cann_buffer> free_buffers_rest;
-+        free_buffers_rest.reserve(free_buffers.size());
 +        auto now = std::chrono::steady_clock::now();
 +
++        std::vector<ggml_cann_buffer> free_buffers_rest;
++        free_buffers_rest.reserve(free_buffers.size());
 +        while (!free_buffers.empty()) {
 +            auto b = free_buffers.top();
 +            free_buffers.pop();
@@ -149,20 +150,11 @@ index 68cd9920..7326cf5f 100644
 +#endif
 +                    break;
 +                }
-+                free_buffers_rest.emplace_back(std::move(b));
-+#ifdef DEBUG_CANN_MALLOC
-+                GGML_LOG_INFO(
-+                    "cann pool[%d]: buffer   %p cannot reuse, "
-+                    "continuously searching\n",
-+                    device, b.ptr);
-+#endif
-+                continue;
 +            }
 +
 +            bool should_clean = !disable_clean &&
-+                               b.size > max_free_margin &&
-+                               size > max_free_margin &&
-+                               std::chrono::duration_cast<std::chrono::seconds>(now - b.last_used).count() >= 2;
++                               b.size > min_free_margin &&
++                               std::chrono::duration_cast<std::chrono::milliseconds>(now - b.last_used).count() > 100;
 +            if (should_clean) {
 +                // free the buffer if the size is needed to be freed
 +                ACL_CHECK(aclrtFree(b.ptr));
@@ -181,9 +173,13 @@ index 68cd9920..7326cf5f 100644
 +            }
 +            free_buffers_rest.push_back(b);
 +        }
-+        for (const ggml_cann_buffer& b : free_buffers_rest) {
-+            free_buffers.push(b);
++        for (ggml_cann_buffer &b : free_buffers_rest) {
++            free_buffers.push(std::move(b));
 +        }
++
++#ifdef DEBUG_CANN_MALLOC
++        GGML_LOG_INFO("cann pool[%d] free pool_size = %5u MB\n\n", device, (uint32_t)(GGML_PAD(pool_size, 1048576) / 1048576));
++#endif
 +        if (ptr != nullptr) {
 +            return ptr;
 +        }
@@ -212,12 +208,13 @@ index 68cd9920..7326cf5f 100644
 +     * @param size Size of the buffer to free.
 +     */
 +    void free(void* ptr, size_t size) override {
-+        if (buffer_pool.find(ptr) == buffer_pool.end()) {
++        auto it = buffer_pool.find(ptr);
++        if (it == buffer_pool.end()) {
 +            GGML_ABORT("cann pool[%d]: buffer %p not found in pool\n", device, ptr);
 +        }
 +
 +        auto now = std::chrono::steady_clock::now();
-+        free_buffers.emplace(ggml_cann_buffer{ptr, size, now});
++        free_buffers.emplace(ggml_cann_buffer{ptr, it->second, now});
 +#ifdef DEBUG_CANN_MALLOC
 +        GGML_LOG_INFO(
 +            "cann pool[%d]: return   %p, "
@@ -237,12 +234,12 @@ index 68cd9920..7326cf5f 100644
 +    /**
 +     * @brief The maximum reuse margin for a buffer.
 +     */
-+    static const size_t max_reuse_margin = 1ull << 26;  // 64MB
++    static const size_t max_reuse_margin = 1ull << 22;  // 4MB
 +
 +    /**
-+     * @brief The maximum free margin for a buffer.
++     * @brief The minimum free margin for a buffer.
 +     */
-+    static const size_t max_free_margin = 1ull << 22;   // 4MB
++    static const size_t min_free_margin = 1ull << 20;   // 1MB
 +
 +    /**
 +     * @brief The alignment for buffer allocation.
@@ -322,6 +319,7 @@ index 68cd9920..7326cf5f 100644
 +            size = alignment;
 +        }
 +
++        void* ptr = nullptr;
 +        auto now = std::chrono::steady_clock::now();
 +
 +        int i = 0;
@@ -339,6 +337,7 @@ index 68cd9920..7326cf5f 100644
 +                if (margin <= max_reuse_margin) {
 +                    *actual_size = b.size;
 +                    b.used = true;
++                    ptr = b.ptr;
 +#ifdef DEBUG_CANN_MALLOC
 +                    GGML_LOG_INFO(
 +                        "cann pool[%d]: reused   %p, "
@@ -350,21 +349,13 @@ index 68cd9920..7326cf5f 100644
 +                        (uint32_t)(GGML_PAD(size, 1048576) / 1048576),
 +                        (uint32_t)(GGML_PAD(margin, 1048576) / 1048576));
 +#endif
-+                    return b.ptr;
++                    break;
 +                }
-+#ifdef DEBUG_CANN_MALLOC
-+                GGML_LOG_INFO(
-+                    "cann pool[%d]: buffer   %p cannot reuse, "
-+                    "continuously searching\n",
-+                    device, b.ptr);
-+#endif
-+                continue;
 +            }
 +
 +            bool should_clean = !disable_clean &&
-+                               b.size > max_free_margin &&
-+                               size > max_free_margin &&
-+                               std::chrono::duration_cast<std::chrono::seconds>(now - b.last_used).count() >= 2;
++                               b.size > min_free_margin &&
++                               std::chrono::duration_cast<std::chrono::milliseconds>(now - b.last_used).count() > 100;
 +            if (should_clean) {
 +                // free the buffer if the size is needed to be freed
 +                ACL_CHECK(aclrtFree(b.ptr));
@@ -381,6 +372,10 @@ index 68cd9920..7326cf5f 100644
 +                b.ptr = nullptr;
 +            }
 +        }
++        if (ptr != nullptr) {
++            return ptr;
++        }
++
 +        if (i < MAX_BUFFERS) {
 +            // allocate a new buffer if no buffer can be reused
 +            ggml_cann_buffer& b = buffer_pool[i];
@@ -404,6 +399,7 @@ index 68cd9920..7326cf5f 100644
 +#endif
 +            return b.ptr;
 +        }
++
 +        GGML_ABORT("cann pool[%d]: slots full\n", device);
 +    }
 +
@@ -437,7 +433,7 @@ index 68cd9920..7326cf5f 100644
  /**
   * @brief A pool of CANN buffers(legacy).
   *
-@@ -347,8 +756,7 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -347,8 +752,7 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
       * @param device The device ID to associate with this buffer pool.
       */
      explicit ggml_cann_pool_vmm(int device)
@@ -447,7 +443,7 @@ index 68cd9920..7326cf5f 100644
          auto dev = ggml_cann_info().devices[device];
          granularity = dev.vmm_granularity;
          max_size = dev.total_vram;
-@@ -471,7 +879,18 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
+@@ -471,7 +875,18 @@ struct ggml_cann_pool_vmm : public ggml_cann_pool {
   */
  std::unique_ptr<ggml_cann_pool> ggml_backend_cann_context::new_pool_for_device(
      int device) {
@@ -458,7 +454,7 @@ index 68cd9920..7326cf5f 100644
 +        return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_vmm(device));
 +    }
 +    bool enable_buf_prio = (getenv("GGML_CANN_ENABLE_BUF_PRIO_POOL") != nullptr);
-+    if (!enable_buf_prio) {
++    if (enable_buf_prio) {
 +        GGML_LOG_INFO("%s: device %d use buffer pool with priority queue\n", __func__, device);
 +        return std::unique_ptr<ggml_cann_pool>(new ggml_cann_pool_buf_prio(device));
 +    }
@@ -467,7 +463,7 @@ index 68cd9920..7326cf5f 100644
  }
  
  // cann buffer
-@@ -1020,7 +1439,11 @@ ggml_backend_cann_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
+@@ -1020,7 +1435,11 @@ ggml_backend_cann_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft,
  
      ggml_cann_set_device(buft_ctx->device);
  

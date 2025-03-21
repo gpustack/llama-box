@@ -61,12 +61,13 @@ function request() {
 
     # requesting
     for ((i = 0; i < cc; i++)); do
-        if [[ -z "$ct" ]]; then
+        xct="${ct}"
+        if [[ -z "${xct}" ]]; then
             idx=$(echo "$i % ${#user_contents[@]}" | bc)
-            ct="{\"messages\":[{\"role\":\"user\",\"content\":\"${user_contents[$idx]}\"}]}"
+            xct="{\"messages\":[{\"role\":\"user\",\"content\":\"${user_contents[$idx]}\"}]}"
         fi
 
-        data="$(echo -n "$ct" | jq -cr \
+        data="$(echo -n "$xct" | jq -cr \
             --argjson temperature "${temp}" \
             --argjson top_p "${top_p}" \
             --argjson min_p "${min_p}" \
