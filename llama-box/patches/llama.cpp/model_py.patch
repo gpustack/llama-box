@@ -1,5 +1,5 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 7574218e..c352f613 100755
+index d21edce1..aa1813a9 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
 @@ -4,6 +4,7 @@
@@ -10,7 +10,7 @@ index 7574218e..c352f613 100755
  import logging
  import argparse
  import contextlib
-@@ -3188,7 +3189,67 @@ class XLMRobertaModel(BertModel):
+@@ -3190,7 +3191,67 @@ class XLMRobertaModel(BertModel):
  
          tokenizer_path = self.dir_model / 'sentencepiece.bpe.model'
          if not tokenizer_path.is_file():
@@ -79,7 +79,7 @@ index 7574218e..c352f613 100755
  
          sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
          sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
-@@ -3274,6 +3335,121 @@ class XLMRobertaModel(BertModel):
+@@ -3276,6 +3337,121 @@ class XLMRobertaModel(BertModel):
  
          return super().modify_tensors(data_torch, name, bid)
  
