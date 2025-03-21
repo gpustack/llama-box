@@ -1212,6 +1212,10 @@ struct server_context {
             }
         }
 
+        if (!support_completion_only()) {
+            return true;
+        }
+
         // chat template
         {
             chat_templates = common_chat_templates_init(llm_model, llm_params.chat_template);
@@ -4410,16 +4414,18 @@ int main(int argc, char **argv) {
     common_log_set_timestamps(common_log_main(), true);
     llama_log_set(
         [](ggml_log_level level, const char *text, void * /*user_data*/) {
-            if (LOG_DEFAULT_LLAMA <= common_log_verbosity_thold) {
-                common_log_add(common_log_main(), level, "%s", text);
+            if (level == GGML_LOG_LEVEL_DEBUG && common_log_verbosity_thold < 6) {
+                return;
             }
+            common_log_add(common_log_main(), level, "%s", text);
         },
         nullptr);
     sd_log_set(
         [](sd_log_level_t level, const char *text, void * /*user_data*/) {
-            if (LOG_DEFAULT_LLAMA <= common_log_verbosity_thold) {
-                common_log_add(common_log_main(), sd_log_level_to_ggml_log_level(level), "%s", text);
+            if (level == SD_LOG_DEBUG && common_log_verbosity_thold < 6) {
+                return;
             }
+            common_log_add(common_log_main(), sd_log_level_to_ggml_log_level(level), "%s", text);
         },
         nullptr);
     sd_progress_set(
