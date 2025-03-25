@@ -87,7 +87,7 @@ static inline int send_error_json(const HttpResponseWriterPtr &writer, http_stat
         writer->close(true);
         return HTTP_STATUS_REQUEST_TIMEOUT;
     }
-    writer->close();
+    writer->close(true);
     return code;
 }
 
@@ -127,7 +127,7 @@ static inline int send_json(const HttpResponseWriterPtr &writer, const Json &dat
         writer->close(true);
         return HTTP_STATUS_REQUEST_TIMEOUT;
     }
-    writer->close();
+    writer->close(true);
     return HTTP_STATUS_OK;
 }
 
@@ -154,7 +154,7 @@ static inline int send_error_string(const HttpResponseWriterPtr &writer, http_st
         writer->close(true);
         return HTTP_STATUS_REQUEST_TIMEOUT;
     }
-    writer->close();
+    writer->close(true);
     return code;
 }
 
@@ -181,7 +181,7 @@ static inline int send_string(const HttpResponseWriterPtr &writer, const std::st
         writer->close(true);
         return HTTP_STATUS_REQUEST_TIMEOUT;
     }
-    writer->close();
+    writer->close(true);
     return HTTP_STATUS_OK;
 }
 
@@ -2087,8 +2087,8 @@ enum task_type {
 };
 
 struct btask {
-    explicit btask(task_type type)
-        : tid(hv_gettid()), type(type) {
+    explicit btask(int32_t tid, task_type type)
+        : tid(tid), type(type) {
     }
 
     virtual ~btask() = default;
@@ -2107,8 +2107,8 @@ struct btask {
 };
 
 struct completions_task : btask {
-    explicit completions_task()
-        : btask(TASK_COMPLETIONS) {
+    explicit completions_task(int32_t tid)
+        : btask(tid, TASK_COMPLETIONS) {
     }
 
     ~completions_task() override {
@@ -2350,8 +2350,8 @@ struct completions_task : btask {
 };
 
 struct embeddings_task : btask {
-    explicit embeddings_task()
-        : btask(TASK_EMBEDDINGS) {
+    explicit embeddings_task(int32_t tid)
+        : btask(tid, TASK_EMBEDDINGS) {
     }
 
     // input
@@ -2447,8 +2447,8 @@ struct embeddings_task : btask {
 };
 
 struct images_task : btask {
-    explicit images_task()
-        : btask(TASK_IMAGES) {
+    explicit images_task(int32_t tid)
+        : btask(tid, TASK_IMAGES) {
     }
 
     // input
@@ -2558,18 +2558,13 @@ struct httpserver_metrics {
 struct httpserver {
     explicit httpserver(v2_httpserver_params &params)
         : params(params) {
-        processing_loop      = std::make_unique<HThreadPool>(1, 1);
-        processing_loop_gate = std::make_unique<ParallelControlTokenBucket>(params.n_parallel);
-
-        processing_loop->start();
+        processing_loop = std::make_unique<HThreadPool>(1, 1);
 
         llama_numa_init(params.llm_params.numa);
         llama_backend_init();
     }
 
     ~httpserver() {
-        processing_loop->stop();
-
         llama_batch_free(batch);
         if (llm_ctx != nullptr) {
             llama_detach_threadpool(llm_ctx);
@@ -3006,13 +3001,18 @@ struct httpserver {
             }
         }
 #undef SAFE_HANDLER
-        // create server
+        // start loop
+        processing_loop->start();
+
+        // start server
         HttpServer server(&service);
         server.setHost(params.llm_params.hostname.c_str());
         server.setPort(params.llm_params.port);
         server.setThreadNum(params.llm_params.n_threads_http);
         SRV_INF("listening host = %s, port = %d\n", params.llm_params.hostname.c_str(), params.llm_params.port);
         server.run();
+
+        processing_loop->stop();
         return server.stop();
     }
 
@@ -3024,7 +3024,6 @@ struct httpserver {
     v2_httpserver_params params;
     httpserver_metrics metrics;
     std::unique_ptr<HThreadPool> processing_loop;
-    std::unique_ptr<ParallelControlTokenBucket> processing_loop_gate;
 
     // lora
     std::vector<common_adapter_lora_info> lora_adapters;
@@ -3091,6 +3090,15 @@ struct httpserver {
     llama_token reasoning_start_token = LLAMA_TOKEN_NULL;
     llama_token reasoning_end_token   = LLAMA_TOKEN_NULL;
 
+    static inline int32_t get_task_id() {
+        thread_local static int32_t thread_id = -1;
+        if (thread_id == -1) {
+            static std::atomic<int32_t> next_thread_id{0};
+            thread_id = next_thread_id++;
+        }
+        return thread_id;
+    }
+
     inline bool support_tokenize() const {
         return llm_vocab != nullptr;
     }
@@ -3121,15 +3129,30 @@ struct httpserver {
     // Logics
     //
 
-    int process(const HttpContextPtr &ctx, const std::unique_ptr<btask> &&btask) {
-#define ACQUIRE_GATE_KEY \
-    int32_t gate_key = processing_loop_gate->acquire();
-#define RELEASE_GATE_KEY \
-    processing_loop_gate->release(gate_key);
+#if defined(WIN64) || defined(_WIN64) || defined(WIN32) || defined(_WIN32)
+#define PIN_THREAD                                      \
+    int32_t cpu = GetCurrentProcessorNumber();          \
+    GROUP_AFFINITY groupAffinity;                       \
+    ZeroMemory(&groupAffinity, sizeof(GROUP_AFFINITY)); \
+    groupAffinity.Mask = 1ULL << cpu;                   \
+    SetThreadGroupAffinity(GetCurrentThread(), &groupAffinity, NULL);
+#elif defined(linux) || defined(__linux) || defined(__linux__)
+#define PIN_THREAD                \
+    int32_t cpu = sched_getcpu(); \
+    cpu_set_t cpuset;             \
+    CPU_ZERO(&cpuset);            \
+    CPU_SET(cpu, &cpuset);        \
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+#else
+#define PIN_THREAD
+#endif
 
-        switch (btask->get_type()) {
+    int process(const HttpContextPtr &ctx, const std::unique_ptr<btask> &&task_ptr) {
+        PIN_THREAD;
+
+        switch (task_ptr->get_type()) {
             case TASK_COMPLETIONS: {
-                auto *task = dynamic_cast<completions_task *>(btask.get());
+                auto *task = dynamic_cast<completions_task *>(task_ptr.get());
 
                 const char *rid       = task->req->get_rid();
                 const req_type rtype  = task->req->get_type();
@@ -3162,16 +3185,10 @@ struct httpserver {
                         }
                     }
                 };
-                auto send_stream_json = [&]() {
-                    const Json resp = task->to_json(llm_ctx);
-                    return send_event_json(ctx->writer, resp);
-                };
-
-                ACQUIRE_GATE_KEY;
 
                 task->t_start_prefill = ggml_time_us();
 
-                int32_t seq_id  = -1;
+                int32_t seq_id  = task->get_tid();
                 int32_t seq_pos = 0;
                 do {
                     /**
@@ -3190,6 +3207,16 @@ struct httpserver {
                                 batched_seqs = 0;
                                 decoded_seqs = 0;
                                 batch_type   = TASK_COMPLETIONS;
+
+                                // apply lora adapters, only need to do it once per batch
+                                if (!equal_lora(task->req->lora_adapters, lora_adapters)) {
+                                    try {
+                                        common_set_adapter_lora(llm_ctx, task->req->lora_adapters);
+                                        lora_adapters = task->req->lora_adapters;
+                                    } catch (const std::exception &e) {
+                                        SRV_FUNC_ERR("process", "rid %s | prefilling, failed to apply lora %s\n", rid, e.what());
+                                    }
+                                }
                             } else if (batch_type != TASK_COMPLETIONS) {
                                 SRV_FUNC_DBG("process", "rid %s | waiting previous batch finished: not completions batch\n", rid);
                                 return -1;
@@ -3210,21 +3237,10 @@ struct httpserver {
                                 return -1;
                             }
 
-                            // apply lora adapters, only need to do it once per batch
-                            if (!equal_lora(task->req->lora_adapters, lora_adapters)) {
-                                try {
-                                    common_set_adapter_lora(llm_ctx, task->req->lora_adapters);
-                                    lora_adapters = task->req->lora_adapters;
-                                } catch (const std::exception &e) {
-                                    SRV_FUNC_ERR("process", "rid %s | prefilling, failed to apply lora %s\n", rid, e.what());
-                                }
-                            }
-
                             /* prefill start */
 
                             if (task->n_prefilled < task->n_prefilling) {
                                 if (task->n_prefilled == 0) {
-                                    seq_id = gate_key;
                                     batched_seqs++; // increase to avoid entering the wrong task type
 
                                     if (!task->tokenized_prompts_include_images && cache_prompt) {
@@ -3357,22 +3373,18 @@ struct httpserver {
                         common_sampler_accept(task->sampler, tok, true);
                         append_decode_token(seq_batch_end, tok);
 
+                        if (task->n_decoded == 1) {
+                            task->t_prefilled    = double(ggml_time_us() - task->t_start_prefill) / 1.e3;
+                            task->t_start_decode = ggml_time_us();
+                        } else {
+                            task->t_decoded = double(ggml_time_us() - task->t_start_decode) / 1.e3;
+                        }
+
                         decoded_seqs++; // increase to avoid deadlock
                         return 0;
                     });
                     if (decoded.get() != 0) {
-                        RELEASE_GATE_KEY;
                         return send_error_json(ctx->writer, HTTP_STATUS_INTERNAL_SERVER_ERROR, "failed to decode");
-                    }
-
-                    if (task->n_decoded == 1) {
-                        task->t_prefilled = double(ggml_time_us() - task->t_start_prefill) / 1.e3;
-                        metrics.on_tokens_prefilled(task->t_prefilled, task->n_prefilled);
-                        task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
-
-                        task->t_start_decode = ggml_time_us();
-                    } else {
-                        task->t_decoded = double(ggml_time_us() - task->t_start_decode) / 1.e3;
                     }
 
                     // get token string
@@ -3436,36 +3448,34 @@ struct httpserver {
 
                     // output
                     if (send_text && task->req->stream) {
-                        int32_t sent_code = send_stream_json();
-                        if (sent_code != HTTP_STATUS_OK) {
-                            RELEASE_GATE_KEY;
-                            SRV_ERR("rid %s | decoding, failed to send chunk, code = %d\n", rid, sent_code);
-                            return sent_code;
+                        int32_t sc = send_event_json(ctx->writer, task->to_json(llm_ctx));
+                        if (sc != HTTP_STATUS_OK) {
+                            SRV_ERR("rid %s | decoding, failed to send chunk, code = %d\n", rid, sc);
+                            return sc;
                         }
                     } else if (!ctx->writer->isConnected()) {
-                        RELEASE_GATE_KEY;
                         SRV_ERR("rid %s | decoding, connection closed\n", rid);
                         return HTTP_STATUS_REQUEST_TIMEOUT;
                     }
                 } while (true);
 
-                RELEASE_GATE_KEY;
-
+                metrics.on_tokens_prefilled(task->t_prefilled, task->n_prefilled);
+                task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
                 metrics.on_tokens_decoded(task->t_decoded, task->n_decoded, task->n_drafted, task->n_drafted_accepted);
                 task->p_decoded_tps = 1.e3 / task->t_decoded * task->n_decoded;
                 task->p_drafted_apt = task->n_drafted == 0 ? 0.0 : double(task->n_drafted_accepted) / double(task->n_drafted) * 100.0;
 
-                SRV_INF("rid %s | prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, decode_t = %d, decode_tps = %.2f tps, tpot = %.2fms, draft_t = %d, draft_apt = %.2f%%\n", rid, task->n_prefilled, task->p_prefilled_tps, task->t_prefilled, task->n_decoded, task->p_decoded_tps, double(task->n_decoded) / task->t_decoded, task->n_drafted, task->p_drafted_apt);
+                SRV_INF("rid %s | prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, decode_t = %d, decode_tps = %.2f tps, tpot = %.2fms, draft_t = %d, draft_apt = %.2f%%\n", rid, task->n_prefilled, task->p_prefilled_tps, task->t_prefilled, task->n_decoded, task->p_decoded_tps, task->t_decoded / double(task->n_decoded), task->n_drafted, task->p_drafted_apt);
 
                 // output
-                if (task->req->stream) {
-                    return send_stream_json();
+                int32_t sc = send_json(ctx->writer, task->to_json(llm_ctx));
+                if (sc != HTTP_STATUS_OK) {
+                    SRV_ERR("rid %s | decoding, failed to send chunk, code = %d\n", rid, sc);
                 }
-
-                return send_json(ctx->writer, task->to_json(llm_ctx));
+                return sc;
             }
             case TASK_EMBEDDINGS: {
-                auto *task = dynamic_cast<embeddings_task *>(btask.get());
+                auto *task = dynamic_cast<embeddings_task *>(task_ptr.get());
 
                 const char *rid              = task->req->get_rid();
                 const req_type rtype         = task->req->get_type();
@@ -3619,7 +3629,7 @@ struct httpserver {
                 return send_json(ctx->writer, task->to_json());
             }
             case TASK_IMAGES: {
-                auto *task = dynamic_cast<images_task *>(btask.get());
+                auto *task = dynamic_cast<images_task *>(task_ptr.get());
 
                 /**
                  * forward
@@ -3644,6 +3654,16 @@ struct httpserver {
                         if (forwarded_seqs <= reversed_seqs) {
                             forwarded_seqs = 0;
                             reversed_seqs  = 0;
+
+                            // apply lora adapters, only need to do it once per batch
+                            if (!equal_lora(task->req->lora_adapters, lora_adapters)) {
+                                try {
+                                    sd_ctx->apply_lora_adapters(task->req->lora_adapters);
+                                    lora_adapters = task->req->lora_adapters;
+                                } catch (const std::exception &e) {
+                                    SRV_FUNC_ERR("process", "rid %s | forwarding diffusion, failed to apply lora %s\n", rid, e.what());
+                                }
+                            }
                         } else if (forwarded_seqs >= params.sd_params.max_batch_count) {
                             SRV_FUNC_DBG("process", "rid %s | waiting previous forwarding finished: exceeds max batch count\n", rid);
                             return stream;
@@ -3653,16 +3673,6 @@ struct httpserver {
                         }
 
                         SRV_FUNC_DBG("process", "rid %s | forwarding diffusion\n", rid);
-
-                        // apply lora adapters, only need to do it once per batch
-                        if (!equal_lora(task->req->lora_adapters, lora_adapters)) {
-                            try {
-                                sd_ctx->apply_lora_adapters(task->req->lora_adapters);
-                                lora_adapters = task->req->lora_adapters;
-                            } catch (const std::exception &e) {
-                                SRV_FUNC_ERR("process", "rid %s | forwarding diffusion, failed to apply lora %s\n", rid, e.what());
-                            }
-                        }
 
                         forwarded_seqs++; // avoid cleaning the batch
 
@@ -3696,10 +3706,12 @@ struct httpserver {
                 const bool preview       = json_value(task->req->stream_options, "preview", false) || json_value(task->req->stream_options, "preview_faster", false);
                 const bool chunk         = json_value(task->req->stream_options, "chunk", false);
                 const int32_t chunk_size = json_value(task->req->stream_options, "chunk_size", 4096);
-                auto send_stream_json    = [&](const int32_t seq) {
+                auto send_chunk_json     = [&](const int32_t seq) {
                     if (!chunk || !preview) {
-                        const Json resp = task->to_json(seq);
-                        return send_event_json(ctx->writer, resp);
+                        if (seq == n_seq - 1) {
+                            return send_json(ctx->writer, task->to_json(seq));
+                        }
+                        return send_event_json(ctx->writer, task->to_json(seq));
                     }
 
                     std::string b64_json            = task->b64_jsons[seq];
@@ -3734,9 +3746,14 @@ struct httpserver {
                                 {"generation_per_second", task->p_reversed_sps},
                             };
                         }
-                        int32_t sent_code = send_event_json(ctx->writer, resp);
-                        if (sent_code != HTTP_STATUS_OK) {
-                            return sent_code;
+                        int32_t sc = 0;
+                        if (seq == n_seq - 1) {
+                            sc = send_json(ctx->writer, resp);
+                        } else {
+                            sc = send_event_json(ctx->writer, resp);
+                        }
+                        if (sc != HTTP_STATUS_OK) {
+                            return sc;
                         }
                     };
                     return int32_t(HTTP_STATUS_OK);
@@ -3790,12 +3807,12 @@ struct httpserver {
                     // output
                     if (task->req->stream && (incomplete || n_seq_reversed + 1 < n_seq)) {
                         int64_t t_tart_send = ggml_time_us();
-                        int32_t sent_code   = send_stream_json(n_seq_reversed);
+                        int32_t sc          = send_chunk_json(n_seq_reversed);
                         task->t_start_reverse += (ggml_time_us() - t_tart_send); // exclude sending time, ugly, but works.
-                        if (sent_code != HTTP_STATUS_OK) {
+                        if (sc != HTTP_STATUS_OK) {
                             processing_loop->commit([&]() { reversed_seqs += n_seq - n_seq_reversed; }); // increase to avoid deadlock
-                            SRV_ERR("rid %s | reversing diffusion, failed to send chunk, seq = %d, code = %d\n", rid, n_seq_reversed, sent_code);
-                            return sent_code;
+                            SRV_ERR("rid %s | reversing diffusion, failed to send chunk, seq = %d, code = %d\n", rid, n_seq_reversed, sc);
+                            return sc;
                         }
                     } else if (!ctx->writer->isConnected()) {
                         processing_loop->commit([&]() { reversed_seqs += n_seq - n_seq_reversed; }); // increase to avoid deadlock
@@ -3816,7 +3833,7 @@ struct httpserver {
 
                 // output
                 if (task->req->stream) {
-                    return send_stream_json(n_seq - 1);
+                    return send_chunk_json(n_seq - 1);
                 }
                 return send_json(ctx->writer, task->to_json(-1));
             }
@@ -4227,7 +4244,7 @@ struct httpserver {
             }
         }
 
-        std::unique_ptr<completions_task> task = std::make_unique<completions_task>();
+        std::unique_ptr<completions_task> task = std::make_unique<completions_task>(get_task_id());
         task->token_bucket                     = std::move(token_bucket);
         task->tokenized_prompts                = std::move(tokenized_prompts);
         task->n_prefilling                     = n_prefilling;
@@ -4463,7 +4480,7 @@ struct httpserver {
             }
         }
 
-        std::unique_ptr<completions_task> task     = std::make_unique<completions_task>();
+        std::unique_ptr<completions_task> task     = std::make_unique<completions_task>(get_task_id());
         task->token_bucket                         = std::move(token_bucket);
         task->tokenized_prompts                    = std::move(tokenized_prompts);
         task->tokenized_prompts_format             = req->chat_params.format;
@@ -4512,7 +4529,7 @@ struct httpserver {
             return send_error_json(ctx->writer, HTTP_STATUS_BAD_REQUEST, "Illegal param: empty embedding tokens");
         }
 
-        std::unique_ptr<embeddings_task> task = std::make_unique<embeddings_task>();
+        std::unique_ptr<embeddings_task> task = std::make_unique<embeddings_task>(get_task_id());
         task->tokenized_inputs                = std::move(tokenized_inputs);
         task->n_prefilling                    = n_prefilling;
         task->req                             = std::move(req);
@@ -4576,7 +4593,7 @@ struct httpserver {
             return send_error_json(ctx->writer, HTTP_STATUS_BAD_REQUEST, "Illegal param: empty reranking tokens");
         }
 
-        std::unique_ptr<embeddings_task> task = std::make_unique<embeddings_task>();
+        std::unique_ptr<embeddings_task> task = std::make_unique<embeddings_task>(get_task_id());
         task->tokenized_inputs                = std::move(tokenized_inputs);
         task->n_prefilling                    = n_prefilling;
         task->req                             = std::move(req);
@@ -4594,7 +4611,7 @@ struct httpserver {
             return send_error_string(ctx->writer, HTTP_STATUS_FORBIDDEN, "You are not allowed to do image operation from this model");
         }
 
-        std::unique_ptr<images_task> task = std::make_unique<images_task>();
+        std::unique_ptr<images_task> task = std::make_unique<images_task>(get_task_id());
         if (category == "generations") {
             std::unique_ptr<image_generate_req> req = get_image_generate_req(ctx, params);
             task->req                               = std::move(req);
