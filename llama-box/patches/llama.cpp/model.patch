@@ -1,5 +1,5 @@
 diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
-index 9debb56c..a1270505 100644
+index 8664f896..eb12daea 100644
 --- a/src/llama-arch.cpp
 +++ b/src/llama-arch.cpp
 @@ -16,6 +16,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
@@ -47,10 +47,10 @@ index a28815d8..2dd653bb 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_JINA_BERT_V2,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index cd7e0a0c..c7ec3b3d 100644
+index 0ae75415..1e703f6b 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -631,6 +631,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
+@@ -644,6 +644,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                  // TODO: become GGUF KV parameter
                  hparams.f_max_alibi_bias = 8.0f;
              } break;
@@ -67,7 +67,7 @@ index cd7e0a0c..c7ec3b3d 100644
          case LLM_ARCH_BERT:
              {
                  ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS,    hparams.f_norm_eps);
-@@ -1909,14 +1919,15 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1922,14 +1932,15 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                          layer.ffn_up_b = create_tensor(tn(LLM_TENSOR_FFN_UP, "bias", i),     {n_ff}, 0);
                      }
                  } break;
@@ -85,7 +85,7 @@ index cd7e0a0c..c7ec3b3d 100644
  
                          cls   = create_tensor(tn(LLM_TENSOR_CLS, "weight"), {n_embd, n_embd}, TENSOR_NOT_REQUIRED);
                          cls_b = create_tensor(tn(LLM_TENSOR_CLS, "bias"),   {n_embd},         TENSOR_NOT_REQUIRED);
-@@ -1931,8 +1942,8 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1944,8 +1955,8 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                      for (int i = 0; i < n_layer; ++i) {
                          auto & layer = layers[i];
  
@@ -96,7 +96,7 @@ index cd7e0a0c..c7ec3b3d 100644
                              layer.bq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "bias", i),   {n_embd}, 0);
  
                              layer.wk = create_tensor(tn(LLM_TENSOR_ATTN_K,   "weight", i), {n_embd, n_embd_gqa}, 0);
-@@ -1942,6 +1953,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1955,6 +1966,7 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                              layer.bv = create_tensor(tn(LLM_TENSOR_ATTN_V,   "bias", i),   {n_embd_gqa}, 0);
                          } else {
                              layer.wqkv = create_tensor(tn(LLM_TENSOR_ATTN_QKV, "weight", i), {n_embd, n_embd + 2*n_embd_gqa}, 0);
@@ -104,7 +104,7 @@ index cd7e0a0c..c7ec3b3d 100644
                          }
  
                          layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT,      "weight", i), {n_embd, n_embd}, 0);
-@@ -1949,12 +1961,16 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+@@ -1962,12 +1974,16 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                          layer.attn_out_norm   = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "weight", i), {n_embd}, 0);
                          layer.attn_out_norm_b = create_tensor(tn(LLM_TENSOR_ATTN_OUT_NORM, "bias", i),   {n_embd}, 0);
  
@@ -124,7 +124,7 @@ index cd7e0a0c..c7ec3b3d 100644
                              layer.ffn_down_b = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd}, 0);
                          } else {
                              layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
-@@ -5264,7 +5280,7 @@ struct llm_build_bert : public llm_graph_context {
+@@ -5282,7 +5298,7 @@ struct llm_build_bert : public llm_graph_context {
          // token types are hardcoded to zero ("Sentence A")
          ggml_tensor * type_row0 = ggml_view_1d(ctx0, model.type_embd, n_embd, 0);
          inpL = ggml_add(ctx0, inpL, type_row0);
@@ -133,7 +133,7 @@ index cd7e0a0c..c7ec3b3d 100644
              inpL = ggml_add(ctx0, ggml_get_rows(ctx0, model.pos_embd, inp_pos), inpL);
          }
          cb(inpL, "inp_embd", -1);
-@@ -5284,7 +5300,7 @@ struct llm_build_bert : public llm_graph_context {
+@@ -5302,7 +5318,7 @@ struct llm_build_bert : public llm_graph_context {
              ggml_tensor * Vcur;
  
              // self-attention
@@ -142,7 +142,7 @@ index cd7e0a0c..c7ec3b3d 100644
                  Qcur = ggml_add(ctx0, build_lora_mm(model.layers[il].wq, cur), model.layers[il].bq);
  
                  if (model.layers[il].attn_q_norm) {
-@@ -5313,6 +5329,11 @@ struct llm_build_bert : public llm_graph_context {
+@@ -5331,6 +5347,11 @@ struct llm_build_bert : public llm_graph_context {
                  cur = build_lora_mm(model.layers[il].wqkv, cur);
                  cb(cur, "wqkv", il);
  
@@ -154,7 +154,7 @@ index cd7e0a0c..c7ec3b3d 100644
                  Qcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd,     n_tokens, cur->nb[1], 0*sizeof(float)*(n_embd)));
                  Kcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd)));
                  Vcur = ggml_cont(ctx0, ggml_view_2d(ctx0, cur, n_embd_gqa, n_tokens, cur->nb[1], 1*sizeof(float)*(n_embd + n_embd_gqa)));
-@@ -5365,7 +5386,14 @@ struct llm_build_bert : public llm_graph_context {
+@@ -5383,7 +5404,14 @@ struct llm_build_bert : public llm_graph_context {
              cb(ffn_inp, "ffn_inp", il);
  
              // feed-forward network
@@ -170,7 +170,7 @@ index cd7e0a0c..c7ec3b3d 100644
                  cur = build_ffn(cur,
                          model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   NULL,
                          NULL,                      NULL,                        NULL,
-@@ -11671,6 +11699,7 @@ llm_graph_result_ptr llama_model::build_graph(
+@@ -11689,6 +11717,7 @@ llm_graph_result_ptr llama_model::build_graph(
              {
                  llm = std::make_unique<llm_build_refact>(*this, params, gf);
              } break;
@@ -178,7 +178,7 @@ index cd7e0a0c..c7ec3b3d 100644
          case LLM_ARCH_BERT:
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
-@@ -12004,6 +12033,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
+@@ -12022,6 +12051,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
          case LLM_ARCH_FALCON:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
