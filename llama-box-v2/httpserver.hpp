@@ -3129,14 +3129,7 @@ struct httpserver {
     // Logics
     //
 
-#if defined(WIN64) || defined(_WIN64) || defined(WIN32) || defined(_WIN32)
-#define PIN_THREAD                                      \
-    int32_t cpu = GetCurrentProcessorNumber();          \
-    GROUP_AFFINITY groupAffinity;                       \
-    ZeroMemory(&groupAffinity, sizeof(GROUP_AFFINITY)); \
-    groupAffinity.Mask = 1ULL << cpu;                   \
-    SetThreadGroupAffinity(GetCurrentThread(), &groupAffinity, NULL);
-#elif defined(linux) || defined(__linux) || defined(__linux__)
+#if defined(linux) || defined(__linux) || defined(__linux__)
 #define PIN_THREAD                \
     int32_t cpu = sched_getcpu(); \
     cpu_set_t cpuset;             \
