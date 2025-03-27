@@ -267,7 +267,7 @@ jobs:
           - arch: 'amd64'
             version: '6.2'
             distro_container_image: 'gpustack/devel-rocm-hip:6.2.4-centos7'
-            hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1100;gfx1101;gfx1102'
+            hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -1044,7 +1044,7 @@ jobs:
           - arch: 'amd64'
             version: '6.2'
             distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q4-WinSvr2022-For-HIP.exe'
-            hip_arch: 'gfx1030;gfx1100;gfx1101;gfx1102'
+            hip_arch: 'gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102'
     runs-on: windows-2022
     steps:
       - name: Checkout
