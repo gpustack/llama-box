@@ -203,7 +203,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // general //
     // server //
     opts.push_back({ "server" });
-    opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen (default: %s)", llm_params.hostname.c_str() });
+    opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen, or bind to an UNIX socket if the address ends with .sock (default: %s)", llm_params.hostname.c_str() });
     opts.push_back({ "server",                             "       --port PORT",                            "Port to listen (default: %d)", llm_params.port });
     opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
     opts.push_back({ "server",                             "       --conn-keepalive N",                     "Server connection keep-alive in seconds (default: %d)", params_.hs_params.conn_keepalive });

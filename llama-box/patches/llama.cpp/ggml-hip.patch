@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
-index 954ff5f1..fccb929f 100644
+index f8c55a2b..787aa0fd 100644
 --- a/ggml/src/ggml-cuda/common.cuh
 +++ b/ggml/src/ggml-cuda/common.cuh
 @@ -59,6 +59,9 @@
@@ -10,33 +10,33 @@ index 954ff5f1..fccb929f 100644
 +#define GGML_CUDA_CC_CDNA2_DCU  (GGML_CUDA_CC_OFFSET_AMD + 0x926)  // Z100
 +#define GGML_CUDA_CC_CDNA2_DCU2 (GGML_CUDA_CC_OFFSET_AMD + 0x928)  // K100
  
- // RNDA removes MFMA, dp4a, xnack, acc registers, wave size is 32
+ // RDNA removes MFMA, dp4a, xnack, acc registers, wave size is 32
  #define GGML_CUDA_CC_RDNA1      (GGML_CUDA_CC_OFFSET_AMD + 0x1010) // RX 5000
-@@ -71,7 +74,7 @@
- #define GGML_CUDA_CC_IS_RDNA2(cc) (cc >= GGML_CUDA_CC_RDNA2 && cc < GGML_CUDA_CC_RDNA3)
- #define GGML_CUDA_CC_IS_RDNA3(cc) (cc >= GGML_CUDA_CC_RDNA3)
+@@ -73,7 +76,7 @@
+ #define GGML_CUDA_CC_IS_RDNA3(cc) (cc >= GGML_CUDA_CC_RDNA3 && cc < GGML_CUDA_CC_RDNA4)
+ #define GGML_CUDA_CC_IS_RDNA4(cc) (cc >= GGML_CUDA_CC_RDNA4)
  #define GGML_CUDA_CC_IS_GCN(cc)   (cc > GGML_CUDA_CC_OFFSET_AMD && cc < GGML_CUDA_CC_CDNA)
 -#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA && cc < GGML_CUDA_CC_RDNA1)
 +#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA && cc < GGML_CUDA_CC_RDNA1 && cc != GGML_CUDA_CC_CDNA2_DCU && cc != GGML_CUDA_CC_CDNA2_DCU2)
  
  // Moore Threads
  #define GGML_CUDA_MUSA_ARCH_IS_QY1 (__MUSA_ARCH__ <= 210)
-@@ -407,7 +410,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
+@@ -409,7 +412,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
  
  static __device__ __forceinline__ int ggml_cuda_dp4a(const int a, const int b, int c) {
  #if defined(GGML_USE_HIP) && defined(__HIP_PLATFORM_AMD__)
 -#if defined(CDNA) || defined(RDNA2) || defined(__gfx906__)
 +#if (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__)) || defined(RDNA2) || defined(__gfx906__)
      c = __builtin_amdgcn_sdot4(a, b, c, false);
- #elif defined(RDNA3)
+ #elif defined(RDNA3) || defined(RDNA4)
      c = __builtin_amdgcn_sudot4( true, a, true, b, c, false);
 diff --git a/ggml/src/ggml-cuda/mmvq.cu b/ggml/src/ggml-cuda/mmvq.cu
-index a7d518a5..244f43c1 100644
+index 45ea30f6..492a4495 100644
 --- a/ggml/src/ggml-cuda/mmvq.cu
 +++ b/ggml/src/ggml-cuda/mmvq.cu
 @@ -56,7 +56,7 @@ enum mmvq_parameter_table_id {
  static constexpr __device__ mmvq_parameter_table_id get_device_table_id() {
- #if defined(RDNA2) || defined(RDNA3)
+ #if defined(RDNA2) || defined(RDNA3) || defined(RDNA4)
      return MMVQ_PARAMETERS_RDNA2;
 -#elif defined(GCN) || defined(CDNA)
 +#elif defined(GCN) || (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__))

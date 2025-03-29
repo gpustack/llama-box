@@ -139,7 +139,7 @@ index 9aad84e8..733556aa 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 25a9f827..08010f1d 100644
+index c66a2370..6cd1c388 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -383,6 +383,11 @@ extern "C" {
