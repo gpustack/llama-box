@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdarg>
+#include <fstream>
 #include <utility>
 
 #include "llama.cpp/common/common.h"
@@ -270,7 +271,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // server //
     opts.push_back({ "server" });
     opts.push_back({ "server",                             "       --v2",                                   "Switch to use v2 engine (experimental)"});
-    opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen (default: %s)", llm_params.hostname.c_str() });
+    opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen, or bind to an UNIX socket if the address ends with .sock (default: %s)", llm_params.hostname.c_str() });
     opts.push_back({ "server",                             "       --port PORT",                            "Port to listen (default: %d)", llm_params.port });
     opts.push_back({ "server",                             "-to    --timeout N",                            "Server read/write timeout in seconds (default: %d)", llm_params.timeout_read });
     opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });

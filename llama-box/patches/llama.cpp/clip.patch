@@ -1,5 +1,5 @@
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index a1f050e3..88f91c25 100644
+index 58ee5cf0..cd13e35e 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -27,37 +27,10 @@
@@ -278,7 +278,15 @@ index a1f050e3..88f91c25 100644
      }
  
      return n_patches;
-@@ -3168,6 +3139,9 @@ bool clip_is_glm(const struct clip_ctx * ctx) {
+@@ -2990,6 +2961,7 @@ bool clip_model_quantize(const char * fname_inp, const char * fname_out, const i
+     ggml_type type = static_cast<ggml_type>(itype);
+ 
+     auto * ctx_clip = clip_init(fname_inp, clip_context_params{
++        /* max_image_size */ 0,
+         /* use_gpu */   false,
+         /* verbosity */ 2,
+     });
+@@ -3171,6 +3143,9 @@ bool clip_is_glm(const struct clip_ctx * ctx) {
  bool clip_is_qwen2vl(const struct clip_ctx * ctx) {
      return ctx->has_qwen2vl_merger;
  }

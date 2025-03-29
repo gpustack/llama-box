@@ -56,10 +56,10 @@ index 18f691b2..f5a4da3a 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/ggml/src/ggml-metal/ggml-metal-impl.h b/ggml/src/ggml-metal/ggml-metal-impl.h
-index 1e954b4c..73446eb9 100644
+index ca5a00b0..d2d61378 100644
 --- a/ggml/src/ggml-metal/ggml-metal-impl.h
 +++ b/ggml/src/ggml-metal/ggml-metal-impl.h
-@@ -117,6 +117,11 @@ typedef struct {
+@@ -181,6 +181,11 @@ typedef struct {
      bool     inplace;
  } ggml_metal_kargs_set;
  
@@ -71,7 +71,7 @@ index 1e954b4c..73446eb9 100644
  typedef struct {
      int32_t  ne00;
      int32_t  ne01;
-@@ -143,6 +148,9 @@ typedef struct {
+@@ -207,6 +212,9 @@ typedef struct {
      float    attn_factor;
      float    beta_fast;
      float    beta_slow;
@@ -82,7 +82,7 @@ index 1e954b4c..73446eb9 100644
  
  typedef struct {
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index af65e7d9..b14b2335 100644
+index 195d9678..8d054516 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1264,16 +1264,7 @@ static bool ggml_metal_supports_op(const struct ggml_backend_metal_device_contex
@@ -103,7 +103,7 @@ index af65e7d9..b14b2335 100644
          case GGML_OP_IM2COL:
              return op->src[0]->type == GGML_TYPE_F16;
          case GGML_OP_POOL_1D:
-@@ -3338,6 +3329,7 @@ static void ggml_metal_encode_node(
+@@ -3294,6 +3285,7 @@ static void ggml_metal_encode_node(
                  float attn_factor;
                  float beta_fast;
                  float beta_slow;
@@ -111,7 +111,7 @@ index af65e7d9..b14b2335 100644
  
                  memcpy(&freq_base,   (const int32_t *) dst->op_params +  5, sizeof(float));
                  memcpy(&freq_scale,  (const int32_t *) dst->op_params +  6, sizeof(float));
-@@ -3345,8 +3337,11 @@ static void ggml_metal_encode_node(
+@@ -3301,8 +3293,11 @@ static void ggml_metal_encode_node(
                  memcpy(&attn_factor, (const int32_t *) dst->op_params +  8, sizeof(float));
                  memcpy(&beta_fast,   (const int32_t *) dst->op_params +  9, sizeof(float));
                  memcpy(&beta_slow,   (const int32_t *) dst->op_params + 10, sizeof(float));
@@ -123,7 +123,7 @@ index af65e7d9..b14b2335 100644
  
                  id<MTLComputePipelineState> pipeline = nil;
  
-@@ -3390,6 +3385,9 @@ static void ggml_metal_encode_node(
+@@ -3346,6 +3341,9 @@ static void ggml_metal_encode_node(
                      /*.attn_factor =*/ attn_factor,
                      /*.beta_fast   =*/ beta_fast,
                      /*.beta_slow   =*/ beta_slow,
@@ -133,7 +133,7 @@ index af65e7d9..b14b2335 100644
                  };
  
                  [encoder setComputePipelineState:pipeline];
-@@ -3409,7 +3407,6 @@ static void ggml_metal_encode_node(
+@@ -3365,7 +3363,6 @@ static void ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
@@ -142,10 +142,10 @@ index af65e7d9..b14b2335 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-metal/ggml-metal.metal b/ggml/src/ggml-metal/ggml-metal.metal
-index 3cef81b7..64da1a2e 100644
+index 38f03efb..3648f0f2 100644
 --- a/ggml/src/ggml-metal/ggml-metal.metal
 +++ b/ggml/src/ggml-metal/ggml-metal.metal
-@@ -2624,37 +2624,98 @@ kernel void kernel_rope_norm(
+@@ -2614,37 +2614,98 @@ kernel void kernel_rope_norm(
  
      device const int32_t * pos = (device const int32_t *) src1;
  

@@ -12,7 +12,7 @@ index a6106944..cfb8b0f3 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index af65e7d9..e7c54199 100644
+index 195d9678..4e8a6e65 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1410,11 +1410,6 @@ static void ggml_metal_encode_node(
@@ -81,7 +81,7 @@ index af65e7d9..e7c54199 100644
                      const int nxpsg  = ne11 < 3 ? 16 : 8; // num threads along row per simdgroup
                      const int nypsg  = 32/nxpsg;          // num threads along col per simdgroup (i.e. a simdgroup processes that many src0 rows at a time)
                      const int r0ptg  = nypsg*nsg;         // num src0 rows per threadgroup
-@@ -3176,7 +3173,7 @@ static void ggml_metal_encode_node(
+@@ -3132,7 +3129,7 @@ static void ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
@@ -90,7 +90,7 @@ index af65e7d9..e7c54199 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -5265,4 +5262,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+@@ -5221,4 +5218,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
      return &g_ggml_backend_metal_reg;
  }
  

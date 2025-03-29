@@ -3125,7 +3125,15 @@ struct httpserver {
         });
         server->new_task_queue = [&thread_pool] { return thread_pool.get(); };
 
-        // listening
+        // listening on socket
+        if (string_ends_with(std::string(params.llm_params.hostname), ".sock")) {
+            SRV_INF("listening sock = %s\n", params.llm_params.hostname.c_str());
+            server->set_address_family(AF_UNIX);
+            server->bind_to_port(params.llm_params.hostname, 1);
+            return server->listen_after_bind();
+        }
+
+        // listening on port
         SRV_INF("listening host = %s, port = %d\n", params.llm_params.hostname.c_str(), params.llm_params.port);
         return server->listen(params.llm_params.hostname, params.llm_params.port);
     }
