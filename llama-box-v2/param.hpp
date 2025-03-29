@@ -203,7 +203,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     // general //
     // server //
     opts.push_back({ "server" });
-    opts.push_back({ "general",                            "-np,   --parallel N",                           "Number of processing parallel (default: %d)", params_.hs_params.n_parallel });
     opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen (default: %s)", llm_params.hostname.c_str() });
     opts.push_back({ "server",                             "       --port PORT",                            "Port to listen (default: %d)", llm_params.port });
     opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
@@ -354,8 +353,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion/speculative",      "-ngld, --gpu-layers-draft, --n-gpu-layers-draft N",
                                                                                                             "Number of layers to store in VRAM for the draft model" });
     opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "Minimum n-gram size for lookup cache (default: %d, 0 = disabled)", params_.hs_params.lookup_ngram_min });
-    opts.push_back({ "server/completion/speculative",      "-lcs,  --lookup-cache-static FILE",             "Path to static lookup cache to use for lookup decoding (not updated by generation)" });
-    opts.push_back({ "server/completion/speculative",      "-lcd,  --lookup-cache-dynamic FILE",            "Path to dynamic lookup cache to use for lookup decoding (updated by generation)" });
     // server // completion // speculative //
     // server // completion // visual //
     opts.push_back({ "server/completion/visual" });
@@ -525,18 +522,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
             // general //
 
             // server //
-
-            if (!strcmp(flag, "-np") || !strcmp(flag, "--parallel")) {
-                if (i == argc) {
-                    missing("--parallel");
-                }
-                char *arg                    = argv[i++];
-                params_.hs_params.n_parallel = std::stoi(std::string(arg));
-                if (params_.hs_params.n_parallel <= 0) {
-                    invalid("--parallel");
-                }
-                continue;
-            }
 
             if (!strcmp(flag, "--host")) {
                 if (i == argc) {
@@ -1068,7 +1053,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                                  = argv[i++];
                 params_.hs_params.llm_params.sampling.temp = std::stof(std::string(arg));
-                params_.hs_params.llm_params.sampling.temp = MAX(params_.hs_params.llm_params.sampling.temp, 0.0f);
+                params_.hs_params.llm_params.sampling.temp = std::max(params_.hs_params.llm_params.sampling.temp, 0.0f);
                 continue;
             }
 
@@ -1144,7 +1129,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (params_.hs_params.llm_params.sampling.penalty_last_n < -1) {
                     invalid("--repeat-last-n");
                 }
-                params_.hs_params.llm_params.sampling.n_prev = MAX(params_.hs_params.llm_params.sampling.n_prev, params_.hs_params.llm_params.sampling.penalty_last_n);
+                params_.hs_params.llm_params.sampling.n_prev = std::max(params_.hs_params.llm_params.sampling.n_prev, params_.hs_params.llm_params.sampling.penalty_last_n);
                 continue;
             }
 
@@ -1633,26 +1618,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                     invalid("--lookup-ngram-min");
                 }
                 if (params_.hs_params.lookup_ngram_min > LLAMA_NGRAM_MAX) {
-                    invalid("--lookup-ngram-min");
+                    invalid("--lookup-ngram-min cannot exceed 4");
                 }
-                continue;
-            }
-
-            if (!strcmp(flag, "-lcs") || !strcmp(flag, "--lookup-cache-static")) {
-                if (i == argc) {
-                    missing("--lookup-cache-static");
-                }
-                char *arg                                        = argv[i++];
-                params_.hs_params.llm_params.lookup_cache_static = std::string(arg);
-                continue;
-            }
-
-            if (!strcmp(flag, "-lcd") || !strcmp(flag, "--lookup-cache-dynamic")) {
-                if (i == argc) {
-                    missing("--lookup-cache-dynamic");
-                }
-                char *arg                                         = argv[i++];
-                params_.hs_params.llm_params.lookup_cache_dynamic = std::string(arg);
                 continue;
             }
 

@@ -451,12 +451,6 @@ struct server_slot {
             {"predicted_per_second", 1e3 / t_token_generation * n_decoded},
         };
 
-        if (n_drafted > 0) {
-            const int32_t n_decoded_with_drafted = n_decoded + n_drafted - n_drafted_accepted;
-            ret["predicted_per_token_ms"]        = t_token_generation / n_decoded_with_drafted;
-            ret["predicted_per_second"]          = 1e3 / t_token_generation * n_decoded_with_drafted;
-        }
-
         return ret;
     }
 
@@ -1067,6 +1061,7 @@ struct server_context {
             SRV_INF("loading draft model '%s'\n", llm_params.speculative.model.c_str());
 
             common_params llm_params_draft   = llm_params;
+            llm_params_draft.embedding       = false;
             llm_params_draft.model           = llm_params.speculative.model;
             llm_params_draft.n_gpu_layers    = llm_params.speculative.n_gpu_layers;
             llm_params_draft.cpuparams       = llm_params.speculative.cpuparams;
@@ -3829,6 +3824,7 @@ struct server_context {
                         slot.push_token_into_result(llm_ctx, tok_idx, tok, result);
                         slot.n_decoded += 1;
                         if (!accept) {
+                            slot.n_decoded += sz_draft - j;
                             break;
                         }
                         slot.n_drafted_accepted += 1;

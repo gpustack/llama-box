@@ -36,25 +36,6 @@ int engine_start(int argc, char **argv) {
             // nothing to do
         },
         nullptr);
-    hlog_set_format("%s");
-    hlog_set_handler([](int loglevel, const char *buf, int len) {
-        if (common_log_verbosity_thold > 4) {
-            ggml_log_level lvl;
-            switch (loglevel) {
-                case LOG_LEVEL_WARN:
-                    lvl = GGML_LOG_LEVEL_WARN;
-                    break;
-                case LOG_LEVEL_ERROR:
-                case LOG_LEVEL_FATAL:
-                    lvl = GGML_LOG_LEVEL_ERROR;
-                    break;
-                default:
-                    return;
-            }
-            common_log_add(common_log_main(), lvl, "libhv: %s", buf);
-        }
-    });
-    //    hlog_disable();
 
     // parse arguments
     llama_box_params params{};

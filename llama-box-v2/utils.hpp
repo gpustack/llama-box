@@ -3,9 +3,9 @@
 // heads
 #include <chrono>
 #include <functional>
+#include <random>
 #include <thread>
 #include <utility>
-#include <random>
 
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/json.hpp"
@@ -100,7 +100,7 @@ struct RatelimitTokenBucket {
         }
         int new_tokens = (int(elapsed) / 1000) * rate;
         if (new_tokens > 0) {
-            tokens_remain = MIN(capacity, tokens_remain + new_tokens);
+            tokens_remain = std::min(capacity, tokens_remain + new_tokens);
             last_time     = now;
         }
     }
