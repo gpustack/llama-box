@@ -62,7 +62,11 @@ int engine_start(int argc, char **argv) {
         LOG_INF("version    : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
         LOG_INF("compiler   : %s\n", LLAMA_BOX_BUILD_COMPILER);
         LOG_INF("target     : %s\n", LLAMA_BOX_BUILD_TARGET);
-        LOG_INF("vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER, STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
+        LOG_INF("vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d), concurrentqueue %s (%d), readerwriterqueue %s (%d)\n",
+                LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER,
+                STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER,
+                CONCURRENT_QUEUE_COMMIT, CONCURRENT_QUEUE_BUILD_NUMBER,
+                READER_WRITER_QUEUE_COMMIT, READER_WRITER_QUEUE_BUILD_NUMBER);
         LOG_INF("%s\n", common_params_get_system_info(params.hs_params.llm_params).c_str());
         LOG_INF("\n");
     }

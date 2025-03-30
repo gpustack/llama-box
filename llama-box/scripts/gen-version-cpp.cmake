@@ -195,6 +195,88 @@ message(STATUS "Stable Diffusion CPP commit:         ${STABLE_DIFFUSION_CPP_COMM
 message(STATUS "Stable Diffusion CPP build number:   ${STABLE_DIFFUSION_CPP_BUILD_NUMBER}")
 
 #
+# Concurrent Queue
+#
+
+set(CONCURRENT_QUEUE_COMMIT "unknown")
+set(CONCURRENT_QUEUE_BUILD_NUMBER 0)
+
+# Get the commit and count
+if (Git_FOUND)
+    # Get the commit
+    execute_process(
+            COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../concurrentqueue
+            OUTPUT_VARIABLE GIT_HEAD
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE RES
+    )
+    if (RES EQUAL 0)
+        set(CONCURRENT_QUEUE_COMMIT ${GIT_HEAD})
+    else ()
+        message(WARNING "Failed to get the commit of concurrentqueue")
+    endif ()
+    # Get the commit count
+    execute_process(
+            COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../concurrentqueue
+            OUTPUT_VARIABLE GIT_COUNT
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE RES
+    )
+    if (RES EQUAL 0)
+        set(CONCURRENT_QUEUE_BUILD_NUMBER ${GIT_COUNT})
+    else ()
+        message(WARNING "Failed to get the commit count of concurrentqueue")
+    endif ()
+endif ()
+
+# Print the version info
+message(STATUS "Concurrent Queue commit:         ${CONCURRENT_QUEUE_COMMIT}")
+message(STATUS "Concurrent Queue build number:   ${CONCURRENT_QUEUE_BUILD_NUMBER}")
+
+#
+# ReaderWriter Queue
+#
+
+set(READER_WRITER_QUEUE_COMMIT "unknown")
+set(READER_WRITER_QUEUE_BUILD_NUMBER 0)
+
+# Get the commit and count
+if (Git_FOUND)
+    # Get the commit
+    execute_process(
+            COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../readerwriterqueue
+            OUTPUT_VARIABLE GIT_HEAD
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE RES
+    )
+    if (RES EQUAL 0)
+        set(READER_WRITER_QUEUE_COMMIT ${GIT_HEAD})
+    else ()
+        message(WARNING "Failed to get the commit of readerwriterqueue")
+    endif ()
+    # Get the commit count
+    execute_process(
+            COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../readerwriterqueue
+            OUTPUT_VARIABLE GIT_COUNT
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE RES
+    )
+    if (RES EQUAL 0)
+        set(READER_WRITER_QUEUE_BUILD_NUMBER ${GIT_COUNT})
+    else ()
+        message(WARNING "Failed to get the commit count of readerwriterqueue")
+    endif ()
+endif ()
+
+# Print the version info
+message(STATUS "ReaderWriter Queue commit:         ${READER_WRITER_QUEUE_COMMIT}")
+message(STATUS "ReaderWriter Queue build number:   ${READER_WRITER_QUEUE_BUILD_NUMBER}")
+
+#
 # Write version info
 #
 

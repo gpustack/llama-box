@@ -24,6 +24,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #endif
+#include <filesystem>
+#include <fstream>
 
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"
@@ -48,7 +50,7 @@
 
 #include "utils.hpp"
 
-#define UNUSED GGML_UNUSED
+namespace fs = std::filesystem;
 
 #ifdef _WIN32
 typedef SOCKET rpc_sockfd_t;
@@ -108,6 +110,7 @@ enum rpc_cmd {
     RPC_CMD_FREE_BUFFER,
     RPC_CMD_BUFFER_CLEAR,
     RPC_CMD_SET_TENSOR,
+    RPC_CMD_SET_TENSOR_HASH,
     RPC_CMD_GET_TENSOR,
     RPC_CMD_COPY_TENSOR,
     RPC_CMD_GRAPH_COMPUTE,
@@ -118,7 +121,22 @@ enum rpc_cmd {
     RPC_CMD_COUNT,
 };
 
+// Try RPC_CMD_SET_TENSOR_HASH first when data size is larger than this threshold
+const size_t HASH_THRESHOLD = 10 * 1024 * 1024;
+
 // RPC helper
+
+// Computes FNV-1a hash of the data
+static uint64_t fnv_hash(const uint8_t *data, size_t len) {
+    const uint64_t fnv_prime = 0x100000001b3ULL;
+    uint64_t hash            = 0xcbf29ce484222325ULL;
+
+    for (size_t i = 0; i < len; ++i) {
+        hash ^= data[i];
+        hash *= fnv_prime;
+    }
+    return hash;
+}
 
 static std::shared_ptr<rpc_socket_t> rpc_socket_create(rpc_sockfd_t fd) {
 #ifdef _WIN32
@@ -245,8 +263,8 @@ static void rpcserver_get_backend_memory(ggml_backend_t backend, int32_t gpu, si
 
 class rpcserver {
   public:
-    rpcserver(ggml_backend_t backend, int32_t index = 0, size_t capacity = 0)
-        : backend(backend), index(index), capacity(capacity) {
+    rpcserver(ggml_backend_t backend, const char *cache_dir, int32_t index = 0, size_t capacity = 0)
+        : backend(backend), cache_dir(cache_dir), index(index), capacity(capacity) {
     }
 
     ~rpcserver();
@@ -258,6 +276,7 @@ class rpcserver {
     bool free_buffer(const std::vector<uint8_t> &input);
     bool buffer_clear(const std::vector<uint8_t> &input);
     bool set_tensor(const std::vector<uint8_t> &input);
+    bool set_tensor_hash(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
     bool get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
     bool copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
     bool graph_compute(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
@@ -267,11 +286,13 @@ class rpcserver {
     bool support_op(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
 
   private:
+    bool get_cached_file(uint64_t hash, std::vector<uint8_t> &data);
     size_t get_free_memory() const;
     ggml_tensor *deserialize_tensor(struct ggml_context *ctx, const rpc_tensor *tensor);
     ggml_tensor *create_node(uint64_t id, struct ggml_context *ctx, const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs, std::unordered_map<uint64_t, struct ggml_tensor *> &tensor_map);
 
     ggml_backend_t backend;
+    const char *cache_dir;
     int32_t index                                     = 0;
     size_t capacity                                   = 0;
     std::unordered_set<ggml_backend_buffer_t> buffers = {};
@@ -432,8 +453,77 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
         }
     }
 
-    const void *data = input.data() + sizeof(rpc_tensor) + sizeof(offset);
+    const void *data   = input.data() + sizeof(rpc_tensor) + sizeof(offset);
+    int caching_status = -1; // -1 = no cache, 0 = cached ok, 1 = cache failed
+    if (cache_dir && size > HASH_THRESHOLD) {
+        try {
+            uint64_t hash = fnv_hash((const uint8_t *)data, size);
+            char hash_str[17];
+            snprintf(hash_str, sizeof(hash_str), "%016" PRIx64, hash);
+            fs::path cache_file = fs::path(cache_dir) / hash_str;
+            std::ofstream ofs(cache_file, std::ios::binary);
+            ofs.write((const char *)data, size);
+            caching_status = 0;
+        } catch (std::exception &e) {
+            SRV_WRN("cannot cache tensor id = %lu: %s\n", in_tensor->id, e.what());
+            caching_status = 1;
+        }
+    }
     ggml_backend_tensor_set(tensor, data, offset, size);
+    ggml_free(ctx);
+    SRV_DBG("id = %lu, size = %zu, name = %s, type = %s, caching = %d\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type), caching_status);
+    return true;
+}
+
+bool rpcserver::set_tensor_hash(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
+    // output serialization format: | result (1 byte) |
+    output.resize(1, 0);
+
+    // serialization format: | rpc_tensor | offset (8 bytes) | hash (8 bytes) |
+    if (input.size() != sizeof(rpc_tensor) + 16) {
+        return false;
+    }
+    const rpc_tensor *in_tensor = (const rpc_tensor *)input.data();
+    uint64_t offset;
+    memcpy(&offset, input.data() + sizeof(rpc_tensor), sizeof(offset));
+    const uint64_t *hash = (const uint64_t *)(input.data() + sizeof(rpc_tensor) + sizeof(offset));
+
+    // get cached
+    std::vector<uint8_t> cached_file;
+    if (!get_cached_file(*hash, cached_file)) {
+        output[0] = 0;
+        return true;
+    }
+    size_t size = cached_file.size();
+
+    struct ggml_init_params params{
+        /*.mem_size   =*/ggml_tensor_overhead(),
+        /*.mem_buffer =*/NULL,
+        /*.no_alloc   =*/true,
+    };
+    struct ggml_context *ctx = ggml_init(params);
+    ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
+    if (tensor == nullptr) {
+        SRV_ERR("faield to set tensor with hash: faile to deserialize cached tensor: id = %lu\n", in_tensor->id);
+        ggml_free(ctx);
+        return false;
+    }
+
+    // sanitize tensor->data
+    {
+        const size_t p0 = (size_t)ggml_backend_buffer_get_base(tensor->buffer);
+        const size_t p1 = p0 + ggml_backend_buffer_get_size(tensor->buffer);
+
+        if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
+            SRV_ERR("failed to set tensor with hash: tensor->data out of bounds: id = %lu, size = %lu, data = %p, offset = %llu, hash = %" PRIx64 "\n", in_tensor->id, size, tensor->data, offset, *hash);
+            delete tensor;
+            ggml_free(ctx);
+            return false;
+        }
+    }
+
+    ggml_backend_tensor_set(tensor, cached_file.data(), offset, size);
+    output[0] = 1;
     ggml_free(ctx);
     SRV_DBG("id = %lu, size = %zu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     return true;
@@ -476,6 +566,7 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     output.resize(size, 0);
     ggml_backend_tensor_get(tensor, output.data(), offset, size);
     ggml_free(ctx);
+    SRV_DBG("id = %lu, size = %lu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     SRV_DBG("id = %lu, size = %lu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     return true;
 }
@@ -689,6 +780,25 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
     return true;
 }
 
+bool rpcserver::get_cached_file(uint64_t hash, std::vector<uint8_t> &data) {
+    if (!cache_dir) {
+        return false;
+    }
+    char hash_str[17];
+    snprintf(hash_str, sizeof(hash_str), "%016" PRIx64, hash);
+    fs::path cache_file = fs::path(cache_dir) / hash_str;
+    if (!fs::exists(cache_file)) {
+        return false;
+    }
+    std::ifstream ifs(cache_file, std::ios::binary);
+    ifs.seekg(0, std::ios::end);
+    size_t size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    data.resize(size);
+    ifs.read((char *)data.data(), size);
+    return true;
+}
+
 size_t rpcserver::get_free_memory() const {
     size_t free_mem, total_mem;
     rpcserver_get_backend_memory(backend, index, &free_mem, &total_mem);
@@ -763,11 +873,11 @@ ggml_tensor *rpcserver::create_node(uint64_t id, struct ggml_context *ctx, const
     return result;
 }
 
-static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_sockfd_t sockfd) {
+static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx, size_t cap, rpc_sockfd_t sockfd) {
     std::vector<uint8_t> input;
     std::vector<uint8_t> output;
 
-    rpcserver server(bkd, idx, cap);
+    rpcserver server(bkd, cached, idx, cap);
     while (true) {
         // receive command
         uint8_t cmd;
@@ -831,6 +941,10 @@ static void rpcserver_serve(ggml_backend_t bkd, int32_t idx, size_t cap, rpc_soc
                 }
                 case RPC_CMD_SET_TENSOR: {
                     ok = server.set_tensor(input);
+                    break;
+                }
+                case RPC_CMD_SET_TENSOR_HASH: {
+                    ok = server.set_tensor_hash(input, output);
                     break;
                 }
                 case RPC_CMD_GET_TENSOR: {
@@ -937,6 +1051,8 @@ struct rpcserver_params {
     int port              = 0;
     int32_t main_gpu      = 0;
     size_t reserve_memory = 0;
+    bool use_cache        = false;
+    std::string cache_dir = fs_get_cache_directory() + +"rpc/";
 };
 
 static int rpcserver_start(rpcserver_params &params) {
@@ -955,9 +1071,19 @@ static int rpcserver_start(rpcserver_params &params) {
         SRV_ERR("%s", "failed to create backend\n");
         return 1;
     }
+    const char *cache_dir = nullptr;
+    if (params.use_cache) {
+        cache_dir = params.cache_dir.c_str();
+        if (!fs_create_directory_with_parents(params.cache_dir)) {
+            SRV_ERR("failed to create cache directory: %s\n", cache_dir);
+            return 1;
+        }
+    }
+
+    int32_t main_gpu = params.main_gpu;
 
     size_t free_mem, total_mem;
-    rpcserver_get_backend_memory(backend, params.main_gpu, &free_mem, &total_mem);
+    rpcserver_get_backend_memory(backend, main_gpu, &free_mem, &total_mem);
     if (total_mem < params.reserve_memory) {
         SRV_ERR("not enough memory, "
                 "free_mib = %zu, total_mib = %zu, reserve_mib = %zu\n",
@@ -1007,10 +1133,9 @@ static int rpcserver_start(rpcserver_params &params) {
         unsigned short cli_port = ntohs(cli_addr.sin_port);
 
         try {
-            int32_t main_gpu = params.main_gpu;
-            std::thread([backend, main_gpu, total_mem, cli_socket, cli_ip, cli_port]() {
+            std::thread([backend, cache_dir, main_gpu, total_mem, cli_socket, cli_ip, cli_port]() {
                 LOG_INF("cli %25s: %s:%d\n", "accepted", cli_ip, cli_port);
-                rpcserver_serve(backend, main_gpu, total_mem, cli_socket->fd);
+                rpcserver_serve(backend, cache_dir, main_gpu, total_mem, cli_socket->fd);
                 LOG_INF("cli %25s: %s:%d\n", "closed", cli_ip, cli_port);
             }).detach();
         } catch (const std::exception &e) {

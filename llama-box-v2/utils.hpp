@@ -3,9 +3,11 @@
 // heads
 #include <chrono>
 #include <functional>
+#include <queue>
 #include <random>
 #include <thread>
 #include <utility>
+#include <queue>
 
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/json.hpp"
@@ -152,6 +154,10 @@ extern const char *LLAMA_CPP_COMMIT;
 extern int LLAMA_CPP_BUILD_NUMBER;
 extern const char *STABLE_DIFFUSION_CPP_COMMIT;
 extern int STABLE_DIFFUSION_CPP_BUILD_NUMBER;
+extern const char *CONCURRENT_QUEUE_COMMIT;
+extern int CONCURRENT_QUEUE_BUILD_NUMBER;
+extern const char *READER_WRITER_QUEUE_COMMIT;
+extern int READER_WRITER_QUEUE_BUILD_NUMBER;
 
 // utils
 

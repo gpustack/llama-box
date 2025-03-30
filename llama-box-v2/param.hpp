@@ -205,7 +205,9 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server" });
     opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen, or bind to an UNIX socket if the address ends with .sock (default: %s)", llm_params.hostname.c_str() });
     opts.push_back({ "server",                             "       --port PORT",                            "Port to listen (default: %d)", llm_params.port });
+    opts.push_back({ "server",                             "-to    --timeout N",                            "Server read/write timeout in seconds (default: %d)", llm_params.timeout_read });
     opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
+    opts.push_back({ "server",                             "       --conn-idle N",                          "Server connection idle in seconds (default: %d)", params_.hs_params.conn_idle });
     opts.push_back({ "server",                             "       --conn-keepalive N",                     "Server connection keep-alive in seconds (default: %d)", params_.hs_params.conn_keepalive });
     opts.push_back({ "server",                             "-m,    --model FILE",                           "Model path (default: %s)", DEFAULT_MODEL_PATH });
     opts.push_back({ "server",                             "-a,    --alias NAME",                           "Model name alias" });
@@ -406,6 +408,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "Port to RPC server listen (default: %d, 0 = disabled)", rpc_params.port });
     opts.push_back({ "rpc-server",                         "       --rpc-server-main-gpu N",                "The GPU VRAM to use for the RPC server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
     opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "Reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-cache",                     "Enable caching large tensors locally (default: %s)", rpc_params.use_cache ? "enabled" : "disabled" });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-cache-dir PATH",            "Path to store large tensors (default: %s, according to OS)", rpc_params.cache_dir.c_str() });
     // rpc-server //
 
     // clang-format on
@@ -463,7 +467,11 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 fprintf(stderr, "version    : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
                 fprintf(stderr, "compiler   : %s\n", LLAMA_BOX_BUILD_COMPILER);
                 fprintf(stderr, "target     : %s\n", LLAMA_BOX_BUILD_TARGET);
-                fprintf(stderr, "vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d)\n", LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER, STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER);
+                fprintf(stderr, "vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d), concurrentqueue %s (%d), readerwriterqueue %s (%d)\n",
+                        LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER,
+                        STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER,
+                        CONCURRENT_QUEUE_COMMIT, CONCURRENT_QUEUE_BUILD_NUMBER,
+                        READER_WRITER_QUEUE_COMMIT, READER_WRITER_QUEUE_BUILD_NUMBER);
                 exit(0);
             }
 
@@ -544,12 +552,31 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 continue;
             }
 
+            if (!strcmp(flag, "-to") || !strcmp(flag, "--timeout")) {
+                if (i == argc) {
+                    missing("--timeout");
+                }
+                char *arg                                  = argv[i++];
+                params_.hs_params.llm_params.timeout_read  = std::stoi(std::string(arg));
+                params_.hs_params.llm_params.timeout_write = params_.hs_params.llm_params.timeout_read;
+                continue;
+            }
+
             if (!strcmp(flag, "--threads-http")) {
                 if (i == argc) {
                     missing("--threads-http");
                 }
                 char *arg                                   = argv[i++];
                 params_.hs_params.llm_params.n_threads_http = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--conn-idle")) { // extend
+                if (i == argc) {
+                    missing("--conn-idle");
+                }
+                char *arg                   = argv[i++];
+                params_.hs_params.conn_idle = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1994,6 +2021,23 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                        = argv[i++];
                 params_.rs_params.reserve_memory = std::stoul(std::string(arg)) << 20;
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc-server-cache")) {
+                if (i == argc) {
+                    missing("--rpc-server-cache");
+                }
+                params_.rs_params.use_cache = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc-server-cache-dir")) {
+                if (i == argc) {
+                    missing("--rpc-server-cache-dir");
+                }
+                char *arg                   = argv[i++];
+                params_.rs_params.cache_dir = std::string(arg);
                 continue;
             }
 
