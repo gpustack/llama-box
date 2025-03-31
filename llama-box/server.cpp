@@ -3354,6 +3354,7 @@ struct server_context {
                 }
 
                 slot.n_past -= n_discard;
+                slot.n_prompt_tokens_processed -= n_discard;
 
                 slot.truncated = true;
             }
