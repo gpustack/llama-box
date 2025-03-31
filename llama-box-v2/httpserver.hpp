@@ -566,7 +566,7 @@ static inline std::unique_ptr<tokenize_req> get_tokenize_req(const httplib::Requ
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["content"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -611,7 +611,7 @@ static inline std::unique_ptr<detokenize_req> get_detokenize_req(const httplib::
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["tokens"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -693,7 +693,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["prompt"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -941,7 +941,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["messages"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -1297,7 +1297,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
         inputs.parallel_tool_calls   = ptr->parallel_tool_calls;
         // NB(thxCode): common_chat_templates_apply2 is a patch.
         ptr->chat_params = common_chat_templates_apply2(llama_get_model(llm_ctx), chat_templates, inputs);
-        SRV_INFV(2, "rid %s | formatted prompt\n%s\n", rid.c_str(), ptr->chat_params.prompt.c_str());
+        SRV_INFV(3, "rid %s | formatted prompt\n%s\n", rid.c_str(), ptr->chat_params.prompt.c_str());
     };
 
     // merge sampling
@@ -1378,7 +1378,7 @@ static inline std::unique_ptr<embed_req> get_embed_req(const httplib::Request &r
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["input"] = "[...]";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -1435,7 +1435,7 @@ static inline std::unique_ptr<rerank_req> get_rerank_req(const httplib::Request 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["query"]     = "...";
             req_cp["documents"] = "...";
         }
@@ -1531,7 +1531,7 @@ static inline std::unique_ptr<image_generate_req> get_image_generate_req(const h
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
         Json req_cp = req;
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["prompt"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -1708,7 +1708,7 @@ static inline std::unique_ptr<image_edit_req> get_image_edit_req(const httplib::
                 req_cp[el.first] = el.second.content;
             }
         }
-        if (common_log_verbosity_thold < 2) {
+        if (common_log_verbosity_thold < 3) {
             req_cp["prompt"] = "...";
         }
         SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
@@ -1987,10 +1987,11 @@ struct btask {
   protected:
     int32_t id     = -1;
     task_type type = TASK_UNKNOWN;
+    int32_t seq_id = -1;
 
   public:
     explicit btask(int32_t id, task_type type, const std::function<bool()> &is_connection_closed)
-        : id(id), type(type), is_connection_closed(is_connection_closed) {
+        : id(id), type(type), seq_id(id), is_connection_closed(is_connection_closed) {
     }
 
     virtual ~btask() = default;
@@ -2001,6 +2002,14 @@ struct btask {
 
     [[nodiscard]] task_type get_type() const {
         return type;
+    }
+
+    void set_seq_id(int32_t new_seq_id) {
+        seq_id = new_seq_id;
+    }
+
+    [[nodiscard]] int32_t get_seq_id() const {
+        return seq_id;
     }
 
     [[nodiscard]] virtual std::string get_r_id() const {
@@ -2080,6 +2089,7 @@ struct completions_task : btask {
 
     // process
     llama_pos pos                       = 0;                                                          // indicate the position at present
+    bool pos_truncated                  = false;                                                      // indicate the position is truncated
     int32_t i_batch_seq_end             = 0;                                                          // indicate the index of the batch seq end
     int32_t i_prompt_prefilled          = 0;                                                          // indicate the index which prompt has been prefilled
     int32_t i_prompt_prefilled_text_pos = 0;                                                          // indicate the position which i_prompt_prefilled prompt has been prefilled
@@ -2440,7 +2450,7 @@ struct embeddings_task : btask {
 };
 
 struct images_task : btask {
-    explicit images_task(int32_t id, std::function<bool()> is_connection_closed)
+    explicit images_task(int32_t id, const std::function<bool()> &is_connection_closed)
         : btask(id, TASK_IMAGES, is_connection_closed) {
     }
 
@@ -2746,7 +2756,7 @@ struct httpserver {
         llm_ctx_size       = int32_t(llama_n_ctx(llm_ctx));
         llm_ctx_embed_size = llama_model_n_embd(llm_model);
         if (params.llm_params.n_threads_http != 1) {
-            llm_ctx_size_shifting = llm_ctx_size / (params.llm_params.n_threads_http >> 1) - 4;
+            llm_ctx_size_shifting = int32_t(float(llm_ctx_size) / float(params.llm_params.n_threads_http) * 1.5);
         } else {
             llm_ctx_size_shifting = llm_ctx_size - 1;
         }
@@ -2812,18 +2822,8 @@ struct httpserver {
         cache_prompt = params.cache_prompt;
         // disable prompt caching if using clip model.
         cache_prompt = cache_prompt && llm_ctx_clip == nullptr;
-        // disable prompt caching if disallowing context shifting.
-        cache_prompt = cache_prompt && params.llm_params.ctx_shift;
-        // disable prompt caching if using remote backend.
-        for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
-            ggml_backend_dev_t dev = ggml_backend_dev_get(i);
-            if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-                ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
-                if (ggml_backend_reg_name(reg) == std::string("RPC")) {
-                    cache_prompt = false;
-                    break;
-                }
-            }
+        if (cache_prompt) {
+            cache_prompts.resize(params.llm_params.n_threads_http);
         }
         SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : (params.cache_prompt ? "unsupported" : "disabled"));
 
@@ -3183,8 +3183,16 @@ struct httpserver {
     llama_batch batch             = {};
 
     // model addition
+
+    struct cache_prompt_entry {
+        llama_tokens tokens;
+        bool occupied = false;
+        bool prefixed = true;
+    };
+
     bool cache_prompt = false;
     common_chat_templates_ptr chat_templates;
+    std::vector<cache_prompt_entry> cache_prompts;
 
     // clip model
     clip_ctx *llm_ctx_clip = nullptr;
@@ -3249,21 +3257,19 @@ struct httpserver {
 
     inline void shift_cmpl_task_ctx(completions_task *task) {
         const std::string rid   = task->get_r_id();
-        const int32_t seq_id    = task->get_id();
+        const int32_t seq_id    = task->get_seq_id();
         const int32_t n_keep    = params.llm_params.n_keep + llama_vocab_get_add_bos(llm_vocab);
         const int32_t n_left    = task->pos - n_keep;
         const int32_t n_discard = n_left >> 1;
-        SRV_WRN("rid %s | "
-                "shift context, kv cache move [%d, %d) -> [%d, %d)\n",
-                rid.c_str(),
-                n_keep + n_discard, task->pos, n_keep, n_keep + n_discard);
         llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
         llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
         if (llm_ctx_draft != nullptr) {
             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, n_keep, n_keep + n_discard);
             llama_kv_self_seq_add(llm_ctx_draft, seq_id, n_keep + n_discard, task->pos, -n_discard);
         }
+        SRV_WRN("rid %s | shift context, kv cache move, seq = %d, [%d, %d) -> [%d, %d)\n", rid.c_str(), seq_id, n_keep + n_discard, task->pos, n_keep, n_keep + n_discard);
         task->pos -= n_discard;
+        task->pos_truncated = true;
     }
 
     //
@@ -3297,7 +3303,7 @@ struct httpserver {
 
         // batch tasks
         task_type batch_task_type = TASK_UNKNOWN;
-        std::unordered_map<int32_t, std::unique_ptr<btask>> batch_task_ptrs;
+        std::vector<std::unique_ptr<btask>> batch_task_ptrs;
         batch_task_ptrs.reserve(n_dequeue_tasks);
         for (auto &task_ptr : task_ptrs) {
             if (task_ptr == nullptr) {
@@ -3356,10 +3362,9 @@ struct httpserver {
             }
 
             // batch
+            int32_t seq_id = task_ptr->get_seq_id();
 
             if (batch_task_type != TASK_IMAGES) {
-                int32_t seq_id = tid;
-
                 /**
                  * completions
                  */
@@ -3385,19 +3390,60 @@ struct httpserver {
 
                         // prepare cache - prefix cache
                         if (task->n_prefilled == 0 && cache_prompt) {
-                            // TODO: find the cache
-                            // if (!task->tokenized_prompts_include_images) {
-                            //    task->n_prefilled_cached = 0;
-                            //    task->pos = 0;
-                            //    task->i_prompt_prefilled_text_pos = 0;
-                            //    task->n_processed_detokenized = 0;
-                            // }
+                            // TODO: support vision cache found
+                            if (!task->tokenized_prompts_include_images) {
+                                llama_tokens tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[0]);
+                                bool seq_id_occupied        = false;
+                                int32_t seq_lcp_id_empty    = -1;
+                                int32_t seq_lcp_id          = -1;
+                                size_t seq_lcp_l            = 0;
+                                for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
+                                    cache_prompt_entry &cache = cache_prompts.at(i);
+                                    if (cache.occupied) {
+                                        seq_id_occupied = i == seq_id;
+                                        continue;
+                                    }
+                                    seq_lcp_id_empty = i;
+                                    size_t lcp_l     = common_lcp(cache.tokens, tokenized_text);
+                                    if (lcp_l >= seq_lcp_l) {
+                                        if (!cache.prefixed && lcp_l != cache.tokens.size()) {
+                                            continue;
+                                        }
+                                        seq_lcp_l  = lcp_l;
+                                        seq_lcp_id = i;
+                                    }
+                                }
+                                // miss cache
+                                if (seq_lcp_l == 0) {
+                                    if (seq_id_occupied) {
+                                        seq_id = seq_lcp_id_empty;
+                                    }
+                                    SRV_INFV(2, "rid %s | miss prompt cache, seq = %d\n", rid.c_str(), seq_id);
+                                }
+                                // hit cache
+                                else {
+                                    auto pos                          = int32_t(std::min(tokenized_text.size() - 1, seq_lcp_l));
+                                    seq_id                            = seq_lcp_id;
+                                    task->n_prefilled_cached          = pos;
+                                    task->n_prefilled                 = pos;
+                                    task->pos                         = pos;
+                                    task->i_prompt_prefilled_text_pos = pos;
+                                    task->n_processed_detokenized     = pos;
+                                    SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = %d\n", rid.c_str(), seq_id, pos);
+                                }
+                                cache_prompt_entry &cache = cache_prompts.at(seq_id);
+                                cache.tokens.clear();
+                                cache.occupied = true;
+                                cache.prefixed = true;
+                                task->set_seq_id(seq_id);
+                            }
 
                             // mask kv cache
                             llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
                             }
+                            SRV_DBG("rid %s | prefix cache, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id, task->pos);
                         }
 
                         // batching
@@ -3440,6 +3486,7 @@ struct httpserver {
                             }
                             task->i_prompt_prefilled++;
                         } while (task->i_prompt_prefilled < n_prompt);
+
                     out_of_batch:
                         if (task->i_prompt_prefilled < n_prompt) {
                             if (!task_ptr->is_connection_closed()) {
@@ -3458,6 +3505,7 @@ struct httpserver {
                         if (task->pos >= llm_ctx_size_shifting && params.llm_params.ctx_shift) {
                             shift_cmpl_task_ctx(task);
                         }
+
                         // batching
                         if (llm_model_rope_mrope) {
                             common_batch_add_with_mrope(batch, task->processed_tokens.back(), task->pos, 1, {seq_id}, true);
@@ -3475,13 +3523,14 @@ struct httpserver {
                                 task->pos++;
                             }
                         }
+
                         if (task->n_decoded == 1) {
                             SRV_DBG("rid %s | batching, decode next, seq = %d\n", rid.c_str(), seq_id);
                         }
                     }
 
                     task->i_batch_seq_end = batch.n_tokens - 1;
-                    batch_task_ptrs[tid]  = std::move(task_ptr);
+                    batch_task_ptrs.push_back(std::move(task_ptr));
                     continue;
                 }
 
@@ -3501,6 +3550,12 @@ struct httpserver {
                         break;
                     }
 
+                    // prepare cache - clean cache
+                    if (llm_model_casual) {
+                        llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                        SRV_DBG("rid %s | batching, clean cache, kv cache mask, seq %d = [0, end)", rid.c_str(), seq_id);
+                    }
+
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
                         if (llm_model_rope_mrope) {
                             common_batch_add_with_mrope(batch, task->tokenized_inputs[task->i_input_prefilled][pos], pos, n_pos, {seq_id}, need_embed);
@@ -3515,11 +3570,11 @@ struct httpserver {
                     task->i_input_prefilled++;
 
                     task->i_batch_seq_end = batch.n_tokens - 1;
-                    batch_task_ptrs[tid]  = std::move(task_ptr);
+                    batch_task_ptrs.push_back(std::move(task_ptr));
                     break;
                 } while (task->i_input_prefilled < n_input);
 
-                SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), tid);
+                SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
 
                 continue;
             }
@@ -3548,9 +3603,9 @@ struct httpserver {
                 }
             }
 
-            batch_task_ptrs[tid] = std::move(task_ptr);
+            batch_task_ptrs.push_back(std::move(task_ptr));
 
-            SRV_DBG("rid %s | batching, reverse, seq = %d\n", rid.c_str(), tid);
+            SRV_DBG("rid %s | batching, reverse, seq = %d\n", rid.c_str(), seq_id);
         }
 
         // process tasks
@@ -3571,19 +3626,19 @@ struct httpserver {
                             while (decoded_again == -3) {
                                 SRV_WRN("%s", "decode in batch, try shifting context\n");
                                 // shift the decoding task which has largest pos
-                                int32_t target_tid = -1;
+                                int32_t target_idx = -1;
                                 int32_t target_pos = -1;
-                                for (auto &[tid, task_ptr] : batch_task_ptrs) {
-                                    auto *task = dynamic_cast<completions_task *>(task_ptr.get());
+                                for (int32_t i = 0; i < int32_t(batch_task_ptrs.size()); i++) {
+                                    auto *task = dynamic_cast<completions_task *>(batch_task_ptrs[i].get());
                                     if (task->n_decoded > 0 && task->pos > target_pos) {
-                                        target_tid = tid;
+                                        target_idx = i;
                                         target_pos = task->pos;
                                     }
                                 }
-                                if (target_tid == -1) {
+                                if (target_idx == -1) {
                                     break;
                                 }
-                                auto *task = dynamic_cast<completions_task *>(batch_task_ptrs[target_tid].get());
+                                auto *task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
                                 shift_cmpl_task_ctx(task);
                                 // adjust batch pos
                                 const llama_pos new_pos = task->pos;
@@ -3609,9 +3664,9 @@ struct httpserver {
                             llama_kv_self_clear(llm_ctx_draft);
                         }
                         // output
-                        for (auto &[tid, _] : batch_task_ptrs) {
+                        for (auto &task_ptr : batch_task_ptrs) {
                             Json data = {{"message", "failed to decode"}};
-                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
+                            process_task_results[task_ptr->get_id()]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
                         return;
                     }
@@ -3627,18 +3682,19 @@ struct httpserver {
                         llama_kv_self_clear(llm_ctx);
                         llama_kv_self_clear(llm_ctx_draft);
                         // output
-                        for (auto &[tid, _] : batch_task_ptrs) {
+                        for (auto &task_ptr : batch_task_ptrs) {
                             Json data = {{"message", "failed to decode draft"}};
-                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
+                            process_task_results[task_ptr->get_id()]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
                         return;
                     }
                 }
                 // sample
-                for (auto &[tid, task_ptr] : batch_task_ptrs) {
+                for (auto &task_ptr : batch_task_ptrs) {
                     auto *task            = dynamic_cast<completions_task *>(task_ptr.get());
-                    const int32_t seq_id  = tid;
+                    const int32_t tid     = task->get_id();
                     const std::string rid = task->get_r_id();
+                    const int32_t seq_id  = task->get_seq_id();
                     // sample token
                     //// default
                     if (task->drafted_tokens.empty()) {
@@ -3669,6 +3725,7 @@ struct httpserver {
                                     task->n_decoding_budget -= d;
                                     // mask kv cache
                                     llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
+                                    SRV_DBG("rid %s | decode, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id, task->pos);
                                     break;
                                 }
                                 task->n_drafted_accepted++;
@@ -3941,6 +3998,7 @@ struct httpserver {
                                 llama_pos draft_pos = task->pos;
                                 // mask kv cache
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, draft_pos, -1);
+                                SRV_DBG("rid %s | decode draft, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id, draft_pos);
                                 // clean batch for later adding
                                 common_batch_clear(batch_draft);
                                 if (llm_model_rope_mrope) {
@@ -3954,6 +4012,7 @@ struct httpserver {
                                     SRV_ERR("rid %s | decode draft, failed to decode, try increasing context size or reducing requests: result = %d\n", rid.c_str(), decoded_draft);
                                     // clean kv cache
                                     llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                    SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                                     // output
                                     Json data = {{"message", "failed to decode draft"}};
                                     process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
@@ -3983,6 +4042,7 @@ struct httpserver {
                                     if (decoded_draft != 0) {
                                         // clean kv cache
                                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                        SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                                         break;
                                     }
                                     draft_pos++;
@@ -4042,6 +4102,15 @@ struct httpserver {
                         if (llm_ctx_draft != nullptr) {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
+                        SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                    }
+                    // cache prompt
+                    // TODO: support vision cache found
+                    else if (!task->tokenized_prompts_include_images) {
+                        cache_prompt_entry &cache = cache_prompts.at(seq_id);
+                        cache.tokens              = std::move(task->processed_tokens);
+                        cache.occupied            = false;
+                        cache.prefixed            = !task->pos_truncated;
                     }
                 }
                 return;
@@ -4058,17 +4127,18 @@ struct httpserver {
                     llama_kv_self_clear(llm_ctx);
                 }
                 // output
-                for (auto &[tid, _] : batch_task_ptrs) {
+                for (auto &task_ptr : batch_task_ptrs) {
                     Json data = {{"message", "failed to decode"}};
-                    process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
+                    process_task_results[task_ptr->get_id()]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                 }
                 return;
             }
-            for (auto &[tid, task_ptr] : batch_task_ptrs) {
+            for (auto &task_ptr : batch_task_ptrs) {
                 auto *task            = dynamic_cast<embeddings_task *>(task_ptr.get());
-                const int32_t seq_id  = tid;
+                const int32_t tid     = task->get_id();
                 const std::string rid = task->get_r_id();
                 const req_type rtype  = task->get_r_type();
+                const int32_t seq_id  = task->get_seq_id();
                 // get embeddings
                 const size_t n_input = task->tokenized_inputs.size();
                 task->embeds.reserve(n_input);
@@ -4119,6 +4189,12 @@ struct httpserver {
                 // clean kv cache
                 if (llm_model_casual) {
                     llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                    SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                    // uncache prompt
+                    cache_prompt_entry &cache = cache_prompts.at(seq_id);
+                    cache.tokens.clear();
+                    cache.occupied = false;
+                    cache.prefixed = true;
                 }
             }
             return;
@@ -4128,9 +4204,10 @@ struct httpserver {
          * images
          */
 
-        for (auto &[tid, task_ptr] : batch_task_ptrs) {
+        for (auto &task_ptr : batch_task_ptrs) {
             auto *task             = dynamic_cast<images_task *>(task_ptr.get());
             const bool preview     = json_value(task->req->stream_options, "preview", false) || json_value(task->req->stream_options, "preview_faster", false);
+            const int32_t tid      = task->get_id();
             const std::string rid  = task->get_r_id();
             const int32_t n_repeat = task->req->n;
             // stats

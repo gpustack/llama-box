@@ -18,7 +18,7 @@
 
 #define SRV_INF(fmt, ...) LOG_INF("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
 #define SRV_INFV(v, fmt, ...)                                   \
-    if (common_log_verbosity_thold > v) {                       \
+    if (common_log_verbosity_thold >= v) {                       \
         LOG_INF("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__); \
     }
 #define SRV_WRN(fmt, ...) LOG_WRN("srv %25.*s: " fmt, 25, __func__, __VA_ARGS__)
@@ -30,7 +30,7 @@
 
 #define SRV_FUNC_INF(func, fmt, ...) LOG_INF("srv %25.*s: " fmt, 25, func, __VA_ARGS__)
 #define SRV_FUNC_INFV(v, func, fmt, ...)                    \
-    if (common_log_verbosity_thold > v) {                   \
+    if (common_log_verbosity_thold >= v) {                   \
         LOG_INF("srv %25.*s: " fmt, 25, func, __VA_ARGS__); \
     }
 #define SRV_FUNC_WRN(func, fmt, ...) LOG_WRN("srv %25.*s: " fmt, 25, func, __VA_ARGS__)
