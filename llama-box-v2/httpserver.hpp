@@ -1989,7 +1989,7 @@ struct btask {
     task_type type = TASK_UNKNOWN;
 
   public:
-    explicit btask(int32_t id, task_type type, std::function<bool()> &is_connection_closed)
+    explicit btask(int32_t id, task_type type, const std::function<bool()> &is_connection_closed)
         : id(id), type(type), is_connection_closed(is_connection_closed) {
     }
 
@@ -2026,11 +2026,13 @@ struct btask {
         return empty;
     }
 
-    std::function<bool()> is_connection_closed = []() { return true; };
+    std::function<bool()> is_connection_closed = []() {
+        return true;
+    };
 };
 
 struct completions_task : btask {
-    explicit completions_task(int32_t id, std::function<bool()> is_connection_closed)
+    explicit completions_task(int32_t id, const std::function<bool()> &is_connection_closed)
         : btask(id, TASK_COMPLETIONS, is_connection_closed) {
     }
 
@@ -2078,7 +2080,6 @@ struct completions_task : btask {
 
     // process
     llama_pos pos                       = 0;                                                          // indicate the position at present
-    bool pos_truncated                  = false;                                                      // indicate whether the position is truncated
     int32_t i_batch_seq_end             = 0;                                                          // indicate the index of the batch seq end
     int32_t i_prompt_prefilled          = 0;                                                          // indicate the index which prompt has been prefilled
     int32_t i_prompt_prefilled_text_pos = 0;                                                          // indicate the position which i_prompt_prefilled prompt has been prefilled
@@ -2332,7 +2333,7 @@ struct completions_task : btask {
 };
 
 struct embeddings_task : btask {
-    explicit embeddings_task(int32_t id, std::function<bool()> is_connection_closed)
+    explicit embeddings_task(int32_t id, const std::function<bool()> &is_connection_closed)
         : btask(id, TASK_EMBEDDINGS, is_connection_closed) {
     }
 
@@ -2741,8 +2742,18 @@ struct httpserver {
             SRV_ERR("failed to load model, '%s'\n", params.llm_params.model.c_str());
             return false;
         }
-        llm_vocab = llama_model_get_vocab(llm_model);
-        batch     = llama_batch_init(int32_t(llama_n_ctx(llm_ctx)), 0, 1);
+        llm_vocab          = llama_model_get_vocab(llm_model);
+        llm_ctx_size       = int32_t(llama_n_ctx(llm_ctx));
+        llm_ctx_embed_size = llama_model_n_embd(llm_model);
+        if (params.llm_params.n_threads_http != 1) {
+            llm_ctx_size_shifting = llm_ctx_size / (params.llm_params.n_threads_http >> 1) - 4;
+        } else {
+            llm_ctx_size_shifting = llm_ctx_size - 1;
+        }
+        // NB(thxCode): llama_causal_attn is a patch.
+        llm_model_casual     = llama_causal_attn(llm_ctx);
+        llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
+        batch                = llama_batch_init(llm_ctx_size, 0, 1);
 
         // check multimodal projection model compatibility
         if (llm_ctx_clip != nullptr) {
@@ -2944,7 +2955,7 @@ struct httpserver {
         // sample tokens per second
         if (params.n_tps < 0) {
             SRV_INF("%s", "sampling tokens per second, this will take some time...\n");
-            const int32_t n_check            = std::min(int32_t(llama_n_ctx(llm_ctx)), params.llm_params.n_ubatch);
+            const int32_t n_check            = std::min(llm_ctx_size, params.llm_params.n_ubatch);
             llama_tokens check_prompt_tokens = {llama_vocab_bos(llm_vocab)};
             common_sampler *check_smpl       = common_sampler_init(llm_model, params.llm_params.sampling);
             int64_t t_start_decode           = ggml_time_us();
@@ -3013,7 +3024,7 @@ struct httpserver {
         }
 #undef _HANDLER
 
-        // register reconcile process
+        // register reconcile loop
         thread_pool->enqueue([&]() {
             server->wait_until_ready();
             if (!server->is_running()) {
@@ -3022,7 +3033,7 @@ struct httpserver {
                 return;
             }
             SRV_FUNC_INF("start", "%s", "server is ready\n");
-            reconcile();
+            reconcile_loop();
         });
 
         // register shutdown handler
@@ -3161,10 +3172,15 @@ struct httpserver {
 
     // model
     common_init_result llm_init;
-    llama_model *llm_model       = nullptr;
-    llama_context *llm_ctx       = nullptr;
-    const llama_vocab *llm_vocab = nullptr;
-    llama_batch batch            = {};
+    llama_model *llm_model        = nullptr;
+    llama_context *llm_ctx        = nullptr;
+    const llama_vocab *llm_vocab  = nullptr;
+    int32_t llm_ctx_size          = 0;
+    int32_t llm_ctx_embed_size    = 0;
+    int32_t llm_ctx_size_shifting = 0;
+    bool llm_model_casual         = true;
+    bool llm_model_rope_mrope     = false;
+    llama_batch batch             = {};
 
     // model addition
     bool cache_prompt = false;
@@ -3216,8 +3232,7 @@ struct httpserver {
     }
 
     inline bool support_completion() const {
-        // NB(thxCode): llama_causal_attn is a patch.
-        return llm_ctx != nullptr && llama_causal_attn(llm_ctx) && !params.llm_params.reranking;
+        return llm_ctx != nullptr && llm_model_casual && !params.llm_params.reranking;
     }
 
     inline bool support_embedding() const {
@@ -3225,16 +3240,30 @@ struct httpserver {
     }
 
     inline bool support_reranking() const {
-        // NB(thxCode): llama_causal_attn is a patch.
-        return llm_ctx != nullptr && !llama_causal_attn(llm_ctx) && params.llm_params.reranking;
+        return llm_ctx != nullptr && !llm_model_casual && params.llm_params.reranking;
     }
 
     inline bool support_image() const {
         return sd_ctx != nullptr;
     }
 
-    static inline bool is_mrope_model(llama_model *lm) {
-        return lm != nullptr && llama_model_rope_type(lm) == LLAMA_ROPE_TYPE_MROPE;
+    inline void shift_cmpl_task_ctx(completions_task *task) {
+        const std::string rid   = task->get_r_id();
+        const int32_t seq_id    = task->get_id();
+        const int32_t n_keep    = params.llm_params.n_keep + llama_vocab_get_add_bos(llm_vocab);
+        const int32_t n_left    = task->pos - n_keep;
+        const int32_t n_discard = n_left >> 1;
+        SRV_WRN("rid %s | "
+                "shift context, kv cache move [%d, %d) -> [%d, %d)\n",
+                rid.c_str(),
+                n_keep + n_discard, task->pos, n_keep, n_keep + n_discard);
+        llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
+        llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
+        if (llm_ctx_draft != nullptr) {
+            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, n_keep, n_keep + n_discard);
+            llama_kv_self_seq_add(llm_ctx_draft, seq_id, n_keep + n_discard, task->pos, -n_discard);
+        }
+        task->pos -= n_discard;
     }
 
     //
@@ -3252,583 +3281,507 @@ struct httpserver {
 #define PIN_THREAD
 #endif
 
-    int32_t reconcile() {
+    [[noreturn]] void reconcile_loop() {
         PIN_THREAD;
 
         while (true) {
-            // dequeue tasks
-            std::vector<std::unique_ptr<btask>> task_ptrs;
-            task_ptrs.resize(params.llm_params.n_threads_http);
-            size_t n_dequeue_tasks = process_tasks->wait_dequeue_bulk(task_ptrs.data(), params.llm_params.n_threads_http);
+            reconcile();
+        }
+    }
 
-            // batch tasks
-            task_type batch_task_type = TASK_UNKNOWN;
-            std::unordered_map<int32_t, std::unique_ptr<btask>> batch_task_ptrs;
-            batch_task_ptrs.reserve(n_dequeue_tasks);
-            {
-                for (auto &task_ptr : task_ptrs) {
-                    if (task_ptr == nullptr) {
+    void reconcile() {
+        // dequeue tasks
+        std::vector<std::unique_ptr<btask>> task_ptrs;
+        task_ptrs.resize(params.llm_params.n_threads_http);
+        size_t n_dequeue_tasks = process_tasks->wait_dequeue_bulk(task_ptrs.data(), params.llm_params.n_threads_http);
+
+        // batch tasks
+        task_type batch_task_type = TASK_UNKNOWN;
+        std::unordered_map<int32_t, std::unique_ptr<btask>> batch_task_ptrs;
+        batch_task_ptrs.reserve(n_dequeue_tasks);
+        for (auto &task_ptr : task_ptrs) {
+            if (task_ptr == nullptr) {
+                break;
+            }
+
+            const int32_t tid     = task_ptr->get_id();
+            const task_type ttype = task_ptr->get_type();
+            const std::string rid = task_ptr->get_r_id();
+            const req_type rtype  = task_ptr->get_r_type();
+
+            // filter
+            if (batch_task_type == TASK_UNKNOWN) {
+                batch_task_type = ttype;
+
+                //// completions or embeddings
+                if (batch_task_type != TASK_IMAGES) {
+                    // set batch task type
+                    llama_set_embeddings(llm_ctx, batch_task_type == TASK_EMBEDDINGS);
+                    // apply lora adapters, only need to do it once per batch
+                    if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
+                        lora_adapters = task_ptr->get_lora_adapters(); // copy
+                        try {
+                            common_set_adapter_lora(llm_ctx, lora_adapters);
+                        } catch (const std::exception &e) {
+                            SRV_ERR("rid %s | batching, failed to apply lora %s\n", rid.c_str(), e.what());
+                        }
+                    }
+                    // clean batch for later adding
+                    common_batch_clear(batch);
+                    if (llm_ctx_draft != nullptr) {
+                        common_batch_clear(batch_draft);
+                    }
+                }
+
+                //// images
+                else {
+                    // apply lora adapters, only need to do it once per batch
+                    if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
+                        lora_adapters = task_ptr->get_lora_adapters(); // copy
+                        try {
+                            sd_ctx->apply_lora_adapters(lora_adapters);
+                        } catch (const std::exception &e) {
+                            SRV_ERR("rid %s | batching, failed to apply lora %s\n", rid.c_str(), e.what());
+                        }
+                    }
+                }
+            } else if (batch_task_type != ttype) {
+                SRV_INF("rid %s | batching, waiting previous batch finished: not the same kind batch\n", rid.c_str());
+                process_tasks->enqueue(std::move(task_ptr));
+                continue;
+            } else if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
+                SRV_INF("rid %s | batching, waiting previous batch finished: lora adapters not matched\n", rid.c_str());
+                process_tasks->enqueue(std::move(task_ptr));
+                continue;
+            }
+
+            // batch
+
+            if (batch_task_type != TASK_IMAGES) {
+                int32_t seq_id = tid;
+
+                /**
+                 * completions
+                 */
+
+                if (batch_task_type == TASK_COMPLETIONS) {
+                    auto *task = dynamic_cast<completions_task *>(task_ptr.get());
+
+                    // prefill first (n_prefilled < n_prefilling_request)
+                    if (task->n_prefilled < task->n_prefilling_request) {
+                        // filter
+                        //// for text only, can place partial tokens
+                        if (!task->tokenized_prompts_include_images && batch.n_tokens > llm_ctx_size) {
+                            SRV_INF("rid %s | batching, waiting previous batch finished: not enough space to place all tokens\n", rid.c_str());
+                            process_tasks->enqueue(std::move(task_ptr));
+                            continue;
+                        }
+                        //// for vision, must place all tokens once
+                        else if (task->tokenized_prompts_include_images && (task->n_prefilling_request + batch.n_tokens > llm_ctx_size)) {
+                            SRV_INF("rid %s | batching, waiting previous batch finished: not enough space to place all tokens\n", rid.c_str());
+                            process_tasks->enqueue(std::move(task_ptr));
+                            continue;
+                        }
+
+                        // prepare cache - prefix cache
+                        if (task->n_prefilled == 0 && cache_prompt) {
+                            // TODO: find the cache
+                            // if (!task->tokenized_prompts_include_images) {
+                            //    task->n_prefilled_cached = 0;
+                            //    task->pos = 0;
+                            //    task->i_prompt_prefilled_text_pos = 0;
+                            //    task->n_processed_detokenized = 0;
+                            // }
+
+                            // mask kv cache
+                            llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
+                            if (llm_ctx_draft != nullptr) {
+                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
+                            }
+                        }
+
+                        // batching
+                        const auto n_prompt = int32_t(task->tokenized_prompts.size());
+                        do {
+                            if (std::holds_alternative<llama_tokens>(task->tokenized_prompts[task->i_prompt_prefilled])) {
+                                llama_tokens tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[task->i_prompt_prefilled]);
+                                const auto n_text_pos       = int32_t(tokenized_text.size());
+                                for (; task->i_prompt_prefilled_text_pos < n_text_pos; task->i_prompt_prefilled_text_pos++) {
+                                    if (1 + batch.n_tokens >= llm_ctx_size) { // disallow batch's tokens size be equal to llm_ctx_size
+                                        SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
+                                        goto out_of_batch;
+                                    }
+                                    const llama_token tok = tokenized_text[task->i_prompt_prefilled_text_pos];
+                                    const bool need_embed = task->i_prompt_prefilled_text_pos + 1 == n_text_pos;
+                                    if (llm_model_rope_mrope) {
+                                        common_batch_add_with_mrope(batch, tok, task->pos, n_text_pos, {seq_id}, need_embed);
+                                        if (!task->tokenized_prompts_include_images && llm_ctx_draft != nullptr) {
+                                            common_batch_add_with_mrope(batch_draft, tok, task->pos, n_text_pos, {seq_id}, need_embed);
+                                        }
+                                    } else {
+                                        common_batch_add(batch, tok, task->pos, {seq_id}, need_embed);
+                                        if (!task->tokenized_prompts_include_images && llm_ctx_draft != nullptr) {
+                                            common_batch_add(batch_draft, tok, task->pos, {seq_id}, need_embed);
+                                        }
+                                    }
+                                    task->pos++;
+                                    task->n_prefilled++;
+                                }
+                                if (!task->tokenized_prompts_include_images) {
+                                    task->processed_tokens        = std::move(tokenized_text);
+                                    task->n_processed_detokenized = n_text_pos;
+                                }
+                                task->i_prompt_prefilled_text_pos = 0;
+                            } else {
+                                auto tokenized_image      = std::get<std::unique_ptr<llava_image_embed>>(std::move(task->tokenized_prompts[task->i_prompt_prefilled]));
+                                const int32_t n_image_pos = tokenized_image->n_image_pos;
+                                // TODO implement
+                                task->n_prefilled += n_image_pos;
+                            }
+                            task->i_prompt_prefilled++;
+                        } while (task->i_prompt_prefilled < n_prompt);
+                    out_of_batch:
+                        if (task->i_prompt_prefilled < n_prompt) {
+                            if (!task_ptr->is_connection_closed()) {
+                                process_tasks->enqueue(std::move(task_ptr));
+                                continue;
+                            }
+                            SRV_WRN("rid %s | batching, connection closed, stop enqueuing task\n", rid.c_str());
+                        } else {
+                            SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
+                        }
+                    }
+
+                    // decode next (n_decoded > 0)
+                    else if (batch.n_tokens + 1 < llm_ctx_size && task->n_decoded > 0) {
+                        // prepare cache - truncate cache
+                        if (task->pos >= llm_ctx_size_shifting && params.llm_params.ctx_shift) {
+                            shift_cmpl_task_ctx(task);
+                        }
+                        // batching
+                        if (llm_model_rope_mrope) {
+                            common_batch_add_with_mrope(batch, task->processed_tokens.back(), task->pos, 1, {seq_id}, true);
+                        } else {
+                            common_batch_add(batch, task->processed_tokens.back(), task->pos, {seq_id}, true);
+                        }
+                        task->pos++;
+                        if (!task->drafted_tokens.empty()) {
+                            for (const llama_token &tok : task->drafted_tokens) {
+                                if (llm_model_rope_mrope) {
+                                    common_batch_add_with_mrope(batch, tok, task->pos, 1, {seq_id}, true);
+                                } else {
+                                    common_batch_add(batch, tok, task->pos, {seq_id}, true);
+                                }
+                                task->pos++;
+                            }
+                        }
+                        if (task->n_decoded == 1) {
+                            SRV_DBG("rid %s | batching, decode next, seq = %d\n", rid.c_str(), seq_id);
+                        }
+                    }
+
+                    task->i_batch_seq_end = batch.n_tokens - 1;
+                    batch_task_ptrs[tid]  = std::move(task_ptr);
+                    continue;
+                }
+
+                /**
+                 * embeddings
+                 */
+
+                auto *task = dynamic_cast<embeddings_task *>(task_ptr.get());
+
+                // prefill first
+                const bool need_embed = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
+                const auto n_input    = int32_t(task->tokenized_inputs.size());
+                do {
+                    const auto n_pos = int32_t(task->tokenized_inputs[task->i_input_prefilled].size());
+                    if (n_pos + batch.n_tokens > llm_ctx_size) { // allow batch's tokens size be equal to llm_ctx_size
+                        SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
                         break;
                     }
 
-                    const int32_t tid     = task_ptr->get_id();
-                    const task_type ttype = task_ptr->get_type();
-                    const std::string rid = task_ptr->get_r_id();
-                    const req_type rtype  = task_ptr->get_r_type();
-
-                    // filter
-                    if (batch_task_type == TASK_UNKNOWN) {
-                        batch_task_type = ttype;
-
-                        //// completions or embeddings
-                        if (batch_task_type != TASK_IMAGES) {
-                            llama_set_embeddings(llm_ctx, batch_task_type == TASK_EMBEDDINGS);
-                            // apply lora adapters, only need to do it once per batch
-                            if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
-                                lora_adapters = task_ptr->get_lora_adapters(); // copy
-                                try {
-                                    common_set_adapter_lora(llm_ctx, lora_adapters);
-                                } catch (const std::exception &e) {
-                                    SRV_ERR("rid %s | batching, failed to apply lora %s\n", rid.c_str(), e.what());
-                                }
-                            }
-                        }
-
-                        //// images
-                        else {
-                            // apply lora adapters, only need to do it once per batch
-                            if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
-                                lora_adapters = task_ptr->get_lora_adapters(); // copy
-                                try {
-                                    sd_ctx->apply_lora_adapters(lora_adapters);
-                                } catch (const std::exception &e) {
-                                    SRV_ERR("rid %s | batching, failed to apply lora %s\n", rid.c_str(), e.what());
-                                }
-                            }
-                        }
-                    } else if (batch_task_type != ttype) {
-                        SRV_INF("rid %s | batching, waiting previous batch finished: not the same kind batch\n", rid.c_str());
-                        process_tasks->enqueue(std::move(task_ptr));
-                        continue;
-                    } else if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
-                        SRV_INF("rid %s | batching, waiting previous batch finished: lora adapters not matched\n", rid.c_str());
-                        process_tasks->enqueue(std::move(task_ptr));
-                        continue;
-                    }
-
-                    // batch
-                    //// completions or embeddings
-                    if (batch_task_type != TASK_IMAGES) {
-                        const int32_t n_ctx          = int32_t(llama_n_ctx(llm_ctx));
-                        const int32_t n_ctx_shifting = n_ctx / params.llm_params.n_threads_http;
-                        const bool need_mrope        = is_mrope_model(llm_model);
-
-                        int32_t seq_id = tid;
-
-                        // completions
-                        if (batch_task_type == TASK_COMPLETIONS) {
-                            auto *task = dynamic_cast<completions_task *>(task_ptr.get());
-
-                            // prefill first (n_prefilled < n_prefilling_request)
-                            if (task->n_prefilled < task->n_prefilling_request) {
-                                // filter
-                                //// for text only, can place partial tokens
-                                if (!task->tokenized_prompts_include_images && batch.n_tokens > n_ctx) {
-                                    SRV_INF("rid %s | batching, waiting previous batch finished: not enough space to place all tokens\n", rid.c_str());
-                                    process_tasks->enqueue(std::move(task_ptr));
-                                    continue;
-                                }
-                                //// for vision, must place all tokens once
-                                else if (task->tokenized_prompts_include_images && (task->n_prefilling_request + batch.n_tokens > n_ctx)) {
-                                    SRV_INF("rid %s | batching, waiting previous batch finished: not enough space to place all tokens\n", rid.c_str());
-                                    process_tasks->enqueue(std::move(task_ptr));
-                                    continue;
-                                }
-
-                                // prepare cache
-                                if (task->n_prefilled == 0 && cache_prompt) {
-                                    // TODO: find the cache
-                                    // if (!task->tokenized_prompts_include_images) {
-                                    //    task->n_prefilled_cached = 0;
-                                    //    task->pos = 0;
-                                    //    task->i_prompt_prefilled_text_pos = 0;
-                                    //    task->n_processed_detokenized = 0;
-                                    // }
-
-                                    // mask kv cache
-                                    llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
-                                    if (llm_ctx_draft != nullptr) {
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
-                                    }
-                                }
-
-                                // batching
-                                const auto n_prompt = int32_t(task->tokenized_prompts.size());
-                                do {
-                                    if (std::holds_alternative<llama_tokens>(task->tokenized_prompts[task->i_prompt_prefilled])) {
-                                        llama_tokens tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[task->i_prompt_prefilled]);
-                                        const auto n_text_pos       = int32_t(tokenized_text.size());
-                                        for (; task->i_prompt_prefilled_text_pos < n_text_pos; task->i_prompt_prefilled_text_pos++) {
-                                            if (1 + batch.n_tokens >= n_ctx) { // disallow batch's tokens size be equal to n_ctx
-                                                SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
-                                                goto out_of_batch;
-                                            }
-                                            const llama_token tok = tokenized_text[task->i_prompt_prefilled_text_pos];
-                                            const bool need_embed = task->i_prompt_prefilled_text_pos + 1 == n_text_pos;
-                                            if (need_mrope) {
-                                                common_batch_add_with_mrope(batch, tok, task->pos, n_text_pos, {seq_id}, need_embed);
-                                                if (!task->tokenized_prompts_include_images && llm_ctx_draft != nullptr) {
-                                                    common_batch_add_with_mrope(batch_draft, tok, task->pos, n_text_pos, {seq_id}, need_embed);
-                                                }
-                                            } else {
-                                                common_batch_add(batch, tok, task->pos, {seq_id}, need_embed);
-                                                if (!task->tokenized_prompts_include_images && llm_ctx_draft != nullptr) {
-                                                    common_batch_add(batch_draft, tok, task->pos, {seq_id}, need_embed);
-                                                }
-                                            }
-                                            task->pos++;
-                                            task->n_prefilled++;
-                                        }
-                                        if (!task->tokenized_prompts_include_images) {
-                                            task->processed_tokens        = std::move(tokenized_text);
-                                            task->n_processed_detokenized = n_text_pos;
-                                        }
-                                        task->i_prompt_prefilled_text_pos = 0;
-                                    } else {
-                                        auto tokenized_image      = std::get<std::unique_ptr<llava_image_embed>>(std::move(task->tokenized_prompts[task->i_prompt_prefilled]));
-                                        const int32_t n_image_pos = tokenized_image->n_image_pos;
-                                        // TODO implement
-                                        task->n_prefilled += n_image_pos;
-                                    }
-                                    task->i_prompt_prefilled++;
-                                } while (task->i_prompt_prefilled < n_prompt);
-                            out_of_batch:
-                                if (task->i_prompt_prefilled < n_prompt) {
-                                    if (!task_ptr->is_connection_closed()) {
-                                        process_tasks->enqueue(std::move(task_ptr));
-                                        continue;
-                                    }
-                                }
-                                SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
-                            }
-
-                            // decode next (n_decoded > 0)
-                            else if (batch.n_tokens + 1 < n_ctx && task->n_decoded > 0) {
-                                // prepare cache
-                                if (params.llm_params.ctx_shift && task->pos >= n_ctx_shifting) {
-                                    const int32_t n_keep    = params.llm_params.n_keep + llama_vocab_get_add_bos(llm_vocab);
-                                    const int32_t n_left    = task->pos - n_keep;
-                                    const int32_t n_discard = n_left >> 1;
-                                    SRV_WRN("rid %s | "
-                                            "batching, context shift, original = %d, keep = %d, discard = %d,"
-                                            "kv cache move [%d, %d) -> [%d, %d)\n",
-                                            rid.c_str(),
-                                            task->pos, n_keep, n_discard,
-                                            n_keep + n_discard, task->pos, n_keep, n_keep + n_discard);
-
-                                    llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
-                                    llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
-                                    if (llm_ctx_draft != nullptr) {
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, n_keep, n_keep + n_discard);
-                                        llama_kv_self_seq_add(llm_ctx_draft, seq_id, n_keep + n_discard, task->pos, -n_discard);
-                                    }
-                                    task->pos -= n_discard;
-                                    task->pos_truncated = true;
-                                }
-
-                                // batching
-                                if (need_mrope) {
-                                    common_batch_add_with_mrope(batch, task->processed_tokens.back(), task->pos, 1, {seq_id}, true);
-                                } else {
-                                    common_batch_add(batch, task->processed_tokens.back(), task->pos, {seq_id}, true);
-                                }
-                                task->pos++;
-                                if (!task->drafted_tokens.empty()) {
-                                    for (const llama_token &tok : task->drafted_tokens) {
-                                        if (need_mrope) {
-                                            common_batch_add_with_mrope(batch, tok, task->pos, 1, {seq_id}, true);
-                                        } else {
-                                            common_batch_add(batch, tok, task->pos, {seq_id}, true);
-                                        }
-                                        task->pos++;
-                                    }
-                                }
-                                if (task->n_decoded == 1) {
-                                    SRV_DBG("rid %s | batching, decode next, seq = %d\n", rid.c_str(), seq_id);
-                                }
-                            }
-
-                            task->i_batch_seq_end = batch.n_tokens - 1;
-                            batch_task_ptrs[tid]  = std::move(task_ptr);
-                        }
-
-                        // embeddings
-                        else {
-                            const bool is_embedding_only = !llama_causal_attn(llm_ctx);
-
-                            auto *task = dynamic_cast<embeddings_task *>(task_ptr.get());
-
-                            // prefill first
-                            const bool need_embed = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
-                            const auto n_input    = int32_t(task->tokenized_inputs.size());
-                            do {
-                                const auto n_pos = int32_t(task->tokenized_inputs[task->i_input_prefilled].size());
-                                if (n_pos + batch.n_tokens > n_ctx) { // allow batch's tokens size be equal to n_ctx
-                                    SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
-                                    break;
-                                }
-
-                                // clear kv cache
-                                if (!is_embedding_only) {
-                                    llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
-                                }
-
-                                for (llama_pos pos = 0; pos < n_pos; pos++) {
-                                    if (need_mrope) {
-                                        common_batch_add_with_mrope(batch, task->tokenized_inputs[task->i_input_prefilled][pos], pos, n_pos, {seq_id}, need_embed);
-                                    } else {
-                                        common_batch_add(batch, task->tokenized_inputs[task->i_input_prefilled][pos], pos, {seq_id}, need_embed);
-                                    }
-                                }
-                                task->n_prefilled += n_pos;
-                                task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : std::min(task->n_min_prefilled, n_pos);
-                                task->n_max_prefilled = std::max(task->n_max_prefilled, n_pos);
-
-                                task->i_input_prefilled++;
-
-                                task->i_batch_seq_end = batch.n_tokens - 1;
-                                batch_task_ptrs[tid]  = std::move(task_ptr);
-                                break;
-                            } while (task->i_input_prefilled < n_input);
-
-                            SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), tid);
+                    for (llama_pos pos = 0; pos < n_pos; pos++) {
+                        if (llm_model_rope_mrope) {
+                            common_batch_add_with_mrope(batch, task->tokenized_inputs[task->i_input_prefilled][pos], pos, n_pos, {seq_id}, need_embed);
+                        } else {
+                            common_batch_add(batch, task->tokenized_inputs[task->i_input_prefilled][pos], pos, {seq_id}, need_embed);
                         }
                     }
+                    task->n_prefilled += n_pos;
+                    task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : std::min(task->n_min_prefilled, n_pos);
+                    task->n_max_prefilled = std::max(task->n_max_prefilled, n_pos);
 
-                    //// images
-                    else {
-                        auto *task = dynamic_cast<images_task *>(task_ptr.get());
+                    task->i_input_prefilled++;
 
-                        // forward
-                        const int32_t n_repeat = task->req->n;
+                    task->i_batch_seq_end = batch.n_tokens - 1;
+                    batch_task_ptrs[tid]  = std::move(task_ptr);
+                    break;
+                } while (task->i_input_prefilled < n_input);
 
-                        if (task->n_forward_steps == 0) {
-                            task->streams.resize(n_repeat);
-                            task->b64_jsons.resize(n_repeat);
-                            task->progressed_steps.resize(n_repeat);
-                            task->progress_steps.resize(n_repeat);
-                            // init stream
-                            for (int32_t n = 0; n < n_repeat; n++) {
-                                v2_stablediffusion_params_sampling sampling = task->req->sampling; // copy
-                                sampling.seed += n;
-                                std::unique_ptr<v2_stablediffusion_sampling_stream> stream = sd_ctx->generate_stream(task->req->get_prompt(), sampling);
-                                task->streams[n]                                           = std::move(stream);
-                                task->n_forward_steps++;
-                            }
-                        }
+                SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), tid);
 
-                        batch_task_ptrs[tid] = std::move(task_ptr);
+                continue;
+            }
 
-                        SRV_DBG("rid %s | batching, reverse, seq = %d\n", rid.c_str(), tid);
-                    }
+            /**
+             * images
+             */
+
+            auto *task = dynamic_cast<images_task *>(task_ptr.get());
+
+            // forward
+            const int32_t n_repeat = task->req->n;
+
+            if (task->n_forward_steps == 0) {
+                task->streams.resize(n_repeat);
+                task->b64_jsons.resize(n_repeat);
+                task->progressed_steps.resize(n_repeat);
+                task->progress_steps.resize(n_repeat);
+                // init stream
+                for (int32_t n = 0; n < n_repeat; n++) {
+                    v2_stablediffusion_params_sampling sampling = task->req->sampling; // copy
+                    sampling.seed += n;
+                    std::unique_ptr<v2_stablediffusion_sampling_stream> stream = sd_ctx->generate_stream(task->req->get_prompt(), sampling);
+                    task->streams[n]                                           = std::move(stream);
+                    task->n_forward_steps++;
                 }
             }
 
-            // decode completions or embeddings in batch
-            if (batch_task_type != TASK_IMAGES) {
-                const bool need_mrope = is_mrope_model(llm_model);
+            batch_task_ptrs[tid] = std::move(task_ptr);
 
-                // completions
-                if (batch_task_type == TASK_COMPLETIONS) {
-                    // decode
+            SRV_DBG("rid %s | batching, reverse, seq = %d\n", rid.c_str(), tid);
+        }
+
+        // process tasks
+
+        if (batch_task_type != TASK_IMAGES) {
+            /**
+             * completions
+             */
+
+            if (batch_task_type == TASK_COMPLETIONS) {
+                // decode
+                while (true) {
                     const int32_t decoded = llama_decode(llm_ctx, batch);
-                    common_batch_clear(batch);
-                    if (decoded != 0) {
+                    if (decoded != 0) { // -1 no tokens, -2 allocate failed, -3 no kv cache/compute failed, 2 compute aborted
+                        // try to recover
+                        if (params.llm_params.ctx_shift) {
+                            int32_t decoded_again = decoded;
+                            while (decoded_again == -3) {
+                                SRV_WRN("%s", "decode in batch, try shifting context\n");
+                                // shift the decoding task which has largest pos
+                                int32_t target_tid = -1;
+                                int32_t target_pos = -1;
+                                for (auto &[tid, task_ptr] : batch_task_ptrs) {
+                                    auto *task = dynamic_cast<completions_task *>(task_ptr.get());
+                                    if (task->n_decoded > 0 && task->pos > target_pos) {
+                                        target_tid = tid;
+                                        target_pos = task->pos;
+                                    }
+                                }
+                                if (target_tid == -1) {
+                                    break;
+                                }
+                                auto *task = dynamic_cast<completions_task *>(batch_task_ptrs[target_tid].get());
+                                shift_cmpl_task_ctx(task);
+                                // adjust batch pos
+                                const llama_pos new_pos = task->pos;
+                                if (llm_model_rope_mrope) {
+                                    for (int32_t i = 0; i < 3; i++) {
+                                        batch.pos[task->i_batch_seq_end + i] = new_pos - 1;
+                                    }
+                                } else {
+                                    batch.pos[task->i_batch_seq_end] = new_pos - 1;
+                                }
+                                // decode again
+                                decoded_again = llama_decode(llm_ctx, batch);
+                            }
+                            if (decoded_again == 0) {
+                                break;
+                            }
+                            SRV_WRN("%s", "decode in batch, failed to decode after shifting context\n");
+                        }
                         SRV_ERR("decode in batch, failed to decode, try increasing context size or reducing parallel: result = %d\n", decoded);
-                        // TODO process -3
                         // clean kv cache
                         llama_kv_self_clear(llm_ctx);
+                        if (llm_ctx_draft != nullptr) {
+                            llama_kv_self_clear(llm_ctx_draft);
+                        }
                         // output
                         for (auto &[tid, _] : batch_task_ptrs) {
                             Json data = {{"message", "failed to decode"}};
                             process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
-                        continue;
+                        return;
                     }
-                    // speculative - draft
-                    if (llm_ctx_draft != nullptr && batch_draft.n_tokens > 0) {
-                        const int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
-                        common_batch_clear(batch_draft);
-                        if (decoded_draft != 0) {
-                            SRV_ERR("decode draft in batch, failed to decode, try increasing context size or reducing parallel: result = %d\n", decoded);
-                            // clean kv cache
-                            llama_kv_self_clear(llm_ctx);
-                            llama_kv_self_clear(llm_ctx_draft);
-                            // output
-                            for (auto &[tid, _] : batch_task_ptrs) {
-                                Json data = {{"message", "failed to decode draft"}};
-                                process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
-                            }
-                            continue;
+                    break;
+                }
+                // speculative - draft
+                if (llm_ctx_draft != nullptr && batch_draft.n_tokens > 0) {
+                    const int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
+                    if (decoded_draft != 0) {
+                        // NB(thxCode): we should not reach here.
+                        SRV_ERR("decode draft in batch, failed to decode, try increasing context size or reducing parallel: result = %d\n", decoded_draft);
+                        // clean kv cache
+                        llama_kv_self_clear(llm_ctx);
+                        llama_kv_self_clear(llm_ctx_draft);
+                        // output
+                        for (auto &[tid, _] : batch_task_ptrs) {
+                            Json data = {{"message", "failed to decode draft"}};
+                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
+                        return;
                     }
-                    // sample
-                    for (auto &[tid, task_ptr] : batch_task_ptrs) {
-                        auto *task            = dynamic_cast<completions_task *>(task_ptr.get());
-                        const std::string rid = task->get_r_id();
-                        const int32_t seq_id  = tid;
-                        // sample token
-                        {
-                            if (task->drafted_tokens.empty()) {
-                                const int32_t tok_idx = task->i_batch_seq_end;
-                                const llama_token tok = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
-                                common_sampler_accept(task->sampler, tok, true);
-                                task->push_generated_token(llm_ctx, tok_idx, tok);
-                                task->n_decoded++;
-                                task->n_decoding_budget--;
-                            } else {
-                                for (int32_t j = 0, s = int32_t(task->drafted_tokens.size()); j < s + 1 /* +1 for main model decoded token */; ++j) {
-                                    // greedy verification only
-                                    const int32_t tok_idx = task->i_batch_seq_end - s + j;
-                                    const llama_token tok = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
-                                    common_sampler_accept(task->sampler, tok, true);
-                                    task->push_generated_token(llm_ctx, tok_idx, tok);
-                                    task->n_decoded++;
-                                    task->n_decoding_budget--;
-                                    if (j < s) {
-                                        if (tok != task->drafted_tokens[j]) {
-                                            int32_t d = s - j;
-                                            // back pos to the correct position
-                                            task->pos -= d;
-                                            // stats drafted tokens size
-                                            task->n_decoded += d;
-                                            task->n_decoding_budget -= d;
-                                            // mask kv cache
-                                            llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
-                                            break;
-                                        }
-                                        task->n_drafted_accepted++;
-                                    }
+                }
+                // sample
+                for (auto &[tid, task_ptr] : batch_task_ptrs) {
+                    auto *task            = dynamic_cast<completions_task *>(task_ptr.get());
+                    const int32_t seq_id  = tid;
+                    const std::string rid = task->get_r_id();
+                    // sample token
+                    //// default
+                    if (task->drafted_tokens.empty()) {
+                        const int32_t tok_idx = task->i_batch_seq_end;
+                        const llama_token tok = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
+                        common_sampler_accept(task->sampler, tok, true);
+                        task->push_generated_token(llm_ctx, tok_idx, tok);
+                        task->n_decoded++;
+                        task->n_decoding_budget--;
+                    }
+                    //// include drafted tokens
+                    else {
+                        for (int32_t j = 0, s = int32_t(task->drafted_tokens.size()); j < s + 1 /* +1 for main model decoded token */; ++j) {
+                            // greedy verification only
+                            const int32_t tok_idx = task->i_batch_seq_end - s + j;
+                            const llama_token tok = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
+                            common_sampler_accept(task->sampler, tok, true);
+                            task->push_generated_token(llm_ctx, tok_idx, tok);
+                            task->n_decoded++;
+                            task->n_decoding_budget--;
+                            if (j < s) {
+                                if (tok != task->drafted_tokens[j]) {
+                                    int32_t d = s - j;
+                                    // back pos to the correct position
+                                    task->pos -= d;
+                                    // stats drafted tokens size
+                                    task->n_decoded += d;
+                                    task->n_decoding_budget -= d;
+                                    // mask kv cache
+                                    llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
+                                    break;
                                 }
-                            }
-                            // speculative - lookup
-                            if (params.lookup_ngram_min > 0) {
-                                common_ngram_cache_update(task->ngram_cache, params.lookup_ngram_min, LLAMA_NGRAM_MAX, task->processed_tokens, 1, false);
+                                task->n_drafted_accepted++;
                             }
                         }
-                        // stats
-                        if (task->n_decoded == 1) {
-                            task->t_start_decode = ggml_time_us();
-                            task->t_prefilled    = double(task->t_start_decode - task->t_start_prefill) / 1.e3;
-                            metrics.on_tokens_prefilled(task->t_prefilled, task->n_prefilled);
-                            task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
-                        }
-                        // postprocess
-                        bool send_text = false;
-                        {
-                            const int32_t n_generated_tokens_s = task->n_processed_detokenized;
-                            const int32_t n_generated_tokens_e = int32_t(task->processed_tokens.size());
-                            std::string sampled_str;
-                            for (; task->n_processed_detokenized < n_generated_tokens_e; task->n_processed_detokenized++) {
-                                llama_token tok = task->processed_tokens[task->n_processed_detokenized];
-                                // accept special token
-                                bool special = params.llm_params.special || task->req->sampling.preserved_tokens.find(tok) != task->req->sampling.preserved_tokens.end();
-                                sampled_str += common_token_to_piece(llm_ctx, tok, special);
-                                // check if the token is a reasoning token
-                                if (support_reasoning) {
-                                    if (!task->reasoning_start_found) {
-                                        task->reasoning_start_found = tok == reasoning_start_token;
-                                    } else if (!task->reasoning_end_found) {
-                                        if (tok == reasoning_end_token) {
-                                            task->reasoning_end_found = true;
-                                        } else {
-                                            task->n_reasoning++;
-                                        }
+                    }
+                    // speculative - lookup
+                    if (params.lookup_ngram_min > 0) {
+                        common_ngram_cache_update(task->ngram_cache, params.lookup_ngram_min, LLAMA_NGRAM_MAX, task->processed_tokens, 1, false);
+                    }
+                    // stats
+                    if (task->n_decoded == 1) {
+                        task->t_start_decode = ggml_time_us();
+                        task->t_prefilled    = double(task->t_start_decode - task->t_start_prefill) / 1.e3;
+                        metrics.on_tokens_prefilled(task->t_prefilled, task->n_prefilled);
+                        task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
+                    }
+                    // postprocess
+                    bool send_text = false;
+                    {
+                        const int32_t n_generated_tokens_s = task->n_processed_detokenized;
+                        const int32_t n_generated_tokens_e = int32_t(task->processed_tokens.size());
+                        std::string sampled_str;
+                        for (; task->n_processed_detokenized < n_generated_tokens_e; task->n_processed_detokenized++) {
+                            llama_token tok = task->processed_tokens[task->n_processed_detokenized];
+                            // accept special token
+                            bool special = params.llm_params.special || task->req->sampling.preserved_tokens.find(tok) != task->req->sampling.preserved_tokens.end();
+                            sampled_str += common_token_to_piece(llm_ctx, tok, special);
+                            // check if the token is a reasoning token
+                            if (support_reasoning) {
+                                if (!task->reasoning_start_found) {
+                                    task->reasoning_start_found = tok == reasoning_start_token;
+                                } else if (!task->reasoning_end_found) {
+                                    if (tok == reasoning_end_token) {
+                                        task->reasoning_end_found = true;
                                     } else {
-                                        task->reasoning_finished = true;
+                                        task->n_reasoning++;
                                     }
+                                } else {
+                                    task->reasoning_finished = true;
                                 }
                             }
-                            task->generated_text += sampled_str;
-                            send_text = get_position_of_utf8(task->generated_text) == task->generated_text.size();
-                            // check stop
-                            //// check stop word or tool call
-                            if (send_text) {
-                                for (const std::string &word : task->req->stop) {
-                                    size_t pos = task->generated_text.find(word, task->generated_text.size() - sampled_str.size());
-                                    if (pos != std::string::npos) {
-                                        SRV_DBG("rid %s | stopped by word\n", rid.c_str());
-                                        task->generated_finish_reason = "stop";
-                                        task->generated_text_keep_pos = pos;
-                                        break;
-                                    }
+                        }
+                        task->generated_text += sampled_str;
+                        send_text = get_position_of_utf8(task->generated_text) == task->generated_text.size();
+                        // check stop
+                        //// check stop word or tool call
+                        if (send_text) {
+                            for (const std::string &word : task->req->stop) {
+                                size_t pos = task->generated_text.find(word, task->generated_text.size() - sampled_str.size());
+                                if (pos != std::string::npos) {
+                                    SRV_DBG("rid %s | stopped by word\n", rid.c_str());
+                                    task->generated_finish_reason = "stop";
+                                    task->generated_text_keep_pos = pos;
+                                    break;
                                 }
-                                // find tool call
-                                if (task->tokenized_prompts_include_tools && task->reasoning_finished) {
-                                    //// jinja
-                                    if (params.llm_params.use_jinja) {
-                                        bool has_tool_call_start_token = task->tool_call_start_token != LLAMA_TOKEN_NULL;
-                                        bool has_tool_call_start_words = !task->tool_call_start_words.empty();
-                                        ////// found tool call start
-                                        if (!task->tool_call_start_found && (has_tool_call_start_token || has_tool_call_start_words)) {
-                                            if (has_tool_call_start_token) {
-                                                // stop sending text if the start token found
-                                                for (int32_t i = n_generated_tokens_s; i < n_generated_tokens_e; i++) {
-                                                    if (task->processed_tokens[i] == task->tool_call_start_token) {
-                                                        task->tool_call_start_found = true;
-                                                        size_t pos                  = task->generated_text.find(
-                                                            task->tool_call_start_token_word,
-                                                            task->generated_text.size() - sampled_str.size());
-                                                        if (pos != std::string::npos) {
-                                                            task->generated_text_keep_pos = pos;
-                                                            // within jinja we should keep the tool call start word
-                                                        }
-                                                        break;
-                                                    }
-                                                }
-                                            } else {
-                                                // stop sending text if the start word found
-                                                if (task->generated_text.length() <= task->tool_call_start_words_longest_length) {
-                                                    send_text = false;
-                                                } else {
-                                                    for (const std::string &word : task->tool_call_start_words) {
-                                                        if (size_t pos = task->generated_text.find(word); pos != std::string::npos) {
-                                                            task->tool_call_start_found   = true;
-                                                            task->generated_text_keep_pos = pos;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        ////// found tool call end
-                                        else {
-                                            send_text = false;
-                                            std::string functions_str;
-                                            if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
-                                                functions_str = task->generated_text;
-                                            }
-                                            if (!functions_str.empty()) {
-                                                task->tool_call_start_found = false;
-                                                try {
-                                                    common_chat_msg msg = common_chat_parse(functions_str, task->tokenized_prompts_format);
-                                                    if (!msg.tool_calls.empty()) {
-                                                        for (const common_chat_tool_call &tc : msg.tool_calls) {
-                                                            task->generated_tool_calls.push_back({
-                                                                {"type", "function"},
-                                                                {"function", {{"name", tc.name}, {"arguments", tc.arguments}}},
-                                                                {"id", tc.id.empty() ? gen_call_id() : tc.id},
-                                                            });
-                                                        }
-                                                        if (!task->tool_call_parallel) {
-                                                            task->generated_finish_reason = "tool_calls";
-                                                        }
-                                                        // eat the rest of the text
-                                                        task->generated_text_keep_pos = std::string::npos;
-                                                        task->generated_text.clear();
-                                                    }
-                                                } catch (const std::exception &e) {
-                                                    SRV_ERR("rid %s | failed to parse tool call: %s, fallback\n", rid.c_str(), e.what());
-                                                }
-                                            }
-                                        }
-                                    }
-                                    //// non-jinja
-                                    else {
-                                        ////// found tool call start
-                                        if (!task->tool_call_start_found) {
-                                            if (tool_call_start_token != LLAMA_TOKEN_NULL) {
-                                                // stop sending text if the start token found
-                                                for (int32_t i = n_generated_tokens_s; i < n_generated_tokens_e; i++) {
-                                                    if (task->processed_tokens[i] == tool_call_start_token) {
-                                                        task->tool_call_start_found = true;
-                                                        size_t pos                  = task->generated_text.find(
-                                                            task->tool_call_start_token_word,
-                                                            task->generated_text.size() - sampled_str.size());
-                                                        if (pos != std::string::npos) {
-                                                            task->generated_text_keep_pos = pos;
-                                                            // within non-jinja we should drop the tool call start word
-                                                            task->generated_text.erase(
-                                                                task->generated_text_keep_pos,
-                                                                task->generated_text_keep_pos + tool_call_start_token_word.size());
-                                                        }
-                                                        break;
-                                                    }
-                                                }
-                                            } else if (!tool_call_start_words.empty()) {
-                                                // stop sending text if the start word found
-                                                if (task->generated_text.length() <= tool_call_start_words_longest_length) {
-                                                    send_text = false;
-                                                } else {
-                                                    for (const std::string &word : tool_call_start_words) {
-                                                        if (size_t pos = task->generated_text.find(word); pos != std::string::npos) {
-                                                            task->tool_call_start_found      = true;
-                                                            task->generated_text_keep_pos    = pos;
-                                                            task->tool_call_start_found_word = word;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        ////// found tool call end
-                                        else {
-                                            send_text = false;
-                                            std::string functions_str;
-                                            if (tool_call_end_token != LLAMA_TOKEN_NULL) {
-                                                for (int32_t i = n_generated_tokens_e - 1; i >= n_generated_tokens_s; --i) {
-                                                    if (task->processed_tokens[i] == tool_call_end_token) {
-                                                        // within non-jinja we should drop the tool call end word
-                                                        functions_str = task->generated_text;
-                                                        functions_str = functions_str.substr(0, functions_str.length() - sampled_str.size() + sampled_str.find(tool_call_end_token_word));
-                                                        break;
-                                                    }
-                                                }
-                                            } else if (!tool_call_end_words.empty()) {
-                                                for (const std::string &word : tool_call_end_words) {
-                                                    if (!string_ends_with(task->generated_text, word)) {
-                                                        continue;
-                                                    }
-                                                    functions_str = task->generated_text;
-                                                    if (tool_call_start_trim && !task->tool_call_start_found_word.empty()) {
-                                                        functions_str = functions_str.substr(task->tool_call_start_found_word.length());
-                                                    }
-                                                    if (tool_call_end_trim) {
-                                                        functions_str = functions_str.substr(0, functions_str.length() - word.length());
+                            }
+                            // find tool call
+                            if (task->tokenized_prompts_include_tools && task->reasoning_finished) {
+                                //// jinja
+                                if (params.llm_params.use_jinja) {
+                                    bool has_tool_call_start_token = task->tool_call_start_token != LLAMA_TOKEN_NULL;
+                                    bool has_tool_call_start_words = !task->tool_call_start_words.empty();
+                                    ////// found tool call start
+                                    if (!task->tool_call_start_found && (has_tool_call_start_token || has_tool_call_start_words)) {
+                                        if (has_tool_call_start_token) {
+                                            // stop sending text if the start token found
+                                            for (int32_t i = n_generated_tokens_s; i < n_generated_tokens_e; i++) {
+                                                if (task->processed_tokens[i] == task->tool_call_start_token) {
+                                                    task->tool_call_start_found = true;
+                                                    size_t pos                  = task->generated_text.find(
+                                                        task->tool_call_start_token_word,
+                                                        task->generated_text.size() - sampled_str.size());
+                                                    if (pos != std::string::npos) {
+                                                        task->generated_text_keep_pos = pos;
+                                                        // within jinja we should keep the tool call start word
                                                     }
                                                     break;
                                                 }
                                             }
-                                            if (!functions_str.empty()) {
-                                                task->tool_call_start_found = false;
-                                                try {
-                                                    auto append_tool_calls = [&](Json &function) {
-                                                        if (!function.is_object()) {
-                                                            throw std::runtime_error("function is an object");
-                                                        }
-                                                        if (!function.contains("name")) {
-                                                            throw std::runtime_error("function does not contain \"name\"");
-                                                        }
-                                                        if (!function.contains("arguments")) {
-                                                            throw std::runtime_error("function does not contain \"arguments\"");
-                                                        }
-                                                        if (!function.at("arguments").is_string()) {
-                                                            function["arguments"] = function.at("arguments").dump(-1, ' ', false, Json::error_handler_t::replace);
-                                                        }
-                                                        Json tool_call = {
+                                        } else {
+                                            // stop sending text if the start word found
+                                            if (task->generated_text.length() <= task->tool_call_start_words_longest_length) {
+                                                send_text = false;
+                                            } else {
+                                                for (const std::string &word : task->tool_call_start_words) {
+                                                    if (size_t pos = task->generated_text.find(word); pos != std::string::npos) {
+                                                        task->tool_call_start_found   = true;
+                                                        task->generated_text_keep_pos = pos;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ////// found tool call end
+                                    else {
+                                        send_text = false;
+                                        std::string functions_str;
+                                        if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
+                                            functions_str = task->generated_text;
+                                        }
+                                        if (!functions_str.empty()) {
+                                            task->tool_call_start_found = false;
+                                            try {
+                                                common_chat_msg msg = common_chat_parse(functions_str, task->tokenized_prompts_format);
+                                                if (!msg.tool_calls.empty()) {
+                                                    for (const common_chat_tool_call &tc : msg.tool_calls) {
+                                                        task->generated_tool_calls.push_back({
                                                             {"type", "function"},
-                                                            {"function", function},
-                                                            {"id", gen_call_id()},
-                                                        };
-                                                        task->generated_tool_calls.push_back(tool_call);
-                                                    };
-                                                    Json functions = Json::parse(functions_str);
-                                                    if (functions.is_array()) {
-                                                        for (auto &function : functions) {
-                                                            append_tool_calls(function);
-                                                        }
-                                                    } else {
-                                                        append_tool_calls(functions);
+                                                            {"function", {{"name", tc.name}, {"arguments", tc.arguments}}},
+                                                            {"id", tc.id.empty() ? gen_call_id() : tc.id},
+                                                        });
                                                     }
                                                     if (!task->tool_call_parallel) {
                                                         task->generated_finish_reason = "tool_calls";
@@ -3836,283 +3789,431 @@ struct httpserver {
                                                     // eat the rest of the text
                                                     task->generated_text_keep_pos = std::string::npos;
                                                     task->generated_text.clear();
-                                                } catch (const std::exception &e) {
-                                                    SRV_ERR("rid %s | failed to parse tool call: %s, fallback\n", rid.c_str(), e.what());
                                                 }
+                                            } catch (const std::exception &e) {
+                                                SRV_ERR("rid %s | failed to parse tool call: %s, wait\n", rid.c_str(), e.what());
+                                                task->tool_call_start_found   = true;
+                                                task->generated_text_keep_pos = 0;
+                                            }
+                                        }
+                                    }
+                                }
+                                //// non-jinja
+                                else {
+                                    ////// found tool call start
+                                    if (!task->tool_call_start_found) {
+                                        if (tool_call_start_token != LLAMA_TOKEN_NULL) {
+                                            // stop sending text if the start token found
+                                            for (int32_t i = n_generated_tokens_s; i < n_generated_tokens_e; i++) {
+                                                if (task->processed_tokens[i] == tool_call_start_token) {
+                                                    task->tool_call_start_found = true;
+                                                    size_t pos                  = task->generated_text.find(
+                                                        task->tool_call_start_token_word,
+                                                        task->generated_text.size() - sampled_str.size());
+                                                    if (pos != std::string::npos) {
+                                                        task->generated_text_keep_pos = pos;
+                                                        // within non-jinja we should drop the tool call start word
+                                                        task->generated_text.erase(
+                                                            task->generated_text_keep_pos,
+                                                            task->generated_text_keep_pos + tool_call_start_token_word.size());
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        } else if (!tool_call_start_words.empty()) {
+                                            // stop sending text if the start word found
+                                            if (task->generated_text.length() <= tool_call_start_words_longest_length) {
+                                                send_text = false;
+                                            } else {
+                                                for (const std::string &word : tool_call_start_words) {
+                                                    if (size_t pos = task->generated_text.find(word); pos != std::string::npos) {
+                                                        task->tool_call_start_found      = true;
+                                                        task->generated_text_keep_pos    = pos;
+                                                        task->tool_call_start_found_word = word;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ////// found tool call end
+                                    else {
+                                        send_text = false;
+                                        std::string functions_str;
+                                        if (tool_call_end_token != LLAMA_TOKEN_NULL) {
+                                            for (int32_t i = n_generated_tokens_e - 1; i >= n_generated_tokens_s; --i) {
+                                                if (task->processed_tokens[i] == tool_call_end_token) {
+                                                    // within non-jinja we should drop the tool call end word
+                                                    functions_str = task->generated_text;
+                                                    functions_str = functions_str.substr(0, functions_str.length() - sampled_str.size() + sampled_str.find(tool_call_end_token_word));
+                                                    break;
+                                                }
+                                            }
+                                        } else if (!tool_call_end_words.empty()) {
+                                            for (const std::string &word : tool_call_end_words) {
+                                                size_t pos = task->generated_text.rfind(word);
+                                                if (pos == std::string::npos) {
+                                                    continue;
+                                                }
+                                                functions_str = task->generated_text.substr(0, pos + word.length());
+                                                if (tool_call_start_trim && !task->tool_call_start_found_word.empty()) {
+                                                    functions_str = functions_str.substr(task->tool_call_start_found_word.length());
+                                                }
+                                                if (tool_call_end_trim) {
+                                                    functions_str = functions_str.substr(0, functions_str.length() - word.length());
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        if (!functions_str.empty()) {
+                                            task->tool_call_start_found = false;
+                                            try {
+                                                auto append_tool_calls = [&](Json &function) {
+                                                    if (!function.is_object()) {
+                                                        throw std::runtime_error("function is an object");
+                                                    }
+                                                    if (!function.contains("name")) {
+                                                        throw std::runtime_error("function does not contain \"name\"");
+                                                    }
+                                                    if (!function.contains("arguments")) {
+                                                        throw std::runtime_error("function does not contain \"arguments\"");
+                                                    }
+                                                    if (!function.at("arguments").is_string()) {
+                                                        function["arguments"] = function.at("arguments").dump(-1, ' ', false, Json::error_handler_t::replace);
+                                                    }
+                                                    Json tool_call = {
+                                                        {"type", "function"},
+                                                        {"function", function},
+                                                        {"id", gen_call_id()},
+                                                    };
+                                                    task->generated_tool_calls.push_back(tool_call);
+                                                };
+                                                Json functions = Json::parse(functions_str);
+                                                if (functions.is_array()) {
+                                                    for (auto &function : functions) {
+                                                        append_tool_calls(function);
+                                                    }
+                                                } else {
+                                                    append_tool_calls(functions);
+                                                }
+                                                if (!task->tool_call_parallel) {
+                                                    task->generated_finish_reason = "tool_calls";
+                                                }
+                                                // eat the rest of the text
+                                                task->generated_text_keep_pos = std::string::npos;
+                                                task->generated_text.clear();
+                                            } catch (const std::exception &e) {
+                                                SRV_ERR("rid %s | failed to parse tool call: %s, wait\n", rid.c_str(), e.what());
+                                                task->tool_call_start_found   = true;
+                                                task->generated_text_keep_pos = 0;
                                             }
                                         }
                                     }
                                 }
                             }
-                            if (task->generated_finish_reason.empty()) {
-                                //// check eog
-                                if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
-                                    SRV_DBG("rid %s | stopped by EOG\n", rid.c_str());
-                                    task->generated_finish_reason = "stop";
-                                }
-                                //// check budget
-                                else if (task->n_decoding_budget <= 0) {
-                                    SRV_DBG("rid %s | stopped by length\n", rid.c_str());
-                                    task->generated_finish_reason = "length";
-                                }
-                            }
                         }
-                        // continue if not finished
                         if (task->generated_finish_reason.empty()) {
-                            // stream outputting
-                            if (send_text && task_ptr->is_stream()) {
-                                Json data = task->to_json(llm_ctx);
-                                process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
+                            //// check eog
+                            if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
+                                SRV_DBG("rid %s | stopped by EOG\n", rid.c_str());
+                                task->generated_finish_reason = "stop";
                             }
-                            // speculative
-                            if (!task->tokenized_prompts_include_images) {
-                                task->drafted_tokens.clear();
-                                //// draft
-                                if (llm_ctx_draft != nullptr) {
-                                    llama_pos draft_pos = task->pos;
-                                    // mask kv cache
-                                    llama_kv_self_seq_rm(llm_ctx_draft, seq_id, draft_pos, -1);
-                                    if (need_mrope) {
-                                        common_batch_add_with_mrope(batch_draft, task->processed_tokens.back(), draft_pos, 1, {seq_id}, true);
-                                    } else {
-                                        common_batch_add(batch_draft, task->processed_tokens.back(), draft_pos, {seq_id}, true);
-                                    }
-                                    draft_pos++;
-                                    int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
-                                    common_batch_clear(batch_draft);
-                                    if (decoded_draft != 0) {
-                                        // clean kv cache
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                        // output
-                                        Json data = {{"message", "failed to decode draft"}};
-                                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
-                                        continue;
-                                    }
-                                    // speculative in n_max times
-                                    for (int32_t j = 0; j < params.llm_params.speculative.n_max; ++j) {
-                                        const llama_token tok               = common_sampler_sample(task->sampler_draft, llm_ctx_draft, 0, true);
-                                        const llama_token_data_array *cur_p = common_sampler_get_candidates(task->sampler_draft);
-                                        if (cur_p->data[0].p < params.llm_params.speculative.p_min) {
-                                            break;
-                                        }
-                                        common_sampler_accept(task->sampler_draft, tok, true);
-                                        task->drafted_tokens.push_back(tok);
-                                        task->n_drafted++;
-                                        if (llama_vocab_is_eog(llm_vocab_draft, tok)) {
-                                            break;
-                                        }
-                                        common_batch_add(batch_draft, tok, draft_pos, {seq_id}, true);
-                                        decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
-                                        common_batch_clear(batch_draft);
-                                        if (decoded_draft != 0) {
-                                            // clean kv cache
-                                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                            break;
-                                        }
-                                        draft_pos++;
-                                    }
-                                    // ignore if less than n_min
-                                    if (int32_t(task->drafted_tokens.size()) < params.llm_params.speculative.n_min) {
-                                        task->drafted_tokens.clear();
-                                    }
-                                }
-                                //// lookup ngram
-                                if (params.lookup_ngram_min > 0) {
-                                    size_t n_drafted = task->drafted_tokens.size();
-                                    if (n_drafted == 0) {
-                                        task->drafted_tokens.push_back(task->processed_tokens.back());
-                                    }
-                                    common_ngram_cache ngram_cache_empty;
-                                    common_ngram_cache_draft(
-                                        task->processed_tokens, task->drafted_tokens,
-                                        params.llm_params.speculative.n_max, params.lookup_ngram_min, LLAMA_NGRAM_MAX,
-                                        task->ngram_cache, ngram_cache_empty, ngram_cache_empty);
-                                    if (n_drafted == 0) {
-                                        task->drafted_tokens.erase(task->drafted_tokens.begin());
-                                    }
-                                    task->n_drafted += int32_t(task->drafted_tokens.size() - n_drafted);
-                                }
-                            }
-                            // enqueue
-                            if (!task_ptr->is_connection_closed()) {
-                                process_tasks->enqueue(std::move(task_ptr));
-                                continue;
-                            }
-                        }
-                        // stats
-                        task->t_decoded = double(ggml_time_us() - task->t_start_decode) / 1.e3;
-                        metrics.on_tokens_decoded(task->t_decoded, task->n_decoded, task->n_drafted, task->n_drafted_accepted);
-                        task->p_decoded_tps = 1.e3 / task->t_decoded * task->n_decoded;
-                        task->p_drafted_apt = task->n_drafted == 0 ? 0.0 : double(task->n_drafted_accepted) / double(task->n_drafted);
-                        // output
-                        Json data = task->to_json(llm_ctx);
-                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
-                        SRV_INF("rid %s | "
-                                "prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, "
-                                "decode_t = %d, decode_tps = %.2f tps, tpot = %.2fms, "
-                                "draft_t = %d, draft_apt = %.2f%%\n",
-                                rid.c_str(),
-                                task->n_prefilled, task->p_prefilled_tps, task->t_prefilled,
-                                task->n_decoded, task->p_decoded_tps, task->t_decoded / double(task->n_decoded),
-                                task->n_drafted, task->p_drafted_apt * 100);
-                        if (!cache_prompt) {
-                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
-                            if (llm_ctx_draft != nullptr) {
-                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                            }
-                        }
-                    }
-                }
-
-                // embeddings
-                else {
-                    const int32_t n_embed = llama_model_n_embd(llm_model);
-                    const int32_t decoded = llama_decode(llm_ctx, batch);
-                    common_batch_clear(batch);
-                    if (decoded != 0) {
-                        SRV_ERR("decode in batch, failed to decode, try increasing context size or reducing parallel: result = %d\n", decoded);
-                        // clean kv cache
-                        llama_kv_self_clear(llm_ctx);
-                        // output
-                        for (auto &[tid, _] : batch_task_ptrs) {
-                            Json data = {{"message", "failed to decode"}};
-                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
-                        }
-                        continue;
-                    }
-                    for (auto &[tid, task_ptr] : batch_task_ptrs) {
-                        auto *task            = dynamic_cast<embeddings_task *>(task_ptr.get());
-                        const std::string rid = task->get_r_id();
-                        // get embeddings
-                        const req_type rtype = task->get_r_type();
-                        const size_t n_input = task->tokenized_inputs.size();
-                        task->embeds.reserve(n_input);
-                        if (rtype == REQ_EMBED) {
-                            task->embeds.emplace_back(n_embed, 0.0f);
-                        } else {
-                            task->embeds.emplace_back(1, -1.e6);
-                        }
-                        const float *embed = llama_get_embeddings_seq(llm_ctx, tid);
-                        if (embed == nullptr) {
-                            embed = llama_get_embeddings_ith(llm_ctx, task->i_batch_seq_end);
-                        }
-                        if (embed == nullptr) {
-                            SRV_WRN("rid %s | decode in batch, failed to get embeddings\n", rid.c_str());
-                            continue;
-                        }
-                        if (rtype == REQ_EMBED) {
-                            common_embd_normalize(embed, task->embeds[task->embeds.size() - 1].data(), n_embed, 2);
-                        } else {
-                            task->embeds[task->embeds.size() - 1][0] = embed[0];
-                        }
-                        // continue if not finished
-                        if (task->embeds.size() < n_input) {
-                            if (!task_ptr->is_connection_closed()) {
-                                process_tasks->enqueue(std::move(task_ptr));
-                                continue;
-                            }
-                        }
-                        // stats
-                        task->t_prefilled = double(ggml_time_us() - task->t_start_prefill) / 1.e3;
-                        metrics.on_tokens_prefilled(task->t_prefilled, task->n_prefilled);
-                        task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
-                        // output
-                        Json data = task->to_json();
-                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
-                        SRV_INF("rid %s | "
-                                "prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, "
-                                "total_t = %d, min_prompt_t = %d, max_prompt_t = %d\n",
-                                rid.c_str(),
-                                task->n_prefilled, task->p_prefilled_tps, task->t_prefilled,
-                                task->n_prefilled, task->n_min_prefilled, task->n_max_prefilled);
-                    }
-                }
-            }
-
-            // reverse images in batch
-            else {
-                for (auto &[tid, task_ptr] : batch_task_ptrs) {
-                    auto *task             = dynamic_cast<images_task *>(task_ptr.get());
-                    const bool preview     = json_value(task->req->stream_options, "preview", false) || json_value(task->req->stream_options, "preview_faster", false);
-                    const std::string rid  = task->get_r_id();
-                    const int32_t n_repeat = task->req->n;
-                    // stats
-                    if (task->progressed_steps[0] == 0) {
-                        task->t_start_reverse = ggml_time_us();
-                        task->t_forwarded     = double(task->t_start_reverse - task->t_start_forward) / 1.e3;
-                        metrics.on_image_forwarded(task->t_forwarded, task->n_forward_steps);
-                        task->p_forwarded_sps = 1.e3 / task->t_forwarded * task->n_forward_steps;
-                    }
-                    bool incomplete = false;
-                    // reverse
-                    for (int32_t n = 0; n < n_repeat; n++) {
-                        // skip if finished
-                        if (task->progressed_steps[n] > 0 && task->progressed_steps[n] == task->progress_steps[n]) {
-                            continue;
-                        }
-                        // sample
-                        v2_stablediffusion_sampling_stream *stream = task->streams[n].get();
-                        uint64_t start_at                          = ggml_time_us();
-                        incomplete                                 = sd_ctx->sample_stream(stream);
-                        uint64_t rct                               = ggml_time_us() - start_at;
-                        task->n_reverse_steps++;
-                        const auto &[progressed_steps, progress_steps] = sd_ctx->progress_stream(stream);
-                        SRV_INFV(3, "rid %s | reversed, seq = %d, n = %d, progress = %03i/%03i, cost = %.2f%s\n",
-                                 rid.c_str(), tid, n, progressed_steps, progress_steps, double(rct) / (rct > 1.e6 ? 1.e6 : 1.e3), rct > 1.e6 ? "s" : "ms");
-                        task->progressed_steps[n] = progressed_steps;
-                        task->progress_steps[n]   = progress_steps;
-                        // output
-                        if (incomplete) {
-                            // stream outputting
-                            if (task->is_stream()) {
-                                // get preview image
-                                if (preview) {
-                                    auto preview_img     = sd_ctx->preview_image_stream(stream, true);
-                                    std::string b64_json = encode_base64(preview_img->data, preview_img->size);
-                                    task->b64_jsons[n]   = std::move(b64_json);
-                                }
-                                Json data = task->to_json(n);
-                                process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
-                            }
-                        } else {
-                            // get generated image
-                            auto generated_img   = sd_ctx->result_image_stream(stream);
-                            std::string b64_json = encode_base64(generated_img->data, generated_img->size);
-                            task->b64_jsons[n]   = std::move(b64_json);
-                            // stream outputting, but not the last one
-                            if (task->is_stream() && n + 1 < n_repeat) {
-                                Json data = task->to_json(n);
-                                process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
+                            //// check budget
+                            else if (task->n_decoding_budget <= 0) {
+                                SRV_DBG("rid %s | stopped by length\n", rid.c_str());
+                                task->generated_finish_reason = "length";
                             }
                         }
                     }
                     // continue if not finished
-                    if (incomplete) {
+                    bool opened = true;
+                    if (task->generated_finish_reason.empty()) {
+                        // stream outputting
+                        if (send_text && task_ptr->is_stream()) {
+                            Json data = task->to_json(llm_ctx);
+                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
+                        }
+                        // speculative
+                        if (!task->tokenized_prompts_include_images) {
+                            task->drafted_tokens.clear();
+                            //// draft
+                            if (llm_ctx_draft != nullptr) {
+                                llama_pos draft_pos = task->pos;
+                                // mask kv cache
+                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, draft_pos, -1);
+                                // clean batch for later adding
+                                common_batch_clear(batch_draft);
+                                if (llm_model_rope_mrope) {
+                                    common_batch_add_with_mrope(batch_draft, task->processed_tokens.back(), draft_pos, 1, {seq_id}, true);
+                                } else {
+                                    common_batch_add(batch_draft, task->processed_tokens.back(), draft_pos, {seq_id}, true);
+                                }
+                                draft_pos++;
+                                int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
+                                if (decoded_draft != 0) {
+                                    SRV_ERR("rid %s | decode draft, failed to decode, try increasing context size or reducing requests: result = %d\n", rid.c_str(), decoded_draft);
+                                    // clean kv cache
+                                    llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                    // output
+                                    Json data = {{"message", "failed to decode draft"}};
+                                    process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
+                                    continue;
+                                }
+                                // speculative in n_max times
+                                for (int32_t j = 0; j < params.llm_params.speculative.n_max; ++j) {
+                                    const llama_token tok               = common_sampler_sample(task->sampler_draft, llm_ctx_draft, 0, true);
+                                    const llama_token_data_array *cur_p = common_sampler_get_candidates(task->sampler_draft);
+                                    if (cur_p->data[0].p < params.llm_params.speculative.p_min) {
+                                        break;
+                                    }
+                                    common_sampler_accept(task->sampler_draft, tok, true);
+                                    task->drafted_tokens.push_back(tok);
+                                    task->n_drafted++;
+                                    if (llama_vocab_is_eog(llm_vocab_draft, tok)) {
+                                        break;
+                                    }
+                                    // clean batch for later adding
+                                    common_batch_clear(batch_draft);
+                                    if (llm_model_rope_mrope) {
+                                        common_batch_add_with_mrope(batch_draft, tok, draft_pos, 1, {seq_id}, true);
+                                    } else {
+                                        common_batch_add(batch_draft, tok, draft_pos, {seq_id}, true);
+                                    }
+                                    decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
+                                    if (decoded_draft != 0) {
+                                        // clean kv cache
+                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                        break;
+                                    }
+                                    draft_pos++;
+                                }
+                                // ignore if less than n_min
+                                if (int32_t(task->drafted_tokens.size()) < params.llm_params.speculative.n_min) {
+                                    task->drafted_tokens.clear();
+                                }
+                            }
+                            //// lookup ngram
+                            if (params.lookup_ngram_min > 0) {
+                                size_t n_drafted = task->drafted_tokens.size();
+                                if (n_drafted == 0) {
+                                    task->drafted_tokens.push_back(task->processed_tokens.back());
+                                }
+                                common_ngram_cache ngram_cache_empty;
+                                common_ngram_cache_draft(
+                                    task->processed_tokens, task->drafted_tokens,
+                                    params.llm_params.speculative.n_max, params.lookup_ngram_min, LLAMA_NGRAM_MAX,
+                                    task->ngram_cache, ngram_cache_empty, ngram_cache_empty);
+                                if (n_drafted == 0) {
+                                    task->drafted_tokens.erase(task->drafted_tokens.begin());
+                                }
+                                task->n_drafted += int32_t(task->drafted_tokens.size() - n_drafted);
+                            }
+                        }
+                        // enqueue
                         if (!task_ptr->is_connection_closed()) {
                             process_tasks->enqueue(std::move(task_ptr));
                             continue;
                         }
+                        opened = false;
                     }
                     // stats
-                    task->t_reversed = double(ggml_time_us() - task->t_start_reverse) / 1.e3;
-                    metrics.on_image_reversed(task->t_reversed, task->n_reverse_steps);
-                    task->p_reversed_sps = 1.e3 / task->t_reversed * task->n_reverse_steps;
+                    task->t_decoded = double(ggml_time_us() - task->t_start_decode) / 1.e3;
+                    metrics.on_tokens_decoded(task->t_decoded, task->n_decoded, task->n_drafted, task->n_drafted_accepted);
+                    task->p_decoded_tps = 1.e3 / task->t_decoded * task->n_decoded;
+                    task->p_drafted_apt = task->n_drafted == 0 ? 0.0 : double(task->n_drafted_accepted) / double(task->n_drafted);
                     // output
-                    Json data;
-                    if (task->is_stream()) {
-                        data = task->to_json(n_repeat - 1);
-                    } else {
-                        data = task->to_json(-1);
+                    if (opened) {
+                        Json data = task->to_json(llm_ctx);
+                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
                     }
-                    process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
                     SRV_INF("rid %s | "
-                            "forward_s = %d, forward_sps = %.2f sps, "
-                            "reverse_s = %d, reverse_sps = %.2f sps\n",
+                            "prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, "
+                            "decode_t = %d, decode_tps = %.2f tps, tpot = %.2fms, "
+                            "draft_t = %d, draft_apt = %.2f%%, "
+                            "stop_r = %s\n",
                             rid.c_str(),
-                            task->n_forward_steps, task->p_forwarded_sps,
-                            task->n_reverse_steps, task->p_reversed_sps);
+                            task->n_prefilled, task->p_prefilled_tps, task->t_prefilled,
+                            task->n_decoded, task->p_decoded_tps, task->t_decoded / double(task->n_decoded),
+                            task->n_drafted, task->p_drafted_apt * 100,
+                            opened ? task->generated_finish_reason.c_str() : "closed");
+                    // clean kv cache
+                    if (!cache_prompt) {
+                        llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                        if (llm_ctx_draft != nullptr) {
+                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                        }
+                    }
+                }
+                return;
+            }
+
+            /**
+             * embeddings
+             */
+            const int32_t decoded = llama_decode(llm_ctx, batch);
+            if (decoded != 0) {
+                SRV_ERR("decode in batch, failed to decode, try increasing context size or reducing parallel: result = %d\n", decoded);
+                // clean kv cache
+                if (llm_model_casual) {
+                    llama_kv_self_clear(llm_ctx);
+                }
+                // output
+                for (auto &[tid, _] : batch_task_ptrs) {
+                    Json data = {{"message", "failed to decode"}};
+                    process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
+                }
+                return;
+            }
+            for (auto &[tid, task_ptr] : batch_task_ptrs) {
+                auto *task            = dynamic_cast<embeddings_task *>(task_ptr.get());
+                const int32_t seq_id  = tid;
+                const std::string rid = task->get_r_id();
+                const req_type rtype  = task->get_r_type();
+                // get embeddings
+                const size_t n_input = task->tokenized_inputs.size();
+                task->embeds.reserve(n_input);
+                if (rtype == REQ_EMBED) {
+                    task->embeds.emplace_back(llm_ctx_embed_size, 0.0f);
+                } else {
+                    task->embeds.emplace_back(1, -1.e6);
+                }
+                const float *embed = llama_get_embeddings_seq(llm_ctx, seq_id);
+                if (embed == nullptr) {
+                    embed = llama_get_embeddings_ith(llm_ctx, task->i_batch_seq_end);
+                }
+                if (embed == nullptr) {
+                    SRV_WRN("rid %s | decode in batch, failed to get embeddings\n", rid.c_str());
+                    continue;
+                }
+                if (rtype == REQ_EMBED) {
+                    common_embd_normalize(embed, task->embeds[task->embeds.size() - 1].data(), llm_ctx_embed_size, 2);
+                } else {
+                    task->embeds[task->embeds.size() - 1][0] = embed[0];
+                }
+                // continue if not finished
+                bool opened = true;
+                if (task->embeds.size() < n_input) {
+                    if (!task_ptr->is_connection_closed()) {
+                        process_tasks->enqueue(std::move(task_ptr));
+                        continue;
+                    }
+                    opened = false;
+                }
+                // stats
+                task->t_prefilled = double(ggml_time_us() - task->t_start_prefill) / 1.e3;
+                metrics.on_tokens_prefilled(task->t_prefilled, task->n_prefilled);
+                task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
+                // output
+                if (opened) {
+                    Json data = task->to_json();
+                    process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
+                }
+                SRV_INF("rid %s | "
+                        "prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, "
+                        "total_t = %d, min_prompt_t = %d, max_prompt_t = %d, "
+                        "stop_r = %s\n",
+                        rid.c_str(),
+                        task->n_prefilled, task->p_prefilled_tps, task->t_prefilled,
+                        task->n_prefilled, task->n_min_prefilled, task->n_max_prefilled,
+                        opened ? "stop" : "closed");
+                // clean kv cache
+                if (llm_model_casual) {
+                    llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
                 }
             }
+            return;
+        }
+
+        /**
+         * images
+         */
+
+        for (auto &[tid, task_ptr] : batch_task_ptrs) {
+            auto *task             = dynamic_cast<images_task *>(task_ptr.get());
+            const bool preview     = json_value(task->req->stream_options, "preview", false) || json_value(task->req->stream_options, "preview_faster", false);
+            const std::string rid  = task->get_r_id();
+            const int32_t n_repeat = task->req->n;
+            // stats
+            if (task->progressed_steps[0] == 0) {
+                task->t_start_reverse = ggml_time_us();
+                task->t_forwarded     = double(task->t_start_reverse - task->t_start_forward) / 1.e3;
+                metrics.on_image_forwarded(task->t_forwarded, task->n_forward_steps);
+                task->p_forwarded_sps = 1.e3 / task->t_forwarded * task->n_forward_steps;
+            }
+            bool incomplete = false;
+            // reverse
+            for (int32_t n = 0; n < n_repeat; n++) {
+                // skip if finished
+                if (task->progressed_steps[n] > 0 && task->progressed_steps[n] == task->progress_steps[n]) {
+                    continue;
+                }
+                // sample
+                v2_stablediffusion_sampling_stream *stream = task->streams[n].get();
+                uint64_t start_at                          = ggml_time_us();
+                incomplete                                 = sd_ctx->sample_stream(stream);
+                uint64_t rct                               = ggml_time_us() - start_at;
+                task->n_reverse_steps++;
+                const auto &[progressed_steps, progress_steps] = sd_ctx->progress_stream(stream);
+                SRV_INFV(3, "rid %s | reversed, seq = %d, n = %d, progress = %03i/%03i, cost = %.2f%s\n",
+                         rid.c_str(), tid, n, progressed_steps, progress_steps, double(rct) / (rct > 1.e6 ? 1.e6 : 1.e3), rct > 1.e6 ? "s" : "ms");
+                task->progressed_steps[n] = progressed_steps;
+                task->progress_steps[n]   = progress_steps;
+                // output
+                if (incomplete) {
+                    // stream outputting
+                    if (task->is_stream()) {
+                        // get preview image
+                        if (preview) {
+                            auto preview_img     = sd_ctx->preview_image_stream(stream, true);
+                            std::string b64_json = encode_base64(preview_img->data, preview_img->size);
+                            task->b64_jsons[n]   = std::move(b64_json);
+                        }
+                        Json data = task->to_json(n);
+                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
+                    }
+                } else {
+                    // get generated image
+                    auto generated_img   = sd_ctx->result_image_stream(stream);
+                    std::string b64_json = encode_base64(generated_img->data, generated_img->size);
+                    task->b64_jsons[n]   = std::move(b64_json);
+                    // stream outputting, but not the last one
+                    if (task->is_stream() && n + 1 < n_repeat) {
+                        Json data = task->to_json(n);
+                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
+                    }
+                }
+            }
+            // continue if not finished
+            bool opened = true;
+            if (incomplete) {
+                if (!task_ptr->is_connection_closed()) {
+                    process_tasks->enqueue(std::move(task_ptr));
+                    continue;
+                }
+                opened = false;
+            }
+            // stats
+            task->t_reversed = double(ggml_time_us() - task->t_start_reverse) / 1.e3;
+            metrics.on_image_reversed(task->t_reversed, task->n_reverse_steps);
+            task->p_reversed_sps = 1.e3 / task->t_reversed * task->n_reverse_steps;
+            // output
+            if (opened) {
+                Json data;
+                if (task->is_stream()) {
+                    data = task->to_json(n_repeat - 1);
+                } else {
+                    data = task->to_json(-1);
+                }
+                process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
+            }
+            SRV_INF("rid %s | "
+                    "forward_s = %d, forward_sps = %.2f sps, "
+                    "reverse_s = %d, reverse_sps = %.2f sps, "
+                    "stop_r = %s\n",
+                    rid.c_str(),
+                    task->n_forward_steps, task->p_forwarded_sps,
+                    task->n_reverse_steps, task->p_reversed_sps,
+                    opened ? "stop" : "closed");
         }
     }
 
@@ -4319,7 +4420,7 @@ struct httpserver {
                     {
                         {"name", "kv_cache_usage_ratio"},
                         {"help", "KV-cache usage. 1 means 100 percent usage."},
-                        {"value", support_completion() ? double(llama_kv_self_used_cells(llm_ctx)) / params.llm_params.n_ctx : 0},
+                        {"value", support_completion() ? double(llama_kv_self_used_cells(llm_ctx)) / llm_ctx_size : 0},
                     },
                     {
                         {"name", "kv_cache_tokens"},
