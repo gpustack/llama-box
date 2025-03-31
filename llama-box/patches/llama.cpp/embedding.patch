@@ -1,8 +1,8 @@
 diff --git a/include/llama.h b/include/llama.h
-index c66a2370..4ed1d170 100644
+index 468ab1fa..5e4a9f1f 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -458,6 +458,7 @@ extern "C" {
+@@ -460,6 +460,7 @@ extern "C" {
      LLAMA_API bool llama_supports_gpu_offload(void);
      LLAMA_API bool llama_supports_rpc        (void);
  

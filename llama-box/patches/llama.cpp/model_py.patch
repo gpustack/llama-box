@@ -1,5 +1,5 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index c605e4d0..956fcf4d 100755
+index 0919cd3f..733aba4e 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
 @@ -4,6 +4,7 @@
@@ -10,7 +10,7 @@ index c605e4d0..956fcf4d 100755
  import logging
  import argparse
  import contextlib
-@@ -3193,7 +3194,67 @@ class XLMRobertaModel(BertModel):
+@@ -3199,7 +3200,67 @@ class XLMRobertaModel(BertModel):
  
          tokenizer_path = self.dir_model / 'sentencepiece.bpe.model'
          if not tokenizer_path.is_file():
@@ -79,7 +79,7 @@ index c605e4d0..956fcf4d 100755
  
          sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
          sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
-@@ -3279,6 +3340,121 @@ class XLMRobertaModel(BertModel):
+@@ -3285,6 +3346,121 @@ class XLMRobertaModel(BertModel):
  
          return super().modify_tensors(data_torch, name, bid)
  
@@ -202,7 +202,7 @@ index c605e4d0..956fcf4d 100755
  @Model.register("GemmaForCausalLM")
  class GemmaModel(Model):
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 1753dca4..ce84ce94 100644
+index 3a52cfd1..80c460c9 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
 @@ -239,6 +239,7 @@ class MODEL_ARCH(IntEnum):
@@ -213,7 +213,7 @@ index 1753dca4..ce84ce94 100644
      JINA_BERT_V2     = auto()
      BLOOM            = auto()
      STABLELM         = auto()
-@@ -442,6 +443,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -443,6 +444,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.REFACT:           "refact",
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
@@ -221,7 +221,7 @@ index 1753dca4..ce84ce94 100644
      MODEL_ARCH.JINA_BERT_V2:     "jina-bert-v2",
      MODEL_ARCH.BLOOM:            "bloom",
      MODEL_ARCH.STABLELM:         "stablelm",
-@@ -754,6 +756,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -756,6 +758,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.ATTN_Q,
          MODEL_TENSOR.ATTN_K,
          MODEL_TENSOR.ATTN_V,
@@ -229,7 +229,7 @@ index 1753dca4..ce84ce94 100644
          MODEL_TENSOR.ATTN_OUT,
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
-@@ -775,6 +778,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -777,6 +780,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_UP,
          MODEL_TENSOR.LAYER_OUT_NORM,
      ],
@@ -251,10 +251,10 @@ index 1753dca4..ce84ce94 100644
          MODEL_TENSOR.TOKEN_EMBD,
          MODEL_TENSOR.TOKEN_EMBD_NORM,
 diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index 8d4a2b03..50609037 100644
+index 50bef12e..bf75f32f 100644
 --- a/gguf-py/gguf/tensor_mapping.py
 +++ b/gguf-py/gguf/tensor_mapping.py
-@@ -152,9 +152,11 @@ class TensorNameMap:
+@@ -153,9 +153,11 @@ class TensorNameMap:
              "h.{bid}.attn.c_attn",                                                 # gpt2
              "transformer.h.{bid}.mixer.Wqkv",                                      # phi2
              "encoder.layers.{bid}.attn.Wqkv",                                      # nomic-bert
@@ -266,7 +266,7 @@ index 8d4a2b03..50609037 100644
          ),
  
          # Attention query
-@@ -213,6 +215,7 @@ class TensorNameMap:
+@@ -214,6 +216,7 @@ class TensorNameMap:
              "model.layers.{bid}.self_attn.dense",                           # persimmon
              "h.{bid}.attn.c_proj",                                          # gpt2
              "transformer.h.{bid}.mixer.out_proj",                           # phi2
@@ -274,7 +274,7 @@ index 8d4a2b03..50609037 100644
              "model.layers.layers.{bid}.self_attn.o_proj",                   # plamo
              "model.layers.{bid}.attention.wo",                              # internlm2
              "encoder.layers.{bid}.attn.out_proj",                           # nomic-bert
-@@ -221,6 +224,7 @@ class TensorNameMap:
+@@ -222,6 +225,7 @@ class TensorNameMap:
              "encoder.layers.{bid}.self_attention.dense",                    # chatglm
              "transformer.layers.{bid}.attn.out_proj",                       # openelm
              "transformer.h.{bid}.attn.attention.out_proj",                  # exaone
@@ -282,7 +282,7 @@ index 8d4a2b03..50609037 100644
          ),
  
          # Attention output norm
-@@ -229,6 +233,7 @@ class TensorNameMap:
+@@ -230,6 +234,7 @@ class TensorNameMap:
              "encoder.layers.{bid}.norm1",                      # nomic-bert
              "transformer.decoder_layer.{bid}.rms_norm_1",      # Grok
              "transformer.blocks.{bid}.norm_attn_norm.norm_2",  # dbrx
@@ -290,7 +290,7 @@ index 8d4a2b03..50609037 100644
          ),
  
          MODEL_TENSOR.ATTN_POST_NORM: (
-@@ -311,9 +316,11 @@ class TensorNameMap:
+@@ -312,9 +317,11 @@ class TensorNameMap:
              "encoder.layers.{bid}.mlp.fc11",                          # nomic-bert
              "model.layers.{bid}.mlp.c_fc",                            # starcoder2
              "encoder.layer.{bid}.mlp.gated_layers_v",                 # jina-bert-v2
@@ -302,7 +302,7 @@ index 8d4a2b03..50609037 100644
          ),
  
          MODEL_TENSOR.FFN_UP_EXP: (
-@@ -383,11 +390,13 @@ class TensorNameMap:
+@@ -384,11 +391,13 @@ class TensorNameMap:
              "encoder.layers.{bid}.mlp.fc2",                           # nomic-bert
              "model.layers.{bid}.mlp.c_proj",                          # starcoder2
              "encoder.layer.{bid}.mlp.wo",                             # jina-bert-v2
@@ -316,7 +316,7 @@ index 8d4a2b03..50609037 100644
          ),
  
          MODEL_TENSOR.FFN_DOWN_EXP: (
-@@ -431,7 +440,8 @@ class TensorNameMap:
+@@ -432,7 +441,8 @@ class TensorNameMap:
              "encoder.layers.{bid}.norm2",                   # nomic-bert
              "transformer.decoder_layer.{bid}.rms_norm_3",   # Grok
              "encoder.layer.{bid}.mlp.layernorm",            # jina-bert-v2

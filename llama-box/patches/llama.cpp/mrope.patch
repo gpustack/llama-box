@@ -142,7 +142,7 @@ index 3942013f..4f7c74e2 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-metal/ggml-metal.metal b/ggml/src/ggml-metal/ggml-metal.metal
-index 1c0ca5ad..bddae0bf 100644
+index 80d0765b..4fd77a34 100644
 --- a/ggml/src/ggml-metal/ggml-metal.metal
 +++ b/ggml/src/ggml-metal/ggml-metal.metal
 @@ -2619,37 +2619,98 @@ kernel void kernel_rope_norm(
