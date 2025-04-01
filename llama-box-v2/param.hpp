@@ -274,8 +274,6 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "server/completion",                  "       --no-context-shift",                     "Disable context shift on infinite text generation and long prompt embedding" });
     opts.push_back({ "server/completion",                  "       --context-shift",                        "Enable context shift on infinite text generation and long prompt embedding" });
     opts.push_back({ "server/completion",                  "-n,    --predict N",                            "Number of tokens to predict (default: %d, -1 = infinity, when --context-shift)", llm_params.n_predict });
-    opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "Logical batch size.\n"
-                                                                                                            "Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: %d)", llm_params.n_batch });
     opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "Physical batch size, which is the maximum number of tokens that may be processed at a time.\n"
                                                                                                             "Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: %d)", llm_params.n_ubatch });
     opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d, -1 = all)", llm_params.n_keep });
@@ -1015,15 +1013,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                              = argv[i++];
                 params_.hs_params.llm_params.n_predict = std::stoi(std::string(arg));
-                continue;
-            }
-
-            if (!strcmp(flag, "-b") || !strcmp(flag, "--batch-size")) {
-                if (i == argc) {
-                    missing("--batch-size");
-                }
-                char *arg                            = argv[i++];
-                params_.hs_params.llm_params.n_batch = std::stoi(std::string(arg));
                 continue;
             }
 

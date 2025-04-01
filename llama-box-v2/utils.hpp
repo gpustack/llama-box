@@ -468,3 +468,68 @@ static std::string tokens_to_output_formatted_string(const llama_context *ctx, c
 
     return out;
 }
+
+struct llava_image_embed_batch_wrapper {
+    std::vector<llama_pos> pos;
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id> seq_id_0;
+    std::vector<llama_seq_id *> seq_ids;
+    std::vector<int8_t> logits;
+    llama_batch batch;
+
+    llava_image_embed_batch_wrapper(float *embd, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
+        pos.resize(n_tokens);
+        n_seq_id.resize(n_tokens);
+        seq_ids.resize(n_tokens + 1);
+        logits.resize(n_tokens);
+        seq_id_0.resize(1);
+        seq_id_0[0]       = seq_id;
+        seq_ids[n_tokens] = nullptr;
+        batch             = {
+            /*n_tokens       =*/n_tokens,
+            /*tokens         =*/nullptr,
+            /*embd           =*/embd,
+            /*pos            =*/pos.data(),
+            /*n_seq_id       =*/n_seq_id.data(),
+            /*seq_id         =*/seq_ids.data(),
+            /*logits         =*/logits.data(),
+        };
+        for (int i = 0; i < n_tokens; i++) {
+            batch.pos[i]      = pos_0 + i;
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i]   = seq_id_0.data();
+            batch.logits[i]   = false;
+        }
+    }
+};
+
+struct qwen2vl_image_embed_batch_wrapper {
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id> seq_id_0;
+    std::vector<llama_seq_id *> seq_ids;
+    std::vector<int8_t> logits;
+    llama_batch batch;
+
+    qwen2vl_image_embed_batch_wrapper(float *embd, int32_t n_tokens, llama_pos *pos, llama_seq_id seq_id) {
+        n_seq_id.resize(n_tokens);
+        seq_ids.resize(n_tokens + 1);
+        logits.resize(n_tokens);
+        seq_id_0.resize(1);
+        seq_id_0[0]       = seq_id;
+        seq_ids[n_tokens] = nullptr;
+        batch             = {
+            /*n_tokens       =*/n_tokens,
+            /*tokens         =*/nullptr,
+            /*embd           =*/embd,
+            /*pos            =*/pos,
+            /*n_seq_id       =*/n_seq_id.data(),
+            /*seq_id         =*/seq_ids.data(),
+            /*logits         =*/logits.data(),
+        };
+        for (int i = 0; i < n_tokens; i++) {
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i]   = seq_id_0.data();
+            batch.logits[i]   = false;
+        }
+    }
+};
