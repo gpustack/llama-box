@@ -589,7 +589,7 @@ rpc-server:
                                   Reserve memory in MiB (default: 0)
          --rpc-server-cache       Enable caching large tensors locally (default: disabled)
          --rpc-server-cache-dir PATH
-                                  Path to store large tensors (default: ..., according to OS)
+                                  Path to store large tensors (default: according to OS)
 
 ```
 

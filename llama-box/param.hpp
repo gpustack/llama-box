@@ -486,7 +486,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "rpc-server",                         "       --rpc-server-main-gpu N",                "The GPU VRAM to use for the RPC server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
     opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "Reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
     opts.push_back({ "rpc-server",                         "       --rpc-server-cache",                     "Enable local file cache (default: %s)", rpc_params.use_cache ? "enabled" : "disabled" });
-    opts.push_back({ "rpc-server",                         "       --rpc-server-cache-dir PATH",            "Path to store large tensors (default: %s, according to OS)", rpc_params.cache_dir.c_str() });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-cache-dir PATH",            "Path to store large tensors (default: according to OS)" });
     // rpc-server //
 
     // clang-format on

@@ -1052,7 +1052,7 @@ struct rpcserver_params {
     int32_t main_gpu      = 0;
     size_t reserve_memory = 0;
     bool use_cache        = false;
-    std::string cache_dir = fs_get_cache_directory() + +"rpc/";
+    std::string cache_dir;
 };
 
 static int rpcserver_start(rpcserver_params &params) {
@@ -1073,11 +1073,15 @@ static int rpcserver_start(rpcserver_params &params) {
     }
     const char *cache_dir = nullptr;
     if (params.use_cache) {
+        if (params.cache_dir.empty()) {
+            params.cache_dir = fs_get_cache_directory() + +"rpc/";
+        }
         cache_dir = params.cache_dir.c_str();
         if (!fs_create_directory_with_parents(params.cache_dir)) {
             SRV_ERR("failed to create cache directory: %s\n", cache_dir);
             return 1;
         }
+        SRV_INF("using cache directory: %s\n", cache_dir);
     }
 
     int32_t main_gpu = params.main_gpu;
