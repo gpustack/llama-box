@@ -42,7 +42,7 @@
 #define HEADER_X_REQUEST_TOKENS_PER_SECOND "X-Request-Tokens-Per-Second"
 
 using namespace moodycamel;
-using Json = nlohmann::json;
+using json = nlohmann::json;
 
 // types
 
@@ -63,12 +63,12 @@ struct v2_httpserver_params {
 // implementations
 
 // send_json, then close.
-static inline int32_t send_json(const httplib::Request &request, httplib::Response &response, httplib::StatusCode status, Json &data) {
+static inline int32_t send_json(const httplib::Request &request, httplib::Response &response, httplib::StatusCode status, json &data) {
     if (request.is_connection_closed()) {
         response.status = httplib::RequestTimeout_408;
         return response.status;
     }
-    Json resp = data;
+    json resp = data;
     if (status >= httplib::BadRequest_400) {
         resp = {
             {"error", data},
@@ -76,7 +76,7 @@ static inline int32_t send_json(const httplib::Request &request, httplib::Respon
         };
     }
     response.status = status;
-    response.set_content(resp.dump(-1, ' ', false, Json::error_handler_t::replace), "application/json");
+    response.set_content(resp.dump(-1, ' ', false, json::error_handler_t::replace), "application/json");
     return response.status;
 }
 
@@ -86,7 +86,7 @@ static inline int32_t send_json(const httplib::Request &request, httplib::Respon
         response.status = httplib::RequestTimeout_408;
         return response.status;
     }
-    Json data = {
+    json data = {
         {"code", status},
         {"message", message},
         {"type", httplib::status_message(status)},
@@ -106,7 +106,7 @@ static inline int32_t send_string(const httplib::Request &request, httplib::Resp
 }
 
 // send_event_json, close if given status is not 100.
-static inline int32_t send_event_json(httplib::DataSink &sink, httplib::StatusCode status, Json &data) {
+static inline int32_t send_event_json(httplib::DataSink &sink, httplib::StatusCode status, json &data) {
     if (!sink.is_writable()) {
         return httplib::RequestTimeout_408;
     }
@@ -114,14 +114,14 @@ static inline int32_t send_event_json(httplib::DataSink &sink, httplib::StatusCo
     std::string message;
     if (status >= httplib::BadRequest_400) {
         event           = "error";
-        const Json resp = {
+        const json resp = {
             {"error", data},
             {"detail", data.contains("message") ? data.at("message") : "Unknown error occurred"},
         };
-        message = resp.dump(-1, ' ', false, Json::error_handler_t::replace);
+        message = resp.dump(-1, ' ', false, json::error_handler_t::replace);
     } else {
         event   = "data";
-        message = data.dump(-1, ' ', false, Json::error_handler_t::replace);
+        message = data.dump(-1, ' ', false, json::error_handler_t::replace);
     }
     const std::string str = event + ": " + message + "\n\n";
     sink.write(str.c_str(), str.size());
@@ -157,14 +157,14 @@ static inline uint32_t normalize_seed(uint32_t seed) {
 }
 
 // prepare_sampling, returns llama.cpp sampling params.
-static inline common_params_sampling prepare_sampling(const Json &data, const common_params_sampling &defaults, const llama_context *llm_ctx) {
+static inline common_params_sampling prepare_sampling(const json &data, const common_params_sampling &defaults, const llama_context *llm_ctx) {
     common_params_sampling params = defaults; // copy
     if (!data.contains("samplers")) {
         return params;
     }
 
     {
-        Json samplers = data.at("samplers");
+        json samplers = data.at("samplers");
         if (samplers.is_array()) {
             params.samplers = common_sampler_types_from_names(samplers, false);
         } else if (samplers.is_string()) {
@@ -206,7 +206,7 @@ static inline common_params_sampling prepare_sampling(const Json &data, const co
     params.min_keep     = json_value(data, "min_keep", defaults.min_keep);
     if (data.contains("json_schema") && !data.contains("grammar")) {
         try {
-            Json schema    = json_value(data, "json_schema", Json::object());
+            json schema    = json_value(data, "json_schema", json::object());
             params.grammar = json_schema_to_grammar(schema);
         } catch (const std::exception &e) {
             throw std::invalid_argument("Illegal param: \"json_schema\": " + std::string(e.what()));
@@ -226,7 +226,7 @@ static inline common_params_sampling prepare_sampling(const Json &data, const co
 }
 
 // prepare_sampling, returns stable-diffusion.cpp sampling params.
-static inline v2_stablediffusion_params_sampling prepare_sampling(const Json &data, const v2_stablediffusion_params_sampling &defaults) {
+static inline v2_stablediffusion_params_sampling prepare_sampling(const json &data, const v2_stablediffusion_params_sampling &defaults) {
     v2_stablediffusion_params_sampling params = defaults; // copy
     if (!data.contains("sampler") && !data.contains("sample_method")) {
         return params;
@@ -393,12 +393,12 @@ static inline v2_stablediffusion_params_sampling prepare_sampling(const httplib:
 }
 
 // sort_rerank_results, gives rerank JSON result.
-static inline void sort_rerank_results(Json &result, int32_t low, int32_t high) {
+static inline void sort_rerank_results(json &result, int32_t low, int32_t high) {
     if (low >= high) {
         return;
     }
 
-    Json base = result[low];
+    json base = result[low];
     int32_t i = low, j = high;
     while (i != j) {
         while (i < j && json_value(result[j], "score", 0.0) <= json_value(base, "score", 0.0))
@@ -406,7 +406,7 @@ static inline void sort_rerank_results(Json &result, int32_t low, int32_t high) 
         while (i < j && json_value(result[i], "score", 0.0) >= json_value(base, "score", 0.0))
             i++;
         if (i < j) {
-            Json temp = result[i];
+            json temp = result[i];
             result[i] = result[j];
             result[j] = temp;
         }
@@ -548,14 +548,14 @@ struct tokenize_req : breq {
     /* OPEN AI*/
 
     // std::string model;                                     // inherit
-    Json content;
+    json content;
     bool add_special = false;
     bool with_pieces = false;
 };
 
 static inline std::unique_ptr<tokenize_req> get_tokenize_req(const httplib::Request &request, httplib::Response &response, const common_params &params) {
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("content")) {
         throw std::invalid_argument("Illegal param: \"content\" is required");
     }
@@ -565,11 +565,11 @@ static inline std::unique_ptr<tokenize_req> get_tokenize_req(const httplib::Requ
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["content"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<tokenize_req> ptr = std::make_unique<tokenize_req>(rid.c_str());
@@ -595,12 +595,12 @@ struct detokenize_req : breq {
     /* OPEN AI*/
 
     // std::string model;                                     // inherit
-    Json tokens;
+    json tokens;
 };
 
 static inline std::unique_ptr<detokenize_req> get_detokenize_req(const httplib::Request &request, httplib::Response &response, const common_params &params) {
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("tokens")) {
         throw std::invalid_argument("Illegal param: \"tokens\" is required");
     }
@@ -610,11 +610,11 @@ static inline std::unique_ptr<detokenize_req> get_detokenize_req(const httplib::
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["tokens"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<detokenize_req> ptr = std::make_unique<detokenize_req>(rid.c_str());
@@ -647,7 +647,7 @@ struct complete_req : breq {
 
     // stream
     bool stream         = false;
-    Json stream_options = {
+    json stream_options = {
         {"include_usage", true},
     };
 };
@@ -662,7 +662,7 @@ struct legacy_complete_req : complete_req {
     /* OPEN AI*/
 
     // std::string model;                                     // inherit
-    Json prompt;
+    json prompt;
     // int32_t best_of = 1;
     // bool echo = false;
     float frequency_penalty = 0.0f;
@@ -674,7 +674,7 @@ struct legacy_complete_req : complete_req {
     uint32_t seed          = LLAMA_DEFAULT_SEED;
     // std::vector<std::string> stop;                         // inherit
     // bool stream         = false;                           // inherit
-    // Json stream_options = {{"include_usage", true}};       // inherit
+    // json stream_options = {{"include_usage", true}};       // inherit
     // std::string suffix;
     float temperature = 1.0;
     float top_p       = 1.0;
@@ -685,18 +685,18 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     const common_params &params = hparams.llm_params;
 
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("prompt")) {
         throw std::invalid_argument("Illegal param: \"prompt\" is required");
     }
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["prompt"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<legacy_complete_req> ptr = std::make_unique<legacy_complete_req>(rid.c_str());
@@ -704,7 +704,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     ptr->sampling = prepare_sampling(req, params.sampling, llm_ctx);
 
     if (req.contains("lora")) {
-        const Json &lora = req.at("lora");
+        const json &lora = req.at("lora");
         if (!lora.is_array()) {
             throw std::invalid_argument("Illegal param: \"lora\" must be a list");
         }
@@ -715,7 +715,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
         }
         // set value
         int32_t max_id = int32_t(ptr->lora_adapters.size()) - 1;
-        for (const Json &l : lora) {
+        for (const json &l : lora) {
             if (!l.is_object()) {
                 throw std::invalid_argument("Illegal param: \"lora\" must be a list of objects");
             }
@@ -735,7 +735,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     ptr->frequency_penalty = json_value(req, "frequency_penalty", params.sampling.penalty_freq);
 
     if (req.contains("logit_bias")) {
-        const Json &logit_bias = req.at("logit_bias");
+        const json &logit_bias = req.at("logit_bias");
         if (!logit_bias.is_object()) {
             throw std::invalid_argument("Illegal param: \"logit_bias\" must be a map");
         }
@@ -784,11 +784,11 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     ptr->seed = normalize_seed(json_value(req, "seed", params.sampling.seed));
 
     if (req.contains("stop")) {
-        const Json &stop = req.at("stop");
+        const json &stop = req.at("stop");
         if (stop.is_string()) {
             ptr->stop.push_back(stop.get<std::string>());
         } else if (stop.is_array()) {
-            for (const Json &s : stop) {
+            for (const json &s : stop) {
                 if (!s.is_string()) {
                     throw std::invalid_argument("Illegal param: \"stop\" must be a list of strings");
                 }
@@ -802,7 +802,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     ptr->stream = json_value(req, "stream", false);
 
     if (ptr->stream && req.contains("stream_options")) {
-        const Json &stream_options = req.at("stream_options");
+        const json &stream_options = req.at("stream_options");
         if (!stream_options.is_object()) {
             throw std::invalid_argument("Illegal param: \"stream_options\" must be an object");
         }
@@ -851,7 +851,7 @@ struct chat_complete_req : complete_req {
     std::vector<common_chat_msg> messages;
     // bool store = false;
     // std::string reasoning_effort;
-    // Json metadata;
+    // json metadata;
     float frequency_penalty = 0.0f;
     std::vector<llama_logit_bias> logit_bias;
     // bool logprobs = false;
@@ -859,15 +859,15 @@ struct chat_complete_req : complete_req {
     // int32_t max_tokens = -1;                                         // inherit // migrate "max_completion_tokens"
     // int32_t n = 1;                                                   // inherit
     // std::vector<std::string> modalities;
-    // Json prediction;
-    // Json audio;
+    // json prediction;
+    // json audio;
     float presence_penalty = 0.0f;
-    Json response_format;
+    json response_format;
     uint32_t seed = LLAMA_DEFAULT_SEED;
     // std::string service_tier;
     // std::vector<std::string> stop;                                   // inherit
     // bool stream         = false;                                     // inherit
-    // Json stream_options = {{"include_usage", true}};                 // inherit
+    // json stream_options = {{"include_usage", true}};                 // inherit
     float temperature = 1.0;
     float top_p       = 1.0;
     std::vector<common_chat_tool> tools;                                // migrate "functions"
@@ -931,7 +931,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     const common_params &params = hparams.llm_params;
 
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("messages")) {
         throw std::invalid_argument("Illegal param: \"messages\" is required");
     } else if (!req.at("messages").is_array()) {
@@ -940,11 +940,11 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["messages"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<chat_complete_req> ptr = std::make_unique<chat_complete_req>(rid.c_str());
@@ -952,7 +952,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     ptr->sampling = prepare_sampling(req, params.sampling, llm_ctx);
 
     if (req.contains("lora")) {
-        const Json &lora = req.at("lora");
+        const json &lora = req.at("lora");
         if (!lora.is_array()) {
             throw std::invalid_argument("Illegal param: \"lora\" must be a list");
         }
@@ -963,7 +963,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
         }
         // set value
         int32_t max_id = int32_t(ptr->lora_adapters.size()) - 1;
-        for (const Json &l : lora) {
+        for (const json &l : lora) {
             if (!l.is_object()) {
                 throw std::invalid_argument("Illegal param: \"lora\" must be a list of objects");
             }
@@ -979,8 +979,8 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     ptr->model = json_value(req, "model", params.model_alias);
 
     {
-        Json messages = req.at("messages");
-        for (const Json &msg : messages) {
+        json messages = req.at("messages");
+        for (const json &msg : messages) {
             std::string role = json_value(msg, "role", std::string());
             std::string content;
             if (msg.contains("content") && !msg.at("content").is_null()) {
@@ -988,7 +988,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                     content = msg.at("content").get<std::string>();
                 } else if (msg.at("content").is_array()) {
                     int32_t n_img = 0;
-                    for (const Json &part : msg.at("content")) {
+                    for (const json &part : msg.at("content")) {
                         if (part.contains("type") && part.at("type") == "image_url") {
                             // process image
                             std::string img = json_value(part.at("image_url"), "url", std::string());
@@ -1066,7 +1066,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
             } else if (msg.contains("tool_calls") && !msg.at("tool_calls").is_null()) {
                 if (msg.at("tool_calls").is_array()) {
                     std::vector<common_chat_tool_call> chat_tcs;
-                    for (const Json &part : msg.at("tool_calls")) {
+                    for (const json &part : msg.at("tool_calls")) {
                         common_chat_tool_call chat_tc;
                         if (!part.contains("type") || part.at("type") != "function") {
                             continue;
@@ -1074,7 +1074,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                         if (!part.contains("function") || !part.at("function").is_object()) {
                             continue;
                         }
-                        const Json &func = part.at("function");
+                        const json &func = part.at("function");
                         if (!func.contains("name") || !func.at("name").is_string()) {
                             continue;
                         }
@@ -1101,7 +1101,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     ptr->frequency_penalty = json_value(req, "frequency_penalty", params.sampling.penalty_freq);
 
     if (req.contains("logit_bias")) {
-        const Json &logit_bias = req.at("logit_bias");
+        const json &logit_bias = req.at("logit_bias");
         if (!logit_bias.is_object()) {
             throw std::invalid_argument("Illegal param: \"logit_bias\" must be a map");
         }
@@ -1163,11 +1163,11 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     ptr->seed = normalize_seed(json_value(req, "seed", params.sampling.seed));
 
     if (req.contains("stop")) {
-        const Json &stop = req.at("stop");
+        const json &stop = req.at("stop");
         if (stop.is_string()) {
             ptr->stop.push_back(stop.get<std::string>());
         } else if (stop.is_array()) {
-            for (const Json &s : stop) {
+            for (const json &s : stop) {
                 if (!s.is_string()) {
                     throw std::invalid_argument("Illegal param: \"stop\" must be a list of strings");
                 }
@@ -1181,7 +1181,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     ptr->stream = json_value(req, "stream", false);
 
     if (ptr->stream && req.contains("stream_options")) {
-        const Json &stream_options = req.at("stream_options");
+        const json &stream_options = req.at("stream_options");
         if (!stream_options.is_object()) {
             throw std::invalid_argument("Illegal param: \"stream_options\" must be an object");
         }
@@ -1197,15 +1197,15 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     if (support_tool_calls) {
         // "tools" and "functions", migrate "functions" to "tools"
         if (req.contains("tools") && !req.contains("functions")) {
-            const Json &tools = req.at("tools");
+            const json &tools = req.at("tools");
             if (!tools.is_array()) {
                 throw std::invalid_argument("Illegal param: \"tools\" must be an array");
             }
-            for (const Json &tool : tools) {
+            for (const json &tool : tools) {
                 if (!tool.contains("function")) {
                     continue;
                 }
-                const Json &func = tool.at("function");
+                const json &func = tool.at("function");
                 if (!func.contains("name") || !func.at("name").is_string()) {
                     continue;
                 }
@@ -1214,15 +1214,15 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                 }
                 std::string name        = func.at("name");
                 std::string description = json_value(func, "description", std::string());
-                std::string parameters  = func.at("parameters").dump(-1, ' ', false, Json::error_handler_t::replace);
+                std::string parameters  = func.at("parameters").dump(-1, ' ', false, json::error_handler_t::replace);
                 ptr->tools.push_back({name, description, parameters});
             }
         } else if (req.contains("functions")) {
-            const Json &functions = req.at("functions");
+            const json &functions = req.at("functions");
             if (!functions.is_array()) {
                 throw std::invalid_argument("Illegal param: \"functions\" must be an array");
             }
-            for (const Json &func : functions) {
+            for (const json &func : functions) {
                 if (!func.contains("name") || !func.at("name").is_string()) {
                     continue;
                 }
@@ -1231,7 +1231,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                 }
                 std::string name        = json_value(func, "name", std::string());
                 std::string description = json_value(func, "description", std::string());
-                std::string parameters  = func.at("parameters").dump(-1, ' ', false, Json::error_handler_t::replace);
+                std::string parameters  = func.at("parameters").dump(-1, ' ', false, json::error_handler_t::replace);
                 ptr->tools.push_back({name, description, parameters});
             }
         }
@@ -1239,9 +1239,9 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
             ptr->tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
             // "tool_choice" and "function_call", migrate "function_call" to "tool_choice"
             if (req.contains("tool_choice") && !req.contains("function_call")) {
-                const Json &tc = req.at("tool_choice");
+                const json &tc = req.at("tool_choice");
                 if (tc.is_object() && tc.contains("function")) {
-                    const Json &fc       = tc.at("function");
+                    const json &fc       = tc.at("function");
                     const std::string fn = json_value(fc, "name", std::string());
                     ptr->tools.erase(
                         std::remove_if(ptr->tools.begin(), ptr->tools.end(), [fn](const common_chat_tool &t) { return t.name == fn; }),
@@ -1253,7 +1253,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                     throw std::invalid_argument("Illegal param: \"tool_choice\" must be a string or an object");
                 }
             } else if (req.contains("function_call")) {
-                const Json &fc = req.at("function_call");
+                const json &fc = req.at("function_call");
                 if (fc.is_object()) {
                     const std::string fn = json_value(fc, "name", std::string());
                     ptr->tools.erase(
@@ -1272,16 +1272,16 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
     }
 
     {
-        Json json_schema;
+        json json_schema;
         if (!ptr->response_format.empty()) {
             std::string response_type = json_value(ptr->response_format, "type", std::string());
             if (response_type == "json_object") {
-                json_schema = json_value(ptr->response_format, "schema", Json());
+                json_schema = json_value(ptr->response_format, "schema", json());
             } else if (response_type == "json_schema") {
                 if (!ptr->response_format.contains("json_schema")) {
                     throw std::invalid_argument("Illegal param: using json schema response format must contain \"json_schema\"");
                 }
-                json_schema = json_value(ptr->response_format.at("json_schema"), "schema", Json());
+                json_schema = json_value(ptr->response_format.at("json_schema"), "schema", json());
             } else if (!response_type.empty() && response_type != "text") {
                 throw std::invalid_argument("Illegal param: \"response_format\" must be one of 'text', 'json_schema' or 'json_object', but got: " + response_type);
             }
@@ -1362,7 +1362,7 @@ struct embed_req : breq {
     /* OPEN AI*/
 
     // std::string model;                                     // inherit
-    Json input;
+    json input;
     std::string encoding_format = "float";
 };
 
@@ -1370,18 +1370,18 @@ static inline std::unique_ptr<embed_req> get_embed_req(const httplib::Request &r
     const common_params &params = hparams.llm_params;
 
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("input")) {
         throw std::invalid_argument("Illegal param: \"input\" is required");
     }
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["input"] = "[...]";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<embed_req> ptr = std::make_unique<embed_req>(rid.c_str());
@@ -1410,8 +1410,8 @@ struct rerank_req : breq {
     /* JINJA */
 
     // std::string model;                                     // inherit
-    Json query;
-    std::vector<Json> documents;
+    json query;
+    std::vector<json> documents;
     int32_t top_n         = 1;
     bool return_documents = false;
     bool normalize        = false;
@@ -1421,7 +1421,7 @@ static inline std::unique_ptr<rerank_req> get_rerank_req(const httplib::Request 
     const common_params &params = hparams.llm_params;
 
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("query")) {
         throw std::invalid_argument("Illegal param: \"query\" is required");
     }
@@ -1434,12 +1434,12 @@ static inline std::unique_ptr<rerank_req> get_rerank_req(const httplib::Request 
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["query"]     = "...";
             req_cp["documents"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<rerank_req> ptr = std::make_unique<rerank_req>(rid.c_str());
@@ -1448,7 +1448,7 @@ static inline std::unique_ptr<rerank_req> get_rerank_req(const httplib::Request 
 
     ptr->query = req.at("query");
 
-    for (const Json &doc : req.at("documents")) {
+    for (const json &doc : req.at("documents")) {
         if (doc.is_string()) {
             ptr->documents.push_back(doc);
         } else if (doc.is_object() && doc.contains("text")) {
@@ -1487,7 +1487,7 @@ struct image_req : breq {
     std::vector<common_adapter_lora_info> lora_adapters;
     // stream
     bool stream         = false;
-    Json stream_options = {
+    json stream_options = {
         {"include_usage", true},
         {"chunk_result", false},
         {"chunk_size", 4096},
@@ -1523,18 +1523,18 @@ static inline std::unique_ptr<image_generate_req> get_image_generate_req(const h
     const v2_stablediffusion_params &params = hparams.sd_params;
 
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
-    const Json req        = Json::parse(request.body);
+    const json req        = json::parse(request.body);
     if (!req.contains("prompt")) {
         throw std::invalid_argument("Illegal param: \"prompt\" is required");
     }
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = req;
+        json req_cp = req;
         if (common_log_verbosity_thold < 3) {
             req_cp["prompt"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<image_generate_req> ptr = std::make_unique<image_generate_req>(rid.c_str());
@@ -1542,7 +1542,7 @@ static inline std::unique_ptr<image_generate_req> get_image_generate_req(const h
     ptr->sampling = prepare_sampling(req, params.sampling);
 
     if (req.contains("lora")) {
-        const Json &lora = req.at("lora");
+        const json &lora = req.at("lora");
         if (!lora.is_array()) {
             throw std::invalid_argument("Illegal param: \"lora\" must be a list");
         }
@@ -1553,7 +1553,7 @@ static inline std::unique_ptr<image_generate_req> get_image_generate_req(const h
         }
         // set value
         int32_t max_id = int32_t(ptr->lora_adapters.size()) - 1;
-        for (const Json &l : lora) {
+        for (const json &l : lora) {
             if (!l.is_object()) {
                 throw std::invalid_argument("Illegal param: \"lora\" must be a list of objects");
             }
@@ -1569,7 +1569,7 @@ static inline std::unique_ptr<image_generate_req> get_image_generate_req(const h
     ptr->stream = json_value(req, "stream", false);
 
     if (ptr->stream && req.contains("stream_options")) {
-        const Json &stream_options = req.at("stream_options");
+        const json &stream_options = req.at("stream_options");
         if (!stream_options.is_object()) {
             throw std::invalid_argument("Illegal param: \"stream_options\" must be an object");
         }
@@ -1700,7 +1700,7 @@ static inline std::unique_ptr<image_edit_req> get_image_edit_req(const httplib::
 
     // print32_t the request for debugging
     if (common_log_verbosity_thold > 1) {
-        Json req_cp = Json::object();
+        json req_cp = json::object();
         for (const auto &el : req) {
             if (el.first == "image" || el.first == "mask" || el.first == "control") {
                 req_cp[el.first] = "...";
@@ -1711,7 +1711,7 @@ static inline std::unique_ptr<image_edit_req> get_image_edit_req(const httplib::
         if (common_log_verbosity_thold < 3) {
             req_cp["prompt"] = "...";
         }
-        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, Json::error_handler_t::replace).c_str());
+        SRV_INF("rid %s | %s\n", rid.c_str(), req_cp.dump(-1, ' ', false, json::error_handler_t::replace).c_str());
     }
 
     std::unique_ptr<image_edit_req> ptr = std::make_unique<image_edit_req>(rid.c_str());
@@ -1720,9 +1720,9 @@ static inline std::unique_ptr<image_edit_req> get_image_edit_req(const httplib::
 
     auto item = req.find("lora");
     if (item != req.end()) {
-        Json lora;
+        json lora;
         try {
-            lora = Json::parse(item->second.content);
+            lora = json::parse(item->second.content);
             if (!lora.is_array()) {
                 throw std::invalid_argument("Illegal param: \"lora\" must be a JSON list");
             }
@@ -1736,7 +1736,7 @@ static inline std::unique_ptr<image_edit_req> get_image_edit_req(const httplib::
         }
         // set value
         int32_t max_id = int32_t(ptr->lora_adapters.size()) - 1;
-        for (const Json &l : lora) {
+        for (const json &l : lora) {
             if (!l.is_object()) {
                 throw std::invalid_argument("Illegal param: \"lora\" must be a list of objects");
             }
@@ -2030,8 +2030,8 @@ struct btask {
         return false;
     }
 
-    [[nodiscard]] virtual Json &get_stream_options() const {
-        static Json empty;
+    [[nodiscard]] virtual json &get_stream_options() const {
+        static json empty;
         return empty;
     }
 
@@ -2070,7 +2070,7 @@ struct completions_task : btask {
         return req->stream;
     }
 
-    [[nodiscard]] Json &get_stream_options() const override {
+    [[nodiscard]] json &get_stream_options() const override {
         return req->stream_options;
     }
 
@@ -2096,7 +2096,7 @@ struct completions_task : btask {
     std::string generated_finish_reason;                                                              // indicate the reason of finish
     size_t generated_text_keep_pos = std::string::npos;                                               // erase after call to_json
     std::string generated_text;                                                                       // keep [generated_text_keep_pos,) after call to_json if streaming
-    std::vector<Json> generated_tool_calls;                                                           // erase after call to_json if streaming
+    std::vector<json> generated_tool_calls;                                                           // erase after call to_json if streaming
     std::vector<float> generated_probs;                                                               // erase after call get_probs_json if streaming
     std::vector<std::vector<std::pair<llama_token /* tok */, float /* prob */>>> generated_top_probs; // erase after call get_probs_json if streaming
 
@@ -2161,7 +2161,7 @@ struct completions_task : btask {
         }
     }
 
-    Json get_probs_json(const llama_context *llm_ctx) {
+    json get_probs_json(const llama_context *llm_ctx) {
         if (generated_probs.empty()) {
             return {};
         }
@@ -2169,29 +2169,29 @@ struct completions_task : btask {
         size_t tokens_size = processed_tokens.size();
         size_t probs_size  = generated_probs.size();
 
-        Json result;
+        json result;
         if (req->get_type() == REQ_CHAT_COMPLETE) {
-            Json content = Json::array();
+            json content = json::array();
 
             for (size_t i = 0; i < probs_size; i++) {
                 const llama_token id    = processed_tokens[tokens_size - probs_size + i];
                 const std::string token = tokens_to_output_formatted_string(llm_ctx, id);
                 float token_logprob     = generated_probs[i] == 0.0f ? std::numeric_limits<float>::lowest() : std::log(generated_probs[i]);
                 std::vector<unsigned char> token_bytes(token.begin(), token.end());
-                Json token_top_logprobs = Json::array();
+                json token_top_logprobs = json::array();
                 for (const auto &tp : generated_top_probs[i]) {
                     const llama_token tp_id    = tp.first;
                     const std::string tp_token = tokens_to_output_formatted_string(llm_ctx, tp_id);
                     float tp_token_logprob     = tp.second == 0.0f ? std::numeric_limits<float>::lowest() : std::log(tp.second);
                     std::vector<unsigned char> tp_token_bytes(tp_token.begin(), tp_token.end());
-                    token_top_logprobs.push_back(Json{
+                    token_top_logprobs.push_back(json{
                         {"token", tp_token},
                         {"logprob", tp_token_logprob},
                         {"bytes", tp_token_bytes},
                     });
                 }
 
-                content.push_back(Json{
+                content.push_back(json{
                     {"token", token},
                     {"logprob", token_logprob},
                     {"bytes", token_bytes},
@@ -2203,15 +2203,15 @@ struct completions_task : btask {
                 {"content", content},
             };
         } else {
-            Json token_logprobs = Json::array();
-            Json tokens         = Json::array();
-            Json top_logprobs   = Json::array();
+            json token_logprobs = json::array();
+            json tokens         = json::array();
+            json top_logprobs   = json::array();
 
             for (size_t i = 0; i < probs_size; i++) {
                 const llama_token id    = processed_tokens[tokens_size - probs_size + i];
                 const std::string token = tokens_to_output_formatted_string(llm_ctx, id);
                 float token_logprob     = generated_probs[i] == 0.0f ? std::numeric_limits<float>::lowest() : std::log(generated_probs[i]);
-                Json token_top_logprobs;
+                json token_top_logprobs;
                 for (const auto &tp : generated_top_probs[i]) {
                     const llama_token tp_id      = tp.first;
                     const std::string tp_token   = tokens_to_output_formatted_string(llm_ctx, tp_id);
@@ -2240,16 +2240,16 @@ struct completions_task : btask {
         return result;
     }
 
-    Json to_json(const llama_context *llm_ctx) {
+    json to_json(const llama_context *llm_ctx) {
         bool stop          = !generated_finish_reason.empty();
         bool include_usage = stop && json_value(req->stream_options, "include_usage", true);
         bool is_chat       = req->get_type() == REQ_CHAT_COMPLETE;
 
-        Json resp = {
+        json resp = {
             {"id", cmpl_id},
             {"created", std::time(nullptr)},
             {"model", req->model},
-            {"usage", Json()},
+            {"usage", json()},
         };
 
         if (is_chat) {
@@ -2293,19 +2293,19 @@ struct completions_task : btask {
 
         std::string_view generated_text_send = std::string_view(generated_text).substr(0, generated_text_keep_pos);
 
-        Json choices = Json::array();
+        json choices = json::array();
         {
-            Json choice = {
+            json choice = {
                 {"index", 0},
-                {"finish_reason", stop ? Json(generated_finish_reason) : Json()},
+                {"finish_reason", stop ? json(generated_finish_reason) : json()},
             };
             if (is_chat) {
-                Json delta_message = Json{
+                json delta_message = json{
                     {"content", generated_text_send},
                 };
                 if (!generated_tool_calls.empty()) {
                     if (generated_text_send.empty()) {
-                        delta_message["content"] = Json();
+                        delta_message["content"] = json();
                     }
                     delta_message["tool_calls"] = generated_tool_calls;
                 }
@@ -2371,10 +2371,10 @@ struct embeddings_task : btask {
     int32_t n_min_prefilled = 0;
     int32_t n_max_prefilled = 0;
 
-    Json to_json() {
+    json to_json() {
         auto n_seq = int32_t(embeds.size());
 
-        Json usage = {
+        json usage = {
             {"prompt_tokens", n_prefilled},
             {"total_tokens", n_prefilled},
             {"prompt_tokens_per_second", p_prefilled_tps},
@@ -2385,9 +2385,9 @@ struct embeddings_task : btask {
 
         if (req->get_type() == REQ_EMBED) {
             auto *dreq = dynamic_cast<embed_req *>(req.get());
-            Json data  = Json::array();
+            json data  = json::array();
             for (int32_t seq = 0; seq < n_seq; seq++) {
-                Json item = {
+                json item = {
                     {"index", seq},
                     {"object", "embedding"},
                 };
@@ -2398,7 +2398,7 @@ struct embeddings_task : btask {
                 }
                 data.push_back(item);
             }
-            Json resp = {
+            json resp = {
                 {"created", std::time(nullptr)},
                 {"model", dreq->model},
                 {"object", "list"},
@@ -2409,14 +2409,14 @@ struct embeddings_task : btask {
         }
 
         auto *dreq   = dynamic_cast<rerank_req *>(req.get());
-        Json results = Json::array();
+        json results = json::array();
         for (int32_t seq = 0; seq < n_seq - (dreq->normalize ? 2 : 0); seq++) {
-            Json item = {
+            json item = {
                 {"index", seq},
                 {"score", embeds[seq][0]},
             };
             if (dreq->return_documents) {
-                item["document"] = dreq->documents[seq].is_string() ? Json{{"text", dreq->documents[seq]}} : dreq->documents[seq];
+                item["document"] = dreq->documents[seq].is_string() ? json{{"text", dreq->documents[seq]}} : dreq->documents[seq];
             }
             results.push_back(item);
         }
@@ -2438,7 +2438,7 @@ struct embeddings_task : btask {
             }
         }
         results.erase(results.begin() + dreq->top_n, results.end());
-        Json resp = {
+        json resp = {
             {"model", dreq->model},
             {"results", results},
             {"usage", usage},
@@ -2468,7 +2468,7 @@ struct images_task : btask {
         return req->stream;
     }
 
-    [[nodiscard]] Json &get_stream_options() const override {
+    [[nodiscard]] json &get_stream_options() const override {
         return req->stream_options;
     }
 
@@ -2493,16 +2493,16 @@ struct images_task : btask {
     double t_reversed       = 0; // indicate the time(ms) spent on reversing
     double p_reversed_sps   = 0;
 
-    Json to_json(const int32_t seq) {
+    json to_json(const int32_t seq) {
         bool all_seqs      = seq < 0;
         bool stop          = all_seqs || progress_steps[seq] == progressed_steps[seq];
         bool include_usage = stop && json_value(req->stream_options, "include_usage", true) && (!req->stream || seq == int32_t(progressed_steps.size() - 1));
 
-        Json resp = {
+        json resp = {
             {"created", std::time(nullptr)},
             {"model", req->model},
             {"object", "list"},
-            {"usage", Json()},
+            {"usage", json()},
         };
         if (include_usage) {
             resp["usage"] = {
@@ -2511,18 +2511,18 @@ struct images_task : btask {
                 {"generation_per_second", p_reversed_sps},
             };
         }
-        Json data = Json::array();
+        json data = json::array();
         for (int32_t idx = 0; idx < int32_t(b64_jsons.size()); idx++) {
             if (!all_seqs && idx != seq) {
                 continue;
             }
-            Json item = {
+            json item = {
                 {"index", idx},
                 {"object", "image"},
                 {"progressed_steps", progressed_steps[idx]},
                 {"progress_steps", progress_steps[idx]},
                 {"progress", stop ? 100 : float(progressed_steps[idx]) / float(progress_steps[idx]) * 100},
-                {"finish_reason", stop ? "stop" : Json()},
+                {"finish_reason", stop ? "stop" : json()},
                 {"b64_json", std::move(b64_jsons[idx])},
             };
             data.push_back(std::move(item));
@@ -2536,12 +2536,12 @@ struct images_task : btask {
 };
 
 struct btask_result {
-    explicit btask_result(httplib::StatusCode &&status, Json &&result)
+    explicit btask_result(httplib::StatusCode &&status, json &&result)
         : status(status), result(std::move(result)) {
     }
 
     httplib::StatusCode status = httplib::Continue_100; // 100 continue (streaming), others finished.
-    Json result;
+    json result;
 };
 
 // implementations // httpserver
@@ -2640,7 +2640,7 @@ struct httpserver {
     }
 
     bool load() {
-        SRV_INF("loading model '%s'\n", params.llm_params.model.c_str());
+        SRV_INF("loading model '%s'\n", params.llm_params.model.path.c_str());
 
         /* STABLE DIFFUSION */
 
@@ -2691,17 +2691,17 @@ struct httpserver {
         /* LLAMA */
 
         if (params.llm_params.model_alias.empty()) {
-            if (params.llm_params.model.find_last_of('/') != std::string::npos) {
-                params.llm_params.model_alias = params.llm_params.model.substr(params.llm_params.model.find_last_of('/') + 1);
-            } else if (params.llm_params.model.find_last_of('\\') != std::string::npos) {
-                params.llm_params.model_alias = params.llm_params.model.substr(params.llm_params.model.find_last_of('\\') + 1);
+            if (params.llm_params.model.path.find_last_of('/') != std::string::npos) {
+                params.llm_params.model_alias = params.llm_params.model.path.substr(params.llm_params.model.path.find_last_of('/') + 1);
+            } else if (params.llm_params.model.path.find_last_of('\\') != std::string::npos) {
+                params.llm_params.model_alias = params.llm_params.model.path.substr(params.llm_params.model.path.find_last_of('\\') + 1);
             } else {
-                params.llm_params.model_alias = params.llm_params.model;
+                params.llm_params.model_alias = params.llm_params.model.path;
             }
         }
 
         // load multimodal projection model
-        if (!params.llm_params.mmproj.empty()) {
+        if (!params.llm_params.mmproj.path.empty()) {
             if (params.llm_params.n_ctx < 2048) {
                 SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
                 params.llm_params.n_ctx = 2048;
@@ -2712,16 +2712,16 @@ struct httpserver {
                 /* use_gpu */ params.llm_params.n_gpu_layers != 0,
                 /* verbosity */ common_log_verbosity_thold,
             };
-            llm_ctx_clip = clip_init(params.llm_params.mmproj.c_str(), llm_params_clip);
+            llm_ctx_clip = clip_init(params.llm_params.mmproj.path.c_str(), llm_params_clip);
             if (llm_ctx_clip == nullptr) {
-                SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.c_str());
+                SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
                 return false;
             }
         }
 
         // load the draft model if needed
-        if (!params.llm_params.speculative.model.empty() && params.llm_params.speculative.n_max > 0) {
-            SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.c_str());
+        if (!params.llm_params.speculative.model.path.empty() && params.llm_params.speculative.n_max > 0) {
+            SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.path.c_str());
 
             common_params llm_params_draft   = params.llm_params;
             llm_params_draft.embedding       = false;
@@ -2736,7 +2736,7 @@ struct httpserver {
             llm_model_draft                  = llm_init_draft.model.get();
             llm_ctx_draft                    = llm_init_draft.context.get();
             if (llm_model_draft == nullptr) {
-                SRV_ERR("failed to load draft model, '%s'\n", params.llm_params.speculative.model.c_str());
+                SRV_ERR("failed to load draft model, '%s'\n", params.llm_params.speculative.model.path.c_str());
                 return false;
             }
             llm_vocab_draft = llama_model_get_vocab(llm_model_draft);
@@ -2747,7 +2747,7 @@ struct httpserver {
         llm_model = llm_init.model.get();
         llm_ctx   = llm_init.context.get();
         if (llm_model == nullptr) {
-            SRV_ERR("failed to load model, '%s'\n", params.llm_params.model.c_str());
+            SRV_ERR("failed to load model, '%s'\n", params.llm_params.model.path.c_str());
             return false;
         }
         llm_vocab          = llama_model_get_vocab(llm_model);
@@ -3506,7 +3506,7 @@ struct httpserver {
                                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                                         SRV_DBG("rid %s | decode text, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                                         // output
-                                        Json data = {{"message", "failed to decode text, try increasing context size or reducing requests"}};
+                                        json data = {{"message", "failed to decode text, try increasing context size or reducing requests"}};
                                         process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                                         break;
                                     }
@@ -3562,7 +3562,7 @@ struct httpserver {
                                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                                         SRV_DBG("rid %s | decode image, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                                         // output
-                                        Json data = {{"message", "failed to decode image, try increasing context size or reducing requests"}};
+                                        json data = {{"message", "failed to decode image, try increasing context size or reducing requests"}};
                                         process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                                         break;
                                     }
@@ -3755,7 +3755,7 @@ struct httpserver {
                         }
                         // output
                         for (auto &task_ptr : batch_task_ptrs) {
-                            Json data = {{"message", "failed to decode, try increasing context size or reducing parallel"}};
+                            json data = {{"message", "failed to decode, try increasing context size or reducing parallel"}};
                             process_task_results[task_ptr->get_id()]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
                         return;
@@ -3773,7 +3773,7 @@ struct httpserver {
                         llama_kv_self_clear(llm_ctx_draft);
                         // output
                         for (auto &task_ptr : batch_task_ptrs) {
-                            Json data = {{"message", "failed to decode draft, try increasing context size or reducing parallel"}};
+                            json data = {{"message", "failed to decode draft, try increasing context size or reducing parallel"}};
                             process_task_results[task_ptr->get_id()]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
                         return;
@@ -4015,7 +4015,7 @@ struct httpserver {
                                         if (!functions_str.empty()) {
                                             task->tool_call_start_found = false;
                                             try {
-                                                auto append_tool_calls = [&](Json &function) {
+                                                auto append_tool_calls = [&](json &function) {
                                                     if (!function.is_object()) {
                                                         throw std::runtime_error("function is an object");
                                                     }
@@ -4026,16 +4026,16 @@ struct httpserver {
                                                         throw std::runtime_error("function does not contain \"arguments\"");
                                                     }
                                                     if (!function.at("arguments").is_string()) {
-                                                        function["arguments"] = function.at("arguments").dump(-1, ' ', false, Json::error_handler_t::replace);
+                                                        function["arguments"] = function.at("arguments").dump(-1, ' ', false, json::error_handler_t::replace);
                                                     }
-                                                    Json tool_call = {
+                                                    json tool_call = {
                                                         {"type", "function"},
                                                         {"function", function},
                                                         {"id", gen_call_id()},
                                                     };
                                                     task->generated_tool_calls.push_back(tool_call);
                                                 };
-                                                Json functions = Json::parse(functions_str);
+                                                json functions = json::parse(functions_str);
                                                 if (functions.is_array()) {
                                                     for (auto &function : functions) {
                                                         append_tool_calls(function);
@@ -4077,7 +4077,7 @@ struct httpserver {
                     if (task->generated_finish_reason.empty()) {
                         // stream outputting
                         if (send_text && task_ptr->is_stream()) {
-                            Json data = task->to_json(llm_ctx);
+                            json data = task->to_json(llm_ctx);
                             process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
                         }
                         // speculative
@@ -4104,7 +4104,7 @@ struct httpserver {
                                     llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                                     SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                                     // output
-                                    Json data = {{"message", "failed to decode draft, try increasing context size or reducing parallel"}};
+                                    json data = {{"message", "failed to decode draft, try increasing context size or reducing parallel"}};
                                     process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                                     continue;
                                 }
@@ -4173,7 +4173,7 @@ struct httpserver {
                     task->p_drafted_apt = task->n_drafted == 0 ? 0.0 : double(task->n_drafted_accepted) / double(task->n_drafted);
                     // output
                     if (opened) {
-                        Json data = task->to_json(llm_ctx);
+                        json data = task->to_json(llm_ctx);
                         process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
                     }
                     SRV_INF("rid %s | "
@@ -4219,7 +4219,7 @@ struct httpserver {
                 }
                 // output
                 for (auto &task_ptr : batch_task_ptrs) {
-                    Json data = {{"message", "failed to decode, try increasing context size or reducing parallel"}};
+                    json data = {{"message", "failed to decode, try increasing context size or reducing parallel"}};
                     process_task_results[task_ptr->get_id()]->enqueue(std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                 }
                 return;
@@ -4266,7 +4266,7 @@ struct httpserver {
                 task->p_prefilled_tps = 1.e3 / task->t_prefilled * task->n_prefilled;
                 // output
                 if (opened) {
-                    Json data = task->to_json();
+                    json data = task->to_json();
                     process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
                 }
                 SRV_INF("rid %s | "
@@ -4331,7 +4331,7 @@ struct httpserver {
                             std::string b64_json = encode_base64(preview_img->data, preview_img->size);
                             task->b64_jsons[n]   = std::move(b64_json);
                         }
-                        Json data = task->to_json(n);
+                        json data = task->to_json(n);
                         process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
                     }
                 } else {
@@ -4341,7 +4341,7 @@ struct httpserver {
                     task->b64_jsons[n]   = std::move(b64_json);
                     // stream outputting, but not the last one
                     if (task->is_stream() && n + 1 < n_repeat) {
-                        Json data = task->to_json(n);
+                        json data = task->to_json(n);
                         process_task_results[tid]->enqueue(std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
                     }
                 }
@@ -4361,7 +4361,7 @@ struct httpserver {
             task->p_reversed_sps = 1.e3 / task->t_reversed * task->n_reverse_steps;
             // output
             if (opened) {
-                Json data;
+                json data;
                 if (task->is_stream()) {
                     data = task->to_json(n_repeat - 1);
                 } else {
@@ -4474,7 +4474,7 @@ struct httpserver {
     //
 
     static int32_t handle_health(const httplib::Request &request, httplib::Response &response) {
-        const Json resp = {
+        const json resp = {
             {"status", "ok"},
         };
         return send_json(request, response, httplib::OK_200, resp);
@@ -4492,7 +4492,7 @@ struct httpserver {
         uint64_t n_tokens_drafted_total          = metrics.n_tokens_drafted_total.load();
         uint64_t n_tokens_drafted_accepted_total = metrics.n_tokens_drafted_accepted_total.load();
 
-        const Json all_metrics_def = {
+        const json all_metrics_def = {
             {
                 "counter",
                 {
@@ -4601,7 +4601,7 @@ struct httpserver {
             for (const auto &metric_def : metrics_def) {
                 const std::string &name = metric_def.at("name");
                 const std::string &help = metric_def.at("help");
-                const Json &value       = metric_def.at("value");
+                const json &value       = metric_def.at("value");
                 metrics_stream << "# HELP llamabox:" << name << " " << help << "\n"
                                << "# TYPE llamabox:" << name << " " << type << "\n"
                                << "llamabox:" << name << " " << value << "\n";
@@ -4619,7 +4619,7 @@ struct httpserver {
 
         std::unique_ptr<tokenize_req> req = get_tokenize_req(request, response, params.llm_params);
 
-        Json tokens_json = Json::array();
+        json tokens_json = json::array();
         {
             llama_tokens tokens = tokenize_prompt(llm_vocab, req->content, req->add_special, true);
             if (req->with_pieces) {
@@ -4631,7 +4631,7 @@ struct httpserver {
                         continue;
                     }
                     // otherwise, store as array of byte values
-                    Json piece_json = Json::array();
+                    json piece_json = json::array();
                     for (unsigned char c : piece) {
                         piece_json.push_back(static_cast<int>(c));
                     }
@@ -4642,7 +4642,7 @@ struct httpserver {
             }
         }
 
-        const Json resp = {
+        const json resp = {
             {"model", req->model},
             {"tokens", tokens_json},
         };
@@ -4656,9 +4656,9 @@ struct httpserver {
 
         std::unique_ptr<detokenize_req> req = get_detokenize_req(request, response, params.llm_params);
 
-        const Json content_json = common_detokenize(llm_ctx, req->tokens, false);
+        const json content_json = common_detokenize(llm_ctx, req->tokens, false);
 
-        const Json resp = {
+        const json resp = {
             {"model", req->model},
             {"content", content_json},
         };
@@ -4666,7 +4666,7 @@ struct httpserver {
     }
 
     int32_t handle_models(const httplib::Request &request, httplib::Response &response) {
-        Json metadata_json;
+        json metadata_json;
         if (support_image()) {
             std::pair<int, int> img_size = sd_ctx->get_default_image_size();
             metadata_json                = {
@@ -4731,7 +4731,7 @@ struct httpserver {
             };
         }
 
-        const Json resp = {
+        const json resp = {
             {"object", "list"},
             {
                 "data",
@@ -5177,7 +5177,7 @@ struct httpserver {
         // ...,
         // tokenized_inputs[length-2] is the query with itself when normalizing,
         // tokenized_inputs[length-1] is the query with unknown token when normalizing.
-        for (const Json &document : req->documents) {
+        for (const json &document : req->documents) {
             llama_tokens tokenized_document = tokenize_prompt(llm_vocab, document, /* add_special= */ false, /* parse_special= */ true);
             tokenized_inputs.emplace_back(decorate(tokenized_document));
         }

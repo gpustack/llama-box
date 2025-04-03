@@ -629,6 +629,36 @@ static bool server_sent_event(httplib::DataSink &sink, const char *event, const 
     return sink.write(str.c_str(), str.size());
 }
 
+// thin wrapper around common_grammar_trigger with (de)serialization functions
+struct server_grammar_trigger {
+    common_grammar_trigger value;
+
+    server_grammar_trigger() = default;
+
+    server_grammar_trigger(const common_grammar_trigger &value)
+        : value(value) {
+    }
+
+    server_grammar_trigger(const json &in) {
+        value.type  = (common_grammar_trigger_type)in.at("type").get<int>();
+        value.value = in.at("value").get<std::string>();
+        if (value.type == COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN) {
+            value.token = (llama_token)in.at("token").get<int>();
+        }
+    }
+
+    json to_json() const {
+        json out{
+            {"type", (int)value.type},
+            {"value", value.value},
+        };
+        if (value.type == COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN) {
+            out["token"] = (int)value.token;
+        }
+        return out;
+    }
+};
+
 //
 // OAI utils
 //
@@ -925,7 +955,8 @@ static json oaicompat_completions_request(const struct common_params &params, co
             llama_params["grammar_lazy"]                       = chat_params.grammar_lazy;
             auto grammar_triggers                              = json::array();
             for (const common_grammar_trigger &trigger : chat_params.grammar_triggers) {
-                grammar_triggers.push_back(trigger.to_json<json>());
+                server_grammar_trigger ct(trigger);
+                grammar_triggers.push_back(ct.to_json());
             }
             if (!grammar_triggers.empty()) {
                 llama_params["grammar_triggers"] = grammar_triggers;

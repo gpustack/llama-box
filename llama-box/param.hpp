@@ -667,7 +667,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                     missing("--model");
                 }
                 char *arg                = argv[i++];
-                params_.llm_params.model = std::string(arg);
+                params_.llm_params.model.path = std::string(arg);
                 continue;
             }
 
@@ -688,6 +688,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 params_.llm_params.lora_adapters.push_back({
                     std::string(arg),
                     1.0f,
+                    nullptr,
                 });
                 continue;
             }
@@ -704,6 +705,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 params_.llm_params.lora_adapters.push_back({
                     std::string(n),
                     std::stof(std::string(s)),
+                    nullptr,
                 });
                 continue;
             }
@@ -1586,7 +1588,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                     missing("--mmproj");
                 }
                 char *arg                 = argv[i++];
-                params_.llm_params.mmproj = std::string(arg);
+                params_.llm_params.mmproj.path = std::string(arg);
                 continue;
             }
 
@@ -1706,7 +1708,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                     missing("--model-draft");
                 }
                 char *arg                            = argv[i++];
-                params_.llm_params.speculative.model = std::string(arg);
+                params_.llm_params.speculative.model.path = std::string(arg);
                 continue;
             }
 
@@ -2162,7 +2164,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     }
 
     // Retrieve params from environment variables
-    get_env("LLAMA_ARG_MODEL", params_.llm_params.model);
+    get_env("LLAMA_ARG_MODEL", params_.llm_params.model.path);
     get_env("LLAMA_ARG_MODEL_ALIAS", params_.llm_params.model_alias);
     get_env("LLAMA_ARG_THREADS", params_.llm_params.cpuparams.n_threads);
     get_env("LLAMA_ARG_CTX_SIZE", params_.llm_params.n_ctx);
@@ -2188,7 +2190,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     get_env("LLAMA_ARG_DRAFT_MAX", params_.llm_params.speculative.n_max);
     get_env("LLAMA_ARG_DRAFT_MIN", params_.llm_params.speculative.n_min);
     get_env("LLAMA_ARG_DRAFT_P_MIN", params_.llm_params.speculative.p_min);
-    get_env("LLAMA_ARG_MODEL_DRAFT", params_.llm_params.speculative.model);
+    get_env("LLAMA_ARG_MODEL_DRAFT", params_.llm_params.speculative.model.path);
     get_env("LLAMA_ARG_DEVICE_DRAFT", params_.llm_params.speculative.devices);
     get_env("LLAMA_ARG_N_GPU_LAYERS_DRAFT", params_.llm_params.speculative.n_gpu_layers);
     get_env("LLAMA_ARG_LOOKUP_NGRAM_MIN", params_.lookup_ngram_min);
@@ -2225,7 +2227,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     }
 
     if (params_.endpoint_images) {
-        params_.sd_params.model                   = params_.llm_params.model;
+        params_.sd_params.model                   = params_.llm_params.model.path;
         params_.sd_params.model_alias             = params_.llm_params.model_alias;
         params_.sd_params.seed                    = params_.llm_params.sampling.seed;
         params_.sd_params.warmup                  = params_.llm_params.warmup;

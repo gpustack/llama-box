@@ -32,7 +32,7 @@ int engine_start(int argc, char **argv) {
         },
         nullptr);
     sd_progress_set(
-        [](int step, int steps, float time, void * /*user_data*/) {
+        [](int /*step*/, int /*steps*/, float time, void * /*user_data*/) {
             // nothing to do
         },
         nullptr);

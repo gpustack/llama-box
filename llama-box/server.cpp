@@ -973,7 +973,7 @@ struct server_context {
     }
 
     bool load_model(llama_box_params &params_) {
-        SRV_INF("loading model '%s'\n", params_.llm_params.model.c_str());
+        SRV_INF("loading model '%s'\n", params_.llm_params.model.path.c_str());
 
         params     = params_;
         llm_params = params.llm_params;
@@ -1028,17 +1028,17 @@ struct server_context {
         /* LLAMA */
 
         if (llm_params.model_alias.empty()) {
-            if (llm_params.model.find_last_of('/') != std::string::npos) {
-                llm_params.model_alias = llm_params.model.substr(llm_params.model.find_last_of('/') + 1);
-            } else if (llm_params.model.find_last_of('\\') != std::string::npos) {
-                llm_params.model_alias = llm_params.model.substr(llm_params.model.find_last_of('\\') + 1);
+            if (llm_params.model.path.find_last_of('/') != std::string::npos) {
+                llm_params.model_alias = llm_params.model.path.substr(llm_params.model.path.find_last_of('/') + 1);
+            } else if (llm_params.model.path.find_last_of('\\') != std::string::npos) {
+                llm_params.model_alias = llm_params.model.path.substr(llm_params.model.path.find_last_of('\\') + 1);
             } else {
-                llm_params.model_alias = llm_params.model;
+                llm_params.model_alias = llm_params.model.path;
             }
         }
 
         // load multimodal projection model
-        if (!llm_params.mmproj.empty()) {
+        if (!llm_params.mmproj.path.empty()) {
             if (llm_params.n_ctx < 2048) {
                 SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
                 llm_params.n_ctx = 2048;
@@ -1049,16 +1049,16 @@ struct server_context {
                 /* use_gpu */ llm_params.n_gpu_layers != 0,
                 /* verbosity */ common_log_verbosity_thold,
             };
-            llm_ctx_clip = clip_init(llm_params.mmproj.c_str(), llm_params_clip);
+            llm_ctx_clip = clip_init(llm_params.mmproj.path.c_str(), llm_params_clip);
             if (llm_ctx_clip == nullptr) {
-                SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.c_str());
+                SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.path.c_str());
                 return false;
             }
         }
 
         // load the draft model if needed
-        if (!llm_params.speculative.model.empty() && llm_params.speculative.n_max > 0) {
-            SRV_INF("loading draft model '%s'\n", llm_params.speculative.model.c_str());
+        if (!llm_params.speculative.model.path.empty() && llm_params.speculative.n_max > 0) {
+            SRV_INF("loading draft model '%s'\n", llm_params.speculative.model.path.c_str());
 
             common_params llm_params_draft   = llm_params;
             llm_params_draft.embedding       = false;
@@ -1073,7 +1073,7 @@ struct server_context {
             llm_model_draft                  = llm_init_draft.model.get();
             llm_ctx_draft                    = llm_init_draft.context.get();
             if (llm_model_draft == nullptr) {
-                SRV_ERR("failed to load draft model, '%s'\n", llm_params.speculative.model.c_str());
+                SRV_ERR("failed to load draft model, '%s'\n", llm_params.speculative.model.path.c_str());
                 return false;
             }
             llm_vocab_draft = llama_model_get_vocab(llm_model_draft);
@@ -1102,7 +1102,7 @@ struct server_context {
         llm_model = llm_init.model.get();
         llm_ctx   = llm_init.context.get();
         if (llm_model == nullptr) {
-            SRV_ERR("failed to load model, '%s'\n", llm_params.model.c_str());
+            SRV_ERR("failed to load model, '%s'\n", llm_params.model.path.c_str());
             return false;
         }
         llm_vocab = llama_model_get_vocab(llm_model);
@@ -1843,9 +1843,9 @@ struct server_context {
             const auto grammar_triggers = data.find("grammar_triggers");
             if (grammar_triggers != data.end()) {
                 for (const auto &t : *grammar_triggers) {
-                    auto ct = common_grammar_trigger::from_json(t);
-                    if (ct.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
-                        const auto &word = ct.value;
+                    server_grammar_trigger ct(t);
+                    if (ct.value.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
+                        const auto &word = ct.value.value;
                         auto ids         = common_tokenize(llm_vocab, word, /* add_special= */ false, /* parse_special= */ true);
                         if (ids.size() == 1) {
                             auto token = ids[0];
@@ -1866,7 +1866,7 @@ struct server_context {
                             slot.tool_call_start_words_longest_length = std::max(slot.tool_call_start_words_longest_length, word.size());
                         }
                     } else {
-                        slot.params.llm_params.grammar_triggers.push_back(ct);
+                        slot.params.llm_params.grammar_triggers.push_back(std::move(ct.value));
                     }
                 }
                 if (!slot.tool_call_start_words.empty()) {
@@ -2436,7 +2436,8 @@ struct server_context {
 
         auto grammar_triggers = json::array();
         for (const auto &trigger : slot.params.llm_params.grammar_triggers) {
-            grammar_triggers.push_back(trigger.to_json<json>());
+            server_grammar_trigger ct(trigger);
+            grammar_triggers.push_back(ct.to_json());
         }
 
         return json{
@@ -4426,7 +4427,7 @@ int main(int argc, char **argv) {
         },
         nullptr);
     sd_progress_set(
-        [](int step, int steps, float time, void * /*user_data*/) {
+        [](int /*step*/, int /*steps*/, float time, void * /*user_data*/) {
             // nothing to do
         },
         nullptr);
@@ -4750,7 +4751,7 @@ int main(int argc, char **argv) {
              }},
         };
         if (ctx_server.llm_ctx) {
-            response["model_path"]    = ctx_server.llm_params.model;
+            response["model_path"]    = ctx_server.llm_params.model.path;
             response["model_alias"]   = ctx_server.llm_params.model_alias;
             response["chat_template"] = ctx_server.llm_params.chat_template.c_str();
         } else if (ctx_server.sd_ctx) {

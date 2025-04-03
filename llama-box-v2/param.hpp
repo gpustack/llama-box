@@ -16,8 +16,7 @@
 
 // types
 
-using json         = nlohmann::json;
-using llama_params = common_params;
+using json = nlohmann::json;
 
 struct llama_box_params {
     v2_httpserver_params hs_params;
@@ -591,8 +590,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--model");
                 }
-                char *arg                          = argv[i++];
-                params_.hs_params.llm_params.model = std::string(arg);
+                char *arg                               = argv[i++];
+                params_.hs_params.llm_params.model.path = std::string(arg);
                 continue;
             }
 
@@ -1481,8 +1480,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--mmproj");
                 }
-                char *arg                           = argv[i++];
-                params_.hs_params.llm_params.mmproj = std::string(arg);
+                char *arg                                = argv[i++];
+                params_.hs_params.llm_params.mmproj.path = std::string(arg);
                 continue;
             }
 
@@ -1601,8 +1600,8 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--model-draft");
                 }
-                char *arg                                      = argv[i++];
-                params_.hs_params.llm_params.speculative.model = std::string(arg);
+                char *arg                                           = argv[i++];
+                params_.hs_params.llm_params.speculative.model.path = std::string(arg);
                 continue;
             }
 
@@ -2066,7 +2065,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
     }
 
     if (params_.hs_params.endpoint_images) {
-        params_.hs_params.sd_params.model                   = params_.hs_params.llm_params.model;
+        params_.hs_params.sd_params.model                   = params_.hs_params.llm_params.model.path;
         params_.hs_params.sd_params.model_alias             = params_.hs_params.llm_params.model_alias;
         params_.hs_params.sd_params.numa                    = params_.hs_params.llm_params.numa;
         params_.hs_params.sd_params.n_parallel              = params_.hs_params.llm_params.n_parallel;
