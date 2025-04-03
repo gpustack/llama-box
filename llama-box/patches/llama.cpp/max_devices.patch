@@ -12,7 +12,7 @@ index 273075f4..51e6f39a 100644
  
  #ifndef GGML_SCHED_MAX_SPLIT_INPUTS
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 81e1dd1d..4e0ffa03 100644
+index d5164720..3e094823 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -33,7 +33,7 @@ struct llama_sampler_chain_params llama_sampler_chain_default_params() {

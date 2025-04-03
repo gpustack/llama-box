@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 18ffb4e7..8ff9dbc8 100644
+index d4882c51..35743fee 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -1041,7 +1041,11 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -994,7 +994,11 @@ struct common_init_result common_init_from_params(common_params & params) {
  
          // some models (e.g. T5) don't have a BOS token
          if (bos != LLAMA_TOKEN_NULL) {
@@ -14,7 +14,7 @@ index 18ffb4e7..8ff9dbc8 100644
          }
          if (eos != LLAMA_TOKEN_NULL) {
              tmp.push_back(eos);
-@@ -1060,7 +1064,7 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -1013,7 +1017,7 @@ struct common_init_result common_init_from_params(common_params & params) {
              tmp.push_back(decoder_start_token_id);
          }
          if (llama_model_has_decoder(model)) {
@@ -24,10 +24,10 @@ index 18ffb4e7..8ff9dbc8 100644
          llama_kv_self_clear(lctx);
          llama_synchronize(lctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 3479a8cc..6d0a48ce 100644
+index 39270794..03b3f1e3 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@ -1240,9 +1240,9 @@ int llama_context::decode(llama_batch & inp_batch) {
+@@ -1215,9 +1215,9 @@ int llama_context::decode(llama_batch & inp_batch) {
          }
      }
  

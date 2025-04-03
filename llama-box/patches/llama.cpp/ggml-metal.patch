@@ -12,7 +12,7 @@ index a6106944..cfb8b0f3 100644
  }
  #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 3942013f..ce19fe31 100644
+index 456e1fd9..bfbacf21 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1466,11 +1466,6 @@ static void ggml_metal_encode_node(
