@@ -595,45 +595,6 @@ rpc-server:
 
 ```
 
-Available environment variables (if the corresponding command-line option is not provided):
-
-- `LLAMA_ARG_MODEL`: equivalent to `-m`, `--model`.
-- `LLAMA_ARG_MODEL_ALIAS`: equivalent to `-a`, `--model-alias`.
-- `LLAMA_ARG_THREADS`: equivalent to `-t`, `--threads`.
-- `LLAMA_ARG_CTX_SIZE`: equivalent to `-c`, `--ctx-size`.
-- `LLAMA_ARG_N_PARALLEL`: equivalent to `-np`, `--parallel`.
-- `LLAMA_ARG_BATCH`: equivalent to `-b`, `--batch-size`.
-- `LLAMA_ARG_UBATCH`: equivalent to `-ub`, `--ubatch-size`.
-- `LLAMA_ARG_DEVICE`: equivalent to `-dev`, `--device`.
-- `LLAMA_ARG_N_GPU_LAYERS`: equivalent to `-ngl`, `--gpu-layers`, `--n-gpu-layers`.
-- `LLAMA_ARG_THREADS_HTTP`: equivalent to `--threads-http`
-- `LLAMA_ARG_CACHE_PROMPT`: if set to `0`, it will **disable** caching prompt (equivalent
-  to `--no-cache-prompt`). This feature is enabled by default.
-- `LLAMA_ARG_CACHE_REUSE`: equivalent to `--cache-reuse`
-- `LLAMA_ARG_CHAT_TEMPLATE`: equivalent to `--chat-template`
-- `LLAMA_ARG_N_PREDICT`: equivalent to `-n`, `--predict`.
-- `LLAMA_ARG_METRICS`: if set to `1`, it will enable metrics endpoint (equivalent to `--metrics`).
-- `LLAMA_ARG_SLOTS`: if set to `1`, it will enable slots endpoint (equivalent to `--slots`).
-- `LLAMA_ARG_EMBEDDINGS`: if set to `1`, it will enable embeddings endpoint (equivalent to `--embeddings`).
-- `LLAMA_ARG_FLASH_ATTN`: if set to `1`, it will enable flash attention (equivalent to `-fa`, `--flash-attn`).
-- `LLAMA_ARG_CONT_BATCHING`: if set to `0`, it will **disable** continuous batching (equivalent
-  to `--no-cont-batching`). This feature is enabled by default.
-- `LLAMA_ARG_DEFRAG_THOLD`: equivalent to `-dt`, `--defrag-thold`.
-- `LLAMA_ARG_HOST`: equivalent to `--host`
-- `LLAMA_ARG_PORT`: equivalent to `--port`
-- `LLAMA_ARG_DRAFT_MAX`: equivalent to `--draft-max`
-- `LLAMA_ARG_DRAFT_MIN`: equivalent to `--draft-min`
-- `LLAMA_ARG_DRAFT_P_MIN`: equivalent to `--draft-p-min`
-- `LLAMA_ARG_MODEL_DRAFT`: equivalent to `-md`, `--model-draft`.
-- `LLAMA_ARG_DEVICE_DRAFT`: equivalent to `-devd`, `--device-draft`.
-- `LLAMA_ARG_N_GPU_LAYERS_DRAFT`: equivalent to `-ngld`, `--gpu-layers-draft`.
-- `LLAMA_ARG_LOOKUP_NGRAM_MIN`: equivalent to `--lookup-ngram-min`.
-- `LLAMA_ARG_LOOKUP_CACHE_STATIC`: equivalent to `-lcs`, `--lookup-cache-static`.
-- `LLAMA_ARG_LOOKUP_CACHE_DYNAMIC`: equivalent to `-lcd`, `--lookup-cache-dynamic`.
-- `LLAMA_ARG_RPC_SERVER_HOST`: equivalent to `--rpc-server-host`.
-- `LLAMA_ARG_RPC_SERVER_PORT`: equivalent to `--rpc-server-port`.
-- `LLAMA_LOG_VERBOSITY`: equivalent to `--log-verbosity`.
-
 ## Server API
 
 The available endpoints for the LLaMA Box server mode are:

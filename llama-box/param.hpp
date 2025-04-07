@@ -176,45 +176,6 @@ static std::string get_builtin_sd_schedule_method() {
 }
 
 //
-// Environment variable utils
-//
-
-template <typename T>
-static typename std::enable_if<std::is_same<T, std::string>::value, void>::type get_env(std::string name, T &target) {
-    char *value = std::getenv(name.c_str());
-    target      = value ? std::string(value) : target;
-}
-
-template <typename T>
-static typename std::enable_if<!std::is_same<T, bool>::value && std::is_integral<T>::value, void>::type get_env(std::string name, T &target) {
-    char *value = std::getenv(name.c_str());
-    target      = value ? std::stoi(value) : target;
-}
-
-template <typename T>
-static typename std::enable_if<std::is_floating_point<T>::value, void>::type get_env(std::string name, T &target) {
-    char *value = std::getenv(name.c_str());
-    target      = value ? std::stof(value) : target;
-}
-
-template <typename T>
-static typename std::enable_if<std::is_same<T, bool>::value, void>::type get_env(std::string name, T &target) {
-    char *value = std::getenv(name.c_str());
-    if (value) {
-        std::string val(value);
-        target = val == "1" || val == "true";
-    }
-}
-
-template <typename T>
-static typename std::enable_if<std::is_same<T, std::vector<ggml_backend_dev_t>>::value, void>::type get_env(std::string name, T &target) {
-    char *value = std::getenv(name.c_str());
-    if (value) {
-        target = parse_device_list(value);
-    }
-}
-
-//
 // Usage
 //
 
@@ -2202,43 +2163,6 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
         fprintf(stderr, "%s\n", ex.what());
         return false;
     }
-
-    // Retrieve params from environment variables
-    get_env("LLAMA_ARG_MODEL", params_.llm_params.model.path);
-    get_env("LLAMA_ARG_MODEL_ALIAS", params_.llm_params.model_alias);
-    get_env("LLAMA_ARG_THREADS", params_.llm_params.cpuparams.n_threads);
-    get_env("LLAMA_ARG_CTX_SIZE", params_.llm_params.n_ctx);
-    get_env("LLAMA_ARG_N_PARALLEL", params_.llm_params.n_parallel);
-    get_env("LLAMA_ARG_BATCH", params_.llm_params.n_batch);
-    get_env("LLAMA_ARG_UBATCH", params_.llm_params.n_ubatch);
-    get_env("LLAMA_ARG_DEVICE", params_.llm_params.devices);
-    get_env("LLAMA_ARG_N_GPU_LAYERS", params_.llm_params.n_gpu_layers);
-    get_env("LLAMA_ARG_THREADS_HTTP", params_.llm_params.n_threads_http);
-    get_env("LLAMA_ARG_CACHE_PROMPT", params_.cache_prompt);
-    get_env("LLAMA_ARG_CACHE_REUSE", params_.llm_params.n_cache_reuse);
-    get_env("LLAMA_ARG_CHAT_TEMPLATE", params_.llm_params.chat_template);
-    get_env("LLAMA_ARG_JINJA", params_.llm_params.use_jinja);
-    get_env("LLAMA_ARG_N_PREDICT", params_.llm_params.n_predict);
-    get_env("LLAMA_ARG_METRICS", params_.llm_params.endpoint_metrics);
-    get_env("LLAMA_ARG_SLOTS", params_.llm_params.endpoint_slots);
-    get_env("LLAMA_ARG_EMBEDDINGS", params_.llm_params.embedding);
-    get_env("LLAMA_ARG_FLASH_ATTN", params_.llm_params.flash_attn);
-    get_env("LLAMA_ARG_DEFRAG_THOLD", params_.llm_params.defrag_thold);
-    get_env("LLAMA_ARG_CONT_BATCHING", params_.llm_params.cont_batching);
-    get_env("LLAMA_ARG_HOST", params_.llm_params.hostname);
-    get_env("LLAMA_ARG_PORT", params_.llm_params.port);
-    get_env("LLAMA_ARG_DRAFT_MAX", params_.llm_params.speculative.n_max);
-    get_env("LLAMA_ARG_DRAFT_MIN", params_.llm_params.speculative.n_min);
-    get_env("LLAMA_ARG_DRAFT_P_MIN", params_.llm_params.speculative.p_min);
-    get_env("LLAMA_ARG_MODEL_DRAFT", params_.llm_params.speculative.model.path);
-    get_env("LLAMA_ARG_DEVICE_DRAFT", params_.llm_params.speculative.devices);
-    get_env("LLAMA_ARG_N_GPU_LAYERS_DRAFT", params_.llm_params.speculative.n_gpu_layers);
-    get_env("LLAMA_ARG_LOOKUP_NGRAM_MIN", params_.lookup_ngram_min);
-    get_env("LLAMA_ARG_LOOKUP_CACHE_STATIC", params_.llm_params.lookup_cache_static);
-    get_env("LLAMA_ARG_LOOKUP_CACHE_DYNAMIC", params_.llm_params.lookup_cache_dynamic);
-    get_env("LLAMA_ARG_RPC_SERVER_HOST", params_.rpc_params.hostname);
-    get_env("LLAMA_ARG_RPC_SERVER_PORT", params_.rpc_params.port);
-    get_env("LLAMA_LOG_VERBOSITY", params_.llm_params.verbosity);
 
     // Postprocess params
     if (params_.llm_params.chat_template.size() > 20 && !common_chat_verify_template(params_.llm_params.chat_template, params_.llm_params.use_jinja)) {
