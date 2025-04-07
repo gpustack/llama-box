@@ -1984,9 +1984,12 @@ struct server_context {
                     common_sampler_free(slot.smpl_draft);
                 }
 
-                struct common_params_sampling params_draft = slot.params.llm_params;
-                params_draft.top_k                         = 10;
-                params_draft.samplers                      = {
+                common_params_sampling params_draft = {};
+                params_draft.seed                   = slot.params.llm_params.seed;
+                params_draft.no_perf                = false;
+                params_draft.top_k                  = 10;
+                params_draft.top_k                  = 10;
+                params_draft.samplers               = {
                     COMMON_SAMPLER_TYPE_TOP_K,
                 };
                 slot.smpl_draft = common_sampler_init(llm_model_draft, params_draft);
@@ -3869,11 +3872,12 @@ struct server_context {
                             break;
                         }
 
-                        slot.sampled_draft.push_back(tok);
                         common_sampler_accept(slot.smpl_draft, tok, true);
                         if (llama_vocab_is_eog(llm_vocab_draft, tok)) {
                             break;
                         }
+                        slot.sampled_draft.push_back(tok);
+
                         common_batch_clear(batch_draft);
                         common_batch_add(batch_draft, tok, pos + 1 + j, {slot.id}, true);
                         if (llama_decode(llm_ctx_draft, batch_draft)) {

@@ -894,10 +894,10 @@ static inline std::unique_ptr<clip_image_u8_c> get_clip_image(std::vector<uint8_
 
     int32_t m = std::max(w, h);
     if (max_image_size < 0 || m <= max_image_size) {
-        img->nx  = w;
-        img->ny  = h;
+        img->nx       = w;
+        img->ny       = h;
         img->buf_data = dt;
-        img->buf_size = w*h*3;
+        img->buf_size = w * h * 3;
         return img;
     }
 
@@ -922,10 +922,10 @@ static inline std::unique_ptr<clip_image_u8_c> get_clip_image(std::vector<uint8_
         throw std::runtime_error("Illegal param: provide image exceeds the max image size, but failed to resize: " + std::string(stbi_failure_reason()));
     }
 
-    img->nx  = nw;
-    img->ny  = nh;
+    img->nx       = nw;
+    img->ny       = nh;
     img->buf_data = ndt;
-    img->buf_size = nw*nh*3;
+    img->buf_size = nw * nh * 3;
     return img;
 }
 
@@ -1005,7 +1005,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                                     throw std::invalid_argument("Illegal param: \"image_url\" is an empty image base64-encoded data");
                                 }
                                 try {
-                                    std::vector<uint8_t> img_buff           = decode_base64(img);
+                                    std::vector<uint8_t> img_buff             = decode_base64(img);
                                     std::unique_ptr<clip_image_u8_c> clip_img = get_clip_image(std::move(img_buff), hparams.max_image_size);
                                     ptr->images.push_back(std::move(clip_img));
                                 } catch (const std::exception &e) {
@@ -3499,7 +3499,7 @@ struct httpserver {
                                         }
                                         task->pos++;
                                     }
-                                    // decode immediatly
+                                    // decode immediately
                                     const int32_t decoded_text = llama_decode(llm_ctx, batch);
                                     common_batch_clear(batch);
                                     if (decoded_text != 0) {
@@ -3765,7 +3765,9 @@ struct httpserver {
                     break;
                 }
                 // speculative - draft
-                if (llm_ctx_draft != nullptr && batch_draft.n_tokens > 0) {
+                // NB(thxCode): we don't need to decode in a loop like above,
+                // as the previous llm_ctx decode also shift the draft kv cache during failure decoding.
+                if (batch_draft.n_tokens > 0) {
                     const int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                     if (decoded_draft != 0) {
                         // NB(thxCode): we should not reach here.
@@ -3817,6 +3819,9 @@ struct httpserver {
                                     task->n_decoding_budget -= d;
                                     // mask kv cache
                                     llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
+                                    if (llm_ctx_draft != nullptr) {
+                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
+                                    }
                                     SRV_DBG("rid %s | decode, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id, task->pos);
                                     break;
                                 }
@@ -4087,18 +4092,13 @@ struct httpserver {
                             task->drafted_tokens.clear();
                             //// draft
                             if (llm_ctx_draft != nullptr) {
-                                llama_pos draft_pos = task->pos;
-                                // mask kv cache
-                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, draft_pos, -1);
-                                SRV_DBG("rid %s | decode draft, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id, draft_pos);
                                 // clean batch for later adding
                                 common_batch_clear(batch_draft);
                                 if (llm_model_rope_mrope) {
-                                    common_batch_add_with_mrope(batch_draft, task->processed_tokens.back(), draft_pos, 1, {seq_id}, true);
+                                    common_batch_add_with_mrope(batch_draft, task->processed_tokens.back(), task->pos, 1, {seq_id}, true);
                                 } else {
-                                    common_batch_add(batch_draft, task->processed_tokens.back(), draft_pos, {seq_id}, true);
+                                    common_batch_add(batch_draft, task->processed_tokens.back(), task->pos, {seq_id}, true);
                                 }
-                                draft_pos++;
                                 int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                                 if (decoded_draft != 0) {
                                     SRV_ERR("rid %s | decode draft, failed to decode, try increasing context size or reducing requests: result = %d\n", rid.c_str(), decoded_draft);
@@ -4118,17 +4118,17 @@ struct httpserver {
                                         break;
                                     }
                                     common_sampler_accept(task->sampler_draft, tok, true);
-                                    task->drafted_tokens.push_back(tok);
                                     task->n_drafted++;
                                     if (llama_vocab_is_eog(llm_vocab_draft, tok)) {
                                         break;
                                     }
+                                    task->drafted_tokens.push_back(tok);
                                     // clean batch for later adding
                                     common_batch_clear(batch_draft);
                                     if (llm_model_rope_mrope) {
-                                        common_batch_add_with_mrope(batch_draft, tok, draft_pos, 1, {seq_id}, true);
+                                        common_batch_add_with_mrope(batch_draft, tok, task->pos + 1 + j, 1, {seq_id}, true);
                                     } else {
-                                        common_batch_add(batch_draft, tok, draft_pos, {seq_id}, true);
+                                        common_batch_add(batch_draft, tok, task->pos + 1 + j, {seq_id}, true);
                                     }
                                     decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                                     if (decoded_draft != 0) {
@@ -4137,7 +4137,6 @@ struct httpserver {
                                         SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                                         break;
                                     }
-                                    draft_pos++;
                                 }
                                 // ignore if less than n_min
                                 if (int32_t(task->drafted_tokens.size()) < params.llm_params.speculative.n_min) {
@@ -4820,11 +4819,11 @@ struct httpserver {
                 return send_json(request, response, httplib::BadRequest_400, "Illegal param: \"sampling\" is invalid");
             }
             if (llm_ctx_draft != nullptr) {
-                common_params_sampling sampling_draft;
-                sampling_draft.seed     = req->sampling.seed;
-                sampling_draft.no_perf  = false;
-                sampling_draft.top_k    = 10;
-                sampling_draft.samplers = {
+                common_params_sampling sampling_draft = {};
+                sampling_draft.seed                   = req->sampling.seed;
+                sampling_draft.no_perf                = false;
+                sampling_draft.top_k                  = 10;
+                sampling_draft.samplers               = {
                     COMMON_SAMPLER_TYPE_TOP_K,
                 };
                 sampler_draft = common_sampler_init(llm_model, sampling_draft);
@@ -4917,7 +4916,7 @@ struct httpserver {
                 // process image
                 std::unique_ptr<llava_image_embed> image_embed = std::make_unique<llava_image_embed>();
                 // NB(thxCode): llava_image_embed_make_with_clip_img_c is a patch.
-                bool image_embed_result                        = llava_image_embed_make_with_clip_img_c(llm_ctx_clip, params.llm_params.cpuparams.n_threads, req->images[images_count].get(), &image_embed->embed, &image_embed->n_image_pos);
+                bool image_embed_result = llava_image_embed_make_with_clip_img_c(llm_ctx_clip, params.llm_params.cpuparams.n_threads, req->images[images_count].get(), &image_embed->embed, &image_embed->n_image_pos);
                 if (!image_embed_result) {
                     return send_string(request, response, httplib::InternalServerError_500, "Failed to embed the image");
                 }
