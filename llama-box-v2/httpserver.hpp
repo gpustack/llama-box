@@ -2726,6 +2726,7 @@ struct httpserver {
             SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.path.c_str());
 
             common_params llm_params_draft   = params.llm_params;
+            llm_params_draft.n_parallel      = params.llm_params.n_threads_http;
             llm_params_draft.embedding       = false;
             llm_params_draft.model           = params.llm_params.speculative.model;
             llm_params_draft.n_gpu_layers    = params.llm_params.speculative.n_gpu_layers;
@@ -2745,7 +2746,9 @@ struct httpserver {
             batch_draft     = llama_batch_init(int32_t(llama_n_ctx(llm_ctx_draft)), 0, 1);
         }
 
-        llm_init  = common_init_from_params(params.llm_params);
+        common_params llm_params = params.llm_params;
+        llm_params.n_parallel = params.llm_params.n_threads_http;
+        llm_init  = common_init_from_params(llm_params);
         llm_model = llm_init.model.get();
         llm_ctx   = llm_init.context.get();
         if (llm_model == nullptr) {
