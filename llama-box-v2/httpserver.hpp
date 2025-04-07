@@ -2588,18 +2588,18 @@ struct httpserver_metrics {
     }
 };
 
-std::function<void(int)> v2_shutdown_handler;
-std::atomic_flag v2_is_terminating = ATOMIC_FLAG_INIT;
+std::function<void(int)> httpserver_shutdown_handler;
+std::atomic_flag httpserver_is_terminating = ATOMIC_FLAG_INIT;
 
-inline void signal_handler(int32_t signal) {
-    if (v2_is_terminating.test_and_set()) {
+inline void httpserver_signal_handler(int32_t signal) {
+    if (httpserver_is_terminating.test_and_set()) {
         // in case it hangs, we can force terminate the server by hitting Ctrl+C
         // twice this is for better developer experience, we can remove when the
         // server is stable enough
         SRV_WRN("%s", "received second interrupt, terminating immediately\n");
         exit(1);
     }
-    v2_shutdown_handler(signal);
+    httpserver_shutdown_handler(signal);
 }
 
 struct httpserver {
@@ -3038,20 +3038,20 @@ struct httpserver {
         });
 
         // register shutdown handler
-        v2_shutdown_handler = [&](int) {
+        httpserver_shutdown_handler = [&](int) {
             SRV_FUNC_INF("start", "%s", "server is stopping\n");
             server->stop();
         };
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
         struct sigaction sigint_action{};
-        sigint_action.sa_handler = signal_handler;
+        sigint_action.sa_handler = httpserver_signal_handler;
         sigemptyset(&sigint_action.sa_mask);
         sigint_action.sa_flags = 0;
         sigaction(SIGINT, &sigint_action, nullptr);
         sigaction(SIGTERM, &sigint_action, nullptr);
 #elif defined(_WIN32)
         auto console_ctrl_handler = +[](DWORD ctrl_type) -> BOOL {
-            return (ctrl_type == CTRL_C_EVENT) ? (signal_handler(SIGINT), true) : false;
+            return (ctrl_type == CTRL_C_EVENT) ? (httpserver_signal_handler(SIGINT), true) : false;
         };
         SetConsoleCtrlHandler(reinterpret_cast<PHANDLER_ROUTINE>(console_ctrl_handler), true);
 #endif
