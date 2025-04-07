@@ -376,6 +376,8 @@ server:
   -ngl,  --gpu-layers,  --n-gpu-layers N
                                   Number of layers to store in VRAM
                                   -ngl 0 means no offloading
+  -ot,   --override-tensor PATTERN_1=BUFFER_TYPE_1,PATTERN_2=BUFFER_TYPE_2,...
+                                  Override tensor buffer type, for example, use --override-tensor "[2-9][0-9]\.ffn_.*_exps\.=CPU" to keep experts of layers 20-99 in the CPU
          --no-warmup              Disable warm up the model with an empty run
          --warmup                 Enable warm up the model with an empty run, which is used to occupy the (V)RAM before serving
 
@@ -395,7 +397,7 @@ server/completion:
                                   Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template BUILTIN  Set built-in chat template (default: analyze from model's metadata)
                                   Only built-in templates are accepted, implicit reset --jinja setting
-                                  List of built-in templates: chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, zephyr
+                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, yandex, zephyr
          --jinja                  Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)
          --chat-template-file FILE
                                   Set jinja chat template (default: take from model's metadata)
@@ -587,7 +589,7 @@ rpc-server:
          --rpc-server-main-gpu N  The GPU VRAM to use for the RPC server (default: 0, -1 = disabled, use RAM)
          --rpc-server-reserve-memory MEM
                                   Reserve memory in MiB (default: 0)
-         --rpc-server-cache       Enable caching large tensors locally (default: disabled)
+         --rpc-server-cache       Enable local file cache (default: disabled)
          --rpc-server-cache-dir PATH
                                   Path to store large tensors (default: according to OS)
 

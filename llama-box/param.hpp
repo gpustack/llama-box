@@ -300,6 +300,8 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
                                                                                                             "For image models, indicate which device should be able to offload"});
     opts.push_back({ "server",                             "-ngl,  --gpu-layers,  --n-gpu-layers N",        "Number of layers to store in VRAM\n"
                                                                                                             "-ngl 0 means no offloading"});
+    opts.push_back({ "server",                             "-ot,   --override-tensor PATTERN_1=BUFFER_TYPE_1,PATTERN_2=BUFFER_TYPE_2,...",
+                                                                                                            R"(Override tensor buffer type, for example, use --override-tensor "[2-9][0-9]\.ffn_.*_exps\.=CPU" to keep experts of layers 20-99 in the CPU)"});
     opts.push_back({ "server",                             "       --no-warmup",                            "Disable warm up the model with an empty run" });
     opts.push_back({ "server",                             "       --warmup",                               "Enable warm up the model with an empty run, which is used to occupy the (V)RAM before serving" });
     // server // completion //
@@ -666,7 +668,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--model");
                 }
-                char *arg                = argv[i++];
+                char *arg                     = argv[i++];
                 params_.llm_params.model.path = std::string(arg);
                 continue;
             }
@@ -802,6 +804,44 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 char *arg                       = argv[i++];
                 params_.llm_params.n_gpu_layers = std::stoi(arg);
                 continue;
+            }
+
+            if (!strcmp(flag, "-ot") || !strcmp(flag, "--override-tensor")) {
+                if (i == argc) {
+                    missing("--override-tensor");
+                }
+                char *arg = argv[i++];
+
+                /* static */ std::unordered_map<std::string /* buffer type name */, ggml_backend_buffer_type_t /* buffer type */> buffer_types;
+                if (buffer_types.empty()) {
+                    // enumerate all the devices and add their buffer types to the list
+                    for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
+                        auto *dev             = ggml_backend_dev_get(j);
+                        auto *dev_buffer_type = ggml_backend_dev_buffer_type(dev);
+                        if (dev_buffer_type) {
+                            buffer_types[ggml_backend_buft_name(dev_buffer_type)] = dev_buffer_type;
+                        }
+                    }
+                }
+
+                for (const auto &override : string_split<std::string>(std::string(arg), ',')) {
+                    std::string::size_type pos = override.find('=');
+                    if (pos == std::string::npos) {
+                        invalid("--override-tensor");
+                    }
+                    std::string tensor_name = override.substr(0, pos);
+                    std::string buffer_type = override.substr(pos + 1);
+
+                    if (buffer_types.find(buffer_type) == buffer_types.end()) {
+                        printf("Available buffer types:\n");
+                        for (const auto &it : buffer_types) {
+                            printf("  %s\n", ggml_backend_buft_name(it.second));
+                        }
+                        invalid("--override-tensor");
+                    }
+
+                    params_.llm_params.tensor_buft_overrides.push_back({strdup(tensor_name.c_str()), buffer_types.at(buffer_type)});
+                }
             }
 
             if (!strcmp(flag, "--no-warmup")) {
@@ -1587,7 +1627,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--mmproj");
                 }
-                char *arg                 = argv[i++];
+                char *arg                      = argv[i++];
                 params_.llm_params.mmproj.path = std::string(arg);
                 continue;
             }
@@ -1707,7 +1747,7 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 if (i == argc) {
                     missing("--model-draft");
                 }
-                char *arg                            = argv[i++];
+                char *arg                                 = argv[i++];
                 params_.llm_params.speculative.model.path = std::string(arg);
                 continue;
             }
