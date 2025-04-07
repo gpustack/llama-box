@@ -3710,11 +3710,11 @@ struct httpserver {
                 // decode
                 while (batch.n_tokens > 0) {
                     const int32_t decoded = llama_decode(llm_ctx, batch);
-                    if (decoded != 0) { // -1 no tokens, -2 allocate failed, -3 no kv cache/compute failed, 2 compute aborted
+                    if (decoded != 0) { // -3 compute failed, -2 allocate failed, -1 no tokens, 0 ok, 1 no kv cache, 2 compute aborted
                         // try to recover
                         if (params.llm_params.ctx_shift) {
                             int32_t decoded_again = decoded;
-                            while (decoded_again == -3) {
+                            while (decoded_again == 1) {
                                 SRV_WRN("%s", "decode in batch, try shifting context\n");
                                 // shift the decoding task which has largest pos
                                 int32_t target_idx = -1;
@@ -4474,7 +4474,7 @@ struct httpserver {
     //
 
     static int32_t handle_health(const httplib::Request &request, httplib::Response &response) {
-        const json resp = {
+        json resp = {
             {"status", "ok"},
         };
         return send_json(request, response, httplib::OK_200, resp);
@@ -4642,7 +4642,7 @@ struct httpserver {
             }
         }
 
-        const json resp = {
+        json resp = {
             {"model", req->model},
             {"tokens", tokens_json},
         };
@@ -4658,7 +4658,7 @@ struct httpserver {
 
         const json content_json = common_detokenize(llm_ctx, req->tokens, false);
 
-        const json resp = {
+        json resp = {
             {"model", req->model},
             {"content", content_json},
         };
@@ -4731,7 +4731,7 @@ struct httpserver {
             };
         }
 
-        const json resp = {
+        json resp = {
             {"object", "list"},
             {
                 "data",
