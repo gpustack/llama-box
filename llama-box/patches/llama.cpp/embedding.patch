@@ -11,7 +11,7 @@ index fca2b034..4e29ed0a 100644
      LLAMA_API uint32_t llama_n_batch    (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_ubatch   (const struct llama_context * ctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 39270794..743253b2 100644
+index 4735e98e..fb7c780b 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -95,6 +95,20 @@ llama_context::llama_context(

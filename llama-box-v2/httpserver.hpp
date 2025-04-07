@@ -837,7 +837,7 @@ struct chat_complete_req : complete_req {
     /* LLAMA BOX */
 
     // images, temporary use, will not value in "process"
-    std::vector<std::unique_ptr<clip_image_u8>> images;
+    std::vector<std::unique_ptr<clip_image_u8_c>> images;
     common_chat_params chat_params;
     // tool calls
     llama_token tool_call_start_token = LLAMA_TOKEN_NULL;
@@ -876,7 +876,7 @@ struct chat_complete_req : complete_req {
     // std::string user;
 };
 
-static inline std::unique_ptr<clip_image_u8> get_clip_image(std::vector<uint8_t> &&img_buff, const int32_t max_image_size) {
+static inline std::unique_ptr<clip_image_u8_c> get_clip_image(std::vector<uint8_t> &&img_buff, const int32_t max_image_size) {
     int32_t w   = 0;
     int32_t h   = 0;
     int32_t c   = 0;
@@ -890,13 +890,14 @@ static inline std::unique_ptr<clip_image_u8> get_clip_image(std::vector<uint8_t>
         throw std::invalid_argument("Illegal param: provided image must be a valid RGB image");
     }
 
-    std::unique_ptr<clip_image_u8> img = std::make_unique<clip_image_u8>();
+    std::unique_ptr<clip_image_u8_c> img = std::make_unique<clip_image_u8_c>();
 
     int32_t m = std::max(w, h);
     if (max_image_size < 0 || m <= max_image_size) {
         img->nx  = w;
         img->ny  = h;
-        img->buf = std::vector<uint8_t>(dt, dt + w * h * 3);
+        img->buf_data = dt;
+        img->buf_size = w*h*3;
         return img;
     }
 
@@ -923,7 +924,8 @@ static inline std::unique_ptr<clip_image_u8> get_clip_image(std::vector<uint8_t>
 
     img->nx  = nw;
     img->ny  = nh;
-    img->buf = std::vector<uint8_t>(ndt, ndt + nw * nh * 3);
+    img->buf_data = ndt;
+    img->buf_size = nw*nh*3;
     return img;
 }
 
@@ -1004,7 +1006,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                                 }
                                 try {
                                     std::vector<uint8_t> img_buff           = decode_base64(img);
-                                    std::unique_ptr<clip_image_u8> clip_img = get_clip_image(std::move(img_buff), hparams.max_image_size);
+                                    std::unique_ptr<clip_image_u8_c> clip_img = get_clip_image(std::move(img_buff), hparams.max_image_size);
                                     ptr->images.push_back(std::move(clip_img));
                                 } catch (const std::exception &e) {
                                     throw std::invalid_argument("Illegal param: \"image_url\" must be a valid base64-encoded image");
@@ -1039,7 +1041,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(const htt
                                     throw std::invalid_argument("Illegal param: invalid \"image_url\", failed to fetch image from URL: " + img + ", status: " + std::to_string(resp ? resp->status : -1) + ", reason: " + (resp ? resp->reason : "unknown"));
                                 }
                                 std::vector<uint8_t> img_buff(resp->body.begin(), resp->body.end());
-                                std::unique_ptr<clip_image_u8> clip_img = get_clip_image(std::move(img_buff), hparams.max_image_size);
+                                std::unique_ptr<clip_image_u8_c> clip_img = get_clip_image(std::move(img_buff), hparams.max_image_size);
                                 ptr->images.push_back(std::move(clip_img));
                             }
                             n_img++;
@@ -2708,9 +2710,9 @@ struct httpserver {
             }
             // NB(thxCode): clip_context_params is a patch.
             clip_context_params llm_params_clip{
-                /* max_image_size */ params.max_image_size,
                 /* use_gpu */ params.llm_params.n_gpu_layers != 0,
-                /* verbosity */ common_log_verbosity_thold,
+                /* verbosity */ common_log_verbosity_thold > 3 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_INFO,
+                /* max_image_size */ params.max_image_size,
             };
             llm_ctx_clip = clip_init(params.llm_params.mmproj.path.c_str(), llm_params_clip);
             if (llm_ctx_clip == nullptr) {
@@ -4914,7 +4916,8 @@ struct httpserver {
 
                 // process image
                 std::unique_ptr<llava_image_embed> image_embed = std::make_unique<llava_image_embed>();
-                bool image_embed_result                        = llava_image_embed_make_with_clip_img(llm_ctx_clip, params.llm_params.cpuparams.n_threads, req->images[images_count].get(), &image_embed->embed, &image_embed->n_image_pos);
+                // NB(thxCode): llava_image_embed_make_with_clip_img_c is a patch.
+                bool image_embed_result                        = llava_image_embed_make_with_clip_img_c(llm_ctx_clip, params.llm_params.cpuparams.n_threads, req->images[images_count].get(), &image_embed->embed, &image_embed->n_image_pos);
                 if (!image_embed_result) {
                     return send_string(request, response, httplib::InternalServerError_500, "Failed to embed the image");
                 }

@@ -1045,9 +1045,9 @@ struct server_context {
             }
             // NB(thxCode): clip_context_params is a patch.
             clip_context_params llm_params_clip{
-                /* max_image_size */ params_.max_image_size,
                 /* use_gpu */ llm_params.n_gpu_layers != 0,
-                /* verbosity */ common_log_verbosity_thold,
+                /* verbosity */ common_log_verbosity_thold > 3 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_INFO,
+                /* max_image_size */ params_.max_image_size,
             };
             llm_ctx_clip = clip_init(llm_params.mmproj.path.c_str(), llm_params_clip);
             if (llm_ctx_clip == nullptr) {
