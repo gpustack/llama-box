@@ -1,14 +1,14 @@
-diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index f3925e17..fb866ac0 100644
---- a/ggml/src/ggml-cpu/ggml-cpu.c
-+++ b/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -8342,7 +8342,9 @@ static void ggml_compute_forward_soft_max_f32(
+diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
+index 7a8d5ac6..0aa197b2 100644
+--- a/ggml/src/ggml-cpu/ops.cpp
++++ b/ggml/src/ggml-cpu/ops.cpp
+@@ -4722,7 +4722,9 @@ static void ggml_compute_forward_soft_max_f32(
          ggml_vec_max_f32(nc, &max, wp);
  
          ggml_float sum = ggml_vec_soft_max_f32(nc, dp, wp, max);
 -        assert(sum > 0.0);
 +        if (isnan(sum) || sum == 0.0) {
-+            sum = -INFINITY;
++           sum = -INFINITY;
 +        }
  
          sum = 1.0/sum;

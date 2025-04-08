@@ -139,10 +139,10 @@ index 9aad84e8..733556aa 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index fca2b034..cd000561 100644
+index 5fd99f4c..9e298f6e 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -393,6 +393,11 @@ extern "C" {
+@@ -394,6 +394,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -154,7 +154,7 @@ index fca2b034..cd000561 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -1115,6 +1120,35 @@ extern "C" {
+@@ -1116,6 +1121,35 @@ extern "C" {
      // Chat templates
      //
  
@@ -191,10 +191,10 @@ index fca2b034..cd000561 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index dd27a381..b25fc438 100644
+index 721faa4e..1dcad573 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
-@@ -178,6 +178,472 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -181,6 +181,472 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
  
@@ -668,7 +668,7 @@ index dd27a381..b25fc438 100644
  // This function uses heuristic checks to determine commonly used template. It is not a jinja parser.
  int32_t llm_chat_apply_template(
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index 0e0bd772..ca36e855 100644
+index 34537ca2..bfd74fcd 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -3,6 +3,7 @@
@@ -679,7 +679,7 @@ index 0e0bd772..ca36e855 100644
  
  enum llm_chat_template {
      LLM_CHAT_TEMPLATE_CHATML,
-@@ -45,10 +46,19 @@ enum llm_chat_template {
+@@ -46,10 +47,19 @@ enum llm_chat_template {
  
  struct llama_chat_message;
  

@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cann/aclnn_ops.cpp b/ggml/src/ggml-cann/aclnn_ops.cpp
-index f5734cba..9ae17bfa 100644
+index fee66aea..a2deb4de 100644
 --- a/ggml/src/ggml-cann/aclnn_ops.cpp
 +++ b/ggml/src/ggml-cann/aclnn_ops.cpp
-@@ -2448,7 +2448,7 @@ void ggml_cann_get_rows(ggml_backend_cann_context& ctx, ggml_tensor* dst) {
+@@ -1762,7 +1762,7 @@ void ggml_cann_get_rows(ggml_backend_cann_context& ctx, ggml_tensor* dst) {
                  src0->data, ACL_INT8, sizeof(int8_t), weight_ne, weight_nb,
                  GGML_MAX_DIMS + 1);
              aclTensor* acl_scale_tensor = ggml_cann_create_tensor(
@@ -12,7 +12,7 @@ index f5734cba..9ae17bfa 100644
              aclTensor* dequant_tensor = ggml_cann_create_tensor(
                  dequant_buffer_allocator.get(), ACL_FLOAT, sizeof(float_t),
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index 5e790f05..8a9d5fd1 100644
+index 326f9d29..49ee02e7 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,8 @@
