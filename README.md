@@ -10,12 +10,35 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 ## Agenda
 
+- [V2](#v2)
 - [Features](#features)
 - [Supports](#supports)
 - [Examples](#examples)
 - [Usage](#usage)
 - [Server API](#server-api)
 - [Tools](#tools)
+
+## V2
+
+In the practice of V2, we try to remove the configuration dependency on `--parallel (-np)` and `--batch-size (-b)`, and
+introduce the following improvements.
+
+- Configuring `--threads-http` is equivalent to `--parallel` in V1. This helps us better understand the concept of
+  parallelism, whether continuous batching is used. `--batch-size (-b)` automatically aligns with `--ctx-size`. With
+  better GPUs, you should try to increase `--ubatch-size (-ub)`.
+- The maximum size of a single request is no longer to be the result of `n_slot_ctx = --ctx-size / --parallel`, but
+  `n_ctx = --ctx-size`. This helps us enter the
+  entire `--ctx-size` in the prompt stage, which plays a vital role.
+- Like the upstream improvements, reduce the reading of Json and switch to access to the structure, which will improve
+  the overall processing speed.
+- No longer support uninteresting APIs, such as `/props`, `/slots(/*)`, `/infill`, `/lora-adapters`, `/apply-template`,
+  etc., and
+  focus on enhancing business APIs.
+- In speculative sampling, both the draft model and ngram mechanisms can be used at the same time, with the draft model
+  being given priority.
+
+V2 will be enabled for a period of time with a special parameter(`--v2`), and will completely replace V1 in a later
+version, which we believe will not be long.
 
 ## Features
 
