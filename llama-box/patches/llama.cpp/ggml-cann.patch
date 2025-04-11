@@ -1,20 +1,8 @@
 diff --git a/ggml/src/ggml-cann/aclnn_ops.cpp b/ggml/src/ggml-cann/aclnn_ops.cpp
-index fee66aea..ac5632e9 100644
+index 37d41179..f312a620 100644
 --- a/ggml/src/ggml-cann/aclnn_ops.cpp
 +++ b/ggml/src/ggml-cann/aclnn_ops.cpp
-@@ -1188,6 +1188,11 @@ void aclnn_sin(ggml_backend_cann_context& ctx, aclTensor* acl_src,
-     GGML_CANN_CALL_ACLNN_OP(Sin, acl_src, acl_dst);
- }
- 
-+void aclnn_geluv2(ggml_backend_cann_context& ctx, aclTensor* acl_src,
-+                   aclTensor* acl_dst) {
-+    GGML_CANN_CALL_ACLNN_OP(GeluV2, acl_src, 0, acl_dst);
-+}
-+
- void ggml_cann_timestep_embedding(ggml_backend_cann_context& ctx,
-                                   ggml_tensor* dst) {
-     const ggml_tensor* src = dst->src[0];
-@@ -1762,7 +1767,7 @@ void ggml_cann_get_rows(ggml_backend_cann_context& ctx, ggml_tensor* dst) {
+@@ -1783,7 +1783,7 @@ void ggml_cann_get_rows(ggml_backend_cann_context& ctx, ggml_tensor* dst) {
                  src0->data, ACL_INT8, sizeof(int8_t), weight_ne, weight_nb,
                  GGML_MAX_DIMS + 1);
              aclTensor* acl_scale_tensor = ggml_cann_create_tensor(
@@ -23,46 +11,8 @@ index fee66aea..ac5632e9 100644
                  GGML_MAX_DIMS + 1, ACL_FORMAT_ND, scale_offset);
              aclTensor* dequant_tensor = ggml_cann_create_tensor(
                  dequant_buffer_allocator.get(), ACL_FLOAT, sizeof(float_t),
-diff --git a/ggml/src/ggml-cann/aclnn_ops.h b/ggml/src/ggml-cann/aclnn_ops.h
-index 116ddf0f..b126a35f 100644
---- a/ggml/src/ggml-cann/aclnn_ops.h
-+++ b/ggml/src/ggml-cann/aclnn_ops.h
-@@ -599,6 +599,10 @@ void aclnn_cos(ggml_backend_cann_context& ctx, aclTensor* acl_src,
- void aclnn_sin(ggml_backend_cann_context& ctx, aclTensor* acl_src,
-     aclTensor* acl_dst);
- 
-+
-+void aclnn_geluv2(ggml_backend_cann_context& ctx, aclTensor* acl_src,
-+                  aclTensor* acl_dst);
-+
- /**
-  * @brief Launches an asynchronous task using the memory allocator.
-  *
-@@ -723,13 +727,14 @@ template <void unary_op(ggml_backend_cann_context&, aclTensor*, aclTensor*)>
-  * @see ggml_cann_unary_op
-  * @see GGML_CANN_CALL_ACLNN_OP
-  */
--#define GGML_CANN_CALL_UNARY_OP(OP_NAME)                         \
--    do {                                                         \
--        auto lambda = [](auto ctx, auto acl_src, auto acl_dst) { \
--            GGML_CANN_CALL_ACLNN_OP(OP_NAME, acl_src, acl_dst);  \
--        };                                                       \
--        ggml_cann_unary_op<lambda>(ctx, dst);                    \
--    }                                                            \
--    while (0)
-+#define GGML_CANN_CALL_UNARY_OP(OP_NAME)                      \
-+    do {                                                      \
-+        ggml_tensor * src     = dst->src[0];                  \
-+        aclTensor *   acl_src = ggml_cann_create_tensor(src); \
-+        aclTensor *   acl_dst = ggml_cann_create_tensor(dst); \
-+        GGML_CANN_CALL_ACLNN_OP(OP_NAME, acl_src, acl_dst);   \
-+        ACL_CHECK(aclDestroyTensor(acl_src));                 \
-+        ACL_CHECK(aclDestroyTensor(acl_dst));                 \
-+    } while (0)
- 
- #endif  // CANN_ACLNN_OPS
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index 326f9d29..39687761 100644
+index b513270c..bbee3b96 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,8 @@
@@ -539,15 +489,3 @@ index 326f9d29..39687761 100644
  
      void* dev_ptr;
      aclError err = aclrtMalloc(&dev_ptr, size, ACL_MEM_MALLOC_HUGE_FIRST);
-@@ -1330,10 +1749,7 @@ static bool ggml_cann_compute_forward(ggml_backend_cann_context& ctx,
-                     GGML_CANN_CALL_UNARY_OP(Silu);
-                     break;
-                 case GGML_UNARY_OP_GELU_QUICK: {
--                        auto lambda = [](auto ctx, auto acl_src, auto acl_dst) {
--                            GGML_CANN_CALL_ACLNN_OP(GeluV2, acl_src, 0, acl_dst);
--                        };
--                        ggml_cann_unary_op<lambda>(ctx, dst);
-+                        ggml_cann_unary_op<aclnn_geluv2>(ctx, dst);
-                     }
-                     break;
-                 case GGML_UNARY_OP_TANH:

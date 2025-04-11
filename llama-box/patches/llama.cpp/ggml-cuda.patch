@@ -24,7 +24,7 @@ index 1405e066..7956d6bb 100644
  }
  
 diff --git a/ggml/src/ggml-impl.h b/ggml/src/ggml-impl.h
-index 606175fb..bfeee396 100644
+index caa6b9db..ca7c07e2 100644
 --- a/ggml/src/ggml-impl.h
 +++ b/ggml/src/ggml-impl.h
 @@ -310,7 +310,7 @@ GGML_API void ggml_aligned_free(void * ptr, size_t size);

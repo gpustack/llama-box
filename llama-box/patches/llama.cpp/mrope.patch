@@ -15,7 +15,7 @@ index d4882c51..a912bf6d 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.path.c_str());
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index 7a8d5ac6..b4d2ef67 100644
+index f63656be..75b35f96 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
 @@ -5145,10 +5145,6 @@ static void ggml_compute_forward_rope_f32(
@@ -82,7 +82,7 @@ index 8721b272..fb5836d4 100644
  
  typedef struct {
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 456e1fd9..b01e8487 100644
+index f2268260..3480b4a3 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1320,16 +1320,7 @@ static bool ggml_metal_supports_op(const struct ggml_backend_metal_device_contex
@@ -103,7 +103,7 @@ index 456e1fd9..b01e8487 100644
          case GGML_OP_IM2COL:
              return op->src[0]->type == GGML_TYPE_F16;
          case GGML_OP_POOL_1D:
-@@ -3349,6 +3340,7 @@ static void ggml_metal_encode_node(
+@@ -3354,6 +3345,7 @@ static void ggml_metal_encode_node(
                  float attn_factor;
                  float beta_fast;
                  float beta_slow;
@@ -111,7 +111,7 @@ index 456e1fd9..b01e8487 100644
  
                  memcpy(&freq_base,   (const int32_t *) dst->op_params +  5, sizeof(float));
                  memcpy(&freq_scale,  (const int32_t *) dst->op_params +  6, sizeof(float));
-@@ -3356,8 +3348,11 @@ static void ggml_metal_encode_node(
+@@ -3361,8 +3353,11 @@ static void ggml_metal_encode_node(
                  memcpy(&attn_factor, (const int32_t *) dst->op_params +  8, sizeof(float));
                  memcpy(&beta_fast,   (const int32_t *) dst->op_params +  9, sizeof(float));
                  memcpy(&beta_slow,   (const int32_t *) dst->op_params + 10, sizeof(float));
@@ -123,7 +123,7 @@ index 456e1fd9..b01e8487 100644
  
                  id<MTLComputePipelineState> pipeline = nil;
  
-@@ -3401,6 +3396,9 @@ static void ggml_metal_encode_node(
+@@ -3406,6 +3401,9 @@ static void ggml_metal_encode_node(
                      /*.attn_factor =*/ attn_factor,
                      /*.beta_fast   =*/ beta_fast,
                      /*.beta_slow   =*/ beta_slow,
@@ -133,7 +133,7 @@ index 456e1fd9..b01e8487 100644
                  };
  
                  [encoder setComputePipelineState:pipeline];
-@@ -3420,7 +3418,6 @@ static void ggml_metal_encode_node(
+@@ -3425,7 +3423,6 @@ static void ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
