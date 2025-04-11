@@ -70,7 +70,6 @@ jobs:
       - name: Build
         run: |
           echo "===== BUILD ====="
-          mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_METAL=off -DGGML_ACCELERATE=on \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
@@ -125,7 +124,6 @@ jobs:
       - name: Build
         run: |
           echo "===== BUILD ====="
-          mkdir -p ${{ github.workspace }}/.cache
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
@@ -162,13 +160,13 @@ jobs:
         include:
           - arch: 'amd64'
             instruction: 'avx2'
-            distro_container_image: 'gpustack/devel-cpu:centos7'
+            distro_container_image: 'gpustack/devel-cpu:centos7-v2'
           - arch: 'amd64'
             instruction: 'avx512'
-            distro_container_image: 'gpustack/devel-cpu:rockylinux8.9'
+            distro_container_image: 'gpustack/devel-cpu:rockylinux8.9-v2'
           - arch: 'arm64'
             instruction: 'neon'
-            distro_container_image: 'gpustack/devel-cpu:ubuntu18.04'
+            distro_container_image: 'gpustack/devel-cpu:ubuntu18.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -189,8 +187,10 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
@@ -200,7 +200,6 @@ jobs:
           rm -rf /usr/lib/gcc/\$(uname -m)-linux-gnu/11/libgomp* || true
           rm -rf /opt/openEuler/gcc-toolset-10/root/usr/lib/gcc/\$(uname -m)-linux-gnu/10/libgomp* || true
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
@@ -214,9 +213,9 @@ jobs:
             -DGGML_BLAS=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -236,7 +235,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -267,7 +266,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: '6.2'
-            distro_container_image: 'gpustack/devel-rocm-hip:6.2.4-centos7'
+            distro_container_image: 'gpustack/devel-rocm-hip:6.2.4-centos7-v2'
             hip_arch: 'gfx906:xnack-;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
@@ -289,19 +288,19 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            -DCMAKE_HIP_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
@@ -311,9 +310,9 @@ jobs:
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -333,7 +332,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env AMDGPU_TARGETS \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
@@ -362,27 +361,27 @@ jobs:
         include:
           - arch: 'amd64'
             version: '12.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8-v2'
             cuda_arch: '70-real;75-real;80-real;86-real;89-real;90-real;100'
           - arch: 'amd64'
             version: '12.4'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-centos7'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-centos7-v2'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
           - arch: 'amd64'
             version: '11.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-centos7'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-centos7-v2'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
           - arch: 'arm64'
             version: '12.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8-v2'
             cuda_arch: '70-real;75-real;80-real;86-real;89-real;90-real;100'
           - arch: 'arm64'
             version: '12.4'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-rockylinux8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-rockylinux8-v2'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
           - arch: 'arm64'
             version: '11.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-rockylinux8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-rockylinux8-v2'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
@@ -404,27 +403,27 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-            -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -444,7 +443,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env CUDA_ARCHITECTURES \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
@@ -469,7 +468,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: '2025.0'
-            distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04'
+            distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -490,36 +489,14 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          if [ -f /etc/os-release ]; then
-            source /etc/os-release
-            cat /etc/os-release
-            if [ "\${ID}" = "ubuntu" ]; then
-              apt-get update -y \
-                && apt-get install -y build-essential libssl-dev ccache curl git bc
-              if (( \$(echo "\${VERSION_ID} < 21.04" | bc -l) )); then
-                apt-get update -y \
-                  && apt-get install -y software-properties-common
-                add-apt-repository -y ppa:ubuntu-toolchain-r/test
-                apt-get update -y \
-                  && apt-get install -y gcc-11 g++-11
-                update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 10
-                update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 10
-              fi
-            else
-              echo "Unsupport distribution: \${ID}"
-              exit 1
-            fi
-          else
-            echo "Unknown distribution"
-            exit 1
-          fi
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
@@ -529,9 +506,9 @@ jobs:
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s -v
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s -v
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -553,7 +530,7 @@ jobs:
             --env CC=icx \
             --env CXX=icpx \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -579,40 +556,40 @@ jobs:
         include:
           - arch: 'amd64'
             version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04-v2'
           - arch: 'amd64'
             version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04-v2'
           - arch: 'amd64'
             version: '8.0.rc3'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-910b-ubuntu20.04-v2'
           - arch: 'amd64'
             version: '8.0.rc3'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-310p-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-310p-ubuntu20.04-v2'
           - arch: 'amd64'
             version: '8.0.rc2'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04-v2'
           - arch: 'amd64'
             version: '8.0.rc2'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.0.rc3'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-910b-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.0.rc3'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-310p-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc3.beta1-310p-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.0.rc2'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-910b-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.0.rc2'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.rc2.beta1-310p-ubuntu20.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -633,14 +610,16 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
+          export LD_LIBRARY_PATH=/usr/loca/Ascend/driver/lib64/common:/usr/loca/Ascend/driver/lib64/driver:\${LD_LIBRARY_PATH}
           source /usr/local/Ascend/ascend-toolkit/set_env.sh
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
@@ -652,9 +631,9 @@ jobs:
             ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -674,7 +653,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -698,7 +677,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: 'rc3.1'
-            distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.1-ubuntu22.04'
+            distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.1-ubuntu22.04-v2'
             musa_arch: '21;22;31'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
@@ -720,27 +699,27 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
           MUSA_ARCHITECTURES: "${{ matrix.musa_arch }}"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_MUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
-            -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s -v
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s -v
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -760,7 +739,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env MUSA_ARCHITECTURES \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
@@ -815,18 +794,18 @@ jobs:
           CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
-          echo "===== BUILD ====="
+          export LD_LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:\${LD_LIBRARY_PATH}"
           source /opt/dtk/env.sh
-          export LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:\${LD_LIBRARY_PATH}"
+          git config --system --add safe.directory '*'
+          echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            -DCMAKE_HIP_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER="hipcc" \
             -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
             -DCMAKE_CXX_COMPILER="hipcc" \
@@ -838,7 +817,6 @@ jobs:
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
           ccache -s
           echo "===== RESULT ====="
@@ -875,6 +853,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
+
   linux-vulkan:
     strategy:
       fail-fast: false
@@ -885,10 +864,10 @@ jobs:
         include:
           - arch: 'amd64'
             version: '1.4'
-            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.4.304-ubuntu22.04'
+            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.4.304-ubuntu22.04-v2'
           - arch: 'amd64'
             version: '1.3'
-            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.3.296-ubuntu22.04'
+            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.3.296-ubuntu22.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -909,13 +888,14 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
         run: |
+          mkdir -p ${{ github.workspace }}/.cache
+          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
           git config --system --add safe.directory '*'
-          mkdir -p ${{ github.workspace }}/.cache
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
@@ -925,9 +905,9 @@ jobs:
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
-          ccache -s -v
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s -v
+          sccache -s
+          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -947,7 +927,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -1020,8 +1000,9 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
-          Write-Host "===== BUILD ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          
+          Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_NATIVE=off `
@@ -1034,6 +1015,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1091,25 +1073,16 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
-      - name: Setup HIP Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: toolbox-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}\.toolbox
       - name: Setup HIP
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          if ( -not (Test-Path -PathType Leaf -Path "${{ github.workspace }}\.toolbox\installer.exe" -ErrorAction Ignore | Out-Null) ) {
-            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
-            New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
-            curl.exe --retry 5 --retry-delay 5 `
-              --output "${{ github.workspace }}\.toolbox\installer.exe" `
-              --url "${{ matrix.distro_binary_installer }}"
-          }
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ github.workspace }}\.toolbox\installer.exe" `
+            --url "${{ matrix.distro_binary_installer }}"
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
@@ -1143,10 +1116,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          
           Write-Host "HIP_PATH=${env:HIP_PATH}"
           
           Write-Host "===== BUILD ====="
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
@@ -1160,6 +1134,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1223,25 +1198,16 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
-      - name: Setup CUDA Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: toolbox-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}\.toolbox
       - name: Setup CUDA
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
-          if ( -not (Test-Path -PathType Leaf -Path "${{ github.workspace }}\.toolbox\installer.exe" -ErrorAction Ignore | Out-Null) ) {
-            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
-            New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
-            curl.exe --retry 5 --retry-delay 5 `
-              --output "${{ github.workspace }}\.toolbox\installer.exe" `
-              --url "${{ matrix.distro_binary_installer }}"
-          }
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ github.workspace }}\.toolbox\installer.exe" `
+            --url "${{ matrix.distro_binary_installer }}"
           
           # https://docs.nvidia.com/cuda/archive/12.4.0/cuda-installation-guide-microsoft-windows/index.html
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
@@ -1276,10 +1242,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
           
           Write-Host "===== BUILD ====="
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
@@ -1289,6 +1256,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1337,25 +1305,16 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
-      - name: Setup oneAPI Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: toolbox-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}\.toolbox
       - name: Setup oneAPI
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          if ( -not (Test-Path -PathType Leaf -Path "${{ github.workspace }}\.toolbox\installer.exe" -ErrorAction Ignore | Out-Null) ) {
-            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download Intel oneAPI SDK"
-            New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
-            curl.exe --retry 5 --retry-delay 5 `
-              --output "${{ github.workspace }}\.toolbox\installer.exe" `
-              --url "${{ matrix.distro_binary_installer }}"
-          }
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download Intel oneAPI SDK"
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ github.workspace }}\.toolbox\installer.exe" `
+            --url "${{ matrix.distro_binary_installer }}"
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install Intel oneAPI SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
@@ -1381,11 +1340,12 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          
           Write-Host "ONEAPI_PATH=${env:ONEAPI_PATH}"
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
           
           Write-Host "===== BUILD ====="
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_SYCL=on -DGGML_SYCL_F16=on `
@@ -1397,6 +1357,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1449,25 +1410,16 @@ jobs:
 
           choco install sccache ninja curl -y
           choco install openssl --version 3.4.1 -y
-      - name: Setup Vulkan Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: toolbox-windows-vulkan-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}\.toolbox
       - name: Setup Vulkan
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
 
-          if ( -not (Test-Path -PathType Leaf -Path "${{ github.workspace }}\.toolbox\installer.exe" -ErrorAction Ignore | Out-Null) ) {
-            Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download LunarG Vulkan SDK"
-            New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
-            curl.exe --retry 5 --retry-delay 5 `
-              --output "${{ github.workspace }}\.toolbox\installer.exe" `
-              --url "${{ matrix.distro_binary_installer }}"
-          }
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download LunarG Vulkan SDK"
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ github.workspace }}\.toolbox\installer.exe" `
+            --url "${{ matrix.distro_binary_installer }}"
           
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install LunarG Vulkan SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
@@ -1495,10 +1447,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
           
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
+          
           Write-Host "VULKAN_SDK=${env:VULKAN_SDK}"
           
           Write-Host "===== BUILD ====="
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           $env:CMAKE_PREFIX_PATH = "${env:VULKAN_SDK}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
@@ -1509,6 +1462,7 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
