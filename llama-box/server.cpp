@@ -763,6 +763,8 @@ struct server_task_queue {
 };
 
 struct server_task_result_queue {
+    bool running = true;
+
     typedef std::function<void(int, int, server_task_result &)> callback_multitask_t;
     callback_multitask_t callback_update_multitask;
 
@@ -817,7 +819,12 @@ struct server_task_result_queue {
     server_task_result recv(const std::unordered_set<int> &id_tasks) {
         while (true) {
             std::unique_lock<std::mutex> lock(mutex_results);
-            condition_results.wait(lock, [&] { return !queue_results.empty(); });
+            condition_results.wait(lock, [&] {
+                if (!running) {
+                    std::terminate(); // we cannot return here since the caller is HTTP code
+                }
+                return !queue_results.empty();
+            });
 
             for (size_t i = 0; i < queue_results.size(); i++) {
                 if (id_tasks.find(queue_results[i].id) != id_tasks.end()) {
@@ -846,6 +853,9 @@ struct server_task_result_queue {
             }
 
             std::cv_status cr_res = condition_results.wait_for(lock, std::chrono::seconds(timeout));
+            if (!running) {
+                std::terminate(); // we cannot return here since the caller is HTTP code
+            }
             if (cr_res == std::cv_status::timeout) {
                 return {};
             }
@@ -872,6 +882,12 @@ struct server_task_result_queue {
                 return;
             }
         }
+    }
+
+    // terminate the waiting loop
+    void terminate() {
+        running = false;
+        condition_results.notify_all();
     }
 };
 
@@ -1380,6 +1396,7 @@ struct server_context {
     void clean(httplib::Server &svr) {
         SRV_INF("%s", "cleaning up before exit...\n");
         svr.stop();
+        queue_results.terminate();
         if (params.lookup_ngram_min > 0 && !llm_params.lookup_cache_dynamic.empty()) {
             common_ngram_cache_save(ngram_cache_dynamic, llm_params.lookup_cache_dynamic);
         }
