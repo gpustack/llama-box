@@ -769,7 +769,7 @@ jobs:
         include:
           - arch: 'amd64'
             version: '24.04'
-            distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04'
+            distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04-v2'
             hip_arch: 'gfx906;gfx926;gfx928'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
@@ -791,7 +791,7 @@ jobs:
             ${{ github.workspace }}/.cache
       - name: Build
         env:
-          CCACHE_DIR: "${{ github.workspace }}/.cache/ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
           mkdir -p ${{ github.workspace }}/.cache
@@ -799,11 +799,12 @@ jobs:
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          export LD_LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:\${LD_LIBRARY_PATH}"
+          export LD_LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:/opt/dtk/llvm/lib/clang/15.0.0/lib/linux/\$(uname -m):\${LD_LIBRARY_PATH}"
           source /opt/dtk/env.sh
           git config --system --add safe.directory '*'
           echo "===== BUILD ====="
           env || true
+          # NB(thxCode): we have to configure cmake twice to make SCCache work.
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="hipcc" \
@@ -817,8 +818,21 @@ jobs:
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_C_COMPILER="clang" \
+            -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_CXX_COMPILER="clang++" \
+            -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_HIP_COMPILER="clang" \
+            -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          ccache -s
+          sccache -s
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -838,7 +852,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
-            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
             --env AMDGPU_TARGETS \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
