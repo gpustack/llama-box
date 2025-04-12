@@ -178,13 +178,15 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
-          path: |
-            ${{ github.workspace }}/.cache
+      # Disable caching in simple tasks.
+      #
+      # - name: Setup Cache
+      #   timeout-minutes: 5
+      #   uses: actions/cache@v4
+      #   with:
+      #     key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
+      #     path: |
+      #      ${{ github.workspace }}/.cache
       - name: Build
         env:
           SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
@@ -977,13 +979,15 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
-          path: |
-            ${{ github.workspace }}\.cache
+      # Disable caching in simple tasks.
+      #
+      # - name: Setup Cache
+      #   timeout-minutes: 5
+      #   uses: actions/cache@v4
+      #  with:
+      #    key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
+      #    path: |
+      #      ${{ github.workspace }}\.cache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
