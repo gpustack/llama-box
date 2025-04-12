@@ -47,7 +47,7 @@ index 20193528..bf1b45cc 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_JINA_BERT_V2,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 9e4166a7..ed2f1832 100644
+index ff847701..baf140cc 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -659,6 +659,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {

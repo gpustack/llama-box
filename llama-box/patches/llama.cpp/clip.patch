@@ -1,17 +1,8 @@
 diff --git a/examples/llava/clip-impl.h b/examples/llava/clip-impl.h
-index 685d6e7e..8eebf7c2 100644
+index 4c035298..5625b111 100644
 --- a/examples/llava/clip-impl.h
 +++ b/examples/llava/clip-impl.h
-@@ -8,6 +8,8 @@
- #include <sstream>
- #include <vector>
- 
-+#include "common/log.h"
-+
- // Internal header for clip.cpp
- 
- #define KEY_FTYPE               "general.file_type"
-@@ -166,18 +168,6 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -186,17 +186,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -26,15 +17,15 @@ index 685d6e7e..8eebf7c2 100644
 -#define LOG_ERR(...) LOG_TMPL(GGML_LOG_LEVEL_ERROR, __VA_ARGS__)
 -#define LOG_DBG(...) LOG_TMPL(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
 -#define LOG_CNT(...) LOG_TMPL(GGML_LOG_LEVEL_CONT,  __VA_ARGS__)
--
++#include "common/log.h"
+ 
  //
- // common utils
- //
+ // cpp wrappers
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 4f21e836..a5a6386e 100644
+index 710309ed..fe5caa7e 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -348,12 +348,16 @@ struct clip_ctx {
+@@ -331,12 +331,16 @@ struct clip_ctx {
  
      struct clip_image_size * load_image_size = nullptr;
  
@@ -51,7 +42,7 @@ index 4f21e836..a5a6386e 100644
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
              backend_ptrs.push_back(backend);
-@@ -1197,6 +1201,19 @@ struct clip_model_loader {
+@@ -1180,6 +1184,19 @@ struct clip_model_loader {
              get_bool(KEY_HAS_QWEN2VL_MERGER, ctx_clip.has_qwen2vl_merger, false);
              // !!! do NOT extend the list above, use KEY_PROJ_TYPE instead
  
@@ -71,7 +62,7 @@ index 4f21e836..a5a6386e 100644
              get_bool(KEY_USE_GELU, ctx_clip.use_gelu, false);
              get_bool(KEY_USE_SILU, ctx_clip.use_silu, false);
  
-@@ -1250,6 +1267,7 @@ struct clip_model_loader {
+@@ -1233,6 +1250,7 @@ struct clip_model_loader {
              LOG_INF("%s: text_encoder:       %d\n", __func__, ctx_clip.has_text_encoder);
              LOG_INF("%s: vision_encoder:     %d\n", __func__, ctx_clip.has_vision_encoder);
              LOG_INF("%s: llava_projector:    %d\n", __func__, ctx_clip.has_llava_projector);
@@ -79,7 +70,7 @@ index 4f21e836..a5a6386e 100644
              LOG_INF("%s: minicpmv_projector: %d\n", __func__, ctx_clip.has_minicpmv_projector);
              LOG_INF("%s: minicpmv_version:   %d\n", __func__, ctx_clip.minicpmv_version);
              LOG_INF("%s: glm_projector:      %d\n", __func__, ctx_clip.has_glm_projector);
-@@ -1491,7 +1509,28 @@ struct clip_model_loader {
+@@ -1474,7 +1492,28 @@ struct clip_model_loader {
          clip_image_f32_batch batch;
          batch.size = 1;
          batch.data = nullptr;
@@ -109,7 +100,7 @@ index 4f21e836..a5a6386e 100644
          ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
          for (size_t i = 0; i < ctx_clip.backend_ptrs.size(); ++i) {
              ggml_backend_t backend = ctx_clip.backend_ptrs[i];
-@@ -2049,7 +2088,6 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2038,7 +2077,6 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
          int idx = 0;
          for (size_t i = 0; i < imgs.size(); ++i) {
              for (size_t j = 0; j < imgs[i].size(); ++j) {
@@ -117,7 +108,7 @@ index 4f21e836..a5a6386e 100644
                  clip_image_f32 * res = clip_image_f32_init();
                  normalize_image_u8_to_f32(imgs[i][j], res, ctx->image_mean, ctx->image_std);
                  res_imgs->data[idx++] = *res;
-@@ -2164,7 +2202,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2153,7 +2191,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
  
              clip_image_u8 *image_original_resize = clip_image_u8_init();
              // bilinear_resize(*img, *image_original_resize, params.image_size, params.image_size); // in python this is "shortest_edge", but all CLIP are square
@@ -126,7 +117,7 @@ index 4f21e836..a5a6386e 100644
              patches.insert(patches.begin(), image_original_resize);
              // clip_image_f32_batch_init(patches.size());
              res_imgs->size = patches.size();
-@@ -2207,48 +2245,8 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
+@@ -2196,48 +2234,8 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, cli
      const int nx3 = int(nx / scale + 0.5f);
      const int ny3 = int(ny / scale + 0.5f);
  
@@ -177,17 +168,8 @@ index 4f21e836..a5a6386e 100644
      clip_image_u8_free(temp);
  
      // {
-@@ -2346,6 +2344,8 @@ int clip_n_patches_by_img(const struct clip_ctx * ctx, struct clip_image_f32 * i
-         int x_patch = img->nx / patch_size + (int)(img->nx % patch_size > 0);
-         int y_patch = img->ny / patch_size + (int)(img->ny % patch_size > 0);
-         n_patches = x_patch * y_patch;
-+    } else if (ctx->proj_type == PROJECTOR_TYPE_GEMMA3) {
-+        n_patches = 256;
-     }
- 
-     return n_patches;
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index 87aa6157..39dc9042 100644
+index f61e0c0b..07d05b23 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -43,6 +43,7 @@ struct clip_image_f32_batch {

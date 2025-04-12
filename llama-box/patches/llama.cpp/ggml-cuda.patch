@@ -23,16 +23,3 @@ index 1405e066..7956d6bb 100644
      scale_f32<<<num_blocks, CUDA_SCALE_BLOCK_SIZE, 0, stream>>>(x, dst, scale, k);
  }
  
-diff --git a/ggml/src/ggml-impl.h b/ggml/src/ggml-impl.h
-index caa6b9db..ca7c07e2 100644
---- a/ggml/src/ggml-impl.h
-+++ b/ggml/src/ggml-impl.h
-@@ -310,7 +310,7 @@ GGML_API void ggml_aligned_free(void * ptr, size_t size);
- // for old CUDA compilers (<= 11), we use uint16_t: ref https://github.com/ggml-org/llama.cpp/pull/10616
- // for     MUSA compilers        , we use uint16_t: ref https://github.com/ggml-org/llama.cpp/pull/11843
- //
--#if defined(__ARM_NEON) && !(defined(__CUDACC__) && __CUDACC_VER_MAJOR__ <= 11) && !defined(__MUSACC__)
-+#if defined(__ARM_NEON) && !(defined(__CUDACC__) && (__CUDACC_VER_MAJOR__ < 12 || (__CUDACC_VER_MAJOR__ == 12 && __CUDACC_VER_MINOR__ <= 4))) && !defined(__MUSACC__)
- 
-     // if YCM cannot find <arm_neon.h>, make a symbolic link to it, for example:
-     //

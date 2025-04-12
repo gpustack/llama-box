@@ -12,7 +12,7 @@ index 37d41179..f312a620 100644
              aclTensor* dequant_tensor = ggml_cann_create_tensor(
                  dequant_buffer_allocator.get(), ACL_FLOAT, sizeof(float_t),
 diff --git a/ggml/src/ggml-cann/ggml-cann.cpp b/ggml/src/ggml-cann/ggml-cann.cpp
-index b513270c..bbee3b96 100644
+index cec36b36..489721ff 100644
 --- a/ggml/src/ggml-cann/ggml-cann.cpp
 +++ b/ggml/src/ggml-cann/ggml-cann.cpp
 @@ -29,6 +29,8 @@

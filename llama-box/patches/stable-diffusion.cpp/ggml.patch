@@ -1,0 +1,41 @@
+diff --git a/common.hpp b/common.hpp
+index 337b4a0..b20c60f 100644
+--- a/common.hpp
++++ b/common.hpp
+@@ -56,7 +56,7 @@ public:
+         // x: [N, channels, h, w]
+         auto conv = std::dynamic_pointer_cast<Conv2d>(blocks["conv"]);
+ 
+-        x = ggml_upscale(ctx, x, 2);  // [N, channels, h*2, w*2]
++        x = ggml_upscale(ctx, x, 2, GGML_SCALE_MODE_NEAREST);  // [N, channels, h*2, w*2]
+         x = conv->forward(ctx, x);    // [N, out_channels, h*2, w*2]
+         return x;
+     }
+diff --git a/esrgan.hpp b/esrgan.hpp
+index 989d15f..5cbb4ad 100644
+--- a/esrgan.hpp
++++ b/esrgan.hpp
+@@ -130,8 +130,8 @@ public:
+         body_feat = conv_body->forward(ctx, body_feat);
+         feat      = ggml_add(ctx, feat, body_feat);
+         // upsample
+-        feat     = lrelu(ctx, conv_up1->forward(ctx, ggml_upscale(ctx, feat, 2)));
+-        feat     = lrelu(ctx, conv_up2->forward(ctx, ggml_upscale(ctx, feat, 2)));
++        feat     = lrelu(ctx, conv_up1->forward(ctx, ggml_upscale(ctx, feat, 2, GGML_SCALE_MODE_NEAREST)));
++        feat     = lrelu(ctx, conv_up2->forward(ctx, ggml_upscale(ctx, feat, 2, GGML_SCALE_MODE_NEAREST)));
+         auto out = conv_last->forward(ctx, lrelu(ctx, conv_hr->forward(ctx, feat)));
+         return out;
+     }
+diff --git a/tae.hpp b/tae.hpp
+index 2314380..b5cf408 100644
+--- a/tae.hpp
++++ b/tae.hpp
+@@ -149,7 +149,7 @@ public:
+                 if (i == 1) {
+                     h = ggml_relu_inplace(ctx, h);
+                 } else {
+-                    h = ggml_upscale(ctx, h, 2);
++                    h = ggml_upscale(ctx, h, 2, GGML_SCALE_MODE_NEAREST);
+                 }
+                 continue;
+             }
