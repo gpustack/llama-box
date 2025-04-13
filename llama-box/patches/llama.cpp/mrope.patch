@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index d4882c51..a912bf6d 100644
+index 94f545f8..6ddf3a0b 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -901,6 +901,11 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -903,6 +903,11 @@ struct common_init_result common_init_from_params(common_params & params) {
  
      auto cparams = common_context_params_to_llama(params);
  

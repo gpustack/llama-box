@@ -1,5 +1,5 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 62ca26ad..14e0c0e4 100644
+index bbc5f087..08207be6 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
 @@ -347,6 +347,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
