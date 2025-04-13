@@ -4020,7 +4020,7 @@ struct server_context {
             std::vector<llama_pos> img_mrope_pos;
             {
                 struct clip_image_size *img_size = clip_get_load_image_size(llm_ctx_clip);
-                const int32_t ps                 = clip_patch_size(llm_ctx_clip) * 2;
+                const int32_t ps                 = clip_get_patch_size(llm_ctx_clip) * 2;
                 const int ph                     = img_size->height / ps + (img_size->height % ps > 0);
                 const int pw                     = img_size->width / ps + (img_size->width % ps > 0);
                 img_mrope_pos.resize(img_embd->n_image_pos * 4);
@@ -5997,7 +5997,8 @@ int main(int argc, char **argv) {
     };
 
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-    struct sigaction sigint_action{};
+    struct sigaction sigint_action {};
+
     sigint_action.sa_handler = signal_handler;
     sigemptyset(&sigint_action.sa_mask);
     sigint_action.sa_flags = 0;

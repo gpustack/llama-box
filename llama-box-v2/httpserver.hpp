@@ -2747,10 +2747,10 @@ struct httpserver {
         }
 
         common_params llm_params = params.llm_params;
-        llm_params.n_parallel = params.llm_params.n_threads_http;
-        llm_init  = common_init_from_params(llm_params);
-        llm_model = llm_init.model.get();
-        llm_ctx   = llm_init.context.get();
+        llm_params.n_parallel    = params.llm_params.n_threads_http;
+        llm_init                 = common_init_from_params(llm_params);
+        llm_model                = llm_init.model.get();
+        llm_ctx                  = llm_init.context.get();
         if (llm_model == nullptr) {
             SRV_ERR("failed to load model, '%s'\n", params.llm_params.model.path.c_str());
             return false;
@@ -3043,7 +3043,8 @@ struct httpserver {
             server->stop();
         };
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-        struct sigaction sigint_action{};
+        struct sigaction sigint_action {};
+
         sigint_action.sa_handler = httpserver_signal_handler;
         sigemptyset(&sigint_action.sa_mask);
         sigint_action.sa_flags = 0;
@@ -3526,7 +3527,7 @@ struct httpserver {
                                     if (clip_is_qwen2vl(llm_ctx_clip)) {
                                         std::vector<llama_pos> mrope_pos;
                                         const int32_t mx = 448;
-                                        const int32_t ps = clip_patch_size(llm_ctx_clip) * 2;
+                                        const int32_t ps = clip_get_patch_size(llm_ctx_clip) * 2;
                                         const int32_t ph = mx / ps + (mx % ps > 0);
                                         const int32_t pw = ph;
                                         mrope_pos.resize(n_image_pos * 4);
