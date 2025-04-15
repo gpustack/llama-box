@@ -1,9 +1,9 @@
 // heads
 
+#include <cerrno>
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
-#include <cerrno>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -36,6 +36,7 @@
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
+#include "llama.cpp/ggml/include/ggml-cpp.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "llama.cpp/ggml/src/ggml-impl.h"
 #ifdef GGML_USE_CUDA
@@ -357,7 +358,8 @@ static std::unique_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
         return nullptr;
     }
 
-    struct sockaddr_in serv_addr{};
+    struct sockaddr_in serv_addr {};
+
     serv_addr.sin_family      = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(host);
     serv_addr.sin_port        = htons(port);
@@ -494,7 +496,8 @@ struct rpcserver_v2 {
             thread_pool->shutdown();
         };
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-        struct sigaction sigint_action{};
+        struct sigaction sigint_action {};
+
         sigint_action.sa_handler = rpcserver_signal_handler;
         sigemptyset(&sigint_action.sa_mask);
         sigint_action.sa_flags = 0;
@@ -526,7 +529,8 @@ struct rpcserver_v2 {
         SRV_INF("listening host = %s, port = %d, capacity_mib = %zu\n", params.hostname.c_str(), params.port, capacity >> 20);
 
         while (true) {
-            struct sockaddr_in cli_addr{};
+            struct sockaddr_in cli_addr {};
+
             socklen_t cli_addr_len = sizeof(cli_addr);
             int sockfd             = accept(svr_socket->fd, (struct sockaddr *)&cli_addr, &cli_addr_len);
             if (sockfd == INVALID_SOCKET) {
@@ -973,13 +977,16 @@ struct rpcserver_v2 {
         memcpy(&offset, input.data() + sizeof(rpc_tensor), sizeof(offset));
         const size_t size = input.size() - sizeof(rpc_tensor) - sizeof(offset);
 
-        struct ggml_init_params gparams{
+        struct ggml_init_params gparams {
             /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+                /*.mem_buffer =*/nullptr,
+                /*.no_alloc   =*/true,
         };
-        struct ggml_context *ctx = ggml_init(gparams);
-        ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
+
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx   = ctx_ptr.get();
+        ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
         // sanitize tensor->data
         {
@@ -989,7 +996,6 @@ struct rpcserver_v2 {
             if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
                 SRV_ERR("out of bound, id = %llu\n", in_tensor->id);
                 delete tensor;
-                ggml_free(ctx);
                 return false;
             }
         }
@@ -1011,7 +1017,6 @@ struct rpcserver_v2 {
             }
         }
         ggml_backend_tensor_set(tensor, data, offset, size);
-        ggml_free(ctx);
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s, "
                 "size = %zu, caching = %d\n",
                 in_tensor->id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type), ggml_op_name((ggml_op)in_tensor->op),
@@ -1036,18 +1041,16 @@ struct rpcserver_v2 {
         if (get_cached_file(*hash, cached_file)) {
             size_t size = cached_file.size();
 
-            struct ggml_init_params gparams{
+            struct ggml_init_params gparams {
                 /*.mem_size   =*/ggml_tensor_overhead(),
-                /*.mem_buffer =*/nullptr,
-                /*.no_alloc   =*/true,
+                    /*.mem_buffer =*/nullptr,
+                    /*.no_alloc   =*/true,
             };
-            struct ggml_context *ctx = ggml_init(gparams);
-            ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
-            if (tensor == nullptr) {
-                SRV_ERR("deserialize cached tensor, id = %llu\n", in_tensor->id);
-                ggml_free(ctx);
-                return false;
-            }
+
+            ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+            GGML_ASSERT(ctx_ptr != nullptr);
+            ggml_context *ctx   = ctx_ptr.get();
+            ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
             // sanitize tensor->data
             {
@@ -1061,14 +1064,12 @@ struct rpcserver_v2 {
                             in_tensor->id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type), ggml_op_name((ggml_op)in_tensor->op),
                             size, tensor->data, offset, *hash);
                     delete tensor;
-                    ggml_free(ctx);
                     return false;
                 }
             }
 
             ggml_backend_tensor_set(tensor, cached_file.data(), offset, size);
             response.result = 1;
-            ggml_free(ctx);
         }
 
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s, "
@@ -1079,13 +1080,16 @@ struct rpcserver_v2 {
     }
 
     bool get_tensor(const rpc_msg_get_tensor_req &request, std::vector<uint8_t> &response) {
-        struct ggml_init_params gparams{
+        struct ggml_init_params gparams {
             /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+                /*.mem_buffer =*/nullptr,
+                /*.no_alloc   =*/true,
         };
-        struct ggml_context *ctx = ggml_init(gparams);
-        ggml_tensor *tensor      = deserialize_tensor(ctx, &request.tensor);
+
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx   = ctx_ptr.get();
+        ggml_tensor *tensor = deserialize_tensor(ctx, &request.tensor);
 
         // sanitize tensor->data
         {
@@ -1096,7 +1100,6 @@ struct rpcserver_v2 {
                 request.tensor.data + request.offset >= p1 ||
                 request.size > (p1 - request.tensor.data - request.offset)) {
                 delete tensor;
-                ggml_free(ctx);
                 SRV_ERR("out of bound, "
                         "id = %llu, name = %s, type = %s, op = %s, "
                         "size = %llu\n",
@@ -1108,7 +1111,6 @@ struct rpcserver_v2 {
 
         response.resize(request.size, 0);
         ggml_backend_tensor_get(tensor, response.data(), request.offset, request.size);
-        ggml_free(ctx);
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s, "
                 "size = %llu\n",
                 request.tensor.id, request.tensor.name, ggml_type_name((ggml_type)request.tensor.type), ggml_op_name((ggml_op)request.tensor.op),
@@ -1117,21 +1119,23 @@ struct rpcserver_v2 {
     }
 
     bool copy_tensor(const rpc_msg_copy_tensor_req &request, rpc_msg_copy_tensor_rsp &response) {
-        struct ggml_init_params gparams{
+        struct ggml_init_params gparams {
             /*.mem_size   =*/2 * ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+                /*.mem_buffer =*/nullptr,
+                /*.no_alloc   =*/true,
         };
-        struct ggml_context *ctx = ggml_init(gparams);
-        ggml_tensor *src         = deserialize_tensor(ctx, &request.src);
-        ggml_tensor *dst         = deserialize_tensor(ctx, &request.dst);
+
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx = ctx_ptr.get();
+        ggml_tensor *src  = deserialize_tensor(ctx, &request.src);
+        ggml_tensor *dst  = deserialize_tensor(ctx, &request.dst);
 
         auto src_size   = (uint64_t)ggml_nbytes(src);
         auto dst_data   = (uint64_t)dst->data;
         auto dst_base   = (uint64_t)ggml_backend_buffer_get_base(dst->buffer);
         auto dst_buf_sz = (uint64_t)ggml_backend_buffer_get_size(dst->buffer);
         if (dst_data + src_size > dst_base + dst_buf_sz) {
-            ggml_free(ctx);
             SRV_ERR("out of bound, "
                     "id = %llu, name = %s, type = %s, op = %s, "
                     "size = %llu, dst_id = %llu, dst_base = %llu, dst_buf_sz = %llu\n",
@@ -1141,7 +1145,6 @@ struct rpcserver_v2 {
         }
 
         response.result = ggml_backend_buffer_copy_tensor(src, dst);
-        ggml_free(ctx);
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s, "
                 "size = %llu, dst_id = %llu, dst_base = %llu, dst_buf_sz = %llu, result = %d\n",
                 request.src.id, request.src.name, ggml_type_name((ggml_type)request.src.type), ggml_op_name((ggml_op)request.src.op),
@@ -1171,13 +1174,17 @@ struct rpcserver_v2 {
         }
         const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
 
-        size_t buf_size                 = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
+        size_t buf_size = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
+
         struct ggml_init_params gparams = {
             /*.mem_size   =*/buf_size,
             /*.mem_buffer =*/nullptr,
             /*.no_alloc   =*/true,
         };
-        struct ggml_context *ctx  = ggml_init(gparams);
+
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx         = ctx_ptr.get();
         struct ggml_cgraph *graph = ggml_new_graph_custom(ctx, n_nodes, false);
         graph->n_nodes            = int32_t(n_nodes);
         std::unordered_map<uint64_t, const rpc_tensor *> tensor_ptrs;
@@ -1191,7 +1198,6 @@ struct rpcserver_v2 {
             graph->nodes[i] = create_node(id, ctx, tensor_ptrs, tensor_map);
         }
         response.result = ggml_backend_graph_compute(backend, graph);
-        ggml_free(ctx);
         SRV_DBG("result = %d\n", response.result);
         return true;
     }
@@ -1204,13 +1210,16 @@ struct rpcserver_v2 {
     }
 
     bool init_tensor(const rpc_msg_init_tensor_req &request) {
-        struct ggml_init_params gparams{
+        struct ggml_init_params gparams {
             /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+                /*.mem_buffer =*/nullptr,
+                /*.no_alloc   =*/true,
         };
-        struct ggml_context *ctx = ggml_init(gparams);
-        ggml_tensor *tensor      = deserialize_tensor(ctx, &request.tensor);
+
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx   = ctx_ptr.get();
+        ggml_tensor *tensor = deserialize_tensor(ctx, &request.tensor);
 
         bool result                  = false;
         ggml_backend_buffer_t buffer = tensor->buffer;
@@ -1225,11 +1234,9 @@ struct rpcserver_v2 {
             // This pointer can either be passed around client/server, or probably better stored server-side and kept track of.
             // Currently unimplemented.
             SRV_ERR("%s", "extra populated by the backend, this is currently unsupported.\n");
-            ggml_free(ctx);
             return false;
         }
 
-        ggml_free(ctx);
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s, "
                 "result = %d\n",
                 request.tensor.id, request.tensor.name, ggml_type_name((ggml_type)request.tensor.type), ggml_op_name((ggml_op)request.tensor.op),
@@ -1239,14 +1246,17 @@ struct rpcserver_v2 {
 
     bool get_alloc_size(const rpc_msg_get_alloc_size_req &request, rpc_msg_get_alloc_size_rsp &response) {
         ggml_backend_buffer_type_t buft;
-        struct ggml_init_params gparams{
+
+        struct ggml_init_params gparams {
             /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+                /*.mem_buffer =*/nullptr,
+                /*.no_alloc   =*/true,
         };
 
-        struct ggml_context *ctx = ggml_init(gparams);
-        ggml_tensor *tensor      = deserialize_tensor(ctx, &request.tensor);
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx   = ctx_ptr.get();
+        ggml_tensor *tensor = deserialize_tensor(ctx, &request.tensor);
         if (tensor->buffer == nullptr) {
             // No buffer allocated.
             buft = ggml_backend_get_default_buffer_type(backend);
@@ -1255,7 +1265,6 @@ struct rpcserver_v2 {
         }
 
         response.alloc_size = ggml_backend_buft_get_alloc_size(buft, tensor);
-        ggml_free(ctx);
         SRV_DBG(
             "id = %llu, name = %s, type = %s, op = %s, "
             "result = %llu\n",
@@ -1280,13 +1289,17 @@ struct rpcserver_v2 {
         const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(uint32_t));
 
         size_t buf_size = ggml_tensor_overhead() * n_tensors;
-        struct ggml_init_params gparams{
+
+        struct ggml_init_params gparams {
             /*.mem_size   =*/buf_size,
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+                /*.mem_buffer =*/nullptr,
+                /*.no_alloc   =*/true,
         };
-        struct ggml_context *ctx = ggml_init(gparams);
-        ggml_tensor *tensor      = deserialize_tensor(ctx, &tensors[n_tensors - 1]);
+
+        ggml_context_ptr ctx_ptr{ggml_init(gparams)};
+        GGML_ASSERT(ctx_ptr != nullptr);
+        ggml_context *ctx   = ctx_ptr.get();
+        ggml_tensor *tensor = deserialize_tensor(ctx, &tensors[n_tensors - 1]);
         for (uint32_t i = 0; i < n_tensors - 1; i++) {
             ggml_tensor *src = deserialize_tensor(ctx, &tensors[i]);
             tensor->src[i]   = src;
@@ -1296,7 +1309,6 @@ struct rpcserver_v2 {
             response.result = backend->device->iface.supports_op(backend->device, tensor);
         }
 
-        ggml_free(ctx);
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s, "
                 "result = %d\n",
                 tensors[n_tensors - 1].id, tensors[n_tensors - 1].name, ggml_type_name((ggml_type)tensors[n_tensors - 1].type), ggml_op_name((ggml_op)tensors[n_tensors - 1].op),

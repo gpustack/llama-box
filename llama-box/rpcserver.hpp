@@ -30,6 +30,7 @@
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
+#include "llama.cpp/ggml/include/ggml-cpp.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "llama.cpp/ggml/src/ggml-impl.h"
 #ifdef GGML_USE_CUDA
@@ -434,13 +435,16 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     memcpy(&offset, input.data() + sizeof(rpc_tensor), sizeof(offset));
     const size_t size = input.size() - sizeof(rpc_tensor) - sizeof(offset);
 
-    struct ggml_init_params params{
+    struct ggml_init_params params {
         /*.mem_size   =*/ggml_tensor_overhead(),
-        /*.mem_buffer =*/nullptr,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/nullptr,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx   = ctx_ptr.get();
+    ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
     // sanitize tensor->data
     {
@@ -450,7 +454,6 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
         if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
             SRV_ERR("%s", "failed: tensor->data out of bounds\n");
             delete tensor;
-            ggml_free(ctx);
             return false;
         }
     }
@@ -472,7 +475,6 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
         }
     }
     ggml_backend_tensor_set(tensor, data, offset, size);
-    ggml_free(ctx);
     SRV_DBG("id = %lu, size = %zu, name = %s, type = %s, caching = %d\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type), caching_status);
     return true;
 }
@@ -498,18 +500,16 @@ bool rpcserver::set_tensor_hash(const std::vector<uint8_t> &input, std::vector<u
     }
     size_t size = cached_file.size();
 
-    struct ggml_init_params params{
+    struct ggml_init_params params {
         /*.mem_size   =*/ggml_tensor_overhead(),
-        /*.mem_buffer =*/NULL,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/NULL,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
-    if (tensor == nullptr) {
-        SRV_ERR("faield to set tensor with hash: faile to deserialize cached tensor: id = %lu\n", in_tensor->id);
-        ggml_free(ctx);
-        return false;
-    }
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx   = ctx_ptr.get();
+    ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
     // sanitize tensor->data
     {
@@ -519,14 +519,12 @@ bool rpcserver::set_tensor_hash(const std::vector<uint8_t> &input, std::vector<u
         if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
             SRV_ERR("failed to set tensor with hash: tensor->data out of bounds: id = %lu, size = %lu, data = %p, offset = %llu, hash = %" PRIx64 "\n", in_tensor->id, size, tensor->data, offset, *hash);
             delete tensor;
-            ggml_free(ctx);
             return false;
         }
     }
 
     ggml_backend_tensor_set(tensor, cached_file.data(), offset, size);
     output[0] = 1;
-    ggml_free(ctx);
     SRV_DBG("id = %lu, size = %zu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     return true;
 }
@@ -543,13 +541,16 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     uint64_t size;
     memcpy(&size, input.data() + sizeof(rpc_tensor) + sizeof(offset), sizeof(size));
 
-    struct ggml_init_params params{
+    struct ggml_init_params params {
         /*.mem_size   =*/ggml_tensor_overhead(),
-        /*.mem_buffer =*/nullptr,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/nullptr,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx   = ctx_ptr.get();
+    ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
     // sanitize tensor->data
     {
@@ -559,7 +560,6 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
         if (in_tensor->data + offset < p0 || in_tensor->data + offset >= p1 || size > (p1 - in_tensor->data - offset)) {
             SRV_ERR("%s", "failed: tensor->data out of bounds\n");
             delete tensor;
-            ggml_free(ctx);
             return false;
         }
     }
@@ -567,7 +567,6 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     // output serialization format: | data (size bytes) |
     output.resize(size, 0);
     ggml_backend_tensor_get(tensor, output.data(), offset, size);
-    ggml_free(ctx);
     SRV_DBG("id = %lu, size = %lu, name = %s, type = %s\n", in_tensor->id, size, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
     return true;
 }
@@ -581,14 +580,17 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     const auto *rpc_src = (const rpc_tensor *)input.data();
     const auto *rpc_dst = (const rpc_tensor *)(input.data() + sizeof(rpc_src));
 
-    struct ggml_init_params params{
+    struct ggml_init_params params {
         /*.mem_size   =*/2 * ggml_tensor_overhead(),
-        /*.mem_buffer =*/nullptr,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/nullptr,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *src         = deserialize_tensor(ctx, rpc_src);
-    ggml_tensor *dst         = deserialize_tensor(ctx, rpc_dst);
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx = ctx_ptr.get();
+    ggml_tensor *src  = deserialize_tensor(ctx, rpc_src);
+    ggml_tensor *dst  = deserialize_tensor(ctx, rpc_dst);
 
     auto src_size   = (uint64_t)ggml_nbytes(src);
     auto dst_data   = (uint64_t)dst->data;
@@ -596,7 +598,6 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     auto dst_buf_sz = (uint64_t)ggml_backend_buffer_get_size(dst->buffer);
     if (dst_data + src_size > dst_base + dst_buf_sz) {
         SRV_ERR("failed: out-of-bounds write, src_size = %lu, dst_base = %lu, dst_buf_sz = %lu\n", src_size, dst_base, dst_buf_sz);
-        ggml_free(ctx);
         return false;
     }
 
@@ -604,7 +605,6 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     // output serialization format: | result (1 byte) |
     output.resize(1, 0);
     output[0] = result;
-    ggml_free(ctx);
     SRV_DBG("src_id = %lu, dst_id = %lu, name = %s, type = %s\n", rpc_src->id, rpc_dst->id, rpc_src->name, ggml_type_name((ggml_type)rpc_dst->type));
     return true;
 }
@@ -638,7 +638,9 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
         /*.mem_buffer =*/nullptr,
         /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx  = ggml_init(params);
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx         = ctx_ptr.get();
     struct ggml_cgraph *graph = ggml_new_graph_custom(ctx, n_nodes, false);
     graph->n_nodes            = int(n_nodes);
     std::unordered_map<uint64_t, const rpc_tensor *> tensor_ptrs;
@@ -652,7 +654,6 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
         ggml_tensor *node = create_node(id, ctx, tensor_ptrs, tensor_map);
         if (node == nullptr) {
             SRV_ERR("%s", "failed: error creating node\n");
-            ggml_free(ctx);
             return false;
         }
         graph->nodes[i] = node;
@@ -661,7 +662,6 @@ bool rpcserver::graph_compute(const std::vector<uint8_t> &input, std::vector<uin
     // output serialization format: | status (1 byte) |
     output.resize(1, 0);
     output[0] = status;
-    ggml_free(ctx);
     SRV_DBG("status = %d\n", status);
     return true;
 }
@@ -684,13 +684,17 @@ bool rpcserver::init_tensor(const std::vector<uint8_t> &input) {
         return false;
     }
     const auto *in_tensor = (const rpc_tensor *)input.data();
-    struct ggml_init_params params{
+
+    struct ggml_init_params params {
         /*.mem_size   =*/ggml_tensor_overhead(),
-        /*.mem_buffer =*/NULL,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/NULL,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx   = ctx_ptr.get();
+    ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
     // Call the backend's buffer_init_tensor function
     ggml_backend_buffer_t buffer = tensor->buffer;
@@ -703,10 +707,8 @@ bool rpcserver::init_tensor(const std::vector<uint8_t> &input) {
         // This pointer can either be passed around client/server, or probably better stored server-side and kept track of.
         // Currently unimplemented.
         SRV_ERR("%s", "failed: tensor->extra populated by the backend, this is currently unsupported.\n");
-        ggml_free(ctx);
         return false;
     }
-    ggml_free(ctx);
     return true;
 }
 
@@ -718,13 +720,17 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
     }
     const auto *in_tensor = (const rpc_tensor *)input.data();
     ggml_backend_buffer_type_t buft;
-    struct ggml_init_params params{
+
+    struct ggml_init_params params {
         /*.mem_size   =*/ggml_tensor_overhead(),
-        /*.mem_buffer =*/NULL,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/NULL,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *tensor      = deserialize_tensor(ctx, in_tensor);
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx   = ctx_ptr.get();
+    ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
 
     if (tensor->buffer == nullptr) {
         // No buffer allocated.
@@ -736,7 +742,6 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
     // output serialization format: | alloc_size (8 bytes) |
     output.resize(sizeof(uint64_t), 0);
     memcpy(output.data(), &alloc_size, sizeof(alloc_size));
-    ggml_free(ctx);
     SRV_DBG("alloc_size = %zu\n", alloc_size);
     return true;
 }
@@ -756,13 +761,17 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
     const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(uint32_t));
 
     size_t buf_size = ggml_tensor_overhead() * n_tensors;
-    struct ggml_init_params params{
+
+    struct ggml_init_params params {
         /*.mem_size   =*/buf_size,
-        /*.mem_buffer =*/NULL,
-        /*.no_alloc   =*/true,
+            /*.mem_buffer =*/NULL,
+            /*.no_alloc   =*/true,
     };
-    struct ggml_context *ctx = ggml_init(params);
-    ggml_tensor *tensor      = deserialize_tensor(ctx, &tensors[n_tensors - 1]);
+
+    ggml_context_ptr ctx_ptr{ggml_init(params)};
+    GGML_ASSERT(ctx_ptr != nullptr);
+    ggml_context *ctx   = ctx_ptr.get();
+    ggml_tensor *tensor = deserialize_tensor(ctx, &tensors[n_tensors - 1]);
     for (uint32_t i = 0; i < n_tensors - 1; i++) {
         ggml_tensor *src = deserialize_tensor(ctx, &tensors[i]);
         tensor->src[i]   = src;
@@ -771,7 +780,6 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
     if (backend->device->iface.supports_op) {
         result = backend->device->iface.supports_op(backend->device, tensor);
     }
-    ggml_free(ctx);
 
     // output serialization format: | alloc_size (8 bytes) |
     output.resize(sizeof(uint8_t), 0);
@@ -1025,7 +1033,7 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
         return nullptr;
     }
 
-    struct sockaddr_in serv_addr{};
+    struct sockaddr_in serv_addr {};
 
     serv_addr.sin_family      = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(host);
@@ -1111,7 +1119,7 @@ static int rpcserver_start(rpcserver_params &params) {
         return 1;
     }
     while (true) {
-        struct sockaddr_in cli_addr{};
+        struct sockaddr_in cli_addr {};
 
         socklen_t cli_addr_len                   = sizeof(cli_addr);
         int cli_socketfd                         = accept(server_socket->fd, (struct sockaddr *)&cli_addr, &cli_addr_len);
