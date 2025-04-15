@@ -131,7 +131,7 @@ LLaMA Box supports the following platforms.
 
 | Backend                                        | OS/Arch                                                | Device Requirement                                                                                                                                                                                                                                                                                                                                                                                               |
 |------------------------------------------------|--------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **NVIDIA CUDA 12.8 (12.8.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `7.0`, `7.5` ,`8.0`, `8.6`, `8.9`, `9.0` or `10.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                          |
+| **NVIDIA CUDA 12.8 (12.8.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `8.0`, `8.6`, `8.9`, `9.0, `10.0` or `12.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                                 |
 | **NVIDIA CUDA 12.4 (12.4.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                    |
 | **NVIDIA CUDA 11.8 (11.8.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5` ,`8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=450.80.02`(linux)/`>=452.39`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                    |
 | **AMD ROCm/HIP 6.2 (6.2.4)**                   | `linux/amd64`<br/> `windows/amd64`                     | LLVM target matches `gfx906 (linux only)`, `gfx908 (linux only)`, `gfx90a (linux only)`, `gfx942 (linux only)`, `gfx1030`, `gfx1031`, `gfx1032`, `gfx1100`, `gfx1101` or `gfx1102`, see <br/>https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.4/reference/system-requirements.html, <br/> https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html. |
@@ -150,22 +150,22 @@ LLaMA Box supports the following platforms.
 
 > [!NOTE]
 >
-> - **"NVIDIA CUDA 12.8"** amd64 releases are built on RockyLinux 8.9 (glibc 2.28).
-> - **"NVIDIA CUDA 12.4/11.8"** amd64 releases are built on CentOS 7 (glibc 2.17), and arm64 releases are built on RockyLinux 8.9 (glibc 2.28).
-> - **"AMD ROCm/HIP 6.2"** amd64 releases are built on CentOS 7 (glibc 2.17).
-> - **"Intel oneAPI 2025.0"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
-> - **"LunarG Vulkan 1.4/1.3"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
-> - **"Huawei Ascend CANN 8.0/8.0.rc3/8.0.rc2"** amd64/arm64 releases are built on Ubuntu 20.04 (glibc 2.31).
+> - **"NVIDIA CUDA 12.8"** Linux amd64 releases are built on RockyLinux 8.9 (glibc 2.28).
+> - **"NVIDIA CUDA 12.4/11.8"** Linux amd64 releases are built on CentOS 7 (glibc 2.17), and Linux arm64 releases are built on RockyLinux 8.9 (glibc 2.28).
+> - **"AMD ROCm/HIP 6.2"** Linux amd64 releases are built on CentOS 7 (glibc 2.17).
+> - **"Intel oneAPI 2025.0"** Linux amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
+> - **"LunarG Vulkan 1.4/1.3"** Linux amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
+> - **"Huawei Ascend CANN 8.0/8.0.rc3/8.0.rc2"** Linux amd64/arm64 releases are built on Ubuntu 20.04 (glibc 2.31).
 >     + Since v0.0.64  (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 8.0.rc2.alpha003.
 >     + Since v0.0.123 (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 0.0.rc2.beta1, and no longer releases the OpenEuler-based archive.
 >     + Since v0.0.127 (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 8.0.0.beta1.
-> - **"Hygon DTK 24.04"** amd64 releases are built on Ubuntu 20.04 (glibc 2.31).
-> - **"Moore Threads MUSA rc3.1"** amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
+> - **"Hygon DTK 24.04"** Linux amd64 releases are built on Ubuntu 20.04 (glibc 2.31).
+> - **"Moore Threads MUSA rc3.1"** Linux amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
 >     + Since v0.0.60  (included), **"Moore Threads MUSA rc3.1"** is backed by Moore Threads MUSA rc3.1.0.
 >     + Since v0.0.118 (included), **"Moore Threads MUSA rc3.1"** is backed by Moore Threads MUSA rc3.1.1.
-> - _"AVX2"_ amd64 releases are built on CentOS 7 (glibc 2.17).
-> - _"Advanced SIMD (NEON)"_ amd64 releases are built on Ubuntu 18.04 (glibc 2.27).
-> - _"AVX512"_ arm64 releases are built on RockyLinux 8.9 (glibc 2.28).
+> - _"AVX2"_ Linux amd64 releases are built on CentOS 7 (glibc 2.17).
+> - _"Advanced SIMD (NEON)"_ Linux arm64 releases are built on Ubuntu 18.04 (glibc 2.27).
+> - _"AVX512"_ Linux amd64 releases are built on RockyLinux 8.9 (glibc 2.28).
 
 ## Examples
 
