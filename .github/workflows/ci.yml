@@ -178,21 +178,20 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      # Disable caching in simple tasks.
-      #
-      # - name: Setup Cache
-      #   timeout-minutes: 5
-      #   uses: actions/cache@v4
-      #   with:
-      #     key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
-      #     path: |
-      #      ${{ github.workspace }}/.cache
+      - name: Setup Cache
+        if: false # Disable caching in simple tasks.
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-linux-${{ matrix.arch }}-${{ matrix.instruction }}
+          path: |
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
         run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
@@ -216,8 +215,6 @@ jobs:
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -225,6 +222,14 @@ jobs:
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -237,6 +242,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
             --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
@@ -251,6 +257,218 @@ jobs:
         with:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}
+
+  linux-cuda:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
+        #     12.8 ==> 12.8.0, RockyLinux 8.
+        #     12.4 ==> 12.4.0, CentOS 7, RockyLinux 8.
+        #     11.8 ==> 11.8.0, CentOS 7, RockyLinux 8.
+        # build fat binary,
+        # see https://developer.nvidia.com/cuda-gpus.
+        include:
+          - arch: 'amd64'
+            version: '12.8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8-v2'
+            cuda_arch: '80-real;86-real;89-real;90-real;100-real;120-real'
+          - arch: 'amd64'
+            version: '12.4'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-centos7-v2'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+          - arch: 'amd64'
+            version: '11.8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-centos7-v2'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+          - arch: 'arm64'
+            version: '12.8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8-v2'
+            cuda_arch: '80-real;86-real;89-real;90-real;100-real;120-real'
+          - arch: 'arm64'
+            version: '12.4'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-rockylinux8-v2'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+          - arch: 'arm64'
+            version: '11.8'
+            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-rockylinux8-v2'
+            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
+    steps:
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
+        with:
+          deep-clean: false
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
+          CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
+        run: |
+          echo "===== SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env CUDA_ARCHITECTURES \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/*.zip
+          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
+
+  linux-musa:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu22.04.
+        #     rc3.1.1 ==> rc3.1.1, Ubuntu 22.04.
+        include:
+          - arch: 'amd64'
+            version: 'rc3.1'
+            distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.1-ubuntu22.04-v2'
+            musa_arch: '21;22;31'
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
+    steps:
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
+        with:
+          deep-clean: false
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
+          MUSA_ARCHITECTURES: "${{ matrix.musa_arch }}"
+        run: |
+          echo "===== SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_MUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
+            -DGGML_NATIVE=off \
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
+            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/build/bin/
+          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env MUSA_ARCHITECTURES \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/*.zip
+          name: llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}
 
   linux-hip:
     strategy:
@@ -287,14 +505,14 @@ jobs:
         with:
           key: cache-linux-hip-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
           AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
@@ -313,8 +531,6 @@ jobs:
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -322,6 +538,14 @@ jobs:
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -334,6 +558,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
             --env SCCACHE_DIR \
             --env AMDGPU_TARGETS \
             --env LLAMA_BOX_BUILD_VERSION \
@@ -350,41 +575,22 @@ jobs:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}
 
-  linux-cuda:
+  linux-dtk:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/nvidia/cuda/tags?page=&page_size=&ordering=&name=devel.
-        #     12.8 ==> 12.8.0, RockyLinux 8.
-        #     12.4 ==> 12.4.0, CentOS 7, RockyLinux 8.
-        #     11.8 ==> 11.8.0, CentOS 7, RockyLinux 8.
+        # see https://sourcefind.cn/#/image/dcu/dtk.
+        #     24.04 ==> 24.04.3, Ubuntu 20.04.
         # build fat binary,
-        # see https://developer.nvidia.com/cuda-gpus.
+        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
+        #     https://llvm.org/docs/AMDGPUUsage.html.
+        # official gpu support list,
+        # see https://download.sourcefind.cn:65024/6/main.
         include:
           - arch: 'amd64'
-            version: '12.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8-v2'
-            cuda_arch: '70-real;75-real;80-real;86-real;89-real;90-real;100'
-          - arch: 'amd64'
-            version: '12.4'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-centos7-v2'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-          - arch: 'amd64'
-            version: '11.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-centos7-v2'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-          - arch: 'arm64'
-            version: '12.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.8.0-rockylinux8-v2'
-            cuda_arch: '70-real;75-real;80-real;86-real;89-real;90-real;100'
-          - arch: 'arm64'
-            version: '12.4'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:12.4.0-rockylinux8-v2'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-          - arch: 'arm64'
-            version: '11.8'
-            distro_container_image: 'gpustack/devel-nvidia-cuda:11.8.0-rockylinux8-v2'
-            cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
+            version: '24.04'
+            distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04-v2'
+            hip_arch: 'gfx906;gfx926;gfx928'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -400,32 +606,38 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-cuda-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-dtk-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
-          CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
+          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
         run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
+          export LD_LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:/opt/dtk/llvm/lib/clang/15.0.0/lib/linux/\$(uname -m):\${LD_LIBRARY_PATH}"
+          source /opt/dtk/env.sh
           git config --system --add safe.directory '*'
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_C_COMPILER="hipcc" \
+            -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_CXX_COMPILER="hipcc" \
+            -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_HIP_COMPILER="clang" \
+            -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -433,6 +645,14 @@ jobs:
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -445,8 +665,9 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
             --env SCCACHE_DIR \
-            --env CUDA_ARCHITECTURES \
+            --env AMDGPU_TARGETS \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -454,98 +675,12 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
-
-  linux-oneapi:
-    strategy:
-      fail-fast: false
-      matrix:
-        # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
-        #     2025.0 ==> 2025.0.0-0, Ubuntu 22.04.
-        include:
-          - arch: 'amd64'
-            version: '2025.0'
-            distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04-v2'
-    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
-    steps:
-      - name: Maximize Root Space
-        uses: gpustack/.github/.github/actions/maximize-root-space@main
-        with:
-          deep-clean: false
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}/.cache
-      - name: Build
-        env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
-        run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
-          echo "===== SCRIPT ====="
-          cat <<EOF > /tmp/entrypoint.sh
-          #!/bin/bash
-          git config --system --add safe.directory '*'
-          echo "===== BUILD ====="
-          env || true
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_SYCL=on -DGGML_SYCL_F16=on \
-            -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
-            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
-          echo "===== RESULT ====="
-          ls -alh ${{ github.workspace }}/build/bin/
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box || true
-          else
-            exit 1
-          fi
-          EOF
-          chmod +x /tmp/entrypoint.sh
-          cat /tmp/entrypoint.sh
-
-          docker run \
-            --rm \
-            --privileged \
-            --platform linux/${{ matrix.arch }} \
-            --volume ${{ github.workspace }}:${{ github.workspace }} \
-            --workdir ${{ github.workspace }} \
-            --env CC=icx \
-            --env CXX=icpx \
-            --env DEBIAN_FRONTEND=noninteractive \
-            --env SCCACHE_DIR \
-            --env LLAMA_BOX_BUILD_VERSION \
-            --volume /tmp/entrypoint.sh:/entrypoint.sh \
-            --entrypoint /entrypoint.sh \
-            ${{ matrix.distro_container_image }}
-
-          echo "===== PACKAGE ====="
-          mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
+          name: llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
 
   linux-cann:
     strategy:
@@ -604,18 +739,19 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
+        if: false # Disable caching in simple tasks.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
           key: cache-linux-cann-${{ matrix.arch }}-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
           path: |
-            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
         run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
@@ -634,8 +770,6 @@ jobs:
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -643,6 +777,14 @@ jobs:
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -655,6 +797,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
             --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
@@ -670,17 +813,16 @@ jobs:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
 
-  linux-musa:
+  linux-oneapi:
     strategy:
       fail-fast: false
       matrix:
-        # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu22.04.
-        #     rc3.1.1 ==> rc3.1.1, Ubuntu 22.04.
+        # see https://hub.docker.com/r/intel/oneapi-basekit/tags?page=&page_size=&ordering=&name=devel.
+        #     2025.0 ==> 2025.0.0-0, Ubuntu 22.04.
         include:
           - arch: 'amd64'
-            version: 'rc3.1'
-            distro_container_image: 'gpustack/devel-mthreads-musa:rc3.1.1-ubuntu22.04-v2'
-            musa_arch: '21;22;31'
+            version: '2025.0'
+            distro_container_image: 'gpustack/devel-intel-oneapi:2025.0.0-0-ubuntu22.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -693,19 +835,19 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
+        if: false # Disable caching in simple tasks.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
-          key: cache-linux-musa-${{ matrix.arch }}-${{ matrix.version }}
+          key: cache-linux-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
-          MUSA_ARCHITECTURES: "${{ matrix.musa_arch }}"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
         run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
@@ -713,15 +855,13 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_MUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
+            -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -729,6 +869,14 @@ jobs:
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -740,9 +888,11 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
+            --env CC=icx \
+            --env CXX=icpx \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
             --env SCCACHE_DIR \
-            --env MUSA_ARCHITECTURES \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
@@ -750,125 +900,12 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}
-
-  linux-dtk:
-    strategy:
-      fail-fast: false
-      matrix:
-        # see https://sourcefind.cn/#/image/dcu/dtk.
-        #     24.04 ==> 24.04.3, Ubuntu 20.04.
-        # build fat binary,
-        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
-        #     https://llvm.org/docs/AMDGPUUsage.html.
-        # official gpu support list,
-        # see https://download.sourcefind.cn:65024/6/main.
-        include:
-          - arch: 'amd64'
-            version: '24.04'
-            distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04-v2'
-            hip_arch: 'gfx906;gfx926;gfx928'
-    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
-    steps:
-      - name: Maximize Root Space
-        uses: gpustack/.github/.github/actions/maximize-root-space@main
-        with:
-          deep-clean: false
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-linux-dtk-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}/.cache
-      - name: Build
-        env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
-          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
-        run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
-          echo "===== SCRIPT ====="
-          cat <<EOF > /tmp/entrypoint.sh
-          #!/bin/bash
-          export LD_LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:/opt/dtk/llvm/lib/clang/15.0.0/lib/linux/\$(uname -m):\${LD_LIBRARY_PATH}"
-          source /opt/dtk/env.sh
-          git config --system --add safe.directory '*'
-          echo "===== BUILD ====="
-          env || true
-          # NB(thxCode): we have to configure cmake twice to make SCCache work.
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            -DCMAKE_C_COMPILER="hipcc" \
-            -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DCMAKE_CXX_COMPILER="hipcc" \
-            -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DCMAKE_HIP_COMPILER="clang" \
-            -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
-            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on
-          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            -DCMAKE_C_COMPILER="clang" \
-            -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DCMAKE_CXX_COMPILER="clang++" \
-            -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DCMAKE_HIP_COMPILER="clang" \
-            -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
-            ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          echo "===== RESULT ====="
-          ls -alh ${{ github.workspace }}/build/bin/
-          if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
-            ldd --version
-            ldd ${{ github.workspace }}/build/bin/llama-box || true
-          else
-            exit 1
-          fi
-          EOF
-          chmod +x /tmp/entrypoint.sh
-          cat /tmp/entrypoint.sh
-
-          docker run \
-            --rm \
-            --privileged \
-            --platform linux/${{ matrix.arch }} \
-            --volume ${{ github.workspace }}:${{ github.workspace }} \
-            --workdir ${{ github.workspace }} \
-            --env DEBIAN_FRONTEND=noninteractive \
-            --env SCCACHE_DIR \
-            --env AMDGPU_TARGETS \
-            --env LLAMA_BOX_BUILD_VERSION \
-            --volume /tmp/entrypoint.sh:/entrypoint.sh \
-            --entrypoint /entrypoint.sh \
-            ${{ matrix.distro_container_image }}
-
-          echo "===== PACKAGE ====="
-          mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          path: ${{ github.workspace }}/out/*.zip
-          name: llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
+          name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
   linux-vulkan:
     strategy:
@@ -896,18 +933,19 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
+        if: false # Disable caching in simple tasks.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
           key: cache-linux-vulkan-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}/.cache/sccache"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
         run: |
-          mkdir -p ${{ github.workspace }}/.cache
-          
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
@@ -922,8 +960,6 @@ jobs:
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(nproc)
-          sccache -s
-          chmod -R a+rwx ${SCCACHE_DIR}
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -931,6 +967,14 @@ jobs:
             ldd ${{ github.workspace }}/build/bin/llama-box || true
           else
             exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
           chmod +x /tmp/entrypoint.sh
@@ -943,6 +987,7 @@ jobs:
             --volume ${{ github.workspace }}:${{ github.workspace }} \
             --workdir ${{ github.workspace }} \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
             --env SCCACHE_DIR \
             --env LLAMA_BOX_BUILD_VERSION \
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
@@ -962,9 +1007,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # AVX2 ==> Windows Server 2022.
-        # AVX512 ==> Windows Server 2022.
-        # NEON ==> Windows Server 2022.
+        # AVX2 ==> Windows Server 2019.
+        # AVX512 ==> Windows Server 2019.
+        # NEON ==> Windows Server 2019.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
@@ -972,22 +1017,22 @@ jobs:
             instruction: 'avx512'
           - arch: 'arm64'
             instruction: 'neon'
-    runs-on: windows-2022
+    runs-on: windows-2019
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      # Disable caching in simple tasks.
-      #
-      # - name: Setup Cache
-      #   timeout-minutes: 5
-      #   uses: actions/cache@v4
-      #  with:
-      #    key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
-      #    path: |
-      #      ${{ github.workspace }}\.cache
+      - name: Setup Cache
+        if: false # Disable caching in simple tasks.
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-windows-${{ matrix.arch }}-${{ matrix.instruction }}
+          path: |
+            ${{ github.workspace }}\.ccache
+            ${{ github.workspace }}\.sccache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
@@ -1013,12 +1058,11 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
+          CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
@@ -1033,7 +1077,6 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
-          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1041,6 +1084,7 @@ jobs:
           } else {
             exit 1
           }
+          sccache -s
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1051,125 +1095,6 @@ jobs:
           path: ${{ github.workspace }}\\out\\*.zip
           name: llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}
 
-  windows-hip:
-    strategy:
-      fail-fast: false
-      matrix:
-        # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
-        #     6.2 ==> 6.2.4, Windows Server 2022.
-        # build fat binary,
-        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
-        #     https://llvm.org/docs/AMDGPUUsage.html.
-        # official gpu support list,
-        # see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html.
-        # might support rocWMMA, try to build it,
-        # see https://github.com/ROCm/rocWMMA/issues/391#issuecomment-2072931720,
-        #     https://github.com/ggml-org/llama.cpp/pull/12230.
-        include:
-          - arch: 'amd64'
-            version: '6.2'
-            distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q4-WinSvr2022-For-HIP.exe'
-            hip_arch: 'gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102'
-    runs-on: windows-2022
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: 'recursive'
-      - name: Setup Cache
-        timeout-minutes: 5
-        uses: actions/cache@v4
-        with:
-          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
-          path: |
-            ${{ github.workspace }}\.cache
-      - name: Deps
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = 'SilentlyContinue'
-
-          choco install sccache ninja curl -y
-          choco install openssl --version 3.4.1 -y
-      - name: Setup HIP
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = 'SilentlyContinue'
-
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
-          curl.exe --retry 5 --retry-delay 5 `
-            --output "${{ github.workspace }}\.toolbox\installer.exe" `
-            --url "${{ matrix.distro_binary_installer }}"
-          
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
-          Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
-            -ArgumentList '-install'
-
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify AMD ROCm HIP SDK"
-          & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
-          
-          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] clone AMD ROCm rocWMMA source"
-          git clone https://github.com/rocm/rocwmma --branch rocm-6.2.4 --depth 1
-
-          $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
-          "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
-          if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
-            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
-              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
-            }
-          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
-            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
-              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
-            }
-          }
-          
-          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Build
-        env:
-          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
-          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = 'SilentlyContinue'
-          
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
-          
-          Write-Host "HIP_PATH=${env:HIP_PATH}"
-          
-          Write-Host "===== BUILD ====="
-          $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
-          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
-          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
-            -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
-            -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
-            -DCMAKE_CXX_FLAGS="-I$($PWD.Path.Replace('\', '/'))/rocwmma/library/include/" `
-            -DGGML_NATIVE=off `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
-            -DGGML_OPENMP=off `
-            -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
-          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
-          sccache -s
-          Write-Host "===== RESULT ====="
-          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
-          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
-            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
-          } else {
-            exit 1
-          }
-
-          Write-Host "===== PACKAGE ====="
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          path: ${{ github.workspace }}\\out\\*.zip
-          name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}
-
   windows-cuda:
     strategy:
       fail-fast: false
@@ -1177,8 +1102,8 @@ jobs:
         # see https://developer.nvidia.com/cuda-12-8-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network,
         #     https://developer.nvidia.com/cuda-12-4-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network,
         #     https://developer.nvidia.com/cuda-11-8-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2019&target_type=exe_network.
-        #     12.8 ==> 12.8.0, Windows Server 2022.
-        #     12.4 ==> 12.4.0, Windows Server 2022.
+        #     12.8 ==> 12.8.0, Windows Server 2019.
+        #     12.4 ==> 12.4.0, Windows Server 2019.
         #     11.8 ==> 11.8.0, Windows Server 2019.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
@@ -1186,7 +1111,7 @@ jobs:
           - arch: 'amd64'
             version: '12.8'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.8.0/network_installers/cuda_12.8.0_windows_network.exe'
-            cuda_arch: '70-real;75-real;80-real;86-real;89-real;90-real;100'
+            cuda_arch: '80-real;86-real;89-real;90-real;100-real;120-real'
           - arch: 'amd64'
             version: '12.4'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.0/network_installers/cuda_12.4.0_windows_network.exe'
@@ -1195,7 +1120,7 @@ jobs:
             version: '11.8'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/11.8.0/network_installers/cuda_11.8.0_windows_network.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-    runs-on: ${{ matrix.version == '11.8' && 'windows-2019' || 'windows-2022' }}
+    runs-on: windows-2019
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1208,7 +1133,8 @@ jobs:
         with:
           key: cache-windows-cuda-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}\.cache
+            ${{ github.workspace }}\.ccache
+            ${{ github.workspace }}\.sccache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
@@ -1254,13 +1180,12 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
+          CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
           CUDA_ARCHITECTURES: "${{ matrix.cuda_arch }}"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
           
@@ -1274,7 +1199,6 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
-          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1282,6 +1206,7 @@ jobs:
           } else {
             exit 1
           }
+          sccache -s
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1292,17 +1217,26 @@ jobs:
           path: ${{ github.workspace }}\\out\\*.zip
           name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
-  windows-oneapi:
+  windows-hip:
     strategy:
       fail-fast: false
       matrix:
-        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=online.
-        #     2025.0 ==> 2025.0.0, Windows Server 2022.
+        # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
+        #     6.2 ==> 6.2.4, Windows Server 2019.
+        # build fat binary,
+        # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
+        #     https://llvm.org/docs/AMDGPUUsage.html.
+        # official gpu support list,
+        # see https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html.
+        # might support rocWMMA, try to build it,
+        # see https://github.com/ROCm/rocWMMA/issues/391#issuecomment-2072931720,
+        #     https://github.com/ggml-org/llama.cpp/pull/12230.
         include:
           - arch: 'amd64'
-            version: '2025.0'
-            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b380d914-366b-4b77-a74a-05e3c38b3514/intel-oneapi-base-toolkit-2025.0.0.882.exe'
-    runs-on: windows-2022
+            version: '6.2'
+            distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q4-WinSvr2022-For-HIP.exe'
+            hip_arch: 'gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102'
+    runs-on: windows-2019
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1313,9 +1247,121 @@ jobs:
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
+          key: cache-windows-hip-${{ matrix.arch }}-${{ matrix.version }}
+          path: |
+            ${{ github.workspace }}\.ccache
+            ${{ github.workspace }}\.sccache
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install sccache ninja curl -y
+          choco install openssl --version 3.4.1 -y
+      - name: Setup HIP
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download AMD ROCm HIP SDK"
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
+          curl.exe --retry 5 --retry-delay 5 `
+            --output "${{ github.workspace }}\.toolbox\installer.exe" `
+            --url "${{ matrix.distro_binary_installer }}"
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
+          Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
+            -ArgumentList '-install'
+
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify AMD ROCm HIP SDK"
+          & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
+          
+          Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] clone AMD ROCm rocWMMA source"
+          git clone https://github.com/rocm/rocwmma --branch rocm-6.2.4 --depth 1
+
+          $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
+          "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+          if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
+          AMDGPU_TARGETS: "${{ matrix.hip_arch }}"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+          
+          Write-Host "HIP_PATH=${env:HIP_PATH}"
+          
+          Write-Host "===== BUILD ====="
+          $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
+            -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
+            -DCMAKE_CXX_FLAGS="-I$($PWD.Path.Replace('\', '/'))/rocwmma/library/include/" `
+            -DGGML_NATIVE=off `
+            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          sccache -s
+
+          Write-Host "===== PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\*.zip
+          name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}
+
+  windows-oneapi:
+    strategy:
+      fail-fast: false
+      matrix:
+        # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=online.
+        #     2025.0 ==> 2025.0.0, Windows Server 2019.
+        include:
+          - arch: 'amd64'
+            version: '2025.0'
+            distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b380d914-366b-4b77-a74a-05e3c38b3514/intel-oneapi-base-toolkit-2025.0.0.882.exe'
+    runs-on: windows-2019
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        if: false # Disable caching in simple tasks.
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
           key: cache-windows-oneapi-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}\.cache
+            ${{ github.workspace }}\.ccache
+            ${{ github.workspace }}\.sccache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
@@ -1353,12 +1399,11 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
+          CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           
           Write-Host "ONEAPI_PATH=${env:ONEAPI_PATH}"
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
@@ -1375,7 +1420,6 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
-          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1383,6 +1427,7 @@ jobs:
           } else {
             exit 1
           }
+          sccache -s
           
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
@@ -1398,8 +1443,8 @@ jobs:
       fail-fast: false
       matrix:
         # see https://vulkan.lunarg.com/sdk/home.
-        #     1.4 ==> 1.4.304.1, Windows Server 2022.
-        #     1.3 ==> 1.3.296.0, Windows Server 2022.
+        #     1.4 ==> 1.4.304.1, Windows Server 2019.
+        #     1.3 ==> 1.3.296.0, Windows Server 2019.
         include:
           - arch: 'amd64'
             version: '1.4'
@@ -1407,7 +1452,7 @@ jobs:
           - arch: 'amd64'
             version: '1.3'
             distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe'
-    runs-on: windows-2022
+    runs-on: windows-2019
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1415,12 +1460,14 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Cache
+        if: false # Disable caching in simple tasks.
         timeout-minutes: 5
         uses: actions/cache@v4
         with:
           key: cache-windows-vulkan-${{ matrix.arch }}-${{ matrix.version }}
           path: |
-            ${{ github.workspace }}\.cache
+           ${{ github.workspace }}\.ccache
+           ${{ github.workspace }}\.sccache
       - name: Deps
         run: |
           $ErrorActionPreference = "Stop"
@@ -1460,12 +1507,11 @@ jobs:
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
-          SCCACHE_DIR: "${{ github.workspace }}\\.cache\\sccache"
+          CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
-          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.cache" -ErrorAction Ignore | Out-Null
           
           Write-Host "VULKAN_SDK=${env:VULKAN_SDK}"
           
@@ -1480,7 +1526,6 @@ jobs:
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
-          sccache -s
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
           if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\build\bin\llama-box.exe") {
@@ -1488,6 +1533,7 @@ jobs:
           } else {
             exit 1
           }
+          sccache -s
 
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
