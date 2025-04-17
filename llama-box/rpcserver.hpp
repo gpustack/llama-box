@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cerrno>
-#include <cstring>
 #include <cinttypes>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -17,6 +17,7 @@
 #endif
 #include <windows.h>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -161,11 +162,18 @@ static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
         if (n < 0) {
             int err = errno;
             if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
-                SRV_WRN("interrupted: bytes_sent = %zu, errno = %d, errmsg = %s, retrying...\n", bytes_sent, err, strerror(err));
+                SRV_WRN("interrupted: data range = [%p, %p), bytes_sent = %zu, bytes_target = %zu,  errno = %d, errmsg = %s, retrying...\n", data, (char *)data + size, bytes_sent, size, err, strerror(err));
                 continue; // try again
             }
             if (err != 0) {
-                SRV_ERR("failed to send data: bytes_sent = %zu, errno = %d, errmsg = %s\n", bytes_sent, err, strerror(err));
+                SRV_ERR("failed to send data: data range = [%p, %p), bytes_sent = %zu, bytes_target = %zu, errno = %d, errmsg = %s\n", data, (char *)data + size, bytes_sent, size, err, strerror(err));
+                int serr           = 0;
+                socklen_t serr_len = sizeof(serr);
+                if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char *)&serr, &serr_len) < 0) {
+                    SRV_ERR("failed to get socket error: errno = %d, errmsg = %s\n", errno, strerror(errno));
+                } else if (serr != 0) {
+                    SRV_ERR("socket has pending error: errno = %d, errmsg = %s\n", serr, strerror(serr));
+                }
             }
             return false;
         }
@@ -181,11 +189,11 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
         if (n <= 0) {
             int err = errno;
             if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
-                SRV_WRN("interrupted: bytes_recv = %zu, errno = %d, errmsg = %s, retrying...\n", bytes_recv, err, strerror(errno));
+                SRV_WRN("interrupted: data range = [%p, %p), bytes_recv = %zu, bytes_target = %zu, errno = %d, errmsg = %s, retrying...\n", data, (char *)data + size, bytes_recv, size, err, strerror(errno));
                 continue; // try again
             }
-            if (err != 0) {
-                SRV_ERR("failed to recv data: bytes_recv = %zu, errno = %d, errmsg = %s\n", bytes_recv, err, strerror(errno));
+            if (err != 0 && err != ESRCH) {
+                SRV_ERR("failed to recv data: data range = [%p, %p), bytes_recv = %zu, bytes_target = %zu, errno = %d, errmsg = %s\n", data, (char *)data + size, bytes_recv, size, err, strerror(errno));
             }
             return false;
         }
@@ -453,10 +461,10 @@ bool rpcserver::set_tensor(const std::vector<uint8_t> &input) {
     memcpy(&offset, input.data() + sizeof(rpc_tensor), sizeof(offset));
     const size_t size = input.size() - sizeof(rpc_tensor) - sizeof(offset);
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/nullptr,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -518,10 +526,10 @@ bool rpcserver::set_tensor_hash(const std::vector<uint8_t> &input, std::vector<u
     }
     size_t size = cached_file.size();
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/NULL,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/NULL,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -559,10 +567,10 @@ bool rpcserver::get_tensor(const std::vector<uint8_t> &input, std::vector<uint8_
     uint64_t size;
     memcpy(&size, input.data() + sizeof(rpc_tensor) + sizeof(offset), sizeof(size));
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/nullptr,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -598,10 +606,10 @@ bool rpcserver::copy_tensor(const std::vector<uint8_t> &input, std::vector<uint8
     const auto *rpc_src = (const rpc_tensor *)input.data();
     const auto *rpc_dst = (const rpc_tensor *)(input.data() + sizeof(rpc_src));
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/2 * ggml_tensor_overhead(),
-            /*.mem_buffer =*/nullptr,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/nullptr,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -703,10 +711,10 @@ bool rpcserver::init_tensor(const std::vector<uint8_t> &input) {
     }
     const auto *in_tensor = (const rpc_tensor *)input.data();
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/NULL,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/NULL,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -739,10 +747,10 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
     const auto *in_tensor = (const rpc_tensor *)input.data();
     ggml_backend_buffer_type_t buft;
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/ggml_tensor_overhead(),
-            /*.mem_buffer =*/NULL,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/NULL,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -780,10 +788,10 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
 
     size_t buf_size = ggml_tensor_overhead() * n_tensors;
 
-    struct ggml_init_params params {
+    struct ggml_init_params params{
         /*.mem_size   =*/buf_size,
-            /*.mem_buffer =*/NULL,
-            /*.no_alloc   =*/true,
+        /*.mem_buffer =*/NULL,
+        /*.no_alloc   =*/true,
     };
 
     ggml_context_ptr ctx_ptr{ggml_init(params)};
@@ -1051,7 +1059,7 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
         return nullptr;
     }
 
-    struct sockaddr_in serv_addr {};
+    struct sockaddr_in serv_addr{};
 
     serv_addr.sin_family      = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(host);
@@ -1137,7 +1145,7 @@ static int rpcserver_start(rpcserver_params &params) {
         return 1;
     }
     while (true) {
-        struct sockaddr_in cli_addr {};
+        struct sockaddr_in cli_addr{};
 
         socklen_t cli_addr_len                   = sizeof(cli_addr);
         int cli_socketfd                         = accept(server_socket->fd, (struct sockaddr *)&cli_addr, &cli_addr_len);
