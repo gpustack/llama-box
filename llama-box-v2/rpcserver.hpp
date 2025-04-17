@@ -245,6 +245,14 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
     while (bytes_recv < size) {
         ssize_t n = recv(sockfd, (char *)data + bytes_recv, size - bytes_recv, 0);
         if (n <= 0) {
+            int err = errno;
+            if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
+                SRV_WRN("interrupted: bytes_recv = %zu, errno = %d, errmsg = %s, retrying...\n", bytes_recv, err, strerror(err));
+                continue; // try again
+            }
+            if (err != 0) {
+                SRV_ERR("failed to recv data: bytes_recv = %zu, errno = %d, errmsg = %s\n", bytes_recv, err, strerror(err));
+            }
             return false;
         }
         bytes_recv += n;
@@ -257,6 +265,14 @@ static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
     while (bytes_sent < size) {
         ssize_t n = send(sockfd, (const char *)data + bytes_sent, size - bytes_sent, 0);
         if (n < 0) {
+            int err = errno;
+            if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
+                SRV_WRN("interrupted: bytes_sent = %zu, errno = %d, errmsg = %s, retrying...\n", bytes_sent, err, strerror(err));
+                continue; // try again
+            }
+            if (err != 0) {
+                SRV_ERR("failed to send data: bytes_sent = %zu, errno = %d, errmsg = %s\n", bytes_sent, err, strerror(err));
+            }
             return false;
         }
         bytes_sent += n;
@@ -267,17 +283,24 @@ static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
 static bool rpc_recv_msg(rpc_sockfd_t sockfd, void *msg, size_t msg_size) {
     uint64_t size;
     if (!rpc_recv_data(sockfd, &size, sizeof(size))) {
+        SRV_ERR("%s", "failed to recv msg size\n");
         return false;
     }
     if (size != msg_size) {
+        SRV_ERR("failed: msg size mismatch, expected %zu, got %llu\n", msg_size, size);
         return false;
     }
-    return rpc_recv_data(sockfd, msg, msg_size);
+    bool ret = rpc_recv_data(sockfd, msg, msg_size);
+    if (!ret) {
+        SRV_ERR("%s", "failed to recv msg data\n");
+    }
+    return ret;
 }
 
 static bool rpc_recv_msg(rpc_sockfd_t sockfd, std::vector<uint8_t> &input) {
     uint64_t size;
     if (!rpc_recv_data(sockfd, &size, sizeof(size))) {
+        SRV_ERR("%s", "failed to recv msg size\n");
         return false;
     }
     try {
@@ -286,14 +309,23 @@ static bool rpc_recv_msg(rpc_sockfd_t sockfd, std::vector<uint8_t> &input) {
         SRV_ERR("failed to allocate input buffer of size %llu\n", size);
         return false;
     }
-    return rpc_recv_data(sockfd, input.data(), size);
+    bool ret = rpc_recv_data(sockfd, input.data(), size);
+    if (!ret) {
+        SRV_ERR("%s", "failed to recv msg data\n");
+    }
+    return ret;
 }
 
 static bool rpc_send_msg(rpc_sockfd_t sockfd, const void *msg, size_t msg_size) {
     if (!rpc_send_data(sockfd, &msg_size, sizeof(msg_size))) {
+        SRV_ERR("%s", "failed to send msg size\n");
         return false;
     }
-    return rpc_send_data(sockfd, msg, msg_size);
+    bool ret = rpc_send_data(sockfd, msg, msg_size);
+    if (!ret) {
+        SRV_ERR("%s", "failed to send msg data\n");
+    }
+    return ret;
 }
 
 static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {

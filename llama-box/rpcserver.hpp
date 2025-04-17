@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cerrno>
+#include <cstring>
 #include <cinttypes>
 #include <cstdio>
 #include <memory>
@@ -157,6 +159,14 @@ static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
     while (bytes_sent < size) {
         ssize_t n = send(sockfd, (const char *)data + bytes_sent, size - bytes_sent, 0);
         if (n < 0) {
+            int err = errno;
+            if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
+                SRV_WRN("interrupted: bytes_sent = %zu, errno = %d, errmsg = %s, retrying...\n", bytes_sent, err, strerror(err));
+                continue; // try again
+            }
+            if (err != 0) {
+                SRV_ERR("failed to send data: bytes_sent = %zu, errno = %d, errmsg = %s\n", bytes_sent, err, strerror(err));
+            }
             return false;
         }
         bytes_sent += n;
@@ -169,6 +179,14 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
     while (bytes_recv < size) {
         ssize_t n = recv(sockfd, (char *)data + bytes_recv, size - bytes_recv, 0);
         if (n <= 0) {
+            int err = errno;
+            if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
+                SRV_WRN("interrupted: bytes_recv = %zu, errno = %d, errmsg = %s, retrying...\n", bytes_recv, err, strerror(errno));
+                continue; // try again
+            }
+            if (err != 0) {
+                SRV_ERR("failed to recv data: bytes_recv = %zu, errno = %d, errmsg = %s\n", bytes_recv, err, strerror(errno));
+            }
             return false;
         }
         bytes_recv += n;
