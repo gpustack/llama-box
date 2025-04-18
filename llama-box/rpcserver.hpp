@@ -1041,6 +1041,11 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
 // RPC server entry point
 
 static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, int port) {
+    if (inet_addr(host) == INADDR_NONE) {
+        SRV_ERR("failed to create server socket, host = %s\n", host);
+        return nullptr;
+    }
+
     int sockfd                               = socket(AF_INET, SOCK_STREAM, 0);
     std::shared_ptr<rpc_socket_t> srv_socket = rpc_socket_create(sockfd);
     if (srv_socket == nullptr) {
@@ -1048,14 +1053,10 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
         return nullptr;
     }
 
-    int flag = 1;
-    int ret  = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&flag, sizeof(int));
+    int reuse = 1;
+    int ret   = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(int));
     if (ret != 0) {
         SRV_ERR("failed to set server socket SO_REUSEADDR, errno = %d\n", ret);
-        return nullptr;
-    }
-    if (inet_addr(host) == INADDR_NONE) {
-        SRV_ERR("failed to create server socket, host = %s\n", host);
         return nullptr;
     }
 
@@ -1155,11 +1156,19 @@ static int rpcserver_start(rpcserver_params &params) {
             continue;
         }
 
-        int flag = 1;
-        int ret  = setsockopt(cli_socketfd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+        int nodelay = 1;
+        int ret     = setsockopt(cli_socketfd, IPPROTO_TCP, TCP_NODELAY, (char *)&nodelay, sizeof(int));
         if (ret != 0) {
-            SRV_ERR("failed to set client socket TCP_NODELAY, errno = %d\n", ret);
-            continue;
+            SRV_WRN("failed to set client socket TCP_NODELAY, errno = %d\n", ret);
+        }
+        int buf_size = 1 << 20; // 1MiB
+        ret          = setsockopt(cli_socketfd, SOL_SOCKET, SO_RCVBUF, (char *)&buf_size, sizeof(int));
+        if (ret != 0) {
+            SRV_WRN("failed to set client socket SO_RCVBUF, buffer_expected = %d, errno = %d, errmsg = %s\n", buf_size, ret, strerror(ret));
+        }
+        ret = setsockopt(cli_socketfd, SOL_SOCKET, SO_SNDBUF, (char *)&buf_size, sizeof(int));
+        if (ret != 0) {
+            SRV_WRN("failed to set client socket SO_SNDBUF, buffer_expected = %d, errno = %d, errmsg = %s\n", buf_size, ret, strerror(ret));
         }
 
         char cli_ip[INET_ADDRSTRLEN];
