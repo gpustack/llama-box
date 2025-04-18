@@ -34,6 +34,7 @@
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
 #include "llama.cpp/ggml/include/ggml-cpp.h"
+#include "llama.cpp/ggml/include/ggml-rpc.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "llama.cpp/ggml/src/ggml-impl.h"
 #ifdef GGML_USE_CUDA
@@ -121,6 +122,7 @@ enum rpc_cmd {
     RPC_CMD_GET_DEVICE_MEMORY,
     RPC_CMD_INIT_TENSOR,
     RPC_CMD_GET_ALLOC_SIZE,
+    RPC_CMD_HELLO,
     RPC_CMD_SUPPORT_OP,
     RPC_CMD_COUNT,
 };
@@ -312,6 +314,7 @@ class rpcserver {
     bool get_device_memory(std::vector<uint8_t> &output);
     bool init_tensor(const std::vector<uint8_t> &input);
     bool get_alloc_size(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
+    bool say_hello(std::vector<uint8_t> &output);
     bool support_op(const std::vector<uint8_t> &input, std::vector<uint8_t> &output);
 
   private:
@@ -772,6 +775,15 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
     return true;
 }
 
+bool rpcserver::say_hello(std::vector<uint8_t> &output) {
+    // output serialization format: | major (8 bytes) | minor (8 bytes) | patch (8 bytes)
+    output.resize(3, 0);
+    output[0] = RPC_PROTO_MAJOR_VERSION;
+    output[1] = RPC_PROTO_MINOR_VERSION;
+    output[2] = RPC_PROTO_PATCH_VERSION;
+    return true;
+}
+
 bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_t> &output) {
     // serialization format: | n_tensors (4 bytes) | tensors (n_tensors * sizeof(rpc_tensor)) |
     if (input.size() < sizeof(uint32_t)) {
@@ -807,8 +819,8 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
         result = backend->device->iface.supports_op(backend->device, tensor);
     }
 
-    // output serialization format: | alloc_size (8 bytes) |
-    output.resize(sizeof(uint8_t), 0);
+    // output serialization format: | result (8 bytes) |
+    output.resize(1, 0);
     output[0] = result;
     SRV_DBG("result = %d\n", result);
     return true;
@@ -904,27 +916,64 @@ ggml_tensor *rpcserver::create_node(uint64_t id, struct ggml_context *ctx, const
 }
 
 static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx, size_t cap, rpc_sockfd_t sockfd) {
+    rpcserver server(bkd, cached, idx, cap);
+
     std::vector<uint8_t> input;
     std::vector<uint8_t> output;
 
-    rpcserver server(bkd, cached, idx, cap);
-    while (true) {
-        // receive command
-        uint8_t cmd;
+    // wait for new command
+    uint8_t cmd;
+    if (!rpc_recv_data(sockfd, &cmd, 1)) {
+        return;
+    }
+    if (cmd >= RPC_CMD_COUNT) {
+        SRV_ERR("unknown command: %d\n", cmd);
+        return;
+    }
+    // receive input size
+    uint64_t input_size;
+    if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
+        return;
+    }
+    try {
+        input.resize(input_size);
+    } catch (const std::bad_alloc &e) {
+        SRV_ERR("cmd %d: failed to allocate input buffer: "
+                "request_b = %lu\n",
+                cmd, input_size);
+        return;
+    }
+
+    // NB(thxCode): compatible with llama-box v0.0.134+.
+    if (cmd == RPC_CMD_HELLO && input_size == 0) {
+        server.say_hello(output);
+        uint64_t output_size = output.size();
+        if (!rpc_send_data(sockfd, &output_size, sizeof(output_size))) {
+            SRV_ERR("cmd %d: failed to send output size, "
+                    "b = %lu\n",
+                    cmd, output_size);
+            return;
+        }
+        if (!rpc_send_data(sockfd, output.data(), output_size)) {
+            SRV_ERR("cmd %d: failed to send output data, "
+                    "b = %lu\n",
+                    cmd, output_size);
+            return;
+        }
+        output.clear();
+
+        // wait for new command
         if (!rpc_recv_data(sockfd, &cmd, 1)) {
-            break;
+            return;
         }
         if (cmd >= RPC_CMD_COUNT) {
             // fail fast if the command is invalid
             SRV_ERR("unknown command: %d\n", cmd);
-            break;
+            return;
         }
-
-        // receive input
-        uint64_t input_size;
+        // receive input size
         if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
-            SRV_ERR("cmd %d: failed to receive input size\n", cmd);
-            break;
+            return;
         }
         try {
             input.resize(input_size);
@@ -932,16 +981,20 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
             SRV_ERR("cmd %d: failed to allocate input buffer: "
                     "request_b = %lu\n",
                     cmd, input_size);
-            break;
+            return;
         }
+    }
+
+    // process other command
+    while (true) {
+        // receive input
         if (!rpc_recv_data(sockfd, input.data(), input_size)) {
             SRV_ERR("cmd %d: failed to receive input data: "
                     "request_b = %lu\n",
                     cmd, input_size);
-            break;
+            return;
         }
 
-        // process command
         bool ok = false;
         try {
             switch (cmd) {
@@ -1001,6 +1054,13 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
                     ok = server.get_alloc_size(input, output);
                     break;
                 }
+                case RPC_CMD_HELLO: {
+                    // NB(thxCode): compatible with llama-box v0.0.116 - v0.0.133.
+                    output.resize(sizeof(uint8_t), 0);
+                    output[0] = true;
+                    ok        = true;
+                    break;
+                }
                 case RPC_CMD_SUPPORT_OP: {
                     ok = server.support_op(input, output);
                     break;
@@ -1032,6 +1092,28 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
             break;
         }
         output.clear();
+
+        // wait for new command
+        if (!rpc_recv_data(sockfd, &cmd, 1)) {
+            break;
+        }
+        if (cmd >= RPC_CMD_COUNT) {
+            SRV_ERR("unknown command: %d\n", cmd);
+            break;
+        }
+        // receive input size
+        if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
+            SRV_ERR("cmd %d: failed to receive input size\n", cmd);
+            break;
+        }
+        try {
+            input.resize(input_size);
+        } catch (const std::bad_alloc &e) {
+            SRV_ERR("cmd %d: failed to allocate input buffer: "
+                    "request_b = %lu\n",
+                    cmd, input_size);
+            break;
+        }
     }
 
     output.clear();
@@ -1127,8 +1209,9 @@ static int rpcserver_start(rpcserver_params &params) {
     }
     total_mem -= params.reserve_memory;
 
-    SRV_INF("listening "
+    SRV_INF("proto v%d.%d.%d, listening "
             "hostname = %s, port = %d, allocatable_mib = %zu, capacity_mib = %zu\n",
+            RPC_PROTO_MAJOR_VERSION, RPC_PROTO_MINOR_VERSION, RPC_PROTO_PATCH_VERSION,
             params.hostname.c_str(), params.port, free_mem >> 20, total_mem >> 20);
 #ifdef _WIN32
     {
@@ -1152,7 +1235,6 @@ static int rpcserver_start(rpcserver_params &params) {
         int cli_socketfd                         = accept(server_socket->fd, (struct sockaddr *)&cli_addr, &cli_addr_len);
         std::shared_ptr<rpc_socket_t> cli_socket = rpc_socket_create(cli_socketfd);
         if (cli_socket == nullptr) {
-            SRV_ERR("%s", "failed to accept client connection\n");
             continue;
         }
 

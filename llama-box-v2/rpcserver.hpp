@@ -38,6 +38,7 @@
 #include "llama.cpp/ggml/include/ggml-alloc.h"
 #include "llama.cpp/ggml/include/ggml-backend.h"
 #include "llama.cpp/ggml/include/ggml-cpp.h"
+#include "llama.cpp/ggml/include/ggml-rpc.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "llama.cpp/ggml/src/ggml-impl.h"
 #ifdef GGML_USE_CUDA
@@ -128,6 +129,7 @@ enum rpc_cmd {
     RPC_CMD_GET_DEVICE_MEMORY,
     RPC_CMD_INIT_TENSOR,
     RPC_CMD_GET_ALLOC_SIZE,
+    RPC_CMD_HELLO,
     RPC_CMD_SUPPORT_OP,
     RPC_CMD_COUNT,
 };
@@ -207,6 +209,12 @@ struct rpc_msg_graph_compute_rsp {
 struct rpc_msg_get_device_memory_rsp {
     uint64_t free_mem;
     uint64_t total_mem;
+};
+
+struct rpc_msg_hello_rsp {
+    uint8_t major;
+    uint8_t minor;
+    uint8_t patch;
 };
 
 struct rpc_msg_support_op_rsp {
@@ -567,7 +575,10 @@ struct rpcserver_v2 {
             SRV_ERR("%s", "failed to create server socket\n");
             return 1;
         }
-        SRV_INF("listening host = %s, port = %d, capacity_mib = %zu\n", params.hostname.c_str(), params.port, capacity >> 20);
+        SRV_INF("proto v%d.%d.%d, "
+                "listening host = %s, port = %d, capacity_mib = %zu\n",
+                RPC_PROTO_MAJOR_VERSION, RPC_PROTO_MINOR_VERSION, RPC_PROTO_PATCH_VERSION,
+                params.hostname.c_str(), params.port, capacity >> 20);
 
         while (true) {
             struct sockaddr_in cli_addr{};
@@ -725,13 +736,35 @@ struct rpcserver_v2 {
     //
 
     void process(rpc_sockfd_t sockfd) {
+        // wait for new command
+        uint8_t cmd;
+        if (!rpc_recv_data(sockfd, &cmd, 1)) {
+            return;
+        }
+        if (cmd != RPC_CMD_HELLO) {
+            SRV_ERR("expected command %d, please update main server\n", RPC_CMD_HELLO);
+            rpc_msg_hello_rsp hello{};
+            say_hello(hello);
+            rpc_send_msg(sockfd, &hello, sizeof(hello)); // send something to trigger main server crash
+            return;
+        }
+
+        if (!rpc_recv_msg(sockfd, nullptr, 0)) {
+            return;
+        }
+        rpc_msg_hello_rsp hello{};
+        say_hello(hello);
+        if (!rpc_send_msg(sockfd, &hello, sizeof(hello))) {
+            return;
+        }
+
+        // process other command
         while (true) {
-            uint8_t cmd;
+            // wait for new command
             if (!rpc_recv_data(sockfd, &cmd, 1)) {
-                break;
+                return;
             }
             if (cmd >= RPC_CMD_COUNT) {
-                // fail fast if the command is invalid
                 SRV_ERR("unknown command: %d\n", cmd);
                 break;
             }
@@ -916,6 +949,10 @@ struct rpcserver_v2 {
                     if (!rpc_send_msg(sockfd, &response, sizeof(response))) {
                         return;
                     }
+                    break;
+                }
+                case RPC_CMD_HELLO: {
+                    // already processed in above
                     break;
                 }
                 case RPC_CMD_SUPPORT_OP: {
@@ -1319,6 +1356,13 @@ struct rpcserver_v2 {
             "result = %llu\n",
             request.tensor.id, request.tensor.name, ggml_type_name((ggml_type)request.tensor.type), ggml_op_name((ggml_op)request.tensor.op),
             response.alloc_size);
+        return true;
+    }
+
+    bool say_hello(rpc_msg_hello_rsp &response) {
+        response.major = RPC_PROTO_MAJOR_VERSION;
+        response.minor = RPC_PROTO_MINOR_VERSION;
+        response.patch = RPC_PROTO_PATCH_VERSION;
         return true;
     }
 
