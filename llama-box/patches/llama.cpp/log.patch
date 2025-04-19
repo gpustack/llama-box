@@ -1,0 +1,78 @@
+diff --git a/common/log.cpp b/common/log.cpp
+index 52b31470..efa5fe6a 100644
+--- a/common/log.cpp
++++ b/common/log.cpp
+@@ -8,6 +8,8 @@
+ #include <sstream>
+ #include <thread>
+ #include <vector>
++#include <iomanip>
++#include <ctime>
+ 
+ int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
+ 
+@@ -19,6 +21,25 @@ static int64_t t_us() {
+     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+ }
+ 
++static std::string t_str() {
++    auto now = std::chrono::system_clock::now();
++    auto now_t = std::chrono::system_clock::to_time_t(now);
++    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000000;
++
++    struct tm local_tm;
++#if defined(_WIN32)
++    localtime_s(&local_tm, &now_t);
++#else
++    localtime_r(&now_t, &local_tm);
++#endif
++
++    std::ostringstream oss;
++    oss << std::put_time(&local_tm, "[%Y-%m-%d %H:%M:%S")
++        << '.' << std::setfill('0') << std::setw(6) << ms.count() << "] ";
++
++    return oss.str();
++}
++
+ // colors
+ enum common_log_col : int {
+     COMMON_LOG_COL_DEFAULT = 0,
+@@ -50,7 +71,7 @@ struct common_log_entry {
+ 
+     bool prefix;
+ 
+-    int64_t timestamp;
++    std::string timestr;
+ 
+     std::vector<char> msg;
+ 
+@@ -74,14 +95,10 @@ struct common_log_entry {
+         }
+ 
+         if (level != GGML_LOG_LEVEL_NONE && level != GGML_LOG_LEVEL_CONT && prefix) {
+-            if (timestamp) {
+-                // [M.s.ms.us]
+-                fprintf(fcur, "%s%d.%02d.%03d.%03d%s ",
++            if (!timestr.empty()) {
++                fprintf(fcur, "%s%s%s",
+                         g_col[COMMON_LOG_COL_BLUE],
+-                        (int) (timestamp / 1000000 / 60),
+-                        (int) (timestamp / 1000000 % 60),
+-                        (int) (timestamp / 1000 % 1000),
+-                        (int) (timestamp % 1000),
++                        timestr.c_str(),
+                         g_col[COMMON_LOG_COL_DEFAULT]);
+             }
+ 
+@@ -202,10 +219,7 @@ public:
+ 
+         entry.level = level;
+         entry.prefix = prefix;
+-        entry.timestamp = 0;
+-        if (timestamps) {
+-            entry.timestamp = t_us() - t_start;
+-        }
++        entry.timestr = t_str();
+         entry.is_end = false;
+ 
+         tail = (tail + 1) % entries.size();
