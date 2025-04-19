@@ -261,6 +261,23 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
             }
             if (err != 0 && err != ESRCH) {
                 SRV_ERR("failed to recv data: data range = [%p, %p), bytes_recv = %zu, bytes_target = %zu, errno = %d, errmsg = %s\n", data, (char *)data + size, bytes_recv, size, err, strerror(errno));
+                int serr           = 0;
+                socklen_t serr_len = sizeof(serr);
+                int ret            = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char *)&serr, &serr_len);
+                if (ret < 0) {
+                    err = errno;
+                    SRV_ERR("failed to get peer socket error: errno = %d, errmsg = %s\n", err, strerror(err));
+                } else if (serr != 0) {
+                    SRV_ERR("peer socket error: errno = %d, errmsg = %s\n", serr, strerror(serr));
+                } else {
+                    struct sockaddr_in sin{};
+                    socklen_t addr_len = sizeof(sin);
+                    ret                = getpeername(sockfd, (struct sockaddr *)&sin, &addr_len);
+                    if (ret < 0) {
+                        err = errno;
+                        SRV_ERR("peer may have been disconnected: errno = %d, errmsg = %s\n", err, strerror(err));
+                    }
+                }
             }
             return false;
         }
@@ -283,10 +300,20 @@ static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
                 SRV_ERR("failed to send data: data range = [%p, %p), bytes_sent = %zu, bytes_target = %zu, errno = %d, errmsg = %s\n", data, (char *)data + size, bytes_sent, size, err, strerror(err));
                 int serr           = 0;
                 socklen_t serr_len = sizeof(serr);
-                if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char *)&serr, &serr_len) < 0) {
-                    SRV_ERR("failed to get socket error: errno = %d, errmsg = %s\n", errno, strerror(errno));
+                int ret            = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char *)&serr, &serr_len);
+                if (ret < 0) {
+                    err = errno;
+                    SRV_ERR("failed to get peer socket error: errno = %d, errmsg = %s\n", err, strerror(err));
                 } else if (serr != 0) {
-                    SRV_ERR("socket has pending error: errno = %d, errmsg = %s\n", serr, strerror(serr));
+                    SRV_ERR("peer socket error: errno = %d, errmsg = %s\n", serr, strerror(serr));
+                } else {
+                    struct sockaddr_in sin{};
+                    socklen_t addr_len = sizeof(sin);
+                    ret                = getpeername(sockfd, (struct sockaddr *)&sin, &addr_len);
+                    if (ret < 0) {
+                        err = errno;
+                        SRV_ERR("peer may have been disconnected: errno = %d, errmsg = %s\n", err, strerror(err));
+                    }
                 }
             }
             return false;
