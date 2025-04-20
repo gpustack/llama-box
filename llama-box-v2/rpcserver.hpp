@@ -512,15 +512,13 @@ struct rpcserver_v2 {
     explicit rpcserver_v2(v2_rpcserver_params &params)
         : params(params) {
         llama_numa_init(params.numa);
-        llama_backend_init();
     }
 
     ~rpcserver_v2() {
-        if (backend != nullptr) {
-            ggml_backend_free(backend);
+        for (ggml_backend_buffer *buffer : buffers) {
+            ggml_backend_buffer_free(buffer);
         }
-
-        llama_backend_free();
+        buffers.clear();
     }
 
     bool load() {
@@ -565,11 +563,29 @@ struct rpcserver_v2 {
         SRV_INF("%s", "starting\n");
 
         std::shared_ptr<httplib::ThreadPool> thread_pool = std::make_shared<httplib::ThreadPool>(cpu_get_num_physical_cores(), 1024);
+        std::unique_ptr<rpc_socket_t> svr_socket         = nullptr;
+        bool svr_socket_established                      = false;
+#ifdef _WIN32
+#define SHUTDOWN_SOCKET                    \
+    if (svr_socket_established) {          \
+        shutdown(svr_socket->fd, SD_BOTH); \
+        closesocket(svr_socket->fd);       \
+        svr_socket_established = false;    \
+    }
+#else
+#define SHUTDOWN_SOCKET                      \
+    if (svr_socket_established) {            \
+        shutdown(svr_socket->fd, SHUT_RDWR); \
+        close(svr_socket->fd);               \
+        svr_socket_established = false;      \
+    }
+#endif
 
         // register shutdown handler
         rpcserver_shutdown_handler = [&](int) {
             SRV_FUNC_INF("start", "%s", "server is stopping\n");
             thread_pool->shutdown();
+            SHUTDOWN_SOCKET;
         };
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
         struct sigaction sigint_action{};
@@ -597,11 +613,12 @@ struct rpcserver_v2 {
             }
         }
 #endif
-        std::unique_ptr<rpc_socket_t> svr_socket = rpcserver_socket_create(params.hostname.c_str(), params.port);
+        svr_socket = rpcserver_socket_create(params.hostname.c_str(), params.port);
         if (svr_socket == nullptr) {
             SRV_ERR("%s", "failed to create server socket\n");
             return 1;
         }
+        svr_socket_established = true;
         SRV_INF("proto v%d.%d.%d, "
                 "listening host = %s, port = %d, capacity_mib = %zu\n",
                 RPC_PROTO_MAJOR_VERSION, RPC_PROTO_MINOR_VERSION, RPC_PROTO_PATCH_VERSION,
@@ -651,6 +668,8 @@ struct rpcserver_v2 {
 #if defined(_WIN32)
         WSACleanup();
 #endif
+
+        SHUTDOWN_SOCKET;
         return 1;
     }
 
@@ -661,13 +680,13 @@ struct rpcserver_v2 {
 
     v2_rpcserver_params params;
     ggml_backend_t backend;
-    const char *cache_dir;
+    const char *cache_dir                             = nullptr;
     int32_t index                                     = 0;
     size_t capacity                                   = 0;
     std::unordered_set<ggml_backend_buffer_t> buffers = {};
 
     bool get_cached_file(uint64_t hash, std::vector<uint8_t> &data) {
-        if (!cache_dir) {
+        if (cache_dir == nullptr) {
             return false;
         }
         char hash_str[17];

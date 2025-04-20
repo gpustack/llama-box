@@ -351,7 +351,7 @@ class rpcserver {
     ggml_tensor *create_node(uint64_t id, struct ggml_context *ctx, const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs, std::unordered_map<uint64_t, struct ggml_tensor *> &tensor_map);
 
     ggml_backend_t backend;
-    const char *cache_dir;
+    const char *cache_dir                             = nullptr;
     int32_t index                                     = 0;
     size_t capacity                                   = 0;
     std::unordered_set<ggml_backend_buffer_t> buffers = {};
@@ -854,7 +854,7 @@ bool rpcserver::support_op(const std::vector<uint8_t> &input, std::vector<uint8_
 }
 
 bool rpcserver::get_cached_file(uint64_t hash, std::vector<uint8_t> &data) {
-    if (!cache_dir) {
+    if (cache_dir == nullptr) {
         return false;
     }
     char hash_str[17];
