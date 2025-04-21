@@ -249,9 +249,12 @@ static uint64_t fnv_hash(const uint8_t *data, size_t len) {
     return hash;
 }
 
-const static size_t MAX_CHUNK = 1 << 20; // 1MiB
+const static size_t MAX_CHUNK = 1 << 23; // 8MiB
 
 static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
+    if (size != 0) {
+        SRV_DBG("receiving data: data range = [%p, %p), bytes_target = %zu\n", data, (char *)data + size, size);
+    }
     size_t bytes_recv = 0;
     while (bytes_recv < size) {
         size_t bytes_chunk = MIN(size - bytes_recv, MAX_CHUNK);
@@ -290,6 +293,9 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
 }
 
 static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
+    if (size != 0) {
+        SRV_DBG("sending data: data range = [%p, %p), bytes_target = %zu\n", data, (char *)data + size, size);
+    }
     size_t bytes_sent = 0;
     while (bytes_sent < size) {
         size_t bytes_chunk = MIN(size - bytes_sent, MAX_CHUNK);
@@ -297,7 +303,7 @@ static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
         if (n < 0) {
             int err = errno;
             if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
-                SRV_WRN("interrupted: data range = [%p, %p), bytes_sent = %zu, bytes_target = %zu,  errno = %d, errmsg = %s, retrying...\n", data, (char *)data + size, bytes_sent, size, err, strerror(err));
+                SRV_WRN("interrupted: data range = [%p, %p), bytes_sent = %zu, bytes_target = %zu, errno = %d, errmsg = %s, retrying...\n", data, (char *)data + size, bytes_sent, size, err, strerror(err));
                 continue; // try again
             }
             if (err != 0) {
@@ -651,15 +657,6 @@ struct rpcserver_v2 {
             int ret     = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *)&nodelay, sizeof(int));
             if (ret != 0) {
                 SRV_FUNC_WRN("loop", "failed to set client socket TCP_NODELAY, errno = %d, errmsg = %s\n", ret, strerror(ret));
-            }
-            int buf_size = 1 << 20; // 1MiB
-            ret          = setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *)&buf_size, sizeof(int));
-            if (ret != 0) {
-                SRV_FUNC_WRN("loop", "failed to set client socket SO_RCVBUF, buffer_expected = %d, errno = %d, errmsg = %s\n", buf_size, ret, strerror(ret));
-            }
-            ret = setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (char *)&buf_size, sizeof(int));
-            if (ret != 0) {
-                SRV_FUNC_WRN("loop", "failed to set client socket SO_SNDBUF, buffer_expected = %d, errno = %d, errmsg = %s\n", buf_size, ret, strerror(ret));
             }
 
             thread_pool->enqueue([this, sockfd, cli_ip, cli_port]() {

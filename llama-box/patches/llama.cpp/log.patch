@@ -1,5 +1,5 @@
 diff --git a/common/log.cpp b/common/log.cpp
-index 52b31470..efa5fe6a 100644
+index 52b31470..6837c8e5 100644
 --- a/common/log.cpp
 +++ b/common/log.cpp
 @@ -8,6 +8,8 @@
