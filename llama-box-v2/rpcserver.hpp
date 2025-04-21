@@ -249,10 +249,13 @@ static uint64_t fnv_hash(const uint8_t *data, size_t len) {
     return hash;
 }
 
+const static size_t MAX_CHUNK = 1 << 20; // 1MiB
+
 static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
     size_t bytes_recv = 0;
     while (bytes_recv < size) {
-        ssize_t n = recv(sockfd, (char *)data + bytes_recv, size - bytes_recv, 0);
+        size_t bytes_chunk = MIN(size - bytes_recv, MAX_CHUNK);
+        ssize_t n          = recv(sockfd, (char *)data + bytes_recv, bytes_chunk, 0);
         if (n <= 0) {
             int err = errno;
             if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
@@ -289,7 +292,8 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
 static bool rpc_send_data(rpc_sockfd_t sockfd, const void *data, size_t size) {
     size_t bytes_sent = 0;
     while (bytes_sent < size) {
-        ssize_t n = send(sockfd, (const char *)data + bytes_sent, size - bytes_sent, 0);
+        size_t bytes_chunk = MIN(size - bytes_sent, MAX_CHUNK);
+        ssize_t n          = send(sockfd, (const char *)data + bytes_sent, bytes_chunk, 0);
         if (n < 0) {
             int err = errno;
             if (err == EINTR || err == EAGAIN || err == EWOULDBLOCK) {
