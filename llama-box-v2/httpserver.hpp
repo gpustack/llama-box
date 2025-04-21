@@ -2818,15 +2818,15 @@ struct httpserver {
             }
         }
 
-        if (!support_completion()) {
-            return true;
-        }
-
-        cache_prompt = params.cache_prompt;
+        cache_prompt = llm_model_casual && params.cache_prompt;
         if (cache_prompt) {
             cache_prompts.resize(params.llm_params.n_threads_http);
         }
         SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : (params.cache_prompt ? "unsupported" : "disabled"));
+
+        if (!support_completion()) {
+            return true;
+        }
 
         // chat template
         {
@@ -3043,7 +3043,7 @@ struct httpserver {
             server->stop();
         };
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-        struct sigaction sigint_action {};
+        struct sigaction sigint_action{};
 
         sigint_action.sa_handler = httpserver_signal_handler;
         sigemptyset(&sigint_action.sa_mask);
@@ -3644,9 +3644,10 @@ struct httpserver {
                     }
 
                     // prepare cache - clean cache
-                    if (llm_model_casual) {
+                    if (cache_prompt) {
                         llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
                         SRV_DBG("rid %s | batching, clean cache, kv cache mask, seq %d = [0, end)", rid.c_str(), seq_id);
+
                         cache_prompt_entry &cache = cache_prompts.at(seq_id);
                         cache.tokens.clear();
                         cache.occupied = false;
@@ -4197,7 +4198,7 @@ struct httpserver {
                         if (llm_ctx_draft != nullptr) {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
-                        SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                        SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
                     }
                     // cache prompt
                     // TODO: support vision cache found
@@ -4219,9 +4220,7 @@ struct httpserver {
             if (decoded != 0) {
                 SRV_ERR("decode in batch, failed to decode, try increasing context size or reducing parallel: result = %d\n", decoded);
                 // clean kv cache
-                if (llm_model_casual) {
-                    llama_kv_self_clear(llm_ctx);
-                }
+                llama_kv_self_clear(llm_ctx);
                 // output
                 for (auto &task_ptr : batch_task_ptrs) {
                     json data = {{"message", "failed to decode, try increasing context size or reducing parallel"}};
@@ -4283,9 +4282,9 @@ struct httpserver {
                         task->n_prefilled, task->n_min_prefilled, task->n_max_prefilled,
                         opened ? "stop" : "closed");
                 // clean kv cache
-                if (llm_model_casual) {
+                if (!cache_prompt) {
                     llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
-                    SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                    SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
                 }
             }
             return;
@@ -5137,6 +5136,7 @@ struct httpserver {
         task->tokenized_inputs                = std::move(tokenized_inputs);
         task->n_prefilling_request            = n_prefilling_request;
         task->req                             = std::move(req);
+        task->t_start_prefill                 = ggml_time_us();
 
         return process(request, response, std::move(task));
     }
@@ -5201,6 +5201,7 @@ struct httpserver {
         task->tokenized_inputs                = std::move(tokenized_inputs);
         task->n_prefilling_request            = n_prefilling_request;
         task->req                             = std::move(req);
+        task->t_start_prefill                 = ggml_time_us();
 
         return process(request, response, std::move(task));
     }
@@ -5226,6 +5227,7 @@ struct httpserver {
             std::unique_ptr<image_edit_req> req = get_image_edit_req(request, response, params);
             task->req                           = std::move(req);
         }
+        task->t_start_forward = ggml_time_us();
 
         return process(request, response, std::move(task));
     }
