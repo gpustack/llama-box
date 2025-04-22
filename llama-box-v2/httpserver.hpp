@@ -2818,6 +2818,7 @@ struct httpserver {
             }
         }
 
+        // prompt cache
         cache_prompt = llm_model_casual && params.cache_prompt;
         if (cache_prompt) {
             cache_prompts.resize(params.llm_params.n_threads_http);
@@ -2827,6 +2828,9 @@ struct httpserver {
         if (!support_completion()) {
             return true;
         }
+
+        // context shift
+        SRV_INF("context shifting %s\n", params.force_context_shift ? "enabled" : (params.llm_params.ctx_shift ? "partial supported" : "disabled"));
 
         // chat template
         {
@@ -3258,6 +3262,9 @@ struct httpserver {
     }
 
     inline void shift_cmpl_task_ctx(completions_task *task) {
+        if (!llama_kv_self_can_shift(llm_ctx)) {
+            return;
+        }
         const std::string rid   = task->get_r_id();
         const int32_t seq_id    = task->get_seq_id();
         const int32_t n_keep    = params.llm_params.n_keep + llama_vocab_get_add_bos(llm_vocab);
@@ -4803,7 +4810,7 @@ struct httpserver {
         }
 
         int32_t n_decoding_budget = 0;
-        if (params.llm_params.ctx_shift && req->max_tokens == -1) {
+        if (req->max_tokens == -1 && params.llm_params.ctx_shift) {
             n_decoding_budget = INT32_MAX;
         } else if (req->max_tokens == -1) {
             n_decoding_budget = n_ctx - n_prefilling_request;
@@ -5044,7 +5051,7 @@ struct httpserver {
         bool tokenized_prompts_include_tools = !req->tools.empty();
 
         int32_t n_decoding_budget = 0;
-        if (params.llm_params.ctx_shift && req->max_tokens == -1) {
+        if (req->max_tokens == -1 && params.llm_params.ctx_shift) {
             n_decoding_budget = INT32_MAX;
         } else if (req->max_tokens == -1) {
             n_decoding_budget = n_ctx - n_prefilling_request;
