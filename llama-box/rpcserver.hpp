@@ -813,11 +813,12 @@ bool rpcserver::get_alloc_size(const std::vector<uint8_t> &input, std::vector<ui
 }
 
 bool rpcserver::say_hello(std::vector<uint8_t> &output) {
-    // output serialization format: | major (8 bytes) | minor (8 bytes) | patch (8 bytes)
-    output.resize(3, 0);
+    // output serialization format: | major (8 bytes) | minor (8 bytes) | patch (8 bytes) | enabled_cache (8 bytes) |
+    output.resize(4, 0);
     output[0] = RPC_PROTO_MAJOR_VERSION;
     output[1] = RPC_PROTO_MINOR_VERSION;
     output[2] = RPC_PROTO_PATCH_VERSION;
+    output[3] = cache_dir != nullptr;
     return true;
 }
 
@@ -967,22 +968,9 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
         SRV_ERR("unknown command: %d\n", cmd);
         return;
     }
-    // receive input size
-    uint64_t input_size;
-    if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
-        return;
-    }
-    try {
-        input.resize(input_size);
-    } catch (const std::bad_alloc &e) {
-        SRV_ERR("cmd %d: failed to allocate input buffer: "
-                "request_b = %lu\n",
-                cmd, input_size);
-        return;
-    }
-
-    // NB(thxCode): compatible with llama-box v0.0.134+.
-    if (cmd == RPC_CMD_HELLO && input_size == 0) {
+    if (cmd != RPC_CMD_HELLO) {
+        // send something to trigger main server crash
+        SRV_ERR("expected command %d, please update main server\n", RPC_CMD_HELLO);
         server.say_hello(output);
         uint64_t output_size = output.size();
         if (!rpc_send_data(sockfd, &output_size, sizeof(output_size))) {
@@ -995,20 +983,14 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
             SRV_ERR("cmd %d: failed to send output data, "
                     "b = %lu\n",
                     cmd, output_size);
-            return;
         }
-        output.clear();
+        return;
+    }
 
-        // wait for new command
-        if (!rpc_recv_data(sockfd, &cmd, 1)) {
-            return;
-        }
-        if (cmd >= RPC_CMD_COUNT) {
-            // fail fast if the command is invalid
-            SRV_ERR("unknown command: %d\n", cmd);
-            return;
-        }
+    // say hello
+    {
         // receive input size
+        uint64_t input_size;
         if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
             return;
         }
@@ -1020,10 +1002,54 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
                     cmd, input_size);
             return;
         }
+        // receive input
+        if (!rpc_recv_data(sockfd, input.data(), input_size)) {
+            SRV_ERR("cmd %d: failed to receive input data: "
+                    "request_b = %lu\n",
+                    cmd, input_size);
+            return;
+        }
+        server.say_hello(output);
+        uint64_t output_size = output.size();
+        if (!rpc_send_data(sockfd, &output_size, sizeof(output_size))) {
+            SRV_ERR("cmd %d: failed to send output size, "
+                    "b = %lu\n",
+                    cmd, output_size);
+            return;
+        }
+        if (!rpc_send_data(sockfd, output.data(), output_size)) {
+            SRV_ERR("cmd %d: failed to send output data, "
+                    "b = %lu\n",
+                    cmd, output_size);
+        }
+        output.clear();
+        input.clear();
     }
 
     // process other command
     while (true) {
+        // wait for new command
+        if (!rpc_recv_data(sockfd, &cmd, 1)) {
+            return;
+        }
+        if (cmd >= RPC_CMD_COUNT) {
+            // fail fast if the command is invalid
+            SRV_ERR("unknown command: %d\n", cmd);
+            return;
+        }
+        // receive input size
+        uint64_t input_size;
+        if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
+            return;
+        }
+        try {
+            input.resize(input_size);
+        } catch (const std::bad_alloc &e) {
+            SRV_ERR("cmd %d: failed to allocate input buffer: "
+                    "request_b = %lu\n",
+                    cmd, input_size);
+            return;
+        }
         // receive input
         if (!rpc_recv_data(sockfd, input.data(), input_size)) {
             SRV_ERR("cmd %d: failed to receive input data: "
@@ -1091,13 +1117,6 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
                     ok = server.get_alloc_size(input, output);
                     break;
                 }
-                case RPC_CMD_HELLO: {
-                    // NB(thxCode): compatible with llama-box v0.0.116 - v0.0.133.
-                    output.resize(sizeof(uint8_t), 0);
-                    output[0] = true;
-                    ok        = true;
-                    break;
-                }
                 case RPC_CMD_SUPPORT_OP: {
                     ok = server.support_op(input, output);
                     break;
@@ -1129,28 +1148,6 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
             break;
         }
         output.clear();
-
-        // wait for new command
-        if (!rpc_recv_data(sockfd, &cmd, 1)) {
-            break;
-        }
-        if (cmd >= RPC_CMD_COUNT) {
-            SRV_ERR("unknown command: %d\n", cmd);
-            break;
-        }
-        // receive input size
-        if (!rpc_recv_data(sockfd, &input_size, sizeof(input_size))) {
-            SRV_ERR("cmd %d: failed to receive input size\n", cmd);
-            break;
-        }
-        try {
-            input.resize(input_size);
-        } catch (const std::bad_alloc &e) {
-            SRV_ERR("cmd %d: failed to allocate input buffer: "
-                    "request_b = %lu\n",
-                    cmd, input_size);
-            break;
-        }
     }
 
     output.clear();

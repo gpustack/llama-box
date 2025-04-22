@@ -215,6 +215,7 @@ struct rpc_msg_hello_rsp {
     uint8_t major;
     uint8_t minor;
     uint8_t patch;
+    bool enabled_cache;
 };
 
 struct rpc_msg_support_op_rsp {
@@ -788,14 +789,20 @@ struct rpcserver_v2 {
         if (!rpc_recv_data(sockfd, &cmd, 1)) {
             return;
         }
+        if (cmd >= RPC_CMD_COUNT) {
+            SRV_ERR("unknown command: %d\n", cmd);
+            return;
+        }
         if (cmd != RPC_CMD_HELLO) {
+            // send something to trigger main server crash
             SRV_ERR("expected command %d, please update main server\n", RPC_CMD_HELLO);
             rpc_msg_hello_rsp hello{};
             say_hello(hello);
-            rpc_send_msg(sockfd, &hello, sizeof(hello)); // send something to trigger main server crash
+            rpc_send_msg(sockfd, &hello, sizeof(hello));
             return;
         }
 
+        // say hello
         if (!rpc_recv_msg(sockfd, nullptr, 0)) {
             return;
         }
@@ -996,10 +1003,6 @@ struct rpcserver_v2 {
                     if (!rpc_send_msg(sockfd, &response, sizeof(response))) {
                         return;
                     }
-                    break;
-                }
-                case RPC_CMD_HELLO: {
-                    // already processed in above
                     break;
                 }
                 case RPC_CMD_SUPPORT_OP: {
@@ -1410,6 +1413,7 @@ struct rpcserver_v2 {
         response.major = RPC_PROTO_MAJOR_VERSION;
         response.minor = RPC_PROTO_MINOR_VERSION;
         response.patch = RPC_PROTO_PATCH_VERSION;
+        response.enabled_cache = cache_dir != nullptr;
         return true;
     }
 
