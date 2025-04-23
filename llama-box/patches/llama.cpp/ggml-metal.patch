@@ -1,21 +1,21 @@
 diff --git a/ggml/include/ggml-metal.h b/ggml/include/ggml-metal.h
-index a6106944..cfb8b0f3 100644
+index a6106944..40ecffea 100644
 --- a/ggml/include/ggml-metal.h
 +++ b/ggml/include/ggml-metal.h
-@@ -61,6 +61,8 @@ GGML_BACKEND_API void ggml_backend_metal_capture_next_compute(ggml_backend_t bac
- 
- GGML_BACKEND_API ggml_backend_reg_t ggml_backend_metal_reg(void);
+@@ -59,6 +59,8 @@ GGML_BACKEND_API bool ggml_backend_metal_supports_family(ggml_backend_t backend,
+ // capture all command buffers committed the next time `ggml_backend_graph_compute` is called
+ GGML_BACKEND_API void ggml_backend_metal_capture_next_compute(ggml_backend_t backend);
  
 +GGML_BACKEND_API void ggml_backend_metal_get_device_memory(ggml_backend_t backend, size_t * free_mem, size_t * total_mem);
 +
+ GGML_BACKEND_API ggml_backend_reg_t ggml_backend_metal_reg(void);
+ 
  #ifdef __cplusplus
- }
- #endif
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 266d8af4..93780c7f 100644
+index d92392ed..9f909390 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -1522,11 +1522,6 @@ static void ggml_metal_encode_node(
+@@ -1786,11 +1786,6 @@ static bool ggml_metal_encode_node(
              } break;
      }
  
@@ -24,10 +24,10 @@ index 266d8af4..93780c7f 100644
 -        GGML_ABORT("unsupported op");
 -    }
 -
+     ggml_metal_mem_pool_clear(mem_pool);
+ 
      const int64_t  ne00 = src0 ? src0->ne[0] : 0;
-     const int64_t  ne01 = src0 ? src0->ne[1] : 0;
-     const int64_t  ne02 = src0 ? src0->ne[2] : 0;
-@@ -2438,7 +2433,21 @@ static void ggml_metal_encode_node(
+@@ -2754,7 +2749,21 @@ static bool ggml_metal_encode_node(
  
                  // find the break-even point where the matrix-matrix kernel becomes more efficient compared
                  // to the matrix-vector kernel
@@ -50,7 +50,7 @@ index 266d8af4..93780c7f 100644
  
                  // first try to use small-batch mat-mv kernels
                  // these should be efficient for BS [2, ~8]
-@@ -2447,20 +2456,8 @@ static void ggml_metal_encode_node(
+@@ -2763,20 +2772,8 @@ static bool ggml_metal_encode_node(
                       (
                        (
                         src0t == GGML_TYPE_F16  || // TODO: helper function
@@ -72,7 +72,7 @@ index 266d8af4..93780c7f 100644
                       )
                      )
                     ) {
-@@ -2472,7 +2469,7 @@ static void ggml_metal_encode_node(
+@@ -2788,7 +2785,7 @@ static bool ggml_metal_encode_node(
                      //       my current hypothesis is that the work grid is not evenly divisible for different nsg
                      //       values and there can be some tail effects when nsg is high. need to confirm this
                      //
@@ -81,7 +81,7 @@ index 266d8af4..93780c7f 100644
                      const int nxpsg  = ne11 < 3 ? 16 : 8; // num threads along row per simdgroup
                      const int nypsg  = 32/nxpsg;          // num threads along col per simdgroup (i.e. a simdgroup processes that many src0 rows at a time)
                      const int r0ptg  = nypsg*nsg;         // num src0 rows per threadgroup
-@@ -3255,7 +3252,7 @@ static void ggml_metal_encode_node(
+@@ -3571,7 +3568,7 @@ static bool ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
@@ -90,12 +90,14 @@ index 266d8af4..93780c7f 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -5476,4 +5473,8 @@ ggml_backend_reg_t ggml_backend_metal_reg(void) {
-     return &g_ggml_backend_metal_reg;
- }
+@@ -5783,6 +5780,10 @@ static ggml_backend_dev_t ggml_backend_metal_reg_device_get(ggml_backend_reg_t r
+     /* .get_proc_address = */ ggml_backend_metal_get_proc_address,
+ };
  
 +void ggml_backend_metal_get_device_memory(ggml_backend_t backend, size_t *free, size_t *total) {
 +    ggml_backend_metal_device_get_memory(backend->device, free, total);
 +}
 +
- GGML_BACKEND_DL_IMPL(ggml_backend_metal_reg)
+ ggml_backend_reg_t ggml_backend_metal_reg(void) {
+     // TODO: make this thread-safe somehow?
+     {
