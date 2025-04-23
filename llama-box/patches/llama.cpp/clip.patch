@@ -1,8 +1,8 @@
 diff --git a/examples/llava/clip-impl.h b/examples/llava/clip-impl.h
-index 180ae988..c6096dd7 100644
+index faa8a9d5..95f10219 100644
 --- a/examples/llava/clip-impl.h
 +++ b/examples/llava/clip-impl.h
-@@ -184,17 +184,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -187,17 +187,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -22,10 +22,10 @@ index 180ae988..c6096dd7 100644
  //
  // cpp wrappers
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 75970615..80256bd2 100644
+index ad39e1bd..0fff3964 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -332,12 +332,16 @@ struct clip_ctx {
+@@ -333,12 +333,16 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
@@ -42,7 +42,7 @@ index 75970615..80256bd2 100644
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
              backend_ptrs.push_back(backend);
-@@ -1174,6 +1178,18 @@ struct clip_model_loader {
+@@ -1214,6 +1218,18 @@ struct clip_model_loader {
              get_bool(KEY_HAS_QWEN2VL_MERGER, ctx_clip.has_qwen2vl_merger, false);
              // !!! do NOT extend the list above, use KEY_PROJ_TYPE instead
  
@@ -61,7 +61,7 @@ index 75970615..80256bd2 100644
              get_bool(KEY_USE_GELU, ctx_clip.use_gelu, false);
              get_bool(KEY_USE_SILU, ctx_clip.use_silu, false);
  
-@@ -1468,15 +1484,29 @@ struct clip_model_loader {
+@@ -1521,15 +1537,29 @@ struct clip_model_loader {
  
          // create a fake batch
          clip_image_f32_batch batch;
@@ -99,7 +99,7 @@ index 75970615..80256bd2 100644
  
          ggml_cgraph * gf = clip_image_build_graph(&ctx_clip, batch, image_size, false);
          ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
-@@ -1999,7 +2029,7 @@ struct llava_uhd {
+@@ -2052,7 +2082,7 @@ struct llava_uhd {
  
          // resize to overview size
          clip_image_u8_ptr resized_img(clip_image_u8_init());
@@ -108,8 +108,19 @@ index 75970615..80256bd2 100644
          output.push_back(std::move(resized_img));
          if (inst.slices.empty()) {
              // no slices, just return the resized image
+@@ -2900,6 +2930,10 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+     return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
+ }
+ 
++bool clip_is_smolvlm(const struct clip_ctx * ctx) {
++    return ctx->proj_type == PROJECTOR_TYPE_IDEFICS3;
++}
++
+ // Determine the number of encoder layers to iterate over
+ int get_deepest_feature_layer(const struct clip_ctx * ctx) {
+     // Get the index of the second to last layer; this is the
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index 5fc45d3e..4da06b3e 100644
+index 5fc45d3e..5afa6271 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
@@ -120,6 +131,14 @@ index 5fc45d3e..4da06b3e 100644
  };
  
  // deprecated, use clip_init
+@@ -113,6 +114,7 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
+ CLIP_API bool clip_is_qwen2vl(const struct clip_ctx * ctx);
+ CLIP_API bool clip_is_llava(const struct clip_ctx * ctx);
+ CLIP_API bool clip_is_gemma3(const struct clip_ctx * ctx);
++CLIP_API bool clip_is_smolvlm(const struct clip_ctx * ctx);
+ 
+ CLIP_API int get_deepest_feature_layer(const struct clip_ctx * ctx);
+ 
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
 index 03a22cbb..1fa988ca 100644
 --- a/examples/llava/llava.cpp

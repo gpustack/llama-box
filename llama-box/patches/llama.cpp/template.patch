@@ -1,5 +1,5 @@
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index f62850ca..f12c7ce0 100644
+index 41f89e3a..4fc4b6aa 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -58,6 +58,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
@@ -12,7 +12,7 @@ index f62850ca..f12c7ce0 100644
      { "megrez",            LLM_CHAT_TEMPLATE_MEGREZ            },
      { "yandex",            LLM_CHAT_TEMPLATE_YANDEX            },
      { "bailing",           LLM_CHAT_TEMPLATE_BAILING           },
-@@ -171,6 +174,8 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -174,6 +177,8 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
          return LLM_CHAT_TEMPLATE_GRANITE;
      } else if (tmpl_contains("message['role'] + additional_special_tokens[0] + message['content'] + additional_special_tokens[1]")) {
          return LLM_CHAT_TEMPLATE_GIGACHAT;
@@ -21,7 +21,7 @@ index f62850ca..f12c7ce0 100644
      } else if (tmpl_contains("<|role_start|>")) {
          return LLM_CHAT_TEMPLATE_MEGREZ;
      } else if (tmpl_contains(" Ассистент:")) {
-@@ -568,6 +573,61 @@ int32_t llm_chat_apply_template(
+@@ -571,6 +576,61 @@ int32_t llm_chat_apply_template(
          if (add_ass) {
              ss << "assistant<|role_sep|>";
          }
@@ -84,7 +84,7 @@ index f62850ca..f12c7ce0 100644
          // Megrez template
          for (auto message : chat) {
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index 34537ca2..092b9084 100644
+index dc30df71..c20ca666 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -37,6 +37,9 @@ enum llm_chat_template {
