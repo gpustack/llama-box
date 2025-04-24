@@ -47,11 +47,12 @@ version, which we believe will not be long.
         - [x] LLaVA Series (w/ `--chat-tempalte llava` or `--chat-template llava-mistral`)
         - [x] MiniCPM VL Series
         - [x] Qwen2 VL Series
-            + Before v0.0.123 (included), only the CUDA backend can offload the projector model.
-            + Since v0.0.124, both the CUDA and Metal backends can offload the projector model.
         - [x] GLM-Edge-V Series (w/ `--chat-template llava`)
         - [x] Granite VL Series
         - [x] Gemma3 VL Series
+        - [x] SmolVLM Series
+        - [x] Pixtral Series
+        - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
@@ -66,6 +67,7 @@ version, which we believe will not be long.
         - [x] CommandR Series (w/ `--jinja`)
         - [x] FunctionaryV3 Series (w/ `--jinja`)
         - [x] DeepSeekR1 Series (w/ `--jinja`, experimental)
+        - [x] ...
 - Compatible with [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings).
 - Compatible with [OpenAI Images API](https://platform.openai.com/docs/api-reference/images),
   see our [Image Collection](https://huggingface.co/collections/gpustack/image-672dafeb2fa0d02dbe2539a9).
@@ -131,7 +133,7 @@ LLaMA Box supports the following platforms.
 
 | Backend                                        | OS/Arch                                                | Device Requirement                                                                                                                                                                                                                                                                                                                                                                                               |
 |------------------------------------------------|--------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **NVIDIA CUDA 12.8 (12.8.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5`, `8.0`, `8.6`, `8.9`, `9.0, `10.0`, `10.1` or `12.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                             |
+| **NVIDIA CUDA 12.8 (12.8.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5`, `8.0`, `8.6`, `8.9`, `9.0`, `10.0`, `10.1` or `12.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                            |
 | **NVIDIA CUDA 12.4 (12.4.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5`, `8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=525.60.13`(linux)/`>=528.33`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                    |
 | **NVIDIA CUDA 11.8 (11.8.0)**                  | `linux/amd64`<br/> `linux/arm64`<br/> `windows/amd64`  | Compute capability matches `6.0`, `6.1`, `7.0`, `7.5`, `8.0`, `8.6`, `8.9` or `9.0`, see <br/>https://developer.nvidia.com/cuda-gpus. <br/>Driver version requires `>=450.80.02`(linux)/`>=452.39`(windows), see <br/>https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#id4.                                                                                                                    |
 | **AMD ROCm/HIP 6.2 (6.2.4)**                   | `linux/amd64`<br/> `windows/amd64`                     | LLVM target matches `gfx906 (linux only)`, `gfx908 (linux only)`, `gfx90a (linux only)`, `gfx942 (linux only)`, `gfx1030`, `gfx1031`, `gfx1032`, `gfx1100`, `gfx1101` or `gfx1102`, see <br/>https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.4/reference/system-requirements.html, <br/> https://rocm.docs.amd.com/projects/install-on-windows/en/docs-6.2.4/reference/system-requirements.html. |
@@ -420,7 +422,7 @@ server/completion:
                                   Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template BUILTIN  Set built-in chat template (default: analyze from model's metadata)
                                   Only built-in templates are accepted, implicit reset --jinja setting
-                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, vicuna, vicuna-orca, yandex, zephyr
+                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
          --jinja                  Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)
          --chat-template-file FILE
                                   Set jinja chat template (default: take from model's metadata)
@@ -612,6 +614,7 @@ rpc-server:
          --rpc-server-main-gpu N  The GPU VRAM to use for the RPC server (default: 0, -1 = disabled, use RAM)
          --rpc-server-reserve-memory MEM
                                   Reserve memory in MiB (default: 0)
+         --rpc-server-threads N   Number of threads for the CPU backend (default: according to OS)
          --rpc-server-cache       Enable local file cache (default: disabled)
          --rpc-server-cache-dir PATH
                                   Path to store large tensors (default: according to OS)

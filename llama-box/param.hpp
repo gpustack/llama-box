@@ -448,6 +448,7 @@ static void llama_box_params_print_usage(int, char **argv, const llama_box_param
     opts.push_back({ "rpc-server",                         "       --rpc-server-port PORT",                 "Port to RPC server listen (default: %d, 0 = disabled)", rpc_params.port });
     opts.push_back({ "rpc-server",                         "       --rpc-server-main-gpu N",                "The GPU VRAM to use for the RPC server (default: %d, -1 = disabled, use RAM)", rpc_params.main_gpu });
     opts.push_back({ "rpc-server",                         "       --rpc-server-reserve-memory MEM",        "Reserve memory in MiB (default: %zu)", rpc_params.reserve_memory });
+    opts.push_back({ "rpc-server",                         "       --rpc-server-threads N",                 "Number of threads for the CPU backend (default: according to OS)" });
     opts.push_back({ "rpc-server",                         "       --rpc-server-cache",                     "Enable local file cache (default: %s)", rpc_params.use_cache ? "enabled" : "disabled" });
     opts.push_back({ "rpc-server",                         "       --rpc-server-cache-dir PATH",            "Path to store large tensors (default: according to OS)" });
     // rpc-server //
@@ -2135,6 +2136,15 @@ static bool llama_box_params_parse(int argc, char **argv, llama_box_params &para
                 }
                 char *arg                         = argv[i++];
                 params_.rpc_params.reserve_memory = std::stoul(std::string(arg)) << 20;
+                continue;
+            }
+
+            if (!strcmp(flag, "--rpc-server-threads")) {
+                if (i == argc) {
+                    missing("--rpc-server-threads");
+                }
+                char *arg                    = argv[i++];
+                params_.rpc_params.n_threads = std::stoi(std::string(arg));
                 continue;
             }
 

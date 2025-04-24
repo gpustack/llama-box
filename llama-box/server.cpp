@@ -1070,6 +1070,9 @@ struct server_context {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.path.c_str());
                 return false;
             }
+            if (!clip_is_qwen2vl(llm_ctx_clip)) {
+                params.max_image_size = 0; // disable image size check
+            }
         }
 
         // load the draft model if needed
@@ -4123,7 +4126,6 @@ struct server_context {
             return true;
         }
 
-        // NB(thxCode): clip_is_gemma3 is a patch.
         if (clip_is_gemma3(llm_ctx_clip)) {
             if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|start_of_image|>"), false)) {
                 return false;
@@ -4135,6 +4137,33 @@ struct server_context {
             }
             llama_set_causal_attn(llm_ctx, true);
             if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|end_of_image|>"), false)) {
+                return false;
+            }
+            return true;
+        }
+
+        // NB(thxCode): clip_is_smolvlm is a patch.
+        if (clip_is_smolvlm(llm_ctx_clip)) {
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<fake_token_around_image><global-img>"), false)) {
+                return false;
+            }
+            if (!llava_decode_img_embd(img_embd)) {
+                SLT_ERR(slot, "%s", "failed to decode image");
+                return false;
+            }
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<fake_token_around_image>"), false)) {
+                return false;
+            }
+            return true;
+        }
+
+        // NB(thxCode): clip_is_pixtral is a patch.
+        if (clip_is_pixtral(llm_ctx_clip)) {
+            if (!llava_decode_img_embd(img_embd)) {
+                SLT_ERR(slot, "%s", "failed to decode image");
+                return false;
+            }
+            if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("[IMG_END]"), false)) {
                 return false;
             }
             return true;

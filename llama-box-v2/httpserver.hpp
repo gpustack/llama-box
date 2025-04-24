@@ -893,7 +893,7 @@ static inline std::unique_ptr<clip_image_u8_c> get_clip_image(std::vector<uint8_
     std::unique_ptr<clip_image_u8_c> img = std::make_unique<clip_image_u8_c>();
 
     int32_t m = std::max(w, h);
-    if (max_image_size < 0 || m <= max_image_size) {
+    if (max_image_size <= 0 || m <= max_image_size) {
         img->nx       = w;
         img->ny       = h;
         img->buf_data = dt;
@@ -2719,6 +2719,9 @@ struct httpserver {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
                 return false;
             }
+            if (!clip_is_qwen2vl(llm_ctx_clip)) {
+                params.max_image_size = 0; // disable image size check
+            }
         }
 
         // load the draft model if needed
@@ -3553,7 +3556,6 @@ struct httpserver {
                                         task->pos += ph;
                                     }
                                     // Gemma3
-                                    // NB(thxCode): clip_is_gemma3 is a patch.
                                     else if (clip_is_gemma3(llm_ctx_clip)) {
                                         llava_image_embed_batch_wrapper batch_image = llava_image_embed_batch_wrapper(tokenized_image->embed, n_image_pos, task->pos, seq_id);
                                         // decode immediately
@@ -4208,8 +4210,7 @@ struct httpserver {
                         SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
                     }
                     // cache prompt
-                    // TODO: support vision cache found
-                    else if (!task->tokenized_prompts_include_images) {
+                    else {
                         cache_prompt_entry &cache = cache_prompts.at(seq_id);
                         cache.tokens              = std::move(task->processed_tokens);
                         cache.occupied            = false;
@@ -5009,7 +5010,6 @@ struct httpserver {
                     }
                 }
                 // gemma3
-                // NB(thxCode): clip_is_gemma3 is a patch.
                 else if (clip_is_gemma3(llm_ctx_clip)) {
                     // <|start_of_image|>
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|start_of_image|>", /* add_special= */ add_bos, /* parse_special= */ true);
@@ -5020,6 +5020,32 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(image_embed));
                     // <|end_of_image|>
                     tokenized_text = common_tokenize(llm_vocab, "<|end_of_image|>", /* add_special= */ false, /* parse_special= */ true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                }
+                // smolvlm
+                // NB(thxCode): clip_is_smolvlm is a patch.
+                else if (clip_is_smolvlm(llm_ctx_clip)) {
+                    // <fake_token_around_image><global-img>
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image><global-img>", /* add_special= */ add_bos, /* parse_special= */ true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    add_bos = false;
+                    // <--IMAGE-->
+                    tokenized_prompts.emplace_back(std::move(image_embed));
+                    // <fake_token_around_image>
+                    tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image>", /* add_special= */ false, /* parse_special= */ true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                }
+                // pixtral
+                // NB(thxCode): clip_is_pixtral is a patch.
+                else if (clip_is_pixtral(llm_ctx_clip)) {
+                    add_bos = false;
+                    // <--IMAGE-->
+                    tokenized_prompts.emplace_back(std::move(image_embed));
+                    // [IMG_END]
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "[IMG_END]", /* add_special= */ false, /* parse_special= */ true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                 }

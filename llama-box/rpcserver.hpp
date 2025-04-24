@@ -241,9 +241,19 @@ static bool rpc_recv_data(rpc_sockfd_t sockfd, void *data, size_t size) {
     return true;
 }
 
-static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
-    ggml_backend_t backend = nullptr;
+struct rpcserver_params {
+    std::string hostname  = "0.0.0.0";
+    int port              = 0;
+    int32_t main_gpu      = 0;
+    size_t reserve_memory = 0;
+    int n_threads         = -1;
+    bool use_cache        = false;
+    std::string cache_dir;
+};
 
+static ggml_backend_t rpcserver_create_backend(rpcserver_params &params) {
+    ggml_backend_t backend = nullptr;
+    int32_t gpu            = params.main_gpu;
 #ifdef GGML_USE_CUDA
     SRV_INF("using CUDA backend, gpu: %d\n", gpu);
     backend = ggml_backend_cuda_init(gpu);
@@ -280,7 +290,7 @@ static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     if (!backend) {
         SRV_INF("%s", "fallback, using CPU backend\n");
         backend = ggml_backend_cpu_init();
-        gpu     = -1;
+        ggml_backend_cpu_set_n_threads(backend, params.n_threads);
     }
     return backend;
 }
@@ -1193,26 +1203,21 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
     return srv_socket;
 }
 
-struct rpcserver_params {
-    std::string hostname  = "0.0.0.0";
-    int port              = 0;
-    int32_t main_gpu      = 0;
-    size_t reserve_memory = 0;
-    bool use_cache        = false;
-    std::string cache_dir;
-};
-
 static int rpcserver_start(rpcserver_params &params) {
 #if defined(GGML_USE_METAL)
     // NB(thxCode): disable residency set for Metal backend to avoid memory leak.
     setenv("GGML_METAL_NO_RESIDENCY", "1", 1);
 #endif
+    if (params.n_threads <= 0) {
+        params.n_threads = cpu_get_num_math();
+    }
     ggml_backend_t backend;
     if (params.main_gpu < 0) {
         SRV_INF("%s", "using CPU backend\n");
         backend = ggml_backend_cpu_init();
+        ggml_backend_cpu_set_n_threads(backend, params.n_threads);
     } else {
-        backend = rpcserver_create_backend(params.main_gpu);
+        backend = rpcserver_create_backend(params);
     }
     if (!backend) {
         SRV_ERR("%s", "failed to create backend\n");

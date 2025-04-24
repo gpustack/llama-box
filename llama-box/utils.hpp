@@ -980,7 +980,11 @@ static json oaicompat_completions_request(const struct common_params &params, co
     }
 
     // Handle "max_tokens" field
-    llama_params["n_predict"] = json_value(body, "max_tokens", -1);
+    if (body.contains("max_completion_tokens")) {
+        llama_params["n_predict"] = json_value(body, "max_completion_tokens", -1);
+    } else {
+        llama_params["n_predict"] = json_value(body, "max_tokens", -1);
+    }
 
     // Handle "n" field
     int n_choices = json_value(body, "n", 1);

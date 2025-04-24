@@ -229,6 +229,7 @@ struct v2_rpcserver_params {
     int port              = 0;
     int32_t main_gpu      = 0;
     size_t reserve_memory = 0;
+    int n_threads         = -1;
     bool use_cache        = false;
     std::string cache_dir;
 
@@ -382,9 +383,9 @@ static bool rpc_send_msg(rpc_sockfd_t sockfd, const void *msg, size_t msg_size) 
     return ret;
 }
 
-static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
+static ggml_backend_t rpcserver_create_backend(v2_rpcserver_params &params) {
     ggml_backend_t backend = nullptr;
-
+    int32_t gpu            = params.main_gpu;
 #ifdef GGML_USE_CUDA
     SRV_INF("using CUDA backend, gpu: %d\n", gpu);
     backend = ggml_backend_cuda_init(gpu);
@@ -421,7 +422,7 @@ static ggml_backend_t rpcserver_create_backend(int32_t &gpu) {
     if (!backend) {
         SRV_INF("%s", "fallback, using CPU backend\n");
         backend = ggml_backend_cpu_init();
-        gpu     = -1;
+        ggml_backend_cpu_set_n_threads(backend, params.n_threads);
     }
     return backend;
 }
@@ -533,12 +534,17 @@ struct rpcserver_v2 {
     }
 
     bool load() {
+        if (params.n_threads <= 0) {
+            params.n_threads = cpu_get_num_math();
+        }
+
         if (params.main_gpu < 0) {
             SRV_INF("%s", "using CPU backend\n");
             backend = ggml_backend_cpu_init();
+            ggml_backend_cpu_set_n_threads(backend, params.n_threads);
         } else {
             SRV_INF("%s", "using GPU backend\n");
-            backend = rpcserver_create_backend(params.main_gpu);
+            backend = rpcserver_create_backend(params);
         }
         if (!backend) {
             SRV_ERR("%s", "failed to create backend\n");
@@ -1410,9 +1416,9 @@ struct rpcserver_v2 {
     }
 
     bool say_hello(rpc_msg_hello_rsp &response) {
-        response.major = RPC_PROTO_MAJOR_VERSION;
-        response.minor = RPC_PROTO_MINOR_VERSION;
-        response.patch = RPC_PROTO_PATCH_VERSION;
+        response.major         = RPC_PROTO_MAJOR_VERSION;
+        response.minor         = RPC_PROTO_MINOR_VERSION;
+        response.patch         = RPC_PROTO_PATCH_VERSION;
         response.enabled_cache = cache_dir != nullptr;
         return true;
     }
