@@ -1,8 +1,8 @@
 diff --git a/examples/llava/clip-impl.h b/examples/llava/clip-impl.h
-index faa8a9d5..95f10219 100644
+index 8d310fb0..7a902840 100644
 --- a/examples/llava/clip-impl.h
 +++ b/examples/llava/clip-impl.h
-@@ -187,17 +187,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -191,17 +191,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -22,10 +22,10 @@ index faa8a9d5..95f10219 100644
  //
  // cpp wrappers
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index ad39e1bd..0fff3964 100644
+index 4eec4a26..8ed5c99e 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -333,12 +333,16 @@ struct clip_ctx {
+@@ -344,11 +344,14 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
@@ -36,13 +36,11 @@ index ad39e1bd..0fff3964 100644
          backend     = ctx_params.use_gpu
                          ? ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr)
                          : nullptr;
- 
 +        max_image_size = ctx_params.max_image_size;
-+
+ 
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-             backend_ptrs.push_back(backend);
-@@ -1214,6 +1218,18 @@ struct clip_model_loader {
+@@ -1441,6 +1444,18 @@ struct clip_model_loader {
              get_bool(KEY_HAS_QWEN2VL_MERGER, ctx_clip.has_qwen2vl_merger, false);
              // !!! do NOT extend the list above, use KEY_PROJ_TYPE instead
  
@@ -61,24 +59,23 @@ index ad39e1bd..0fff3964 100644
              get_bool(KEY_USE_GELU, ctx_clip.use_gelu, false);
              get_bool(KEY_USE_SILU, ctx_clip.use_silu, false);
  
-@@ -1521,15 +1537,29 @@ struct clip_model_loader {
+@@ -1771,14 +1786,28 @@ struct clip_model_loader {
  
          // create a fake batch
          clip_image_f32_batch batch;
 -        clip_image_f32_ptr img(clip_image_f32_init());
          clip_image_size image_size;
--        image_size.width  = clip_get_image_size(&ctx_clip);
--        image_size.height = clip_get_image_size(&ctx_clip);
--        int n_patches = clip_get_image_size(&ctx_clip) / image_size.width;
--        img->nx = n_patches;
--        img->ny = n_patches;
--        img->buf.resize(n_patches * image_size.width * image_size.height * 3);
+-        image_size.width  = ctx_clip.vision_model.hparams.image_size;
+-        image_size.height = ctx_clip.vision_model.hparams.image_size;
+-        img->nx = image_size.width;
+-        img->ny = image_size.height;
+-        img->buf.resize(image_size.width * image_size.height * 3);
 -        batch.entries.push_back(std::move(img));
 +        if (ctx_clip.max_image_size > 0) {
 +            clip_image_u8 * img = new clip_image_u8();
 +            img->nx = ctx_clip.max_image_size;
 +            img->ny = ctx_clip.max_image_size;
-+            img->buf.resize(3 * ctx_clip.max_image_size * ctx_clip.max_image_size);
++            img->buf.resize(ctx_clip.max_image_size * ctx_clip.max_image_size * 3);
 +            bool processed = clip_image_preprocess(&ctx_clip, img, &batch);
 +            clip_image_u8_free(img);
 +            if (!processed) {
@@ -88,18 +85,17 @@ index ad39e1bd..0fff3964 100644
 +            image_size.height = batch.entries[0]->ny;
 +        } else {
 +            clip_image_f32_ptr img(clip_image_f32_init());
-+            image_size.width  = clip_get_image_size(&ctx_clip);
-+            image_size.height = clip_get_image_size(&ctx_clip);
-+            int n_patches = clip_get_image_size(&ctx_clip) / image_size.width;
-+            img->nx = n_patches;
-+            img->ny = n_patches;
-+            img->buf.resize(n_patches * image_size.width * image_size.height * 3);
++            image_size.width  = ctx_clip.vision_model.hparams.image_size;
++            image_size.height = ctx_clip.vision_model.hparams.image_size;
++            img->nx = image_size.width;
++            img->ny = image_size.height;
++            img->buf.resize(image_size.width * image_size.height * 3);
 +            batch.entries.push_back(std::move(img));
 +        }
  
          ggml_cgraph * gf = clip_image_build_graph(&ctx_clip, batch, image_size, false);
          ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
-@@ -2052,7 +2082,7 @@ struct llava_uhd {
+@@ -2321,7 +2350,7 @@ struct llava_uhd {
  
          // resize to overview size
          clip_image_u8_ptr resized_img(clip_image_u8_init());
@@ -108,7 +104,7 @@ index ad39e1bd..0fff3964 100644
          output.push_back(std::move(resized_img));
          if (inst.slices.empty()) {
              // no slices, just return the resized image
-@@ -2900,6 +2930,10 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3205,6 +3234,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -116,11 +112,15 @@ index ad39e1bd..0fff3964 100644
 +    return ctx->proj_type == PROJECTOR_TYPE_IDEFICS3;
 +}
 +
++bool clip_is_pixtral(const struct clip_ctx * ctx) {
++    return ctx->proj_type == PROJECTOR_TYPE_PIXTRAL;
++}
++
  // Determine the number of encoder layers to iterate over
  int get_deepest_feature_layer(const struct clip_ctx * ctx) {
      // Get the index of the second to last layer; this is the
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index 5fc45d3e..5afa6271 100644
+index 5fc45d3e..be1ae9c8 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
@@ -131,16 +131,17 @@ index 5fc45d3e..5afa6271 100644
  };
  
  // deprecated, use clip_init
-@@ -113,6 +114,7 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
+@@ -113,6 +114,8 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_qwen2vl(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_llava(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_gemma3(const struct clip_ctx * ctx);
 +CLIP_API bool clip_is_smolvlm(const struct clip_ctx * ctx);
++CLIP_API bool clip_is_pixtral(const struct clip_ctx * ctx);
  
  CLIP_API int get_deepest_feature_layer(const struct clip_ctx * ctx);
  
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index 03a22cbb..1fa988ca 100644
+index 03a22cbb..a4f48e61 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -12,17 +12,7 @@
@@ -198,7 +199,7 @@ index 03a22cbb..1fa988ca 100644
          struct clip_image_size * load_image_size = clip_image_size_init();
          load_image_size->width  = clip_image_f32_batch_nx(img_res_v.get(), 0);
          load_image_size->height = clip_image_f32_batch_ny(img_res_v.get(), 0);
-@@ -339,8 +325,13 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -339,17 +325,24 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
              LOG_ERR("Unable to encode image \n");
              return false;
          }
@@ -206,23 +207,27 @@ index 03a22cbb..1fa988ca 100644
 +        const int64_t t_img_enc_steop_batch_us = ggml_time_us();
 +        LOG_INF("%s: step 1 of 1 encoded in %8.2f ms\n", __func__, (t_img_enc_steop_batch_us - t_img_enc_step_start_us) / 1000.0);
      }
-     else if (strcmp(mm_patch_merge_type, "spatial_unpad") != 0) {
+-    else if (strcmp(mm_patch_merge_type, "spatial_unpad") != 0) {
++    else if (strcmp(mm_patch_merge_type, "spatial_unpad") != 0 || clip_is_smolvlm(ctx_clip) || clip_is_pixtral(ctx_clip)) {
 +        const int64_t t_img_enc_step_start_us = ggml_time_us();
 +
          // flat / default llava-1.5 type embedding
-         *n_img_pos = clip_n_patches(ctx_clip);
+-        *n_img_pos = clip_n_patches(ctx_clip);
          clip_image_f32 * img_res = clip_image_f32_get_img(img_res_v.get(), 0);
-@@ -350,6 +341,9 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
- 
+         bool encoded = clip_image_encode(ctx_clip, n_threads, img_res, image_embd); // image_embd shape is 576 x 4096
+         if (!encoded) {
+             LOG_ERR("Unable to encode image\n");
+-
              return false;
          }
++        *n_img_pos = clip_n_patches_by_img(ctx_clip, img_res);
 +
 +        const int64_t t_img_enc_steop_batch_us = ggml_time_us();
 +        LOG_INF("%s: step 1 of 1 encoded in %8.2f ms\n", __func__, (t_img_enc_steop_batch_us - t_img_enc_step_start_us) / 1000.0);
      }
      else {
          // spatial_unpad llava-1.6 type embedding
-@@ -357,6 +351,8 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -357,6 +350,8 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
          std::vector<float *> image_embd_v;
          image_embd_v.resize(n_imgs);
          for (size_t i = 0; i < n_imgs; i++) {
@@ -231,7 +236,7 @@ index 03a22cbb..1fa988ca 100644
              clip_image_f32 * img_res = clip_image_f32_get_img(img_res_v.get(), i);
              image_embd_v[i] = (float *)malloc(clip_embd_nbytes(ctx_clip)); // 576 patches * 4096 embeddings * 4 bytes = 9437184
              const bool encoded = clip_image_encode(ctx_clip, n_threads, img_res, image_embd_v[i]); // image data is in 3x336x336 format and will be converted to 336x336x3 inside
-@@ -364,9 +360,10 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -364,9 +359,10 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
                  LOG_ERR("Unable to encode image - spatial_unpad - subimage %d of %d\n", (int) i+1, (int) n_imgs);
                  return false;
              }
@@ -244,7 +249,7 @@ index 03a22cbb..1fa988ca 100644
  
          const int32_t * image_grid = clip_image_grid(ctx_clip);
          const size_t num_gridpoints = get_clip_image_grid_size(ctx_clip);
-@@ -397,11 +394,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -397,11 +393,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
  
      LOG_INF("%s: image embedding created: %d tokens\n", __func__, *n_img_pos);
  
@@ -256,7 +261,7 @@ index 03a22cbb..1fa988ca 100644
      return true;
  }
  
-@@ -416,6 +408,18 @@ bool llava_validate_embed_size(const llama_context * ctx_llama, const clip_ctx *
+@@ -416,6 +407,18 @@ bool llava_validate_embed_size(const llama_context * ctx_llama, const clip_ctx *
      return true;
  }
  
@@ -275,7 +280,7 @@ index 03a22cbb..1fa988ca 100644
  bool llava_image_embed_make_with_clip_img(clip_ctx * ctx_clip, int n_threads, const clip_image_u8 * img, float ** image_embd_out, int * n_img_pos_out) {
      // Granite vision uses up to 10 patches + base patch
      int num_max_patches = 11;
-@@ -525,6 +529,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
+@@ -525,6 +528,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
      return result;
  }
  
