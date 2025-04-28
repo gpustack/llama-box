@@ -1,8 +1,8 @@
 diff --git a/examples/llava/clip-impl.h b/examples/llava/clip-impl.h
-index 53ac3813..367a3bb7 100644
+index 04bfcbb5..fd629fd7 100644
 --- a/examples/llava/clip-impl.h
 +++ b/examples/llava/clip-impl.h
-@@ -189,17 +189,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -190,17 +190,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -22,14 +22,14 @@ index 53ac3813..367a3bb7 100644
  //
  // cpp wrappers
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index da8a590f..23997a39 100644
+index 3cd27d5b..5181eb93 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
-@@ -342,11 +342,14 @@ struct clip_ctx {
+@@ -344,11 +344,14 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
-+    int32_t max_image_size = 0;
++    int max_image_size = 0;
 +
      clip_ctx(clip_context_params & ctx_params) {
          backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
@@ -40,13 +40,13 @@ index da8a590f..23997a39 100644
  
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-@@ -1445,6 +1448,18 @@ struct clip_model_loader {
-             get_bool(KEY_HAS_QWEN2VL_MERGER, ctx_clip.has_qwen2vl_merger, false);
-             // !!! do NOT extend the list above, use KEY_PROJ_TYPE instead
- 
+@@ -1651,6 +1654,18 @@ struct clip_model_loader {
+             if (ctx_clip.proj_type == PROJECTOR_TYPE_UNKNOWN) {
+                 throw std::runtime_error(string_format("%s: unknown projector type: %s\n", __func__, proj_type.c_str()));
+             }
 +#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_METAL)
-+            if (ctx_clip.has_qwen2vl_merger && !ggml_backend_is_cpu(ctx_clip.backend)) {
-+                LOG_WRN("%s: Qwen2VL merger is not supported on current backend, fallback to CPU backend\n", __func__);
++            if ((ctx_clip.proj_type == PROJECTOR_TYPE_QWEN2VL || ctx_clip.proj_type == PROJECTOR_TYPE_QWEN25VL) && !ggml_backend_is_cpu(ctx_clip.backend)) {
++                LOG_WRN("%s: Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n", __func__);
 +                ggml_backend_free(ctx_clip.backend);
 +                ctx_clip.backend = ctx_clip.backend_cpu;
 +                ctx_clip.backend_ptrs.erase(ctx_clip.backend_ptrs.begin());
@@ -56,10 +56,10 @@ index da8a590f..23997a39 100644
 +                );
 +            }
 +#endif
-             get_bool(KEY_USE_GELU, ctx_clip.use_gelu, false);
-             get_bool(KEY_USE_SILU, ctx_clip.use_silu, false);
+         }
  
-@@ -1773,14 +1788,28 @@ struct clip_model_loader {
+         // other hparams
+@@ -2019,14 +2034,28 @@ struct clip_model_loader {
  
          // create a fake batch
          clip_image_f32_batch batch;
@@ -95,7 +95,7 @@ index da8a590f..23997a39 100644
  
          ggml_cgraph * gf = clip_image_build_graph(&ctx_clip, batch, image_size, false);
          ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
-@@ -2323,7 +2352,7 @@ struct llava_uhd {
+@@ -2569,7 +2598,7 @@ struct llava_uhd {
  
          // resize to overview size
          clip_image_u8_ptr resized_img(clip_image_u8_init());
@@ -104,7 +104,18 @@ index da8a590f..23997a39 100644
          output.push_back(std::move(resized_img));
          if (inst.slices.empty()) {
              // no slices, just return the resized image
-@@ -3214,6 +3243,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3540,6 +3569,10 @@ bool clip_is_qwen2vl(const struct clip_ctx * ctx) {
+     return ctx->proj_type == PROJECTOR_TYPE_QWEN2VL;
+ }
+ 
++bool clip_is_qwen25vl(const struct clip_ctx * ctx) {
++    return ctx->proj_type == PROJECTOR_TYPE_QWEN25VL;
++}
++
+ bool clip_is_llava(const struct clip_ctx * ctx) {
+     return ctx->has_llava_projector;
+ }
+@@ -3548,6 +3581,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -116,11 +127,11 @@ index da8a590f..23997a39 100644
 +    return ctx->proj_type == PROJECTOR_TYPE_PIXTRAL;
 +}
 +
- // Determine the number of encoder layers to iterate over
- int get_deepest_feature_layer(const struct clip_ctx * ctx) {
-     // Get the index of the second to last layer; this is the
+ bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec) {
+     clip_image_f32 clip_img;
+     clip_img.buf.resize(h * w * 3);
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index 5fc45d3e..be1ae9c8 100644
+index 6ba42ad8..01dd7e15 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
@@ -131,17 +142,20 @@ index 5fc45d3e..be1ae9c8 100644
  };
  
  // deprecated, use clip_init
-@@ -113,6 +114,8 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
+@@ -111,8 +112,11 @@ CLIP_API bool clip_model_quantize(const char * fname_inp, const char * fname_out
+ CLIP_API int clip_is_minicpmv(const struct clip_ctx * ctx);
+ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_qwen2vl(const struct clip_ctx * ctx);
++CLIP_API bool clip_is_qwen25vl(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_llava(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_gemma3(const struct clip_ctx * ctx);
 +CLIP_API bool clip_is_smolvlm(const struct clip_ctx * ctx);
 +CLIP_API bool clip_is_pixtral(const struct clip_ctx * ctx);
  
- CLIP_API int get_deepest_feature_layer(const struct clip_ctx * ctx);
+ CLIP_API bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec);
  
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index 03a22cbb..a4f48e61 100644
+index 03a22cbb..514bb9a6 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -12,17 +12,7 @@
@@ -163,7 +177,7 @@ index 03a22cbb..a4f48e61 100644
  
  // RGB uint8 image
  struct clip_image_u8 {
-@@ -264,8 +254,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -264,13 +254,11 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
          return false;
      }
  
@@ -172,6 +186,21 @@ index 03a22cbb..a4f48e61 100644
      const char * mm_patch_merge_type = clip_patch_merge_type(ctx_clip);
  
      const size_t n_imgs = clip_image_f32_batch_n_images(img_res_v.get());
+ 
+-    if (clip_is_minicpmv(ctx_clip) || clip_is_qwen2vl(ctx_clip)) {
++    if (clip_is_minicpmv(ctx_clip) || clip_is_qwen2vl(ctx_clip) || clip_is_qwen25vl(ctx_clip)) {
+         std::vector<float *> image_embd_v;
+         image_embd_v.resize(n_imgs);
+         clip_image_size load_image_size;
+@@ -287,7 +275,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+ 
+             bool encoded = false;
+             clip_image_f32 * img_res = clip_image_f32_get_img(img_res_v.get(), i);
+-            if (clip_is_qwen2vl(ctx_clip)) {
++            if (clip_is_qwen2vl(ctx_clip) || clip_is_qwen25vl(ctx_clip)) {
+                 encoded = clip_image_encode(ctx_clip, n_threads, img_res, image_embd_v[i]);
+             }
+             else {
 @@ -295,14 +283,11 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
              }
  

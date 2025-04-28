@@ -1,5 +1,5 @@
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 41f89e3a..4fc4b6aa 100644
+index af5e2003..a4c8a402 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -58,6 +58,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
@@ -84,7 +84,7 @@ index 41f89e3a..4fc4b6aa 100644
          // Megrez template
          for (auto message : chat) {
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index dc30df71..c20ca666 100644
+index 3f584346..bbe06aa3 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -37,6 +37,9 @@ enum llm_chat_template {

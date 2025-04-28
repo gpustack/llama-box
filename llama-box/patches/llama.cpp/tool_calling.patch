@@ -191,7 +191,7 @@ index a13350e1..44896f7b 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 41f89e3a..1df015c8 100644
+index af5e2003..af447213 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -186,6 +186,472 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
@@ -220,7 +220,7 @@ index 41f89e3a..1df015c8 100644
 +        tmpl != LLM_CHAT_TEMPLATE_MISTRAL_V3 &&
 +        tmpl != LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN &&
 +        tmpl != LLM_CHAT_TEMPLATE_LLAMA_3 &&
-+        tmpl != LLM_CHAT_TEMPLATE_CHATGML_4 &&
++        tmpl != LLM_CHAT_TEMPLATE_CHATGLM_4 &&
 +        tmpl != LLM_CHAT_TEMPLATE_GRANITE) {
 +        return llm_chat_apply_template(tmpl, chat, dest, add_ass);
 +    }
@@ -522,7 +522,7 @@ index 41f89e3a..1df015c8 100644
 +        if (add_ass) {
 +            ss << "<|start_header_id|>assistant<|end_header_id|>\n\n";
 +        }
-+    } else if (tmpl == LLM_CHAT_TEMPLATE_CHATGML_4) {
++    } else if (tmpl == LLM_CHAT_TEMPLATE_CHATGLM_4) {
 +        ss << "[gMASK]" << "<sop>";
 +        if (!func.empty()) {
 +            const llama_chat_message *root_msg = nullptr;
@@ -668,7 +668,7 @@ index 41f89e3a..1df015c8 100644
  // This function uses heuristic checks to determine commonly used template. It is not a jinja parser.
  int32_t llm_chat_apply_template(
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index dc30df71..01bdd0c2 100644
+index 3f584346..d13e5e29 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -3,6 +3,7 @@
