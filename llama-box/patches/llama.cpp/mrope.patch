@@ -15,7 +15,7 @@ index 94f545f8..6ddf3a0b 100644
      if (lctx == NULL) {
          LOG_ERR("%s: failed to create context with model '%s'\n", __func__, params.model.path.c_str());
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index 6050147b..364ae3b0 100644
+index 7413192b..3c297e81 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
 @@ -5145,10 +5145,6 @@ static void ggml_compute_forward_rope_f32(
