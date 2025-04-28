@@ -52,6 +52,9 @@ version, which we believe will not be long.
         - [x] Gemma3 VL Series
         - [x] SmolVLM Series
         - [x] Pixtral Series
+        - [x] Qwen2.5 VL Series, please use [ggml-org/Qwen2.5-VL-3B-Instruct-GGUF](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF) repo,
+              or the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402). 
+              The popular [Mungert/Qwen2.5-VL-*B-Instruct-GGUF](https://huggingface.co/Mungert?search_models=Qwen2.5-VL) repos are broken.
         - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
