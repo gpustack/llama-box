@@ -914,9 +914,6 @@ struct rpcserver_v2 {
                     if (!set_tensor(input)) {
                         return;
                     }
-                    if (!rpc_send_msg(sockfd, nullptr, 0)) {
-                        return;
-                    }
                     break;
                 }
                 case RPC_CMD_SET_TENSOR_HASH: {

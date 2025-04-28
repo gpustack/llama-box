@@ -1142,6 +1142,9 @@ static void rpcserver_serve(ggml_backend_t bkd, const char *cached, int32_t idx,
         if (!ok) {
             break;
         }
+        if (cmd == RPC_CMD_SET_TENSOR) {
+            continue;
+        }
 
         // send output
         uint64_t output_size = output.size();
