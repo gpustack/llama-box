@@ -1070,7 +1070,7 @@ struct server_context {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", llm_params.mmproj.path.c_str());
                 return false;
             }
-            if (!clip_is_qwen2vl(llm_ctx_clip) && !clip_is_qwen25vl(llm_ctx_clip)) {
+            if (!clip_is_qwen2vl(llm_ctx_clip)) {
                 params.max_image_size = 0; // disable image size check
             }
         }
@@ -3947,7 +3947,7 @@ struct server_context {
             SLT_INF(slot, "%s", "processing text tokens\n");
         }
 
-        if (clip_is_qwen2vl(llm_ctx_clip) || clip_is_qwen25vl(llm_ctx_clip)) {
+        if (clip_is_qwen2vl(llm_ctx_clip)) {
             for (int32_t j = 0; j < n_tokens; j += n_batch) {
                 int32_t n_eval = std::min(n_batch, int32_t(n_tokens - j));
                 std::vector<llama_pos> batch_txt_mrope_pos;
@@ -3991,7 +3991,7 @@ struct server_context {
         const int32_t n_embd = llama_model_n_embd(llama_get_model(llm_ctx));
         SLT_INF(slot, "processing image tokens: %d\n", img_embd->n_image_pos);
 
-        if (clip_is_qwen2vl(llm_ctx_clip) || clip_is_qwen25vl(llm_ctx_clip)) {
+        if (clip_is_qwen2vl(llm_ctx_clip)) {
             if (!preprocess_multi_modal_data_text(slot, n_batch, std::string("<|vision_start|>"), false)) {
                 return false;
             }

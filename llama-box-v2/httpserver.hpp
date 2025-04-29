@@ -2719,7 +2719,7 @@ struct httpserver {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
                 return false;
             }
-            if (!clip_is_qwen2vl(llm_ctx_clip) && !clip_is_qwen25vl(llm_ctx_clip)) {
+            if (!clip_is_qwen2vl(llm_ctx_clip)) {
                 params.max_image_size = 0; // disable image size check
             }
         }
@@ -3533,8 +3533,8 @@ struct httpserver {
                                     auto tokenized_image      = std::get<std::unique_ptr<llava_image_embed>>(std::move(task->tokenized_prompts[i_prompt]));
                                     const int32_t n_image_pos = tokenized_image->n_image_pos;
                                     int32_t decoded_image     = -1;
-                                    // Qwen2VL/Qwen25VL
-                                    if (clip_is_qwen2vl(llm_ctx_clip) || clip_is_qwen25vl(llm_ctx_clip)) {
+                                    // Qwen2VL
+                                    if (clip_is_qwen2vl(llm_ctx_clip)) {
                                         std::vector<llama_pos> mrope_pos;
                                         clip_image_size *is = clip_get_load_image_size(llm_ctx_clip);
                                         const int32_t ps    = clip_get_patch_size(llm_ctx_clip) * 2;
@@ -4934,7 +4934,7 @@ struct httpserver {
                 n_prefilling_request += int32_t(image_embed->n_image_pos);
                 req->images[images_count++] = nullptr; // release image asap
                 // qwen2vl
-                if (clip_is_qwen2vl(llm_ctx_clip) || clip_is_qwen25vl(llm_ctx_clip)) {
+                if (clip_is_qwen2vl(llm_ctx_clip)) {
                     // <|vision_start|>
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|vision_start|>", /* add_special= */ add_bos, /* parse_special= */ true);
                     n_prefilling_request += int32_t(tokenized_text.size());
