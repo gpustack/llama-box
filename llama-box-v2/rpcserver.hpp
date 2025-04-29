@@ -724,7 +724,17 @@ struct rpcserver_v2 {
     }
 
     ggml_tensor *deserialize_tensor(struct ggml_context *ctx, const rpc_tensor *tensor) {
+        if (tensor->type >= GGML_TYPE_COUNT) {
+            SRV_ERR("invalid tensor type received: %u\n", tensor->type);
+            return nullptr;
+        }
+
         ggml_tensor *result = ggml_new_tensor_4d(ctx, (ggml_type)tensor->type, tensor->ne[0], tensor->ne[1], tensor->ne[2], tensor->ne[3]);
+        if (result == nullptr) {
+            SRV_ERR("ggml_new_tensor_4d failed for type %u\\n", tensor->type);
+            return nullptr;
+        }
+
         for (uint32_t i = 0; i < GGML_MAX_DIMS; i++) {
             result->nb[i] = tensor->nb[i];
         }
@@ -758,30 +768,51 @@ struct rpcserver_v2 {
     }
 
     ggml_tensor *create_node(uint64_t id, struct ggml_context *ctx,
-                             const std::unordered_map<uint64_t, const rpc_tensor *> &tensor_ptrs, std::unordered_map<uint64_t, struct ggml_tensor *> &tensor_map) {
-        if (id == 0) {
+                             const std::unordered_map<uint64_t, const rpc_tensor *> &in_tensor_ptrs, std::unordered_map<uint64_t, struct ggml_tensor *> &in_tensor_map) {
+        if (in_tensor_map.find(id) != in_tensor_map.end()) {
+            return in_tensor_map[id];
+        }
+
+        auto it_ptr = in_tensor_ptrs.find(id);
+        if (it_ptr == in_tensor_ptrs.end()) {
             return nullptr;
         }
-        if (tensor_map.find(id) != tensor_map.end()) {
-            return tensor_map[id];
-        }
-        const rpc_tensor *tensor   = tensor_ptrs.at(id);
-        struct ggml_tensor *result = deserialize_tensor(ctx, tensor);
+        const rpc_tensor *in_tensor = it_ptr->second;
 
-        tensor_map[id] = result;
+        struct ggml_tensor *result = deserialize_tensor(ctx, in_tensor);
+        if (result == nullptr) {
+            SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n",
+                    id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
+            return nullptr;
+        }
+        in_tensor_map[id] = result;
+
         for (int i = 0; i < GGML_MAX_SRC; i++) {
-            if (tensor->src[i] == 0) {
-                break;
+            if (in_tensor->src[i] == 0) {
+                result->src[i] = nullptr;
+            } else {
+                result->src[i] = create_node(in_tensor->src[i], ctx, in_tensor_ptrs, in_tensor_map);
+                if (result->src[i] == nullptr) {
+                    SRV_ERR("failed to create src node %d, id = %llu, name = %s, type = %s\n",
+                            i, id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
+                    return nullptr;
+                }
             }
-            result->src[i] = create_node(tensor->src[i], ctx, tensor_ptrs, tensor_map);
         }
-        if (tensor->view_src != 0) {
-            result->view_src = create_node(tensor->view_src, ctx, tensor_ptrs, tensor_map);
+        if (in_tensor->view_src == 0) {
+            result->view_src = nullptr;
+        } else {
+            result->view_src = create_node(in_tensor->view_src, ctx, in_tensor_ptrs, in_tensor_map);
+            if (result->view_src == nullptr) {
+                SRV_ERR("failed to create view_src node, id = %llu, name = %s, type = %s\n",
+                        id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
+                return nullptr;
+            }
         }
-        result->view_offs = tensor->view_offs;
+        result->view_offs = in_tensor->view_offs;
 
         SRV_DBG("id = %llu, name = %s, type = %s, op = %s\n",
-                id, tensor->name, ggml_type_name(static_cast<ggml_type>(tensor->type)), ggml_op_name(static_cast<ggml_op>(tensor->op)));
+                id, in_tensor->name, ggml_type_name(static_cast<ggml_type>(in_tensor->type)), ggml_op_name(static_cast<ggml_op>(in_tensor->op)));
         return result;
     }
 
@@ -1002,7 +1033,9 @@ struct rpcserver_v2 {
                         return;
                     }
                     rpc_msg_get_alloc_size_rsp response{};
-                    get_alloc_size(request, response);
+                    if (!get_alloc_size(request, response)) {
+                        return;
+                    }
                     if (!rpc_send_msg(sockfd, &response, sizeof(response))) {
                         return;
                     }
@@ -1126,6 +1159,10 @@ struct rpcserver_v2 {
         GGML_ASSERT(ctx_ptr != nullptr);
         ggml_context *ctx   = ctx_ptr.get();
         ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
+        if (tensor == nullptr) {
+            SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n", in_tensor->id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
+            return false;
+        }
 
         // sanitize tensor->data
         {
@@ -1190,6 +1227,10 @@ struct rpcserver_v2 {
             GGML_ASSERT(ctx_ptr != nullptr);
             ggml_context *ctx   = ctx_ptr.get();
             ggml_tensor *tensor = deserialize_tensor(ctx, in_tensor);
+            if (tensor == nullptr) {
+                SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n", in_tensor->id, in_tensor->name, ggml_type_name((ggml_type)in_tensor->type));
+                return false;
+            }
 
             // sanitize tensor->data
             {
@@ -1229,6 +1270,10 @@ struct rpcserver_v2 {
         GGML_ASSERT(ctx_ptr != nullptr);
         ggml_context *ctx   = ctx_ptr.get();
         ggml_tensor *tensor = deserialize_tensor(ctx, &request.tensor);
+        if (tensor == nullptr) {
+            SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n", request.tensor.id, request.tensor.name, ggml_type_name((ggml_type)request.tensor.type));
+            return false;
+        }
 
         // sanitize tensor->data
         {
@@ -1268,7 +1313,16 @@ struct rpcserver_v2 {
         GGML_ASSERT(ctx_ptr != nullptr);
         ggml_context *ctx = ctx_ptr.get();
         ggml_tensor *src  = deserialize_tensor(ctx, &request.src);
-        ggml_tensor *dst  = deserialize_tensor(ctx, &request.dst);
+        if (src == nullptr) {
+            SRV_ERR("failed to deserialize src tensor: id = %llu, name = %s, type = %s\n", request.src.id, request.src.name, ggml_type_name((ggml_type)request.src.type));
+            return false;
+        }
+        ggml_tensor *dst = deserialize_tensor(ctx, &request.dst);
+        if (dst == nullptr) {
+            SRV_ERR("failed to deserialize dst tensor: id = %llu, name = %s, type = %s\n", request.dst.id, request.dst.name, ggml_type_name((ggml_type)request.dst.type));
+            delete src;
+            return false;
+        }
 
         auto src_size   = (uint64_t)ggml_nbytes(src);
         auto dst_data   = (uint64_t)dst->data;
@@ -1311,7 +1365,7 @@ struct rpcserver_v2 {
             SRV_ERR("%s", "input size invalid\n");
             return false;
         }
-        const auto *tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
+        const auto *in_tensors = (const rpc_tensor *)(input.data() + sizeof(n_nodes) + n_nodes * sizeof(uint64_t) + sizeof(n_tensors));
 
         size_t buf_size = ggml_tensor_overhead() * (n_nodes + n_tensors) + ggml_graph_overhead_custom(n_nodes, false);
 
@@ -1326,15 +1380,19 @@ struct rpcserver_v2 {
         ggml_context *ctx         = ctx_ptr.get();
         struct ggml_cgraph *graph = ggml_new_graph_custom(ctx, n_nodes, false);
         graph->n_nodes            = int32_t(n_nodes);
-        std::unordered_map<uint64_t, const rpc_tensor *> tensor_ptrs;
+        std::unordered_map<uint64_t, const rpc_tensor *> in_tensor_ptrs;
         for (uint32_t i = 0; i < n_tensors; i++) {
-            tensor_ptrs[tensors[i].id] = &tensors[i];
+            in_tensor_ptrs[in_tensors[i].id] = &in_tensors[i];
         }
-        std::unordered_map<uint64_t, ggml_tensor *> tensor_map;
+        std::unordered_map<uint64_t, ggml_tensor *> in_tensor_map;
         for (uint32_t i = 0; i < n_nodes; i++) {
             int64_t id;
             memcpy(&id, &nodes[i], sizeof(id));
-            graph->nodes[i] = create_node(id, ctx, tensor_ptrs, tensor_map);
+            graph->nodes[i] = create_node(id, ctx, in_tensor_ptrs, in_tensor_map);
+            if (graph->nodes[i] == nullptr && id != 0) {
+                SRV_ERR("failed to create graph node %d, id = %llu\n", i, id);
+                return false;
+            }
         }
         response.result = ggml_backend_graph_compute(backend, graph);
         SRV_DBG("result = %d\n", response.result);
@@ -1359,6 +1417,10 @@ struct rpcserver_v2 {
         GGML_ASSERT(ctx_ptr != nullptr);
         ggml_context *ctx   = ctx_ptr.get();
         ggml_tensor *tensor = deserialize_tensor(ctx, &request.tensor);
+        if (tensor == nullptr) {
+            SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n", request.tensor.id, request.tensor.name, ggml_type_name((ggml_type)request.tensor.type));
+            return false;
+        }
 
         bool result                  = false;
         ggml_backend_buffer_t buffer = tensor->buffer;
@@ -1396,6 +1458,11 @@ struct rpcserver_v2 {
         GGML_ASSERT(ctx_ptr != nullptr);
         ggml_context *ctx   = ctx_ptr.get();
         ggml_tensor *tensor = deserialize_tensor(ctx, &request.tensor);
+        if (tensor == nullptr) {
+            SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n", request.tensor.id, request.tensor.name, ggml_type_name((ggml_type)request.tensor.type));
+            return false;
+        }
+
         if (tensor->buffer == nullptr) {
             // No buffer allocated.
             buft = ggml_backend_get_default_buffer_type(backend);
@@ -1447,9 +1514,19 @@ struct rpcserver_v2 {
         GGML_ASSERT(ctx_ptr != nullptr);
         ggml_context *ctx   = ctx_ptr.get();
         ggml_tensor *tensor = deserialize_tensor(ctx, &tensors[n_tensors - 1]);
+        if (tensor == nullptr) {
+            SRV_ERR("failed to deserialize tensor: id = %llu, name = %s, type = %s\n", tensors[n_tensors - 1].id, tensors[n_tensors - 1].name, ggml_type_name((ggml_type)tensors[n_tensors - 1].type));
+            return false;
+        }
+
         for (uint32_t i = 0; i < n_tensors - 1; i++) {
             ggml_tensor *src = deserialize_tensor(ctx, &tensors[i]);
-            tensor->src[i]   = src;
+            if (src == nullptr) {
+                SRV_ERR("failed to deserialize src tensor: id = %llu, name = %s, type = %s\n", tensors[i].id, tensors[i].name, ggml_type_name((ggml_type)tensors[i].type));
+                return false;
+            }
+
+            tensor->src[i] = src;
         }
         response.result = true;
         if (backend->device->iface.supports_op) {
