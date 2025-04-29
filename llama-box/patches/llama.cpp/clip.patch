@@ -22,7 +22,7 @@ index 04bfcbb5..fd629fd7 100644
  //
  // cpp wrappers
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index 8c5d56cc..a0792dd6 100644
+index a5eb55f4..401eaa34 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -343,11 +343,14 @@ struct clip_ctx {
@@ -59,7 +59,7 @@ index 8c5d56cc..a0792dd6 100644
          }
  
          // other hparams
-@@ -2007,14 +2022,28 @@ struct clip_model_loader {
+@@ -2009,14 +2024,28 @@ struct clip_model_loader {
  
          // create a fake batch
          clip_image_f32_batch batch;
@@ -95,7 +95,7 @@ index 8c5d56cc..a0792dd6 100644
  
          ggml_cgraph * gf = clip_image_build_graph(&ctx_clip, batch, image_size, false);
          ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
-@@ -2557,7 +2586,7 @@ struct llava_uhd {
+@@ -2559,7 +2588,7 @@ struct llava_uhd {
  
          // resize to overview size
          clip_image_u8_ptr resized_img(clip_image_u8_init());
@@ -104,7 +104,7 @@ index 8c5d56cc..a0792dd6 100644
          output.push_back(std::move(resized_img));
          if (inst.slices.empty()) {
              // no slices, just return the resized image
-@@ -3505,6 +3534,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3507,6 +3536,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
