@@ -1,5 +1,5 @@
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 9b566149..c657fded 100644
+index 46d43c58..4e21861d 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -58,6 +58,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
@@ -21,7 +21,7 @@ index 9b566149..c657fded 100644
      } else if (tmpl_contains("<|role_start|>")) {
          return LLM_CHAT_TEMPLATE_MEGREZ;
      } else if (tmpl_contains(" Ассистент:")) {
-@@ -563,6 +568,61 @@ int32_t llm_chat_apply_template(
+@@ -571,6 +576,61 @@ int32_t llm_chat_apply_template(
          if (add_ass) {
              ss << "assistant<|role_sep|>";
          }

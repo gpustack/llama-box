@@ -191,7 +191,7 @@ index 06c56395..9ab68128 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 9b566149..915adf01 100644
+index 46d43c58..e27c9866 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -186,6 +186,472 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {

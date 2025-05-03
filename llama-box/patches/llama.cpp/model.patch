@@ -47,7 +47,7 @@ index 41a023da..64746362 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_NOMIC_BERT_MOE,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 51092a12..400c478a 100644
+index e5289f70..0e9b9948 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -664,6 +664,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
@@ -175,7 +175,7 @@ index 51092a12..400c478a 100644
          case LLM_ARCH_BERT:
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
-@@ -13250,6 +13273,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
+@@ -13248,6 +13271,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
          case LLM_ARCH_FALCON:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
