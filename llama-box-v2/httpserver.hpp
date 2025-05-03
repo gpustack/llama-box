@@ -16,14 +16,14 @@
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
 #define CPPHTTPLIB_TCP_NODELAY true
-#include "llama.cpp/examples/server/httplib.h"
+#include "llama.cpp/tools/server/httplib.h"
 
 #include "llama.cpp/common/chat.h"
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/common/sampling.h"
-#include "llama.cpp/examples/llava/clip.h"
-#include "llama.cpp/examples/llava/llava.h"
+#include "llama.cpp/tools/llava/clip.h"
+#include "llama.cpp/tools/llava/llava.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 
 #include "stable-diffusion.cpp/model.h"

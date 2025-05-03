@@ -1,7 +1,7 @@
-diff --git a/examples/llava/clip-impl.h b/examples/llava/clip-impl.h
+diff --git a/tools/llava/clip-impl.h b/tools/llava/clip-impl.h
 index b575ca4d..6bc60b86 100644
---- a/examples/llava/clip-impl.h
-+++ b/examples/llava/clip-impl.h
+--- a/tools/llava/clip-impl.h
++++ b/tools/llava/clip-impl.h
 @@ -191,17 +191,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
@@ -21,10 +21,10 @@ index b575ca4d..6bc60b86 100644
  
  //
  // cpp wrappers
-diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
+diff --git a/tools/llava/clip.cpp b/tools/llava/clip.cpp
 index 7607d4e3..bad76c56 100644
---- a/examples/llava/clip.cpp
-+++ b/examples/llava/clip.cpp
+--- a/tools/llava/clip.cpp
++++ b/tools/llava/clip.cpp
 @@ -346,11 +346,14 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
@@ -119,10 +119,10 @@ index 7607d4e3..bad76c56 100644
  bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec) {
      clip_image_f32 clip_img;
      clip_img.buf.resize(h * w * 3);
-diff --git a/examples/llava/clip.h b/examples/llava/clip.h
+diff --git a/tools/llava/clip.h b/tools/llava/clip.h
 index 0a53bd8e..6e7d1a99 100644
---- a/examples/llava/clip.h
-+++ b/examples/llava/clip.h
+--- a/tools/llava/clip.h
++++ b/tools/llava/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
  struct clip_context_params {
      bool use_gpu;
@@ -140,10 +140,10 @@ index 0a53bd8e..6e7d1a99 100644
  
  CLIP_API bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec);
  
-diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
+diff --git a/tools/llava/llava.cpp b/tools/llava/llava.cpp
 index c00d16ae..08ab3186 100644
---- a/examples/llava/llava.cpp
-+++ b/examples/llava/llava.cpp
+--- a/tools/llava/llava.cpp
++++ b/tools/llava/llava.cpp
 @@ -12,17 +12,7 @@
  #include <vector>
  #include <memory>
@@ -311,10 +311,10 @@ index c00d16ae..08ab3186 100644
  static bool load_file_to_bytes(const char* path, unsigned char** bytesOut, long *sizeOut) {
      auto file = fopen(path, "rb");
      if (file == NULL) {
-diff --git a/examples/llava/llava.h b/examples/llava/llava.h
+diff --git a/tools/llava/llava.h b/tools/llava/llava.h
 index b6feb302..c06148c4 100644
---- a/examples/llava/llava.h
-+++ b/examples/llava/llava.h
+--- a/tools/llava/llava.h
++++ b/tools/llava/llava.h
 @@ -27,13 +27,23 @@ struct llava_image_embed {
      int n_image_pos;
  };

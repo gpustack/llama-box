@@ -193,6 +193,76 @@ index 0862099d..fe599420 100755
  
  @ModelBase.register("GemmaForCausalLM")
  class GemmaModel(TextModel):
+diff --git a/examples/eval-callback/README.md b/examples/eval-callback/README.md
+index 63a57ad6..aeca91ae 100644
+--- a/examples/eval-callback/README.md
++++ b/examples/eval-callback/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/eval-callback
++# llama.cpp/tools/eval-callback
+ 
+ A simple example which demonstrates how to use callback during the inference.
+ It simply prints to the console all operations and tensor data.
+diff --git a/examples/llama.swiftui/README.md b/examples/llama.swiftui/README.md
+index bd7ce377..dd2526c3 100644
+--- a/examples/llama.swiftui/README.md
++++ b/examples/llama.swiftui/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/llama.swiftui
++# llama.cpp/tools/llama.swiftui
+ 
+ Local inference of llama.cpp on an iPhone. This is a sample app that can be used as a starting
+ point for more advanced projects.
+diff --git a/examples/lookahead/README.md b/examples/lookahead/README.md
+index aab3cd0c..cba5fd31 100644
+--- a/examples/lookahead/README.md
++++ b/examples/lookahead/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/lookahead
++# llama.cpp/tools/lookahead
+ 
+ Demonstration of lookahead decoding technique:
+ 
+diff --git a/examples/lookup/README.md b/examples/lookup/README.md
+index 07d73849..eadeca9c 100644
+--- a/examples/lookup/README.md
++++ b/examples/lookup/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/lookup
++# llama.cpp/tools/lookup
+ 
+ Demonstration of Prompt Lookup Decoding
+ 
+diff --git a/examples/retrieval/README.md b/examples/retrieval/README.md
+index 6938a1e9..c725199d 100644
+--- a/examples/retrieval/README.md
++++ b/examples/retrieval/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/retrieval
++# llama.cpp/tools/retrieval
+ 
+ Demonstration of simple retrieval technique based on cosine similarity
+ 
+diff --git a/examples/speculative-simple/README.md b/examples/speculative-simple/README.md
+index e3a6c6b4..c993334b 100644
+--- a/examples/speculative-simple/README.md
++++ b/examples/speculative-simple/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/speculative-simple
++# llama.cpp/tools/speculative-simple
+ 
+ Demonstration of basic greedy speculative decoding
+ 
+diff --git a/examples/speculative/README.md b/examples/speculative/README.md
+index 36ab3708..f14a6b5c 100644
+--- a/examples/speculative/README.md
++++ b/examples/speculative/README.md
+@@ -1,4 +1,4 @@
+-# llama.cpp/examples/speculative
++# llama.cpp/tools/speculative
+ 
+ Demonstration of speculative decoding and tree-based speculative decoding techniques
+ 
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
 index 7dd7bb6d..f6dfcb40 100644
 --- a/gguf-py/gguf/constants.py

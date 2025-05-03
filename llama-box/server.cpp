@@ -12,8 +12,8 @@
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/common/sampling.h"
-#include "llama.cpp/examples/llava/clip.h"
-#include "llama.cpp/examples/llava/llava.h"
+#include "llama.cpp/tools/llava/clip.h"
+#include "llama.cpp/tools/llava/llava.h"
 #include "llama.cpp/include/llama.h"
 
 #include "param.hpp"

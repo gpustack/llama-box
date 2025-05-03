@@ -32,7 +32,7 @@
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 10485760
 #define CPPHTTPLIB_TCP_NODELAY true
-#include "llama.cpp/examples/server/httplib.h"
+#include "llama.cpp/tools/server/httplib.h"
 
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/ggml/include/ggml-alloc.h"

@@ -176,7 +176,7 @@ endif ()
 #
 
 add_subdirectory(llama.cpp)
-add_subdirectory(llama.cpp/examples/llava)
+add_subdirectory(llama.cpp/tools/llava)
 add_subdirectory(stable-diffusion.cpp)
 add_subdirectory(concurrentqueue)
 add_subdirectory(readerwriterqueue)
