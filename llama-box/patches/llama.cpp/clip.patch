@@ -1,8 +1,8 @@
 diff --git a/examples/llava/clip-impl.h b/examples/llava/clip-impl.h
-index 04bfcbb5..fd629fd7 100644
+index 66cb21ef..2e663e1d 100644
 --- a/examples/llava/clip-impl.h
 +++ b/examples/llava/clip-impl.h
-@@ -190,17 +190,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -188,17 +188,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
