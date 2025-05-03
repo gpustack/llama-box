@@ -1,8 +1,8 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 123df801..75486ce9 100755
+index 04ca646b..c8fb7cce 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
-@@ -3386,7 +3386,67 @@ class BertModel(TextModel):
+@@ -3410,7 +3410,67 @@ class BertModel(TextModel):
  
          tokenizer_path = self.dir_model / 'sentencepiece.bpe.model'
          if not tokenizer_path.is_file():
@@ -71,7 +71,7 @@ index 123df801..75486ce9 100755
  
          sentencepiece_model = model.ModelProto()  # pyright: ignore[reportAttributeAccessIssue]
          sentencepiece_model.ParseFromString(open(tokenizer_path, "rb").read())
-@@ -3606,6 +3666,121 @@ class XLMRobertaModel(BertModel):
+@@ -3630,6 +3690,121 @@ class XLMRobertaModel(BertModel):
  
          return super().modify_tensors(data_torch, name, bid)
  
@@ -194,10 +194,10 @@ index 123df801..75486ce9 100755
  @ModelBase.register("GemmaForCausalLM")
  class GemmaModel(TextModel):
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 326ccdb0..7d0cb55d 100644
+index a2540bd9..34cc3903 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
-@@ -269,6 +269,7 @@ class MODEL_ARCH(IntEnum):
+@@ -270,6 +270,7 @@ class MODEL_ARCH(IntEnum):
      BERT             = auto()
      NOMIC_BERT       = auto()
      NOMIC_BERT_MOE   = auto()
@@ -205,7 +205,7 @@ index 326ccdb0..7d0cb55d 100644
      JINA_BERT_V2     = auto()
      BLOOM            = auto()
      STABLELM         = auto()
-@@ -524,6 +525,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -527,6 +528,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
      MODEL_ARCH.NOMIC_BERT_MOE:   "nomic-bert-moe",
@@ -213,7 +213,7 @@ index 326ccdb0..7d0cb55d 100644
      MODEL_ARCH.JINA_BERT_V2:     "jina-bert-v2",
      MODEL_ARCH.BLOOM:            "bloom",
      MODEL_ARCH.STABLELM:         "stablelm",
-@@ -942,6 +944,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -949,6 +951,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.ATTN_Q,
          MODEL_TENSOR.ATTN_K,
          MODEL_TENSOR.ATTN_V,
@@ -221,7 +221,7 @@ index 326ccdb0..7d0cb55d 100644
          MODEL_TENSOR.ATTN_OUT,
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
-@@ -979,6 +982,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -986,6 +989,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_UP_EXP,
          MODEL_TENSOR.LAYER_OUT_NORM,
      ],
@@ -243,7 +243,7 @@ index 326ccdb0..7d0cb55d 100644
          MODEL_TENSOR.TOKEN_EMBD,
          MODEL_TENSOR.TOKEN_EMBD_NORM,
 diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index 311d1ff6..7ffc28c6 100644
+index 2f632610..6efdd8fb 100644
 --- a/gguf-py/gguf/tensor_mapping.py
 +++ b/gguf-py/gguf/tensor_mapping.py
 @@ -157,6 +157,8 @@ class TensorNameMap:

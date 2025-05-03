@@ -52,6 +52,8 @@ version, which we believe will not be long.
         - [x] Gemma3 VL Series
         - [x] SmolVLM Series
         - [x] Pixtral Series
+        - [x] MobileVLM Series (w/ `--chat-template deepseek`)
+        - [x] Mistral Small 3.1 (w/ `--chat-template mistral-v7`)
         - [x] Qwen2.5 VL Series, please use [ggml-org/Qwen2.5-VL-3B-Instruct-GGUF](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF) repo,
               or the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402). 
               The popular [Mungert/Qwen2.5-VL-*B-Instruct-GGUF](https://huggingface.co/Mungert?search_models=Qwen2.5-VL) repos are broken.

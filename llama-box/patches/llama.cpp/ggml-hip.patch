@@ -31,7 +31,7 @@ index 2ea014e6..0fede2f6 100644
  #elif defined(RDNA3) || defined(RDNA4)
      c = __builtin_amdgcn_sudot4( true, a, true, b, c, false);
 diff --git a/ggml/src/ggml-cuda/mmvq.cu b/ggml/src/ggml-cuda/mmvq.cu
-index d846e35a..e047ab0b 100644
+index 132c466f..653c5a20 100644
 --- a/ggml/src/ggml-cuda/mmvq.cu
 +++ b/ggml/src/ggml-cuda/mmvq.cu
 @@ -63,7 +63,7 @@ enum mmvq_parameter_table_id {
