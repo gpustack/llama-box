@@ -12,7 +12,7 @@ index 381a9c7d..e14511cd 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index a13350e1..215773c8 100644
+index 06c56395..13f62649 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -1028,6 +1028,7 @@ extern "C" {

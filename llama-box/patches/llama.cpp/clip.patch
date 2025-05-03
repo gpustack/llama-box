@@ -22,7 +22,7 @@ index 04bfcbb5..fd629fd7 100644
  //
  // cpp wrappers
 diff --git a/examples/llava/clip.cpp b/examples/llava/clip.cpp
-index a5eb55f4..401eaa34 100644
+index ad3e7df1..92394a8a 100644
 --- a/examples/llava/clip.cpp
 +++ b/examples/llava/clip.cpp
 @@ -343,11 +343,14 @@ struct clip_ctx {
@@ -104,7 +104,7 @@ index a5eb55f4..401eaa34 100644
          output.push_back(std::move(resized_img));
          if (inst.slices.empty()) {
              // no slices, just return the resized image
-@@ -3507,6 +3536,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3533,6 +3562,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -120,7 +120,7 @@ index a5eb55f4..401eaa34 100644
      clip_image_f32 clip_img;
      clip_img.buf.resize(h * w * 3);
 diff --git a/examples/llava/clip.h b/examples/llava/clip.h
-index 6ba42ad8..6ef2e263 100644
+index 0a53bd8e..6e7d1a99 100644
 --- a/examples/llava/clip.h
 +++ b/examples/llava/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
@@ -131,7 +131,7 @@ index 6ba42ad8..6ef2e263 100644
  };
  
  // deprecated, use clip_init
-@@ -113,6 +114,8 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
+@@ -124,6 +125,8 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_qwen2vl(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_llava(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_gemma3(const struct clip_ctx * ctx);
@@ -141,7 +141,7 @@ index 6ba42ad8..6ef2e263 100644
  CLIP_API bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec);
  
 diff --git a/examples/llava/llava.cpp b/examples/llava/llava.cpp
-index 03a22cbb..a4f48e61 100644
+index c00d16ae..08ab3186 100644
 --- a/examples/llava/llava.cpp
 +++ b/examples/llava/llava.cpp
 @@ -12,17 +12,7 @@
@@ -199,7 +199,7 @@ index 03a22cbb..a4f48e61 100644
          struct clip_image_size * load_image_size = clip_image_size_init();
          load_image_size->width  = clip_image_f32_batch_nx(img_res_v.get(), 0);
          load_image_size->height = clip_image_f32_batch_ny(img_res_v.get(), 0);
-@@ -339,17 +325,24 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -339,17 +325,25 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
              LOG_ERR("Unable to encode image \n");
              return false;
          }
@@ -212,22 +212,22 @@ index 03a22cbb..a4f48e61 100644
 +        const int64_t t_img_enc_step_start_us = ggml_time_us();
 +
          // flat / default llava-1.5 type embedding
--        *n_img_pos = clip_n_patches(ctx_clip);
          clip_image_f32 * img_res = clip_image_f32_get_img(img_res_v.get(), 0);
+-        *n_img_pos = clip_n_output_tokens(ctx_clip, img_res);
          bool encoded = clip_image_encode(ctx_clip, n_threads, img_res, image_embd); // image_embd shape is 576 x 4096
          if (!encoded) {
              LOG_ERR("Unable to encode image\n");
--
+ 
              return false;
          }
-+        *n_img_pos = clip_n_patches_by_img(ctx_clip, img_res);
++        *n_img_pos = clip_n_output_tokens(ctx_clip, img_res);
 +
 +        const int64_t t_img_enc_steop_batch_us = ggml_time_us();
 +        LOG_INF("%s: step 1 of 1 encoded in %8.2f ms\n", __func__, (t_img_enc_steop_batch_us - t_img_enc_step_start_us) / 1000.0);
      }
      else {
          // spatial_unpad llava-1.6 type embedding
-@@ -357,6 +350,8 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -357,6 +351,8 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
          std::vector<float *> image_embd_v;
          image_embd_v.resize(n_imgs);
          for (size_t i = 0; i < n_imgs; i++) {
@@ -236,7 +236,7 @@ index 03a22cbb..a4f48e61 100644
              clip_image_f32 * img_res = clip_image_f32_get_img(img_res_v.get(), i);
              image_embd_v[i] = (float *)malloc(clip_embd_nbytes(ctx_clip)); // 576 patches * 4096 embeddings * 4 bytes = 9437184
              const bool encoded = clip_image_encode(ctx_clip, n_threads, img_res, image_embd_v[i]); // image data is in 3x336x336 format and will be converted to 336x336x3 inside
-@@ -364,9 +359,10 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -364,9 +360,10 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
                  LOG_ERR("Unable to encode image - spatial_unpad - subimage %d of %d\n", (int) i+1, (int) n_imgs);
                  return false;
              }
@@ -249,7 +249,7 @@ index 03a22cbb..a4f48e61 100644
  
          const int32_t * image_grid = clip_image_grid(ctx_clip);
          const size_t num_gridpoints = get_clip_image_grid_size(ctx_clip);
-@@ -397,11 +393,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+@@ -398,11 +395,6 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
  
      LOG_INF("%s: image embedding created: %d tokens\n", __func__, *n_img_pos);
  
@@ -261,7 +261,7 @@ index 03a22cbb..a4f48e61 100644
      return true;
  }
  
-@@ -416,6 +407,18 @@ bool llava_validate_embed_size(const llama_context * ctx_llama, const clip_ctx *
+@@ -417,6 +409,18 @@ bool llava_validate_embed_size(const llama_context * ctx_llama, const clip_ctx *
      return true;
  }
  
@@ -280,7 +280,7 @@ index 03a22cbb..a4f48e61 100644
  bool llava_image_embed_make_with_clip_img(clip_ctx * ctx_clip, int n_threads, const clip_image_u8 * img, float ** image_embd_out, int * n_img_pos_out) {
      // Granite vision uses up to 10 patches + base patch
      int num_max_patches = 11;
-@@ -525,6 +528,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
+@@ -526,6 +530,30 @@ struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * c
      return result;
  }
  
