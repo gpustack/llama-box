@@ -1277,10 +1277,6 @@ static std::shared_ptr<rpc_socket_t> rpcserver_socket_create(const char *host, i
 }
 
 static int rpcserver_start(rpcserver_params &params) {
-#if defined(GGML_USE_METAL)
-    // NB(thxCode): disable residency set for Metal backend to avoid memory leak.
-    setenv("GGML_METAL_NO_RESIDENCY", "1", 1);
-#endif
     if (params.n_threads <= 0) {
         params.n_threads = cpu_get_num_math();
     }

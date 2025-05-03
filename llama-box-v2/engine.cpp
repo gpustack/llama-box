@@ -72,10 +72,6 @@ int engine_start(int argc, char **argv) {
     }
 
     if (params.rs_params.port > 0) {
-#if defined(GGML_USE_METAL)
-        // NB(thxCode): disable residency set for Metal backend to avoid memory leak.
-        setenv("GGML_METAL_NO_RESIDENCY", "1", 1);
-#endif
         return start_rpcserver(params.rs_params);
     }
 
