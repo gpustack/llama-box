@@ -1,8 +1,8 @@
 diff --git a/tools/llava/clip-impl.h b/tools/llava/clip-impl.h
-index b575ca4d..6bc60b86 100644
+index b78d930b..c0473ecc 100644
 --- a/tools/llava/clip-impl.h
 +++ b/tools/llava/clip-impl.h
-@@ -191,17 +191,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -193,17 +193,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -22,10 +22,10 @@ index b575ca4d..6bc60b86 100644
  //
  // cpp wrappers
 diff --git a/tools/llava/clip.cpp b/tools/llava/clip.cpp
-index 7607d4e3..bad76c56 100644
+index 3b60a526..87c267c9 100644
 --- a/tools/llava/clip.cpp
 +++ b/tools/llava/clip.cpp
-@@ -346,11 +346,14 @@ struct clip_ctx {
+@@ -348,11 +348,14 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
@@ -40,7 +40,7 @@ index 7607d4e3..bad76c56 100644
  
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-@@ -1678,6 +1681,18 @@ struct clip_model_loader {
+@@ -1687,6 +1690,18 @@ struct clip_model_loader {
              if (ctx_clip.proj_type == PROJECTOR_TYPE_UNKNOWN) {
                  throw std::runtime_error(string_format("%s: unknown projector type: %s\n", __func__, proj_type.c_str()));
              }
@@ -59,7 +59,7 @@ index 7607d4e3..bad76c56 100644
          }
  
          // other hparams
-@@ -2054,14 +2069,28 @@ struct clip_model_loader {
+@@ -2065,14 +2080,28 @@ struct clip_model_loader {
  
          // create a fake batch
          clip_image_f32_batch batch;
@@ -95,7 +95,7 @@ index 7607d4e3..bad76c56 100644
  
          ggml_cgraph * gf = clip_image_build_graph(&ctx_clip, batch, image_size, false);
          ggml_backend_sched_reserve(ctx_clip.sched.get(), gf);
-@@ -2604,7 +2633,7 @@ struct llava_uhd {
+@@ -2615,7 +2644,7 @@ struct llava_uhd {
  
          // resize to overview size
          clip_image_u8_ptr resized_img(clip_image_u8_init());
@@ -104,7 +104,7 @@ index 7607d4e3..bad76c56 100644
          output.push_back(std::move(resized_img));
          if (inst.slices.empty()) {
              // no slices, just return the resized image
-@@ -3579,6 +3608,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3591,6 +3620,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
