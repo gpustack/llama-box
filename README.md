@@ -1,4 +1,4 @@
-# LLaMA Box
+# LLaMA Box (V2)
 
 [![](https://img.shields.io/github/actions/workflow/status/gpustack/llama-box/ci.yml?label=ci)](https://github.com/gpustack/llama-box/actions)
 [![](https://img.shields.io/github/license/gpustack/llama-box?label=license)](https://github.com/gpustack/llama-box#license)
@@ -10,35 +10,12 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 ## Agenda
 
-- [V2](#v2)
 - [Features](#features)
 - [Supports](#supports)
 - [Examples](#examples)
 - [Usage](#usage)
 - [Server API](#server-api)
 - [Tools](#tools)
-
-## V2
-
-In the practice of V2, we try to remove the configuration dependency on `--parallel (-np)` and `--batch-size (-b)`, and
-introduce the following improvements.
-
-- Configuring `--threads-http` is equivalent to `--parallel` in V1. This helps us better understand the concept of
-  parallelism, whether continuous batching is used. `--batch-size (-b)` automatically aligns with `--ctx-size`. With
-  better GPUs, you should try to increase `--ubatch-size (-ub)`.
-- The maximum size of a single request is no longer to be the result of `n_slot_ctx = --ctx-size / --parallel`, but
-  `n_ctx = --ctx-size`. This helps us enter the
-  entire `--ctx-size` in the prompt stage, which plays a vital role.
-- Like the upstream improvements, reduce the reading of Json and switch to access to the structure, which will improve
-  the overall processing speed.
-- No longer support uninteresting APIs, such as `/props`, `/slots(/*)`, `/infill`, `/lora-adapters`, `/apply-template`,
-  etc., and
-  focus on enhancing business APIs.
-- In speculative sampling, both the draft model and ngram mechanisms can be used at the same time, with the draft model
-  being given priority.
-
-V2 will be enabled for a period of time with a special parameter(`--v2`), and will completely replace V1 in a later
-version, which we believe will not be long.
 
 ## Features
 
@@ -54,9 +31,11 @@ version, which we believe will not be long.
         - [x] Pixtral Series
         - [x] MobileVLM Series (w/ `--chat-template deepseek`)
         - [x] Mistral Small 3.1 (w/ `--chat-template mistral-v7`)
-        - [x] Qwen2.5 VL Series, please use [ggml-org/Qwen2.5-VL-3B-Instruct-GGUF](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF) repo,
-              or the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402). 
-              The popular [Mungert/Qwen2.5-VL-*B-Instruct-GGUF](https://huggingface.co/Mungert?search_models=Qwen2.5-VL) repos are broken.
+        - [x] Qwen2.5 VL Series, please
+          use [ggml-org/Qwen2.5-VL-3B-Instruct-GGUF](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF) repo,
+          or the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402).
+          The popular [Mungert/Qwen2.5-VL-*B-Instruct-GGUF](https://huggingface.co/Mungert?search_models=Qwen2.5-VL)
+          repos are broken.
         - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
@@ -163,12 +142,12 @@ LLaMA Box supports the following platforms.
 > - **"Intel oneAPI 2025.0"** Linux amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"LunarG Vulkan 1.4/1.3"** Linux amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
 > - **"Huawei Ascend CANN 8.0/8.0.rc3/8.0.rc2"** Linux amd64/arm64 releases are built on Ubuntu 20.04 (glibc 2.31).
->     + Since v0.0.64  (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 8.0.rc2.alpha003.
+    >     + Since v0.0.64  (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 8.0.rc2.alpha003.
 >     + Since v0.0.123 (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 0.0.rc2.beta1, and no longer releases the OpenEuler-based archive.
 >     + Since v0.0.127 (included), **"Huawei Ascend CANN 8.0"** is backed by Ascend CANN 8.0.0.beta1.
 > - **"Hygon DTK 24.04"** Linux amd64 releases are built on Ubuntu 20.04 (glibc 2.31).
 > - **"Moore Threads MUSA rc3.1"** Linux amd64 releases are built on Ubuntu 22.04 (glibc 2.34).
->     + Since v0.0.60  (included), **"Moore Threads MUSA rc3.1"** is backed by Moore Threads MUSA rc3.1.0.
+    >     + Since v0.0.60  (included), **"Moore Threads MUSA rc3.1"** is backed by Moore Threads MUSA rc3.1.0.
 >     + Since v0.0.118 (included), **"Moore Threads MUSA rc3.1"** is backed by Moore Threads MUSA rc3.1.1.
 > - _"AVX2"_ Linux amd64 releases are built on CentOS 7 (glibc 2.17).
 > - _"Advanced SIMD (NEON)"_ Linux arm64 releases are built on Ubuntu 18.04 (glibc 2.27).
@@ -377,7 +356,6 @@ general:
 
 server:
 
-         --v2                     Switch to use v2 engine (experimental)
          --host HOST              IP address to listen, or bind to an UNIX socket if the address ends with .sock (default: 127.0.0.1)
          --port PORT              Port to listen (default: 8080)
   -to    --timeout N              Server read/write timeout in seconds (default: 600)
@@ -395,11 +373,9 @@ server:
          --no-flash-attn          Disable Flash Attention, which can increase (V)RAM but reduce computation
   -fa,   --flash-attn             Enable Flash Attention, which can reduce (V)RAM but increase computation
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
-         --infill                 Enable infill endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
          --images                 Enable image endpoint (default: disabled)
          --rerank                 Enable reranking endpoint (default: disabled)
-         --slots                  Enable slots monitoring endpoint (default: disabled)
          --rpc SERVERS            A comma-separated list of RPC server
   -ts,   --tensor-split SPLIT     Fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1
                                   For image models, indicate which device should be able to offload
@@ -461,9 +437,7 @@ server/completion:
   -c,    --ctx-size N             Size of the prompt context (default: 4096, 0 = loaded from model)
          --no-context-shift       Disable context shift on infinite text generation and long prompt embedding
          --context-shift          Enable context shift on infinite text generation and long prompt embedding
-  -n,    --predict N              Number of tokens to predict (default: -1, -1 = infinity, -2 = until context filled)
-  -b,    --batch-size N           Logical batch size.
-                                  Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: 2048)
+  -n,    --predict N              Number of tokens to predict (default: -1, -1 = infinity, when --context-shift)
   -ub,   --ubatch-size N          Physical batch size, which is the maximum number of tokens that may be processed at a time.
                                   Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: 512)
          --keep N                 Number of tokens to keep from the initial prompt (default: 0, -1 = all)
@@ -516,7 +490,7 @@ server/completion:
   -ctk,  --cache-type-k TYPE      KV cache data type for K, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
-  -np,   --parallel N             Number of parallel sequences to decode (default: 1)
+  -np,   --parallel N             (Deprecated, use --threads-http instead) Number of parallel sequences to decode (default: 1)
   -nocb, --no-cont-batching       Disable continuous batching
          --mmproj FILE            Path to a multimodal projector file for LLaVA
          --mlock                  Force system to keep model in RAM rather than swapping or compressing
@@ -549,10 +523,6 @@ server/completion/speculative:
   -ngld, --gpu-layers-draft, --n-gpu-layers-draft N
                                   Number of layers to store in VRAM for the draft model
          --lookup-ngram-min N     Minimum n-gram size for lookup cache (default: 0, 0 = disabled)
-  -lcs,  --lookup-cache-static FILE
-                                  Path to static lookup cache to use for lookup decoding (not updated by generation)
-  -lcd,  --lookup-cache-dynamic FILE
-                                  Path to dynamic lookup cache to use for lookup decoding (updated by generation)
 
 server/completion/visual:
 
@@ -620,7 +590,7 @@ rpc-server:
          --rpc-server-reserve-memory MEM
                                   Reserve memory in MiB (default: 0)
          --rpc-server-threads N   Number of threads for the CPU backend (default: according to OS)
-         --rpc-server-cache       Enable local file cache (default: disabled)
+         --rpc-server-cache       Enable caching large tensors locally (default: disabled)
          --rpc-server-cache-dir PATH
                                   Path to store large tensors (default: according to OS)
 
@@ -635,74 +605,35 @@ The available endpoints for the LLaMA Box server mode are:
     ```
     RESPONSE : (application/json)
     CASE 1: model is still being loaded
-      {"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}}
+      404
     CASE 2: model is successfully loaded and the server is ready
       {"status": "ok" }
     ```
 
 - **GET** `/metrics`: Returns the Prometheus compatible metrics of the LLaMA Box.
     + This endpoint is only available if the `--metrics` flag is enabled.
-    + `llamabox:image_process_seconds_total`: (Counter) Image process time.
-    + `llamabox:image_generate_seconds_total`: (Counter) Image generate time.
-    + `llamabox:image_generate_steps_total`: (Counter) Number of image generate steps.
-    + `llamabox:prompt_tokens_total`: (Counter) Number of prompt tokens processed.
-    + `llamabox:prompt_seconds_total`: (Counter) Prompt process time.
-    + `llamabox:tokens_predicted_total`: (Counter) Number of generation tokens processed.
-    + `llamabox:tokens_predicted_seconds_total`: (Counter) Predict process time.
+    + `llamabox:image_forward_total`: (Counter) Number of image forwarded (steps) in diffusion processing.
+    + `llamabox:image_forward_seconds_total`: (Counter) Image forward process time.
+    + `llamabox:image_reverse_total`: (Counter) Number of image reversed (steps) in diffusion processing.
+    + `llamabox:image_reverse_seconds_total`: (Counter) Image reverse process time.
+    + `llamabox:tokens_prefill_total`: (Counter) Number of prompt tokens processed.
+    + `llamabox:tokens_prefill_seconds_total`: (Counter) Prompt process time.
+    + `llamabox:tokens_decode_total`: (Counter) Number of generation tokens processed.
+    + `llamabox:tokens_decode_seconds_total`: (Counter) Predict process time.
     + `llamabox:tokens_drafted_total`: (Counter) Number of speculative decoding tokens processed.
-    + `llamabox:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted.
-    + `llamabox:n_decode_total`: (Counter) Total number of llama_decode() calls.
-    + `llamabox:n_busy_slots_per_decode`: (Counter) Average number of busy slots per llama_decode() call.
-    + `llamabox:image_steps_seconds`: (Gauge) Average image generation throughput in steps/s.
-    + `llamabox:prompt_tokens_seconds`: (Gauge) Average prompt throughput in tokens/s.
-    + `llamabox:predicted_tokens_seconds`: (Gauge) Average generation throughput in tokens/s.
+    + `llamabox:tokens_drafted_accepted_total`: (Counter) Number of speculative decoding tokens to be accepted
+    + `llamabox:image_forward_steps_per_second`: (Gauge) Average image forwarded diffusion throughput in steps/s.
+    + `llamabox:image_reverse_steps_per_second`: (Gauge) Average image reversed diffusion throughput in steps/s.
+    + `llamabox:tokens_prefill_per_second`: (Gauge) Average prompt throughput in tokens/s.
+    + `llamabox:tokens_decode_per_second`: (Gauge) Average generation throughput in tokens/s.
     + `llamabox:kv_cache_usage_ratio`: (Gauge) KV-cache usage. 1 means 100 percent usage.
     + `llamabox:kv_cache_tokens`: (Gauge) KV-cache tokens.
-    + `llamabox:requests_processing`: (Gauge) Number of requests processing.
-    + `llamabox:requests_deferred`: (Gauge) Number of requests deferred.
 
     ```
     RESPONSE : (text/plain)
     # HELP llamabox:prompt_tokens_total Number of prompt tokens processed.
     ....
     ```
-
-- **GET** `/props`: Returns current server settings.
-
-    ```
-    RESPONSE : (application/json)
-    {
-      "chat_template": "...",
-      "default_generation_settings": {...},
-      "total_slots": 4
-    }
-    ```
-
-- **GET** `/slots`: Returns the current slots processing state.
-    + If query param `?fail_on_no_slot=1` is set, this endpoint will respond with status code 503 if there is no
-      available slots.
-    + This endpoint is only available if the `--slots` flag is provided.
-    + `slot[i].state == 0` is idle, otherwise processing.
-
-    ```
-    RESPONSE : (application/json)
-    [
-      {
-        "id": 0,
-        "id_task": -1,
-        "state": 0,
-        ...
-      },
-      ...
-    ]
-    ```
-
-- **POST** `/slots/:id_slot?action={save|restore|erase}`: Operate specific slot via ID.
-    + This endpoint is only available if the `--slots` flag is provided and `--slot-save-path` is provided.
-
-- **POST** `/infill`: Returns the completion of the given prompt.
-    + This is only work to `Text-To-Text` models.
-    + This endpoint is only available if the `--infill` flag is enabled.
 
 - **POST** `/tokenize`: Convert text to tokens.
     + This is only work to `Text-To-Text` or `Embedding` models.
@@ -744,7 +675,7 @@ The available endpoints for the LLaMA Box server mode are:
     }
     ```
 
-- **GET** `/lora-adapters`: Returns the current LoRA adapters.
+- **GET** `/lora-adapters`: Returns the available LoRA adapters.
     + This is only work to `Text-To-Text`/`Text-To-Image`/`Image-To-Image` models.
     + This endpoint is only available if any LoRA adapter is applied with `--lora` or `--lora-scaled`.
 
@@ -754,37 +685,18 @@ The available endpoints for the LLaMA Box server mode are:
       {
         "id": 0, 
         "path": "...", 
-        "scale": 1.0
+        "init_scale": 1.0 // initial scale, may not be the same as the one used currently
       },
       ...
     ]
     ```
-
-- **POST** `/lora-adapters`: Operate LoRA adapters apply. To disable an LoRA adapter, either remove it from the list
-  or set scale to 0.
-    + This is only work to `Text-To-Text`/`Text-To-Image`/`Image-To-Image` models.
-    + This endpoint is only available if any LoRA adapter is applied and `--lora-init-without-apply` is provided.
-
-    ```
-    REQUEST : (application/json)
-    [
-      {
-        "id": 0, 
-        "scale": 0.2
-      },
-      ...
-    ]
-    ```
-
-- **POST** `/apply-template`: Apply chat template to a conversation, like `/v1/chat/completions` do, but without
-  generating.
-    + This is only work to `Text-To-Text` models.
 
 - **POST** `/completion`: Returns the completion of the given prompt.
     + This is only work to `Text-To-Text` models.
 
 - **GET** `/v1/models`: (OpenAI-compatible) Returns the list of available models,
   see https://platform.openai.com/docs/api-reference/models/list.
+    + Return the metadata of the model in `meta` field.
 
 - **POST** `/v1/chat/completions` (OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/chat/create.
@@ -792,6 +704,7 @@ The available endpoints for the LLaMA Box server mode are:
     + This endpoint is compatible with [OpenAI Chat Vision API](https://platform.openai.com/docs/guides/vision) when
       enabled `--mmproj` flag,
       see https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main.
+    + Allow adjusting the scale of LoRA adapters with `lora` field.
 
 - **POST** `/v1/embeddings`: (OpenAI-compatible) Returns the embeddings of the given prompt,
   see https://platform.openai.com/docs/api-reference/embeddings/create.
@@ -801,6 +714,7 @@ The available endpoints for the LLaMA Box server mode are:
 - **POST** `/v1/completions`: (*LEGACY* OpenAI-compatible) Returns the completion of the given prompt,
   see https://platform.openai.com/docs/api-reference/completions/create.
     + This is only work to `Text-To-Text` models.
+    + Allow adjusting the scale of LoRA adapters with `lora` field.
 
 - **POST** `/v1/images/generations`: (OpenAI-compatible) Returns a generated image from the given prompt,
   see https://platform.openai.com/docs/api-reference/images/generations/create.

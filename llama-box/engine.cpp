@@ -1,22 +1,29 @@
-#include "param.hpp"
+// heads
 
-int engine_start(int argc, char **argv) {
+#include <sstream>
+
+#include "llama.cpp/common/common.h"
+#include "llama.cpp/common/log.h"
+#include "llama.cpp/ggml/include/ggml.h"
+#include "llama.cpp/include/llama.h"
+
+#define SELF_PACKAGE 0
+#include "engine_param.hpp"
+
+// implementations
+
+int main(int argc, char ** argv) {
 #if __linux__ && defined(GGML_USE_HIP)
     // NB(thxCode): this is a workaround for the issue that the ROCm runtime occupies the CPU 100% utilization,
     // see https://github.com/gpustack/gpustack/issues/844.
     setenv("GPU_MAX_HW_QUEUES", "1", 1);
 #endif
 
-#if defined(_WIN32)
-    _putenv_s("LLAMA_BOX_V2", "1");
-#else
-    setenv("LLAMA_BOX_V2", "1", 1);
-#endif
     // init log
     common_log_set_prefix(common_log_main(), true);
     common_log_set_timestamps(common_log_main(), true);
     llama_log_set(
-        [](ggml_log_level level, const char *text, void * /*user_data*/) {
+        [](ggml_log_level level, const char * text, void * /*user_data*/) {
             if (level == GGML_LOG_LEVEL_DEBUG && common_log_verbosity_thold < 6) {
                 return;
             }
@@ -24,7 +31,7 @@ int engine_start(int argc, char **argv) {
         },
         nullptr);
     sd_log_set(
-        [](sd_log_level_t level, const char *text, void * /*user_data*/) {
+        [](sd_log_level_t level, const char * text, void * /*user_data*/) {
             if (level == SD_LOG_DEBUG && common_log_verbosity_thold < 6) {
                 return;
             }
@@ -32,7 +39,7 @@ int engine_start(int argc, char **argv) {
         },
         nullptr);
     sd_progress_set(
-        [](int /*step*/, int /*steps*/, float time, void * /*user_data*/) {
+        [](int /*step*/, int /*steps*/, float /*time*/, void * /*user_data*/) {
             // nothing to do
         },
         nullptr);
@@ -62,11 +69,12 @@ int engine_start(int argc, char **argv) {
         LOG_INF("version    : %s (%s)\n", LLAMA_BOX_BUILD_VERSION, LLAMA_BOX_COMMIT);
         LOG_INF("compiler   : %s\n", LLAMA_BOX_BUILD_COMPILER);
         LOG_INF("target     : %s\n", LLAMA_BOX_BUILD_TARGET);
-        LOG_INF("vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d), concurrentqueue %s (%d), readerwriterqueue %s (%d)\n",
-                LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER,
-                STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER,
-                CONCURRENT_QUEUE_COMMIT, CONCURRENT_QUEUE_BUILD_NUMBER,
-                READER_WRITER_QUEUE_COMMIT, READER_WRITER_QUEUE_BUILD_NUMBER);
+        LOG_INF(
+            "vendor     : llama.cpp %s (%d), stable-diffusion.cpp %s (%d), concurrentqueue %s (%d), readerwriterqueue "
+            "%s (%d)\n",
+            LLAMA_CPP_COMMIT, LLAMA_CPP_BUILD_NUMBER, STABLE_DIFFUSION_CPP_COMMIT, STABLE_DIFFUSION_CPP_BUILD_NUMBER,
+            CONCURRENT_QUEUE_COMMIT, CONCURRENT_QUEUE_BUILD_NUMBER, READER_WRITER_QUEUE_COMMIT,
+            READER_WRITER_QUEUE_BUILD_NUMBER);
         LOG_INF("%s\n", common_params_get_system_info(params.hs_params.llm_params).c_str());
         LOG_INF("\n");
     }
