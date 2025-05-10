@@ -446,7 +446,7 @@ static inline std::vector<llama_tokens> tokenize_prompts(const llama_vocab * voc
     return result;
 }
 
-static std::string random_string() {
+static inline std::string random_string() {
     static const std::string str("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
 
     std::random_device rd;
@@ -461,7 +461,7 @@ static std::string random_string() {
     return result;
 }
 
-static std::string tokens_to_output_formatted_string(const llama_context * ctx, const llama_token token) {
+static inline std::string tokens_to_output_formatted_string(const llama_context * ctx, const llama_token token) {
     std::string out = token == LLAMA_TOKEN_NULL ? "" : common_token_to_piece(ctx, token);
 
     // if the size is 1 and first bit is 1, meaning it's a partial character
@@ -474,4 +474,34 @@ static std::string tokens_to_output_formatted_string(const llama_context * ctx, 
     }
 
     return out;
+}
+
+struct longest_common_prefix {
+    int32_t s = 0;
+    size_t  l = 0;
+};
+
+static inline std::unique_ptr<longest_common_prefix> find_longest_common_prefix(const llama_tokens & target,
+                                                                                const llama_tokens & match) {
+    const size_t tsz = target.size();
+    const size_t msz = match.size();
+    if (tsz == 0 || msz == 0) {
+        return nullptr;
+    }
+
+    size_t s = 0, e = 0;
+    for (; s < tsz; s++) {
+        e = s;
+        for (; e < tsz && e - s < msz && target[e] == match[e - s]; e++) {
+        }
+        if (e > s) {
+            break;
+        }
+    }
+
+    if (e == s) {
+        return nullptr;
+    }
+
+    return std::make_unique<longest_common_prefix>(longest_common_prefix{ int32_t(s), e - s });
 }

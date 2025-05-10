@@ -37,6 +37,9 @@ trim_trailing() {
 }
 
 format_messages() {
+    if [[ "${#MESSAGES[@]}" -eq 0 ]]; then
+        return
+    fi
     printf "%s," "${MESSAGES[@]}"
 }
 
@@ -58,10 +61,11 @@ chat_completion() {
         return
     fi
     if [[ "${PROMPT:0:1}" == "@" ]] && [[ -f "${PROMPT:1}" ]]; then
-        DATA="$(cat "${PROMPT:1}")"
         while IFS= read -r LINE; do
             MESSAGES+=("${LINE}")
-        done < <(echo "${DATA}" | jq -cr '.messages[]')
+        done < <(jq -cr '.messages[]' "${PROMPT:1}")
+        DATA="$(format_messages)"
+        DATA="{\"messages\":[${DATA%?}]}"
     else
         DATA="{\"messages\":[$(format_messages){\"role\":\"user\",\"content\":\"${PROMPT}\"}]}"
         MESSAGES+=("{\"role\":\"user\",\"content\":\"$PROMPT\"}")

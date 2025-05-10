@@ -2092,10 +2092,10 @@ struct completions_task : btask {
     std::unique_ptr<complete_req> req;
 
     // process
-    llama_pos          pos             = 0;      // indicate the position at present
-    bool               pos_truncated   = false;  // indicate the position is truncated
-    int32_t            i_batch_seq_end = 0;      // indicate the index of the batch seq end
-    llama_tokens       processed_tokens;  // stores prompt tokens (if not prompt with images) and generated tokens
+    llama_pos          pos             = 0;  // indicate the position at present
+    llama_pos          pos_discard     = 0;  // count the discard position
+    int32_t            i_batch_seq_end = 0;  // indicate the index of the batch seq end
+    llama_tokens       processed_tokens;     // stores prompt tokens (if not prompt with images) and generated tokens
     int32_t            n_processed_detokenized = 0;  // indicate how many processed tokens are detokenized
     std::string        generated_finish_reason;      // indicate the reason of finish
     size_t             generated_text_keep_pos = std::string::npos;  // erase after call to_json
@@ -2758,6 +2758,7 @@ struct httpserver {
         llm_ctx_embed_size = llama_model_n_embd(llm_model);
         if (params.llm_params.n_threads_http != 1) {
             llm_ctx_size_shifting = int32_t(float(llm_ctx_size) / float(params.llm_params.n_threads_http) * 1.5);
+            llm_ctx_size_shifting = std::max(llm_ctx_size_shifting, std::min(llm_ctx_size, 512));
         } else {
             llm_ctx_size_shifting = llm_ctx_size - 1;
         }
@@ -2942,20 +2943,15 @@ struct httpserver {
                     { "user",      "What is the weather like in Beijing?", {}, {}, "", "", "" },
                 });
                 if (support_tool_calls) {
-                    inputs.messages.push_back({ "assistant",
-                                                "",
-                                                {},
-                                                { { "get_weather", R"({"location":"Beijing"})", "123456789" } },
-                                                "",
-                                                "",
-                                                "" });
+                    // clang-format off
+                    inputs.messages.push_back({ "assistant", "", {}, { { "get_weather", R"({"location":"Beijing"})", "123456789" } }, "", "", "" });
                     inputs.messages.push_back({ "tool", R"({"weather":"Sunny"})", {}, {}, "", "", "123456789" });
                     inputs.messages.push_back({ "assistant", "The weather is Sunny.", {}, {}, "", "", "123456789" });
                     inputs.tools = std::vector<common_chat_tool>({
-                        { "get_weather",     "",                                                  R"({"type":"object","properties":{"location":{"type":"string"}}})" },
-                        { "get_temperature", "Return the temperature according to the location.",
-                         R"({"type":"object","properties":{"location":{"type":"string"}}})"                                                                          },
+                        { "get_weather",     "",                                                   R"({"type":"object","properties":{"location":{"type":"string"}}})" },
+                        { "get_temperature", "Return the temperature according to the location.",  R"({"type":"object","properties":{"location":{"type":"string"}}})" },
                     });
+                    // clang-format on
                 }
                 inputs.tool_choice           = COMMON_CHAT_TOOL_CHOICE_NONE;
                 inputs.add_generation_prompt = true;
@@ -3207,8 +3203,8 @@ struct httpserver {
 
     struct cache_prompt_entry {
         llama_tokens tokens;
-        bool         occupied = false;
-        bool         prefixed = true;
+        bool         used = false;
+        size_t       pos  = 0;  // prefix start position
     };
 
     bool                            cache_prompt = false;
@@ -3288,7 +3284,7 @@ struct httpserver {
         SRV_WRN("rid %s | shift context, kv cache move, seq = %d, [%d, %d) -> [%d, %d)\n", rid.c_str(), seq_id,
                 n_keep + n_discard, task->pos, n_keep, n_keep + n_discard);
         task->pos -= n_discard;
-        task->pos_truncated = true;
+        task->pos_discard += n_discard;
     }
 
     //
@@ -3416,56 +3412,76 @@ struct httpserver {
 
                         // prepare cache - prefix cache
                         if (task->n_prefilled == 0 && cache_prompt) {
-                            // TODO: support vision cache found
-                            llama_tokens tokenized_text;
+                            llama_tokens tokens;
                             if (!task->tokenized_prompts_include_images) {
-                                tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[0]);
+                                tokens = std::get<llama_tokens>(task->tokenized_prompts[0]);
+                            } else {
+                                for (const auto & tokenized_prompt : task->tokenized_prompts) {
+                                    if (std::holds_alternative<llama_tokens>(tokenized_prompt)) {
+                                        llama_tokens tokenized_text = std::get<llama_tokens>(tokenized_prompt);
+                                        tokens.insert(tokens.end(), tokenized_text.begin(), tokenized_text.end());
+                                    } else {
+                                        llama_image_tokens tokenized_image =
+                                            std::get<llama_image_tokens>(tokenized_prompt);
+                                        llama_tokens dummy_tokens(tokenized_image.n_tokens, LLAMA_TOKEN_NULL);
+                                        tokens.insert(tokens.end(), dummy_tokens.begin(), dummy_tokens.end());
+                                    }
+                                }
                             }
-                            bool    seq_id_occupied  = false;
-                            int32_t seq_lcp_id_empty = -1;
-                            int32_t seq_lcp_id       = -1;
-                            size_t  seq_lcp_l        = 0;
+                            bool                                   seq_id_used      = false;
+                            int32_t                                seq_lcp_id_empty = -1;
+                            int32_t                                seq_lcp_id       = -1;
+                            std::unique_ptr<longest_common_prefix> seq_lcp          = nullptr;
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
-                                if (cache.occupied) {
-                                    seq_id_occupied = i == seq_id;
+                                if (cache.used) {
+                                    seq_id_used = i == seq_id;
                                     continue;
                                 }
                                 seq_lcp_id_empty = i;
-                                size_t lcp_l     = common_lcp(cache.tokens, tokenized_text);
-                                if (lcp_l >= seq_lcp_l) {
-                                    if (!cache.prefixed && lcp_l != cache.tokens.size()) {
-                                        continue;
+                                if (cache.tokens.empty()) {
+                                    continue;
+                                }
+                                std::unique_ptr<longest_common_prefix> lcp =
+                                    find_longest_common_prefix(cache.tokens, tokens);
+                                if (lcp != nullptr) {
+                                    if (seq_lcp == nullptr || (lcp->l > seq_lcp->l && lcp->l >= cache.pos - 1)) {
+                                        seq_lcp    = std::move(lcp);
+                                        seq_lcp_id = i;
                                     }
-                                    seq_lcp_l  = lcp_l;
-                                    seq_lcp_id = i;
                                 }
                             }
                             // miss cache
-                            if (seq_lcp_l == 0) {
-                                if (seq_id_occupied) {
+                            if (seq_lcp == nullptr) {
+                                if (seq_id_used) {
                                     seq_id = seq_lcp_id_empty;
                                 }
                                 SRV_INFV(2, "rid %s | miss prompt cache, seq = %d\n", rid.c_str(), seq_id);
                             }
                             // hit cache
                             else {
-                                auto pos                      = int32_t(std::min(tokenized_text.size() - 1, seq_lcp_l));
+                                auto pos                      = int32_t(std::min(tokens.size() - 1, seq_lcp->l));
                                 seq_id                        = seq_lcp_id;
                                 task->n_prefilled_cached      = pos;
                                 task->n_prefilled             = pos;
                                 task->pos                     = pos;
                                 task->n_processed_detokenized = pos;
-                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = %d\n", rid.c_str(), seq_id,
-                                         pos);
+                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos_s = %d, pos = %d\n", rid.c_str(),
+                                         seq_id, (seq_lcp == nullptr ? 0 : seq_lcp->s), pos);
                             }
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
                             cache.tokens.clear();
-                            cache.occupied = true;
-                            cache.prefixed = true;
+                            cache.used = true;
+                            cache.pos  = 0;
                             task->set_seq_id(seq_id);
 
                             // mask kv cache
+                            if (seq_lcp != nullptr && seq_lcp->s > 0) {
+                                llama_kv_self_seq_add(llm_ctx, seq_id, seq_lcp->s, task->pos, -seq_lcp->s);
+                                if (llm_ctx_draft != nullptr) {
+                                    llama_kv_self_seq_add(llm_ctx_draft, seq_id, seq_lcp->s, task->pos, -seq_lcp->s);
+                                }
+                            }
                             llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
@@ -3479,8 +3495,8 @@ struct httpserver {
                         if (!task->tokenized_prompts_include_images) {
                             llama_tokens tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[0]);
                             for (; task->n_prefilled < task->n_prefilling_request;) {
-                                if (batch.n_tokens + 1 >=
-                                    llm_ctx_size) {  // disallow batch's tokens size be equal to llm_ctx_size
+                                // disallow batch's tokens size be equal to llm_ctx_size
+                                if (batch.n_tokens + 1 >= llm_ctx_size) {
                                     SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
                                     break;
                                 }
@@ -3515,17 +3531,18 @@ struct httpserver {
                         }
                         //// vision
                         else {
-                            const auto n_prompt = int32_t(task->tokenized_prompts.size());
+                            const auto n_prompt    = int32_t(task->tokenized_prompts.size());
+                            int32_t    c_prefilled = 0;
                             for (int32_t i_prompt = 0; i_prompt < n_prompt; i_prompt++) {
                                 // text
                                 if (std::holds_alternative<llama_tokens>(task->tokenized_prompts[i_prompt])) {
                                     llama_tokens tokenized_text =
                                         std::get<llama_tokens>(task->tokenized_prompts[i_prompt]);
-                                    const auto n_text_pos = int32_t(tokenized_text.size());
-                                    for (int32_t i_text_pos = 0; i_text_pos < n_text_pos; i_text_pos++) {
-                                        const llama_token tok = tokenized_text[i_text_pos];
-                                        const bool        need_embed =
-                                            i_text_pos + 1 == n_text_pos && i_prompt + 1 == n_prompt;
+                                    const auto    n_text   = int32_t(tokenized_text.size());
+                                    const int32_t n_text_s = task->n_prefilled - c_prefilled;
+                                    for (int32_t i_text = n_text_s; i_text < n_text; i_text++) {
+                                        const llama_token tok        = tokenized_text[i_text];
+                                        const bool        need_embed = i_text + 1 == n_text && i_prompt + 1 == n_prompt;
                                         if (llm_model_rope_mrope) {
                                             common_batch_add_with_mrope(batch, tok, task->pos, 1, { seq_id },
                                                                         need_embed);
@@ -3533,98 +3550,115 @@ struct httpserver {
                                             common_batch_add(batch, tok, task->pos, { seq_id }, need_embed);
                                         }
                                         task->pos++;
+                                        task->n_prefilled++;
                                     }
-                                    // decode immediately
-                                    const int32_t decoded_text = llama_decode(llm_ctx, batch);
-                                    common_batch_clear(batch);
-                                    if (decoded_text != 0) {
-                                        SRV_ERR(
-                                            "rid %s | decode vision text, failed to decode, try increasing context "
-                                            "size or reducing requests: result = %d\n",
-                                            rid.c_str(), decoded_text);
-                                        // clean kv cache
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                        SRV_DBG("rid %s | decode text, kv cache clean, seq %d = [0, end)", rid.c_str(),
-                                                seq_id);
-                                        // output
-                                        json data = {
-                                            { "message",
-                                             "failed to decode text, try increasing context size or reducing "
-                                              "requests" }
-                                        };
-                                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(
-                                            httplib::InternalServerError_500, std::move(data)));
-                                        break;
+                                    if (batch.n_tokens > 0 && i_prompt + 1 < n_prompt) {
+                                        // decode immediately
+                                        const int32_t decoded_text = llama_decode(llm_ctx, batch);
+                                        common_batch_clear(batch);
+                                        if (decoded_text != 0) {
+                                            SRV_ERR(
+                                                "rid %s | decode vision text, failed to decode, try increasing context "
+                                                "size or reducing requests: result = %d\n",
+                                                rid.c_str(), decoded_text);
+                                            // clean kv cache
+                                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                            SRV_DBG("rid %s | decode text, kv cache clean, seq %d = [0, end)",
+                                                    rid.c_str(), seq_id);
+                                            // output
+                                            json data = {
+                                                { "message",
+                                                 "failed to decode text, try increasing context size or reducing "
+                                                  "requests" }
+                                            };
+                                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(
+                                                httplib::InternalServerError_500, std::move(data)));
+                                            break;
+                                        }
                                     }
-                                    task->n_prefilled += n_text_pos;
+                                    task->processed_tokens.insert(task->processed_tokens.end(), tokenized_text.begin(),
+                                                                  tokenized_text.end());
+                                    c_prefilled += n_text;
                                 }
                                 // image
                                 else {
                                     auto tokenized_image =
                                         std::get<llama_image_tokens>(std::move(task->tokenized_prompts[i_prompt]));
-                                    const int32_t n_image_pos   = tokenized_image.n_tokens;
-                                    int32_t       decoded_image = -1;
-                                    // Qwen2VL
-                                    if (clip_is_qwen2vl(llm_ctx_clip)) {
-                                        std::vector<llama_pos> mrope_pos;
-                                        clip_image_size &      is = tokenized_image.size;
-                                        const int32_t          ps = clip_get_patch_size(llm_ctx_clip) * 2;
-                                        const int32_t          ph = is.height / ps + (is.height % ps > 0);
-                                        const int32_t          pw = is.width / ps + (is.width % ps > 0);
-                                        mrope_pos.resize(n_image_pos * 4);
-                                        for (int32_t y = 0; y < ph; y++) {
-                                            for (int32_t x = 0; x < pw; x++) {
-                                                const int i                    = y * ph + x;
-                                                mrope_pos[i]                   = task->pos;
-                                                mrope_pos[i + n_image_pos * 1] = task->pos + y;
-                                                mrope_pos[i + n_image_pos * 2] = task->pos + x;
-                                                mrope_pos[i + n_image_pos * 3] = 0;
+                                    const int32_t n_image   = tokenized_image.n_tokens;
+                                    const int32_t n_image_s = task->n_prefilled - c_prefilled;
+                                    if (n_image_s < n_image) {
+                                        int32_t decoded_image = -1;
+                                        // Qwen2VL
+                                        if (clip_is_qwen2vl(llm_ctx_clip)) {
+                                            std::vector<llama_pos> mrope_pos;
+                                            clip_image_size &      is = tokenized_image.size;
+                                            const int32_t          ps = clip_get_patch_size(llm_ctx_clip) * 2;
+                                            const int32_t          ph = is.height / ps + (is.height % ps > 0);
+                                            const int32_t          pw = is.width / ps + (is.width % ps > 0);
+                                            mrope_pos.resize(n_image * 4);
+                                            for (int32_t y = 0; y < ph; y++) {
+                                                for (int32_t x = 0; x < pw; x++) {
+                                                    const int i                = y * ph + x;
+                                                    mrope_pos[i]               = task->pos;
+                                                    mrope_pos[i + n_image * 1] = task->pos + y;
+                                                    mrope_pos[i + n_image * 2] = task->pos + x;
+                                                    mrope_pos[i + n_image * 3] = 0;
+                                                }
                                             }
+                                            llama_image_embed_batch_wrapper batch_image =
+                                                llama_image_embed_batch_wrapper(tokenized_image.embed.data(), n_image,
+                                                                                mrope_pos.data(), seq_id);
+                                            // decode immediately
+                                            decoded_image = llama_decode(llm_ctx, batch_image.batch);
+                                            task->pos += ph;
                                         }
-                                        llama_image_embed_batch_wrapper batch_image = llama_image_embed_batch_wrapper(
-                                            tokenized_image.embed.data(), n_image_pos, mrope_pos.data(), seq_id);
-                                        // decode immediately
-                                        decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                        task->pos += ph;
+                                        // Gemma3
+                                        else if (clip_is_gemma3(llm_ctx_clip)) {
+                                            llama_image_embed_batch_wrapper batch_image =
+                                                llama_image_embed_batch_wrapper(tokenized_image.embed.data(), n_image,
+                                                                                task->pos, seq_id);
+                                            // decode immediately
+                                            llama_set_causal_attn(llm_ctx, false);
+                                            decoded_image = llama_decode(llm_ctx, batch_image.batch);
+                                            llama_set_causal_attn(llm_ctx, true);
+                                            task->pos += n_image;
+                                        }
+                                        // Others
+                                        else {
+                                            llama_image_embed_batch_wrapper batch_image =
+                                                llama_image_embed_batch_wrapper(tokenized_image.embed.data(), n_image,
+                                                                                task->pos, seq_id);
+                                            // decode immediately
+                                            decoded_image = llama_decode(llm_ctx, batch_image.batch);
+                                            task->pos += n_image;
+                                        }
+                                        if (decoded_image != 0) {
+                                            SRV_ERR(
+                                                "rid %s | decode vision image, failed to decode, try again, increasing "
+                                                "context "
+                                                "size or reducing requests: result = %d\n",
+                                                rid.c_str(), decoded_image);
+                                            // clean kv cache
+                                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                            SRV_DBG("rid %s | decode image, kv cache clean, seq %d = [0, end)",
+                                                    rid.c_str(), seq_id);
+                                            // output
+                                            json data = {
+                                                { "message",
+                                                 "failed to decode image, try again, increasing context size or "
+                                                  "reducing "
+                                                  "requests" }
+                                            };
+                                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(
+                                                httplib::InternalServerError_500, std::move(data)));
+                                            break;
+                                        }
+                                        task->n_prefilled += n_image;
                                     }
-                                    // Gemma3
-                                    else if (clip_is_gemma3(llm_ctx_clip)) {
-                                        llama_image_embed_batch_wrapper batch_image = llama_image_embed_batch_wrapper(
-                                            tokenized_image.embed.data(), n_image_pos, task->pos, seq_id);
-                                        // decode immediately
-                                        llama_set_causal_attn(llm_ctx, false);
-                                        decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                        llama_set_causal_attn(llm_ctx, true);
-                                        task->pos += n_image_pos;
-                                    }
-                                    // Others
-                                    else {
-                                        llama_image_embed_batch_wrapper batch_image = llama_image_embed_batch_wrapper(
-                                            tokenized_image.embed.data(), n_image_pos, task->pos, seq_id);
-                                        // decode immediately
-                                        decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                        task->pos += n_image_pos;
-                                    }
-                                    if (decoded_image != 0) {
-                                        SRV_ERR(
-                                            "rid %s | decode vision image, failed to decode, try increasing context "
-                                            "size or reducing requests: result = %d\n",
-                                            rid.c_str(), decoded_image);
-                                        // clean kv cache
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                        SRV_DBG("rid %s | decode image, kv cache clean, seq %d = [0, end)", rid.c_str(),
-                                                seq_id);
-                                        // output
-                                        json data = {
-                                            { "message",
-                                             "failed to decode image, try increasing context size or reducing "
-                                              "requests" }
-                                        };
-                                        process_task_results[tid]->enqueue(std::make_unique<btask_result>(
-                                            httplib::InternalServerError_500, std::move(data)));
-                                        break;
-                                    }
-                                    task->n_prefilled += n_image_pos;
+                                    llama_tokens dummy_tokens(n_image, LLAMA_TOKEN_NULL);
+                                    task->processed_tokens.insert(task->processed_tokens.end(), dummy_tokens.begin(),
+                                                                  dummy_tokens.end());
+                                    c_prefilled += n_image;
                                 }
                             }
                             // abort task if not prefilled all,
@@ -3632,6 +3666,9 @@ struct httpserver {
                             if (task->n_prefilled < task->n_prefilling_request) {
                                 continue;
                             }
+                            // save for cache prompts,
+                            // so we need to mark the base in n_processed_detokenized
+                            task->n_processed_detokenized = task->n_prefilling_request;
                             SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
                         }
                     }
@@ -3704,8 +3741,8 @@ struct httpserver {
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         cache.tokens.clear();
-                        cache.occupied = false;
-                        cache.prefixed = true;
+                        cache.used = false;
+                        cache.pos  = 0;
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
@@ -3774,8 +3811,8 @@ struct httpserver {
                 // decode
                 while (batch.n_tokens > 0) {
                     const int32_t decoded = llama_decode(llm_ctx, batch);
-                    if (decoded !=
-                        0) {  // -3 compute failed, -2 allocate failed, -1 no tokens, 0 ok, 1 no kv cache, 2 compute aborted
+                    // -3 compute failed, -2 allocate failed, -1 no tokens, 0 ok, 1 no kv cache, 2 compute aborted
+                    if (decoded != 0) {
                         // try to recover
                         if (params.llm_params.ctx_shift) {
                             int32_t decoded_again = decoded;
@@ -3813,7 +3850,8 @@ struct httpserver {
                             }
                         }
                         SRV_ERR(
-                            "decode in batch, failed to decode, try increasing context size or reducing parallel: "
+                            "decode in batch, failed to decode, try again, increasing context size, or reducing "
+                            "parallel: "
                             "result = %d\n",
                             decoded);
                         // clean kv cache
@@ -3824,7 +3862,8 @@ struct httpserver {
                         // output
                         for (auto & task_ptr : batch_task_ptrs) {
                             json data = {
-                                { "message", "failed to decode, try increasing context size or reducing parallel" }
+                                { "message",
+                                 "failed to decode, try again, increasing context size, or reducing parallel" }
                             };
                             process_task_results[task_ptr->get_id()]->enqueue(
                                 std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
@@ -3851,7 +3890,8 @@ struct httpserver {
                         for (auto & task_ptr : batch_task_ptrs) {
                             json data = {
                                 { "message",
-                                 "failed to decode draft, try increasing context size or reducing parallel" }
+                                 "failed to decode draft, try again, increasing context size, or reducing "
+                                  "parallel" }
                             };
                             process_task_results[task_ptr->get_id()]->enqueue(
                                 std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
@@ -4203,8 +4243,8 @@ struct httpserver {
                                 int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                                 if (decoded_draft != 0) {
                                     SRV_ERR(
-                                        "rid %s | decode draft, failed to decode, try increasing context size or "
-                                        "reducing requests: result = %d\n",
+                                        "rid %s | decode draft, failed to decode, try again, increasing context size "
+                                        "or reducing requests: result = %d\n",
                                         rid.c_str(), decoded_draft);
                                     // clean kv cache
                                     llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
@@ -4213,8 +4253,8 @@ struct httpserver {
                                     // output
                                     json data = {
                                         { "message",
-                                         "failed to decode draft, try increasing context size or reducing "
-                                          "parallel" }
+                                         "failed to decode draft, try again, increasing context size "
+                                          "or reducing parallel" }
                                     };
                                     process_task_results[tid]->enqueue(std::make_unique<btask_result>(
                                         httplib::InternalServerError_500, std::move(data)));
@@ -4315,8 +4355,8 @@ struct httpserver {
                     else {
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         cache.tokens               = std::move(task->processed_tokens);
-                        cache.occupied             = false;
-                        cache.prefixed             = !task->pos_truncated;
+                        cache.used                 = false;
+                        cache.pos                  = task->pos + task->pos_discard;
                     }
                 }
                 return;
@@ -4329,15 +4369,15 @@ struct httpserver {
             const int32_t decoded = llama_decode(llm_ctx, batch);
             if (decoded != 0) {
                 SRV_ERR(
-                    "decode in batch, failed to decode, try increasing context size or reducing parallel: result = "
-                    "%d\n",
+                    "decode in batch, failed to decode, try again, increasing context size, or reducing parallel: "
+                    "result = %d\n",
                     decoded);
                 // clean kv cache
                 llama_kv_self_clear(llm_ctx);
                 // output
                 for (auto & task_ptr : batch_task_ptrs) {
                     json data = {
-                        { "message", "failed to decode, try increasing context size or reducing parallel" }
+                        { "message", "failed to decode, try again, increasing context size, or reducing parallel" }
                     };
                     process_task_results[task_ptr->get_id()]->enqueue(
                         std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
