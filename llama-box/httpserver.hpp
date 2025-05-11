@@ -3053,7 +3053,7 @@ struct httpserver {
                 return;
             }
             SRV_FUNC_INF("start", "%s", "server is ready\n");
-            reconcile_loop();
+            reconcile_loop(server);
         });
 
         // register shutdown handler
@@ -3311,10 +3311,10 @@ struct httpserver {
 #    define PIN_THREAD
 #endif
 
-    [[noreturn]] void reconcile_loop() {
+    void reconcile_loop(const std::shared_ptr<httplib::Server> & server) {
         PIN_THREAD;
 
-        while (true) {
+        while (server->is_running()) {
             reconcile();
         }
     }
@@ -3323,7 +3323,11 @@ struct httpserver {
         // dequeue tasks
         std::vector<std::unique_ptr<btask>> task_ptrs;
         task_ptrs.resize(params.llm_params.n_threads_http);
-        size_t n_dequeue_tasks = process_tasks->wait_dequeue_bulk(task_ptrs.data(), params.llm_params.n_threads_http);
+        size_t n_dequeue_tasks =
+            process_tasks->wait_dequeue_bulk_timed(task_ptrs.data(), params.llm_params.n_threads_http, 3000000);
+        if (n_dequeue_tasks == 0) {
+            return;
+        }
 
         // batch tasks
         task_type                           batch_task_type = TASK_UNKNOWN;

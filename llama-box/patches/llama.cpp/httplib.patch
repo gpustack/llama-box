@@ -1,0 +1,12 @@
+diff --git a/tools/server/httplib.h b/tools/server/httplib.h
+index 0f981dc8..db90d856 100644
+--- a/tools/server/httplib.h
++++ b/tools/server/httplib.h
+@@ -6564,6 +6564,7 @@ inline void Server::stop() {
+     std::atomic<socket_t> sock(svr_sock_.exchange(INVALID_SOCKET));
+     detail::shutdown_socket(sock);
+     detail::close_socket(sock);
++    is_running_ = false;
+   }
+   is_decommissioned = false;
+ }
