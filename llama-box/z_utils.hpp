@@ -505,3 +505,20 @@ static inline std::unique_ptr<longest_common_prefix> find_longest_common_prefix(
 
     return std::make_unique<longest_common_prefix>(longest_common_prefix{ int32_t(s), e - s });
 }
+
+// Computes FNV-1a hash of the data
+static std::string hash_fnv(const uint8_t * data, size_t len) {
+    constexpr uint64_t FNV_OFFSET_BASIS = 0xcbf29ce484222325ULL;
+    constexpr uint64_t FNV_PRIME        = 0x100000001b3ULL;
+
+    uint64_t hash = FNV_OFFSET_BASIS;
+
+    for (size_t i = 0; i < len; ++i) {
+        hash ^= data[i];
+        hash *= FNV_PRIME;
+    }
+
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0') << std::setw(16) << hash;
+    return ss.str();
+}

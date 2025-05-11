@@ -3212,7 +3212,16 @@ struct httpserver {
     std::vector<cache_prompt_entry> cache_prompts;
 
     // clip model
+    std::mutex llm_ctx_clip_mtx;
     clip_ctx * llm_ctx_clip = nullptr;
+
+    struct cache_image_entry {
+        std::vector<llama_image_tokens> tokens;
+        int64_t                         last_used = 0;
+    };
+
+    size_t                                             cache_images_size = 20;
+    std::unordered_map<std::string, cache_image_entry> cache_images;
 
     // speculative decoding
     common_init_result  llm_init_draft;
@@ -4638,6 +4647,56 @@ struct httpserver {
         return httplib::OK_200;
     }
 
+    std::vector<llama_image_tokens> cache_tokenize_image(const clip_image_u8 * img) {
+        if (llm_ctx_clip == nullptr) {
+            return {};
+        }
+
+        std::string hash;
+        try {
+            hash = hash_fnv(img->buf.data(), img->buf.size());
+        } catch (std::exception & e) {
+            LOG_WRN("failed to hash image: %s\n", e.what());
+        }
+
+        std::unique_lock<std::mutex> lock(llm_ctx_clip_mtx);
+
+        if (hash.empty()) {
+            return tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img);
+        }
+
+        // check if image is already cached.
+        if (auto it = cache_images.find(hash); it != cache_images.end()) {
+            LOG_INFV(2, "hit image cache, hash = %s\n", hash.c_str());
+            it->second.last_used = ggml_time_us();
+            return it->second.tokens;
+        }
+
+        LOG_INFV(2, "miss image cache, hash = %s, tokenizing...\n", hash.c_str());
+
+        std::vector<llama_image_tokens> result =
+            tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img);
+
+        // cache the image if there is space.
+        if (cache_images.size() < cache_images_size) {
+            cache_images[hash] = { result, ggml_time_us() };
+            return result;
+        }
+
+        // otherwise, find the oldest image,
+        // remove it and add the new image.
+        auto oldest_it = cache_images.begin();
+        for (auto it = cache_images.begin(); it != cache_images.end(); ++it) {
+            if (it->second.last_used < oldest_it->second.last_used) {
+                oldest_it = it;
+            }
+        }
+        cache_images.erase(oldest_it);
+        cache_images[hash] = { result, ggml_time_us() };
+
+        return result;
+    }
+
     //
     // Routes
     //
@@ -5119,8 +5178,8 @@ struct httpserver {
                 }
 
                 // process image
-                std::vector<llama_image_tokens> tokenized_images = tokenize_image(
-                    llm_ctx_clip, params.llm_params.cpuparams.n_threads, req->images[images_count].get());
+                std::vector<llama_image_tokens> tokenized_images =
+                    cache_tokenize_image(req->images[images_count].get());
                 if (tokenized_images.empty()) {
                     return send_string(request, response, httplib::InternalServerError_500,
                                        "Failed to embed the image");

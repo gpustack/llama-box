@@ -241,18 +241,6 @@ struct rpcserver_params {
 
 // implementations
 
-// Computes FNV-1a hash of the data
-static uint64_t fnv_hash(const uint8_t * data, size_t len) {
-    const uint64_t fnv_prime = 0x100000001b3ULL;
-    uint64_t       hash      = 0xcbf29ce484222325ULL;
-
-    for (size_t i = 0; i < len; ++i) {
-        hash ^= data[i];
-        hash *= fnv_prime;
-    }
-    return hash;
-}
-
 const static size_t MAX_CHUNK = 1 << 23;  // 8MiB
 
 static bool rpc_recv_data(rpc_sockfd_t sockfd, void * data, size_t size) {
@@ -1216,10 +1204,8 @@ struct rpcserver {
         int          caching_status = -1;  // -1 = no cache, 0 = cached ok, 1 = cache failed
         if (cache_dir && size > HASH_THRESHOLD) {
             try {
-                uint64_t hash = fnv_hash((const uint8_t *) data, size);
-                char     hash_str[17];
-                snprintf(hash_str, sizeof(hash_str), "%016" PRIx64, hash);
-                fs::path      cache_file = fs::path(cache_dir) / hash_str;
+                std::string   hash       = hash_fnv((const uint8_t *) data, size);
+                fs::path      cache_file = fs::path(cache_dir) / hash;
                 std::ofstream ofs(cache_file, std::ios::binary);
                 ofs.write((const char *) data, size);
                 caching_status = 0;
