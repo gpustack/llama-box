@@ -132,9 +132,21 @@ function request() {
     dts=0
     for ((i = 0; i < cc; i++)); do
         pps=$(jq '.usage.prompt_tokens_per_second' "/tmp/response_$i.json")
+        if [[ "${pps}" == "null" ]]; then
+            pps=$(jq '.timings.prompt_per_second' "/tmp/response_$i.json")
+        fi
         dps=$(jq '.usage.tokens_per_second' "/tmp/response_$i.json")
+        if [[ "${dps}" == "null" ]]; then
+            dps=$(jq '.timings.predicted_per_second' "/tmp/response_$i.json")
+        fi
         pt=$(jq '.usage.prompt_tokens' "/tmp/response_$i.json")
+        if [[ "${pt}" == "null" ]]; then
+            pt=$(jq '.timings.prompt_n' "/tmp/response_$i.json")
+        fi
         ct=$(jq '.usage.completion_tokens' "/tmp/response_$i.json")
+        if [[ "${ct}" == "null" ]]; then
+            ct=$(jq '.timings.predicted_n' "/tmp/response_$i.json")
+        fi
         if [[ -n "${pps}" ]] && [[ "${pps}" != "null" ]]; then
             ppss=$(echo "$ppss + $pps" | bc)
         elif [[ -n "${pps}" ]]; then
@@ -167,7 +179,7 @@ echo "---------|------------|---------------------------|--------------|--------
 if [[ -n "${1:-}" ]]; then
     request "${1}" "${2:-}"
 else
-    batches=(1 16 12 8 4 1)
+    batches=(1 1 2 4 8 4 2 1)
     for ((j = 0; j < ${#batches[@]}; j++)); do
         if [[ $j == 0 ]]; then
             request "${batches[$j]}" "${2:-}" >/dev/null 2>&1

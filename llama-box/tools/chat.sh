@@ -162,10 +162,22 @@ chat_completion() {
             fi
             if echo "${LINE}" | jq -e '.usage != null' >/dev/null; then
                 USAGE="$(echo "${LINE}" | jq -cr '.usage')"
+                ttft="$(echo "${USAGE}" | jq -cr '.time_to_first_token_ms')"
+                if [[ "${ttft}" == "null" ]]; then
+                    ttft="$(echo "${LINE}" | jq -cr '.timings.prompt_ms')"
+                fi
+                tbt="$(echo "${USAGE}" | jq -cr '.time_per_output_token_ms')"
+                if [[ "${tbt}" == "null" ]]; then
+                    tbt="$(echo "${LINE}" | jq -cr '.timings.predicted_per_token_ms')"
+                fi
+                tps="$(echo "${USAGE}" | jq -cr '.tokens_per_second')"
+                if [[ "${tps}" == "null" ]]; then
+                    tps="$(echo "${LINE}" | jq -cr '.timings.predicted_per_second')"
+                fi
                 printf "\n------------------------"
-                printf "\n- TTFT : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_to_first_token_ms')"
-                printf "\n- TBT  : %10.2fms  -" "$(echo "${USAGE}" | jq -cr '.time_per_output_token_ms')"
-                printf "\n- TPS  : %10.2f    -" "$(echo "${USAGE}" | jq -cr '.tokens_per_second')"
+                printf "\n- TTFT : %10.2fms  -" "${ttft}"
+                printf "\n- TBT  : %10.2fms  -" "${tbt}"
+                printf "\n- TPS  : %10.2f    -" "${tps}"
                 DRAFTED_N="$(echo "${USAGE}" | jq -cr '.draft_tokens')"
                 if [[ "${DRAFTED_N}" != "null" ]]; then
                     printf "\n- DT   : %10d    -" "${DRAFTED_N}"
