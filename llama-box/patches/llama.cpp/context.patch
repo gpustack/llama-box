@@ -1,5 +1,5 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 45591be9..2cfdd3e7 100644
+index fd64622b..992e1a9d 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -81,7 +81,7 @@ llama_context::llama_context(
@@ -39,8 +39,8 @@ index 45591be9..2cfdd3e7 100644
 +                __func__, cparams.n_ctx, hparams.n_ctx_train);
      }
  
-     logits_all = params.logits_all;
-@@ -1889,8 +1888,8 @@ llama_context * llama_init_from_model(
+     if (!hparams.vocab_only) {
+@@ -1900,8 +1899,8 @@ llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {

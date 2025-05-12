@@ -1,7 +1,7 @@
-diff --git a/tools/llava/clip-impl.h b/tools/llava/clip-impl.h
+diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
 index fb780e9d..adcc3a11 100644
---- a/tools/llava/clip-impl.h
-+++ b/tools/llava/clip-impl.h
+--- a/tools/mtmd/clip-impl.h
++++ b/tools/mtmd/clip-impl.h
 @@ -193,17 +193,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
@@ -60,11 +60,11 @@ index fb780e9d..adcc3a11 100644
  
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
-diff --git a/tools/llava/clip.cpp b/tools/llava/clip.cpp
-index 1414f6ba..1da602ec 100644
---- a/tools/llava/clip.cpp
-+++ b/tools/llava/clip.cpp
-@@ -339,11 +339,14 @@ struct clip_ctx {
+diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
+index 4e1a7328..f4bc75a3 100644
+--- a/tools/mtmd/clip.cpp
++++ b/tools/mtmd/clip.cpp
+@@ -350,11 +350,14 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
@@ -79,7 +79,7 @@ index 1414f6ba..1da602ec 100644
  
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-@@ -1678,6 +1681,18 @@ struct clip_model_loader {
+@@ -1703,6 +1706,18 @@ struct clip_model_loader {
              if (ctx_clip.proj_type == PROJECTOR_TYPE_UNKNOWN) {
                  throw std::runtime_error(string_format("%s: unknown projector type: %s\n", __func__, proj_type.c_str()));
              }
@@ -98,43 +98,19 @@ index 1414f6ba..1da602ec 100644
          }
  
          // other hparams
-@@ -1777,6 +1792,14 @@ struct clip_model_loader {
-                         hparams.rope_theta = 10000.0f;
-                         get_u32(KEY_SPATIAL_MERGE_SIZE, hparams.spatial_merge_size, false);
-                     } break;
-+                case PROJECTOR_TYPE_GEMMA3:
-+                    {
-+                        // default value (used by all model sizes in gemma 3 family)
-+                        // number of patches for each **side** is reduced by a factor of 4
-+                        hparams.proj_scale_factor = 4;
-+                        // test model (tinygemma3) has a different value, we optionally read it
-+                        get_u32(KEY_PROJ_SCALE_FACTOR, hparams.proj_scale_factor, false);
-+                    } break;
-                 case PROJECTOR_TYPE_QWEN25VL:
-                     {
-                         get_u32(KEY_WIN_ATTN_PATTERN, hparams.n_wa_pattern);
-@@ -2066,6 +2089,11 @@ struct clip_model_loader {
-         clip_image_size image_size;
-         image_size.width  = ctx_clip.vision_model.hparams.image_size;
-         image_size.height = ctx_clip.vision_model.hparams.image_size;
+@@ -2098,6 +2113,11 @@ struct clip_model_loader {
+         clip_image_f32_ptr img(clip_image_f32_init());
+         img->nx = ctx_clip.vision_model.hparams.image_size;
+         img->ny = ctx_clip.vision_model.hparams.image_size;
 +        if (ctx_clip.max_image_size > 0 &&
 +            (ctx_clip.proj_type == PROJECTOR_TYPE_QWEN2VL || ctx_clip.proj_type == PROJECTOR_TYPE_QWEN25VL)) {
-+            image_size.width  = ctx_clip.max_image_size;
-+            image_size.height = ctx_clip.max_image_size;
++            img->nx  = ctx_clip.max_image_size;
++            img->ny = ctx_clip.max_image_size;
 +        }
-         img->nx = image_size.width;
-         img->ny = image_size.height;
-         img->buf.resize(image_size.width * image_size.height * 3);
-@@ -2612,7 +2640,7 @@ struct llava_uhd {
+         img->buf.resize(img->nx * img->ny * 3);
+         batch.entries.push_back(std::move(img));
  
-         // resize to overview size
-         clip_image_u8_ptr resized_img(clip_image_u8_init());
--        image_manipulation::bicubic_resize(*img, *resized_img, inst.overview_size.width, inst.overview_size.height);
-+        image_manipulation::resize_and_pad_image(*img, *resized_img, {inst.overview_size.width, inst.overview_size.height});
-         output.push_back(std::move(resized_img));
-         if (inst.slices.empty()) {
-             // no slices, just return the resized image
-@@ -2765,6 +2793,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
+@@ -2795,6 +2815,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
      return inst.grid_size.width;
  }
  
@@ -146,24 +122,7 @@ index 1414f6ba..1da602ec 100644
  // returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns the normalized image patch tensors as a vector
  // res_imgs memory is being allocated here, previous allocations will be freed if found
  bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, struct clip_image_f32_batch * res_imgs) {
-@@ -2976,11 +3009,13 @@ int clip_n_output_tokens(const struct clip_ctx * ctx, struct clip_image_f32 * im
-         int y_patch = img->ny / patch_size + (int)(img->ny % patch_size > 0);
-         n_patches = x_patch * y_patch;
-     } else if (ctx->proj_type == PROJECTOR_TYPE_GEMMA3) {
--        n_patches = 256;
-+        int n_per_side = params.image_size / params.patch_size;
-+        int n_per_side_2d_pool = n_per_side / (params.proj_scale_factor == 0 ? 1 : params.proj_scale_factor);
-+        n_patches = n_per_side_2d_pool * n_per_side_2d_pool;
-     } else if (ctx->proj_type == PROJECTOR_TYPE_IDEFICS3) {
--        n_patches /= ctx->vision_model.hparams.proj_scale_factor;
-+        n_patches /= (params.proj_scale_factor * params.proj_scale_factor);
-     } else if (ctx->proj_type == PROJECTOR_TYPE_PIXTRAL) {
--        int n_merge = ctx->vision_model.hparams.spatial_merge_size;
-+        int n_merge = params.spatial_merge_size;
-         int n_patches_x = img->nx / params.patch_size / (n_merge > 0 ? n_merge : 1);
-         int n_patches_y = img->ny / params.patch_size / (n_merge > 0 ? n_merge : 1);
-         n_patches = n_patches_y*n_patches_x + n_patches_y - 1; // + one [IMG_BREAK] per row, except the last row
-@@ -3596,6 +3631,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3628,6 +3653,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -178,10 +137,10 @@ index 1414f6ba..1da602ec 100644
  bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec) {
      clip_image_f32 clip_img;
      clip_img.buf.resize(h * w * 3);
-diff --git a/tools/llava/clip.h b/tools/llava/clip.h
+diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
 index 0b0eb029..a0010818 100644
---- a/tools/llava/clip.h
-+++ b/tools/llava/clip.h
+--- a/tools/mtmd/clip.h
++++ b/tools/mtmd/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
  struct clip_context_params {
      bool use_gpu;
