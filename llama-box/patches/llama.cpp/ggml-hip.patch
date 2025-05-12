@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
-index 919217df..e8a2dd53 100644
+index 64fb4ff4..e3a8b460 100644
 --- a/ggml/src/ggml-cuda/common.cuh
 +++ b/ggml/src/ggml-cuda/common.cuh
 @@ -59,6 +59,9 @@
@@ -21,7 +21,7 @@ index 919217df..e8a2dd53 100644
  
  // Moore Threads
  #define GGML_CUDA_MUSA_ARCH_IS_QY1 (__MUSA_ARCH__ <= 210)
-@@ -409,7 +412,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
+@@ -428,7 +431,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
  
  static __device__ __forceinline__ int ggml_cuda_dp4a(const int a, const int b, int c) {
  #if defined(GGML_USE_HIP) && defined(__HIP_PLATFORM_AMD__)
