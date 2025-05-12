@@ -3435,7 +3435,7 @@ struct httpserver {
                                     } else {
                                         llama_image_tokens tokenized_image =
                                             std::get<llama_image_tokens>(tokenized_prompt);
-                                        llama_tokens dummy_tokens(tokenized_image.n_tokens, LLAMA_TOKEN_NULL);
+                                        llama_tokens dummy_tokens(tokenized_image.n_pos, LLAMA_TOKEN_NULL);
                                         tokens.insert(tokens.end(), dummy_tokens.begin(), dummy_tokens.end());
                                     }
                                 }
@@ -3598,7 +3598,7 @@ struct httpserver {
                                         std::get<llama_image_tokens>(std::move(task->tokenized_prompts[i_prompt]));
                                     const int32_t n_image   = tokenized_image.n_tokens;
                                     const int32_t n_image_s = task->n_prefilled - c_prefilled;
-                                    if (n_image_s < n_image) {
+                                    if (n_image_s < tokenized_image.n_pos) {
                                         int32_t decoded_image = -1;
                                         // Qwen2VL
                                         if (clip_is_qwen2vl(llm_ctx_clip)) {
@@ -3622,7 +3622,7 @@ struct httpserver {
                                                                                 mrope_pos.data(), seq_id);
                                             // decode immediately
                                             decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                            task->pos += ph;
+                                            task->pos += tokenized_image.n_pos;
                                         }
                                         // Gemma3
                                         else if (clip_is_gemma3(llm_ctx_clip)) {
@@ -3633,7 +3633,7 @@ struct httpserver {
                                             llama_set_causal_attn(llm_ctx, false);
                                             decoded_image = llama_decode(llm_ctx, batch_image.batch);
                                             llama_set_causal_attn(llm_ctx, true);
-                                            task->pos += n_image;
+                                            task->pos += tokenized_image.n_pos;
                                         }
                                         // Others
                                         else {
@@ -3642,7 +3642,7 @@ struct httpserver {
                                                                                 task->pos, seq_id);
                                             // decode immediately
                                             decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                            task->pos += n_image;
+                                            task->pos += tokenized_image.n_pos;
                                         }
                                         if (decoded_image != 0) {
                                             SRV_ERR(
@@ -3665,12 +3665,12 @@ struct httpserver {
                                                 httplib::InternalServerError_500, std::move(data)));
                                             break;
                                         }
-                                        task->n_prefilled += n_image;
+                                        task->n_prefilled += tokenized_image.n_pos;
                                     }
-                                    llama_tokens dummy_tokens(n_image, LLAMA_TOKEN_NULL);
+                                    llama_tokens dummy_tokens(tokenized_image.n_pos, LLAMA_TOKEN_NULL);
                                     task->processed_tokens.insert(task->processed_tokens.end(), dummy_tokens.begin(),
                                                                   dummy_tokens.end());
-                                    c_prefilled += n_image;
+                                    c_prefilled += tokenized_image.n_pos;
                                 }
                             }
                             // abort task if not prefilled all,
@@ -5193,7 +5193,7 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // lead patch <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     tokenized_images.erase(tokenized_images.begin());
                     // </image>
@@ -5225,7 +5225,7 @@ struct httpserver {
                                 tokenized_prompts.emplace_back(std::move(tokenized_text));
                                 // other patches <IMG/>
                                 tokenized_image = tokenized_images[y * n_img_embd_col + x];
-                                n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                                n_prefilling_request += int32_t(tokenized_image.n_pos);
                                 tokenized_prompts.emplace_back(std::move(tokenized_image));
                                 // </slice> | </image>
                                 tokenized_text = common_tokenize(llm_vocab, ofmt, false, true);
@@ -5250,7 +5250,7 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     // <|vision_end|>
                     tokenized_text = common_tokenize(llm_vocab, "<|vision_end|>", false, true);
@@ -5266,7 +5266,7 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     // <|end_of_image|>
                     tokenized_text = common_tokenize(llm_vocab, "<|end_of_image|>", false, true);
@@ -5283,7 +5283,7 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     // <fake_token_around_image>
                     tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image>", false, true);
@@ -5295,7 +5295,7 @@ struct httpserver {
                 else if (clip_is_pixtral(llm_ctx_clip)) {
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     // [IMG_END]
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "[IMG_END]", false, true);
@@ -5311,7 +5311,7 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     // </img>
                     tokenized_text = common_tokenize(llm_vocab, "</img>", false, true);
@@ -5322,7 +5322,7 @@ struct httpserver {
                 else {
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_tokens);
+                    n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                 }
                 req->images[images_count++] = nullptr;  // release image asap
