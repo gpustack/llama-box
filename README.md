@@ -36,6 +36,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
           or the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402).
           The popular [Mungert/Qwen2.5-VL-*B-Instruct-GGUF](https://huggingface.co/Mungert?search_models=Qwen2.5-VL)
           repos are broken.
+        - [x] InternVL2/InternVL3 Series
         - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
