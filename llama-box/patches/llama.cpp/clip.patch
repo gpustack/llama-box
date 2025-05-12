@@ -61,7 +61,7 @@ index 23036ba7..969cbb93 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 0adf0316..2c3bc41a 100644
+index 0adf0316..aa933c0f 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -361,6 +361,8 @@ struct clip_ctx {
@@ -87,13 +87,13 @@ index 0adf0316..2c3bc41a 100644
              }
 +#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_METAL)
 +            if ((ctx_clip.proj_type == PROJECTOR_TYPE_QWEN2VL || ctx_clip.proj_type == PROJECTOR_TYPE_QWEN25VL) && !ggml_backend_is_cpu(ctx_clip.backend)) {
-+                LOG_WRN("%s: Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n", __func__);
++                LOG_WRN("%s", "Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n");
 +                ggml_backend_free(ctx_clip.backend);
 +                ctx_clip.backend = ctx_clip.backend_cpu;
 +                ctx_clip.backend_ptrs.erase(ctx_clip.backend_ptrs.begin());
 +                ctx_clip.backend_buft.erase(ctx_clip.backend_buft.begin());
 +                ctx_clip.sched.reset(
-+                    ggml_backend_sched_new(ctx_clip.backend_ptrs.data(), ctx_clip.backend_buft.data(), ctx_clip.backend_ptrs.size(), 8192, false)
++                    ggml_backend_sched_new(ctx_clip.backend_ptrs.data(), ctx_clip.backend_buft.data(), ctx_clip.backend_ptrs.size(), 8192, false, true)
 +                );
 +            }
 +#endif
