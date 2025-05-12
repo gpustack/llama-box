@@ -1,8 +1,8 @@
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index fb780e9d..adcc3a11 100644
+index 23036ba7..969cbb93 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
-@@ -193,17 +193,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -199,17 +199,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -21,7 +21,7 @@ index fb780e9d..adcc3a11 100644
  
  //
  // cpp wrappers
-@@ -248,37 +238,7 @@ struct clip_image_f32_batch {
+@@ -254,37 +244,7 @@ struct clip_image_f32_batch {
  // common utils
  //
  
@@ -61,10 +61,10 @@ index fb780e9d..adcc3a11 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 1a81c1fc..bdbd43be 100644
+index 0adf0316..2c3bc41a 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
-@@ -350,6 +350,8 @@ struct clip_ctx {
+@@ -361,6 +361,8 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
@@ -73,7 +73,7 @@ index 1a81c1fc..bdbd43be 100644
      clip_ctx(clip_context_params & ctx_params) {
          backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
          if (!backend_cpu) {
-@@ -358,6 +360,7 @@ struct clip_ctx {
+@@ -369,6 +371,7 @@ struct clip_ctx {
          backend = ctx_params.use_gpu
                      ? ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr)
                      : nullptr;
@@ -81,7 +81,7 @@ index 1a81c1fc..bdbd43be 100644
  
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-@@ -1706,6 +1709,18 @@ struct clip_model_loader {
+@@ -1802,6 +1805,18 @@ struct clip_model_loader {
              if (ctx_clip.proj_type == PROJECTOR_TYPE_UNKNOWN) {
                  throw std::runtime_error(string_format("%s: unknown projector type: %s\n", __func__, proj_type.c_str()));
              }
@@ -100,10 +100,10 @@ index 1a81c1fc..bdbd43be 100644
          }
  
          // other hparams
-@@ -2101,6 +2116,11 @@ struct clip_model_loader {
+@@ -2227,6 +2242,11 @@ struct clip_model_loader {
          clip_image_f32_ptr img(clip_image_f32_init());
-         img->nx = ctx_clip.vision_model.hparams.image_size;
-         img->ny = ctx_clip.vision_model.hparams.image_size;
+         img->nx = ctx_clip.vision_model.hparams.warmup_image_size;
+         img->ny = ctx_clip.vision_model.hparams.warmup_image_size;
 +        if (ctx_clip.max_image_size > 0 &&
 +            (ctx_clip.proj_type == PROJECTOR_TYPE_QWEN2VL || ctx_clip.proj_type == PROJECTOR_TYPE_QWEN25VL)) {
 +            img->nx  = ctx_clip.max_image_size;
@@ -112,7 +112,7 @@ index 1a81c1fc..bdbd43be 100644
          img->buf.resize(img->nx * img->ny * 3);
          batch.entries.push_back(std::move(img));
  
-@@ -2799,6 +2819,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
+@@ -2926,6 +2946,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
      return inst.grid_size.width;
  }
  
@@ -124,7 +124,7 @@ index 1a81c1fc..bdbd43be 100644
  // returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns the normalized image patch tensors as a vector
  // res_imgs memory is being allocated here, previous allocations will be freed if found
  bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, struct clip_image_f32_batch * res_imgs) {
-@@ -3632,6 +3657,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3776,6 +3801,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -136,11 +136,15 @@ index 1a81c1fc..bdbd43be 100644
 +    return ctx->proj_type == PROJECTOR_TYPE_PIXTRAL;
 +}
 +
++bool clip_is_internvl(const struct clip_ctx * ctx) {
++    return ctx->proj_type == PROJECTOR_TYPE_INTERNVL;
++}
++
  bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec) {
      clip_image_f32 clip_img;
      clip_img.buf.resize(h * w * 3);
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index 0b0eb029..76bb2af0 100644
+index 0b0eb029..1d8995d0 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
@@ -159,12 +163,13 @@ index 0b0eb029..76bb2af0 100644
  CLIP_API void clip_add_load_image_size(struct clip_ctx * ctx_clip, struct clip_image_size * load_image_size);
  CLIP_API struct clip_image_size * clip_get_load_image_size(struct clip_ctx * ctx_clip);
  
-@@ -124,6 +126,8 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
+@@ -124,6 +126,9 @@ CLIP_API bool clip_is_glm(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_qwen2vl(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_llava(const struct clip_ctx * ctx);
  CLIP_API bool clip_is_gemma3(const struct clip_ctx * ctx);
 +CLIP_API bool clip_is_smolvlm(const struct clip_ctx * ctx);
 +CLIP_API bool clip_is_pixtral(const struct clip_ctx * ctx);
++CLIP_API bool clip_is_internvl(const struct clip_ctx * ctx);
  
  CLIP_API bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec);
  
