@@ -61,10 +61,10 @@ index fb780e9d..adcc3a11 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 4e1a7328..f4bc75a3 100644
+index 1a81c1fc..bdbd43be 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
-@@ -350,11 +350,14 @@ struct clip_ctx {
+@@ -350,6 +350,8 @@ struct clip_ctx {
  
      clip_image_size load_image_size;
  
@@ -72,14 +72,16 @@ index 4e1a7328..f4bc75a3 100644
 +
      clip_ctx(clip_context_params & ctx_params) {
          backend_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
-         backend     = ctx_params.use_gpu
-                         ? ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr)
-                         : nullptr;
+         if (!backend_cpu) {
+@@ -358,6 +360,7 @@ struct clip_ctx {
+         backend = ctx_params.use_gpu
+                     ? ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr)
+                     : nullptr;
 +        max_image_size = ctx_params.max_image_size;
  
          if (backend) {
              LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-@@ -1703,6 +1706,18 @@ struct clip_model_loader {
+@@ -1706,6 +1709,18 @@ struct clip_model_loader {
              if (ctx_clip.proj_type == PROJECTOR_TYPE_UNKNOWN) {
                  throw std::runtime_error(string_format("%s: unknown projector type: %s\n", __func__, proj_type.c_str()));
              }
@@ -98,7 +100,7 @@ index 4e1a7328..f4bc75a3 100644
          }
  
          // other hparams
-@@ -2098,6 +2113,11 @@ struct clip_model_loader {
+@@ -2101,6 +2116,11 @@ struct clip_model_loader {
          clip_image_f32_ptr img(clip_image_f32_init());
          img->nx = ctx_clip.vision_model.hparams.image_size;
          img->ny = ctx_clip.vision_model.hparams.image_size;
@@ -110,7 +112,7 @@ index 4e1a7328..f4bc75a3 100644
          img->buf.resize(img->nx * img->ny * 3);
          batch.entries.push_back(std::move(img));
  
-@@ -2795,6 +2815,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
+@@ -2799,6 +2819,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
      return inst.grid_size.width;
  }
  
@@ -122,7 +124,7 @@ index 4e1a7328..f4bc75a3 100644
  // returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns the normalized image patch tensors as a vector
  // res_imgs memory is being allocated here, previous allocations will be freed if found
  bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, struct clip_image_f32_batch * res_imgs) {
-@@ -3628,6 +3653,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3632,6 +3657,14 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -138,14 +140,14 @@ index 4e1a7328..f4bc75a3 100644
      clip_image_f32 clip_img;
      clip_img.buf.resize(h * w * 3);
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index 0b0eb029..a0010818 100644
+index 0b0eb029..76bb2af0 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
 @@ -37,6 +37,7 @@ struct clip_image_f32_batch;
  struct clip_context_params {
      bool use_gpu;
      enum ggml_log_level verbosity;
-+    int32_t max_image_size = 0;
++    int max_image_size = 0;
  };
  
  // deprecated, use clip_init
