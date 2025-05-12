@@ -9,8 +9,8 @@
 #include <utility>
 #include <variant>
 
-#include "llama.cpp/tools/llava/clip-impl.h"
-#include "llama.cpp/tools/llava/clip.h"
+#include "llama.cpp/tools/mtmd/clip-impl.h"
+#include "llama.cpp/tools/mtmd/clip.h"
 
 // types
 

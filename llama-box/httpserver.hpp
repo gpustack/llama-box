@@ -16,7 +16,7 @@
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/common/ngram-cache.h"
 #include "llama.cpp/common/sampling.h"
-#include "llama.cpp/tools/llava/clip.h"
+#include "llama.cpp/tools/mtmd/clip.h"
 #include "llama.cpp/tools/server/httplib.h"
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
