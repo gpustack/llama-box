@@ -254,7 +254,6 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "Set jinja chat template (default: take from model's metadata)\n"
                                                                                                             "Required --jinja set before\n" });
     opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "Path to save slot kv cache (default: disabled)" });
-    opts.push_back({ "server/completion",                  "-sps,  --slot-prompt-similarity N",             "How much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", llm_params.slot_prompt_similarity });
     opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "Maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
                                                                                                             "When enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", params_.hs_params.n_tps });
     opts.push_back({ "server/completion",                  "-t,    --threads N",                            "Number of threads to use during generation (default: %d)", llm_params.cpuparams.n_threads });
@@ -347,7 +346,6 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "Add a control vector" });
     opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "Add a control vector with user defined scaling SCALE" });
     opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "Layer range to apply the control vector(s) to, start and end inclusive" });
-    opts.push_back({ "server/completion",                  "       --spm-infill",                           "Use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: %s)", llm_params.spm_infill ? "enabled" : "disabled" });
     opts.push_back({ "server/completion",                  "-sp,   --special",                              "Special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
     // server // completion //
     // server // completion // speculative //
@@ -889,15 +887,6 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                     invalid("--chat-template-file, set --chat-template directly if using a built-in template");
                 }
                 params_.hs_params.llm_params.chat_template = t;
-                continue;
-            }
-
-            if (!strcmp(flag, "-sps") || !strcmp(flag, "--slot-prompt-similarity")) {
-                if (i == argc) {
-                    missing("--slot-prompt-similarity");
-                }
-                char * arg                                          = argv[i++];
-                params_.hs_params.llm_params.slot_prompt_similarity = std::stof(std::string(arg));
                 continue;
             }
 
@@ -1620,11 +1609,6 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 char * e                                                = argv[i++];
                 params_.hs_params.llm_params.control_vector_layer_start = std::stoi(std::string(s));
                 params_.hs_params.llm_params.control_vector_layer_end   = std::stoi(std::string(e));
-                continue;
-            }
-
-            if (!strcmp(flag, "--spm-infill")) {
-                params_.hs_params.llm_params.spm_infill = true;
                 continue;
             }
 
