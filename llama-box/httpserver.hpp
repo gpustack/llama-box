@@ -402,10 +402,10 @@ static inline void sort_rerank_results(json & result, int32_t low, int32_t high)
     json    base = result[low];
     int32_t i = low, j = high;
     while (i != j) {
-        while (i < j && json_value(result[j], "score", 0.0) <= json_value(base, "score", 0.0)) {
+        while (i < j && json_value(result[j], "relevance_score", 0.0) <= json_value(base, "relevance_score", 0.0)) {
             j--;
         }
-        while (i < j && json_value(result[i], "score", 0.0) >= json_value(base, "score", 0.0)) {
+        while (i < j && json_value(result[i], "relevance_score", 0.0) >= json_value(base, "relevance_score", 0.0)) {
             i++;
         }
         if (i < j) {
@@ -2412,8 +2412,8 @@ struct embeddings_task : btask {
         json   results = json::array();
         for (int32_t seq = 0; seq < n_seq - (dreq->normalize ? 2 : 0); seq++) {
             json item = {
-                { "index", seq            },
-                { "score", embeds[seq][0] },
+                { "index",           seq            },
+                { "relevance_score", embeds[seq][0] },
             };
             if (dreq->return_documents) {
                 item["document"] = dreq->documents[seq].is_string() ?
@@ -2426,8 +2426,8 @@ struct embeddings_task : btask {
         }
         sort_rerank_results(results, 0, n_seq - 1 - (dreq->normalize ? 2 : 0));
         if (dreq->normalize) {
-            float scr_max = std::max(embeds[n_seq - 2][0], results[0].at("score").get<float>());
-            float scr_min = std::min(embeds[n_seq - 1][0], results[n_seq - 3].at("score").get<float>());
+            float scr_max = std::max(embeds[n_seq - 2][0], results[0].at("relevance_score").get<float>());
+            float scr_min = std::min(embeds[n_seq - 1][0], results[n_seq - 3].at("relevance_score").get<float>());
             float scr_dst = scr_max - scr_min;
             float a = 0.001, b = 0.998;
             if (scr_dst < 1e-6 || dreq->query.get<std::string>() ==
@@ -2437,9 +2437,9 @@ struct embeddings_task : btask {
                 a = 0, b = 1;
             }
             for (int32_t seq = 0; seq < n_seq - 2 && seq < dreq->top_n; seq++) {
-                auto scr              = results[seq].at("score").get<float>();
-                scr                   = a + (scr - scr_min) * b / scr_dst;
-                results[seq]["score"] = scr;
+                auto scr                        = results[seq].at("relevance_score").get<float>();
+                scr                             = a + (scr - scr_min) * b / scr_dst;
+                results[seq]["relevance_score"] = scr;
             }
         }
         results.erase(results.begin() + dreq->top_n, results.end());
