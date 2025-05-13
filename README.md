@@ -404,16 +404,13 @@ server/completion:
                                   Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template BUILTIN  Set built-in chat template (default: analyze from model's metadata)
                                   Only built-in templates are accepted, implicit reset --jinja setting
-                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
+                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, mistral-v7-tekken, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
          --jinja                  Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)
          --chat-template-file FILE
                                   Set jinja chat template (default: take from model's metadata)
                                   Required --jinja set before
                                   
          --slot-save-path PATH    Path to save slot kv cache (default: disabled)
-  -sps,  --slot-prompt-similarity N
-                                  How much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.50, 0.0 = disabled)
-                                  
   -tps   --tokens-per-second N    Maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
                                   When enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
   -t,    --threads N              Number of threads to use during generation (default: -1)
@@ -444,8 +441,8 @@ server/completion:
          --keep N                 Number of tokens to keep from the initial prompt (default: 0, -1 = all)
          --no-escape              Disable process escape sequences
   -e,    --escape                 Process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
-         --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_k;typ_p;top_p;min_p;xtc;temperature)
-         --sampling-seq SEQUENCE  Simplified sequence for samplers that will be used (default: edkypmxt)
+         --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature)
+         --sampling-seq SEQUENCE  Simplified sequence for samplers that will be used (default: edskypmxt)
          --temp T                 Temperature (default: 0.8)
          --top-k N                Top-K sampling (default: 40, 0 = disabled)
          --top-p N                Top-P sampling (default: 0.9, 1.0 = disabled)
@@ -507,7 +504,6 @@ server/completion:
                                   Add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
                                   Layer range to apply the control vector(s) to, start and end inclusive
-         --spm-infill             Use Suffix/Prefix/Middle pattern for infill (instead of Prefix/Suffix/Middle) as some models prefer this (default: disabled)
   -sp,   --special                Special tokens output enabled (default: false)
 
 server/completion/speculative:
