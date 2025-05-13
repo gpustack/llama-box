@@ -15,8 +15,9 @@
 // types
 
 struct llama_image_tokens {
-    int32_t            n_tokens = 0;
-    int32_t            n_pos    = 0;
+    llama_token        dummy_token = LLAMA_TOKEN_NULL;
+    int32_t            n_tokens    = 0;
+    int32_t            n_pos       = 0;
     std::vector<float> embed;
     clip_image_size    size;
 };
@@ -94,6 +95,8 @@ static inline std::vector<llama_image_tokens> tokenize_image(clip_ctx * ctx_clip
     std::vector<llama_image_tokens> result;
     result.resize(batch.entries.size());
 
+    static std::atomic<llama_token> image_dummy_token{ LLAMA_TOKEN_NULL };
+
     if (clip_is_llava(ctx_clip) || clip_is_minicpmv(ctx_clip)) {
         int32_t n_tokens = 0;
         for (const auto & entry : batch.entries) {
@@ -123,6 +126,7 @@ static inline std::vector<llama_image_tokens> tokenize_image(clip_ctx * ctx_clip
             std::memcpy(result[i].embed.data(), embed.data() + i * n_mmproj_embd * result[i].n_tokens, n_embed);
             LOG_INF("encoded image %2zu/%zu in %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
                     (ggml_time_us() - t_start) / 1000.0, result[i].n_tokens);
+            result[i].dummy_token = image_dummy_token--;
         }
     } else {
         // init
@@ -145,6 +149,7 @@ static inline std::vector<llama_image_tokens> tokenize_image(clip_ctx * ctx_clip
             const int32_t ph = batch.entries[0]->ny / ps + (batch.entries[0]->ny % ps > 0);
             result[0].n_pos  = ph;
         }
+        result[0].dummy_token = image_dummy_token--;
     }
 
     return result;

@@ -522,3 +522,40 @@ static std::string hash_fnv(const uint8_t * data, size_t len) {
     ss << std::hex << std::setfill('0') << std::setw(16) << hash;
     return ss.str();
 }
+
+static std::string escape_string(const std::string & str) {
+    std::ostringstream oss;
+    for (const unsigned char uc : str) {
+        switch (uc) {
+            case '\n':
+                oss << "\\n";
+                break;
+            case '\b':
+                oss << "\\b";
+                break;
+            case '\f':
+                oss << "\\f";
+                break;
+            case '\r':
+                oss << "\\r";
+                break;
+            case '\t':
+                oss << "\\t";
+                break;
+            case '\\':
+                oss << "\\\\";
+                break;
+            default:
+                if (uc >= 0x80) {
+                    oss << uc;
+                } else if (std::isprint(uc)) {
+                    oss << uc;
+                } else {
+                    oss << "\\u" << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
+                        << static_cast<int>(uc);
+                }
+                break;
+        }
+    }
+    return oss.str();
+}

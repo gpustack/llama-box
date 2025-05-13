@@ -829,19 +829,52 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     return ptr;
 }
 
+struct clip_image {
+    clip_image_u8_ptr ptr;
+    std::string       hash;
+};
+
+static inline clip_image get_clip_image(std::vector<uint8_t> && img_buff) {
+    std::string hash;
+    try {
+        hash = hash_fnv(img_buff.data(), img_buff.size());
+    } catch (std::exception & e) {
+        LOG_WRN("failed to hash image: %s\n", e.what());
+    }
+
+    int32_t   w  = 0;
+    int32_t   h  = 0;
+    int32_t   c  = 0;
+    uint8_t * dt = stbi_load_from_memory((const stbi_uc *) img_buff.data(), (int32_t) img_buff.size(), &w, &h, &c, 3);
+    if (dt == nullptr) {
+        throw std::invalid_argument("Illegal param: provided image is invalid: " + std::string(stbi_failure_reason()));
+    }
+    if (w <= 0 || h <= 0 || c < 3) {
+        stbi_image_free(dt);
+        throw std::invalid_argument("Illegal param: provided image is invalid");
+    }
+
+    clip_image_u8_ptr ptr(clip_image_u8_init());
+    ptr->nx  = w;
+    ptr->ny  = h;
+    ptr->buf = std::vector<uint8_t>(dt, dt + w * h * c);
+
+    return { std::move(ptr), hash };
+}
+
 struct chat_complete_req : complete_req {
     explicit chat_complete_req(const std::string & id) : complete_req(id, REQ_CHAT_COMPLETE) {}
 
     /* LLAMA BOX */
 
     // images, temporary use, will not value in "process"
-    std::vector<clip_image_u8_ptr> images;
-    common_chat_params             chat_params;
+    std::vector<clip_image>  images;
+    common_chat_params       chat_params;
     // tool calls
-    llama_token                    tool_call_start_token = LLAMA_TOKEN_NULL;
-    std::string                    tool_call_start_token_word;
-    std::vector<std::string>       tool_call_start_words;
-    size_t                         tool_call_start_words_longest_length = 0;
+    llama_token              tool_call_start_token = LLAMA_TOKEN_NULL;
+    std::string              tool_call_start_token_word;
+    std::vector<std::string> tool_call_start_words;
+    size_t                   tool_call_start_words_longest_length = 0;
 
     /* OPEN AI*/
 
@@ -873,25 +906,6 @@ struct chat_complete_req : complete_req {
     bool                          parallel_tool_calls = true;
     // std::string user;
 };
-
-static inline clip_image_u8_ptr get_clip_image(std::vector<uint8_t> && img_buff) {
-    int32_t   w  = 0;
-    int32_t   h  = 0;
-    int32_t   c  = 0;
-    uint8_t * dt = stbi_load_from_memory((const stbi_uc *) img_buff.data(), (int32_t) img_buff.size(), &w, &h, &c, 3);
-    if (dt == nullptr) {
-        throw std::invalid_argument("Illegal param: provided image is invalid: " + std::string(stbi_failure_reason()));
-    }
-    if (w <= 0 || h <= 0 || c < 3) {
-        stbi_image_free(dt);
-        throw std::invalid_argument("Illegal param: provided image is invalid");
-    }
-    clip_image_u8_ptr img(clip_image_u8_init());
-    img->nx  = w;
-    img->ny  = h;
-    img->buf = std::vector<uint8_t>(dt, dt + w * h * c);
-    return img;
-}
 
 static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
     const httplib::Request & request, httplib::Response & response, const httpserver_params & hparams,
@@ -975,8 +989,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                 }
                                 try {
                                     std::vector<uint8_t> img_buff = decode_base64(img);
-                                    clip_image_u8_ptr    clip_img = get_clip_image(std::move(img_buff));
-                                    ptr->images.push_back(std::move(clip_img));
+                                    ptr->images.push_back(get_clip_image(std::move(img_buff)));
                                 } catch (const std::exception & e) {
                                     throw std::invalid_argument(
                                         "Illegal param: \"image_url\" must be a valid base64-encoded image");
@@ -1017,8 +1030,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                         ", reason: " + (resp ? resp->reason : "unknown"));
                                 }
                                 std::vector<uint8_t> img_buff(resp->body.begin(), resp->body.end());
-                                clip_image_u8_ptr    clip_img = get_clip_image(std::move(img_buff));
-                                ptr->images.push_back(std::move(clip_img));
+                                ptr->images.push_back(get_clip_image(std::move(img_buff)));
                             }
                             n_img++;
                             continue;
@@ -2721,8 +2733,8 @@ struct httpserver {
         llm_ctx_size       = int32_t(llama_n_ctx(llm_ctx));
         llm_ctx_embed_size = llama_model_n_embd(llm_model);
         if (params.llm_params.n_threads_http != 1) {
-            llm_ctx_size_shifting = int32_t(float(llm_ctx_size) / float(params.llm_params.n_threads_http) * 1.5);
-            llm_ctx_size_shifting = std::max(llm_ctx_size_shifting, std::min(llm_ctx_size, 512));
+            float ratio           = llm_ctx_clip == nullptr ? 1.0f : 1.5f;
+            llm_ctx_size_shifting = int32_t(float(llm_ctx_size) / float(params.llm_params.n_threads_http) * ratio) - 1;
         } else {
             llm_ctx_size_shifting = llm_ctx_size - 1;
         }
@@ -3167,8 +3179,9 @@ struct httpserver {
 
     struct cache_prompt_entry {
         llama_tokens tokens;
-        bool         used = false;
-        size_t       pos  = 0;  // prefix start position
+        bool         used        = false;
+        llama_pos    pos         = 0;  // position
+        llama_pos    pos_discard = 0;  // count the discard position
     };
 
     bool                            cache_prompt = false;
@@ -3239,7 +3252,7 @@ struct httpserver {
 
     inline bool support_image() const { return sd_ctx != nullptr; }
 
-    inline void shift_cmpl_task_ctx(completions_task * task) {
+    inline void shift_cmpl_task_ctx(completions_task * task, const int32_t n_discard_exp = 1) {
         if (!llama_kv_self_can_shift(llm_ctx)) {
             return;
         }
@@ -3247,7 +3260,7 @@ struct httpserver {
         const int32_t     seq_id    = task->get_seq_id();
         const int32_t     n_keep    = params.llm_params.n_keep + llama_vocab_get_add_bos(llm_vocab);
         const int32_t     n_left    = task->pos - n_keep;
-        const int32_t     n_discard = n_left >> 1;
+        const int32_t     n_discard = n_discard_exp > 0 ? n_left >> n_discard_exp : n_left - (n_left >> -n_discard_exp);
         llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
         llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
         if (llm_ctx_draft != nullptr) {
@@ -3255,7 +3268,7 @@ struct httpserver {
             llama_kv_self_seq_add(llm_ctx_draft, seq_id, n_keep + n_discard, task->pos, -n_discard);
         }
         SRV_WRN("rid %s | shift context, kv cache move, seq = %d, [%d, %d) -> [%d, %d)\n", rid.c_str(), seq_id,
-                n_keep + n_discard, task->pos, n_keep, n_keep + n_discard);
+                n_keep + n_discard, task->pos, n_keep, task->pos - n_discard);
         task->pos -= n_discard;
         task->pos_discard += n_discard;
     }
@@ -3400,70 +3413,52 @@ struct httpserver {
                                     } else {
                                         llama_image_tokens tokenized_image =
                                             std::get<llama_image_tokens>(tokenized_prompt);
-                                        llama_tokens dummy_tokens(tokenized_image.n_pos, LLAMA_TOKEN_NULL);
+                                        llama_tokens dummy_tokens(tokenized_image.n_pos, tokenized_image.dummy_token);
                                         tokens.insert(tokens.end(), dummy_tokens.begin(), dummy_tokens.end());
                                     }
                                 }
                             }
-                            bool                                   seq_id_used      = false;
-                            int32_t                                seq_lcp_id_empty = -1;
-                            int32_t                                seq_lcp_id       = -1;
-                            std::unique_ptr<longest_common_prefix> seq_lcp          = nullptr;
+                            size_t    seq_lcp_l   = 0;
+                            int32_t   seq_lcp_id  = seq_id;
+                            llama_pos seq_lcp_pos = 0;
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
-                                if (cache.used) {
-                                    seq_id_used = i == seq_id;
-                                    continue;
-                                }
-                                seq_lcp_id_empty = i;
-                                if (cache.tokens.empty()) {
-                                    continue;
-                                }
-                                std::unique_ptr<longest_common_prefix> lcp =
-                                    find_longest_common_prefix(cache.tokens, tokens);
-                                if (lcp != nullptr) {
-                                    if (seq_lcp == nullptr || (lcp->l > seq_lcp->l && lcp->l >= cache.pos - 1)) {
-                                        seq_lcp    = std::move(lcp);
-                                        seq_lcp_id = i;
+                                if (!cache.used) {
+                                    size_t lcp_l = common_lcp(cache.tokens, tokens);
+                                    if (lcp_l > seq_lcp_l) {
+                                        seq_lcp_l   = lcp_l;
+                                        seq_lcp_id  = i;
+                                        seq_lcp_pos = cache.pos - 1;
                                     }
                                 }
                             }
+                            seq_id = seq_lcp_id;
                             // miss cache
-                            if (seq_lcp == nullptr) {
-                                if (seq_id_used) {
-                                    seq_id = seq_lcp_id_empty;
-                                }
+                            if (seq_lcp_l == 0) {
                                 SRV_INFV(2, "rid %s | miss prompt cache, seq = %d\n", rid.c_str(), seq_id);
                             }
                             // hit cache
                             else {
-                                auto pos                      = int32_t(std::min(tokens.size() - 1, seq_lcp->l));
-                                seq_id                        = seq_lcp_id;
-                                task->n_prefilled_cached      = pos;
-                                task->n_prefilled             = pos;
+                                auto n_prefilled              = int32_t(std::min(tokens.size() - 1, seq_lcp_l));
+                                auto pos                      = std::min(seq_lcp_pos, llama_pos(seq_lcp_l));
+                                task->n_prefilled_cached      = n_prefilled;
+                                task->n_prefilled             = n_prefilled;
                                 task->pos                     = pos;
-                                task->n_processed_detokenized = pos;
-                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos_s = %d, pos = %d\n", rid.c_str(),
-                                         seq_id, (seq_lcp == nullptr ? 0 : seq_lcp->s), pos);
+                                task->n_processed_detokenized = n_prefilled;
+                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = %d\n", rid.c_str(), seq_id,
+                                         pos);
                             }
+                            // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                            cache.tokens.clear();
-                            cache.used = true;
-                            cache.pos  = 0;
+                            cache.used                 = true;
                             task->set_seq_id(seq_id);
 
                             // mask kv cache
-                            if (seq_lcp != nullptr && seq_lcp->s > 0) {
-                                llama_kv_self_seq_add(llm_ctx, seq_id, seq_lcp->s, task->pos, -seq_lcp->s);
-                                if (llm_ctx_draft != nullptr) {
-                                    llama_kv_self_seq_add(llm_ctx_draft, seq_id, seq_lcp->s, task->pos, -seq_lcp->s);
-                                }
-                            }
                             llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
                             }
-                            SRV_DBG("rid %s | prefix cache, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id,
+                            SRV_DBG("rid %s | prefix cache, kv cache mask, seq %d = [%d, end)\n", rid.c_str(), seq_id,
                                     task->pos);
                         }
 
@@ -3632,7 +3627,7 @@ struct httpserver {
                                         }
                                         task->n_prefilled += tokenized_image.n_pos;
                                     }
-                                    llama_tokens dummy_tokens(tokenized_image.n_pos, LLAMA_TOKEN_NULL);
+                                    llama_tokens dummy_tokens(tokenized_image.n_pos, tokenized_image.dummy_token);
                                     task->processed_tokens.insert(task->processed_tokens.end(), dummy_tokens.begin(),
                                                                   dummy_tokens.end());
                                     c_prefilled += tokenized_image.n_pos;
@@ -3662,7 +3657,7 @@ struct httpserver {
 
                         // prepare cache - truncate cache
                         if (task->pos >= llm_ctx_size_shifting && params.llm_params.ctx_shift) {
-                            shift_cmpl_task_ctx(task);
+                            shift_cmpl_task_ctx(task, 2);
                         }
 
                         // batching
@@ -3718,8 +3713,9 @@ struct httpserver {
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         cache.tokens.clear();
-                        cache.used = false;
-                        cache.pos  = 0;
+                        cache.used        = false;
+                        cache.pos         = 0;
+                        cache.pos_discard = 0;
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
@@ -3809,7 +3805,7 @@ struct httpserver {
                                     break;
                                 }
                                 auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
-                                shift_cmpl_task_ctx(task);
+                                shift_cmpl_task_ctx(task, -2);
                                 // adjust batch pos
                                 const llama_pos new_pos = task->pos;
                                 if (llm_model_rope_mrope) {
@@ -3966,6 +3962,9 @@ struct httpserver {
                         }
                         task->generated_text += sampled_str;
                         send_text = get_position_of_utf8(task->generated_text) == task->generated_text.size();
+                        if (send_text && common_log_verbosity_thold > 5) {
+                            SRV_DBG("rid %s | sampled str: %s\n", rid.c_str(), escape_string(sampled_str).c_str());
+                        }
                         // check stop
                         //// check stop word or tool call
                         if (send_text) {
@@ -4313,13 +4312,15 @@ struct httpserver {
                     }
                     SRV_INF(
                         "rid %s | "
-                        "prefill_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, "
+                        "prefill_t = %d, prefill_cached_t = %d, prefill_tps = %.2f tps, ttft = %.2fms, "
                         "decode_t = %d, decode_tps = %.2f tps, tpot = %.2fms, "
                         "draft_t = %d, draft_apt = %.2f%%, "
+                        "total_t = %d, "
                         "stop_r = %s\n",
-                        rid.c_str(), task->n_prefilled, task->p_prefilled_tps, task->t_prefilled, task->n_decoded,
-                        task->p_decoded_tps, task->t_decoded / double(task->n_decoded), task->n_drafted,
-                        task->p_drafted_apt * 100, opened ? task->generated_finish_reason.c_str() : "closed");
+                        rid.c_str(), task->n_prefilled, task->n_prefilled_cached, task->p_prefilled_tps,
+                        task->t_prefilled, task->n_decoded, task->p_decoded_tps,
+                        task->t_decoded / double(task->n_decoded), task->n_drafted, task->p_drafted_apt * 100,
+                        task->n_prefilled + task->n_decoded, opened ? task->generated_finish_reason.c_str() : "closed");
                     // clean kv cache
                     if (!cache_prompt) {
                         llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
@@ -4331,9 +4332,11 @@ struct httpserver {
                     // cache prompt
                     else {
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                        cache.tokens               = std::move(task->processed_tokens);
-                        cache.used                 = false;
-                        cache.pos                  = task->pos + task->pos_discard;
+                        cache.tokens.clear();
+                        cache.tokens      = std::move(task->processed_tokens);
+                        cache.used        = false;
+                        cache.pos         = task->pos;
+                        cache.pos_discard = task->pos_discard;
                     }
                 }
                 return;
@@ -4615,52 +4618,46 @@ struct httpserver {
         return httplib::OK_200;
     }
 
-    std::vector<llama_image_tokens> cache_tokenize_image(const clip_image_u8 * img) {
+    std::vector<llama_image_tokens> cache_tokenize_image(const clip_image & img) {
         if (llm_ctx_clip == nullptr) {
             return {};
         }
 
-        std::string hash;
-        try {
-            hash = hash_fnv(img->buf.data(), img->buf.size());
-        } catch (std::exception & e) {
-            LOG_WRN("failed to hash image: %s\n", e.what());
-        }
-
         std::unique_lock<std::mutex> lock(llm_ctx_clip_mtx);
 
-        if (hash.empty()) {
-            return tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img);
+        if (img.hash.empty()) {
+            LOG_WRN("failed to hash image, tokenizing directly\n");
+            return tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img.ptr.get());
         }
 
         // check if image is already cached.
-        if (auto it = cache_images.find(hash); it != cache_images.end()) {
-            LOG_INFV(2, "hit image cache, hash = %s\n", hash.c_str());
+        if (auto it = cache_images.find(img.hash); it != cache_images.end()) {
+            LOG_INFV(2, "hit image cache, hash = %s, n_cached = %zu\n", img.hash.c_str(), cache_images.size());
             it->second.last_used = ggml_time_us();
             return it->second.tokens;
         }
 
-        LOG_INFV(2, "miss image cache, hash = %s, tokenizing...\n", hash.c_str());
-
-        std::vector<llama_image_tokens> result =
-            tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img);
-
-        // cache the image if there is space.
-        if (cache_images.size() < cache_images_size) {
-            cache_images[hash] = { result, ggml_time_us() };
-            return result;
-        }
-
-        // otherwise, find the oldest image,
-        // remove it and add the new image.
-        auto oldest_it = cache_images.begin();
-        for (auto it = cache_images.begin(); it != cache_images.end(); ++it) {
-            if (it->second.last_used < oldest_it->second.last_used) {
-                oldest_it = it;
+        // evict the oldest image if the cache is full.
+        if (cache_images.size() >= cache_images_size) {
+            // find the oldest image,
+            // remove it and add the new image.
+            auto oldest_it = cache_images.begin();
+            for (auto it = cache_images.begin(); it != cache_images.end(); ++it) {
+                if (it->second.last_used < oldest_it->second.last_used) {
+                    oldest_it = it;
+                }
             }
+            cache_images.erase(oldest_it);
+            LOG_INFV(2, "evict image cache, hash = %s, n_cached = %zu\n", oldest_it->first.c_str(),
+                     cache_images.size());
         }
-        cache_images.erase(oldest_it);
-        cache_images[hash] = { result, ggml_time_us() };
+
+        LOG_INFV(2, "miss image cache, hash = %s, n_cached = %zu, tokenizing...\n", img.hash.c_str(),
+                 cache_images.size());
+        std::vector<llama_image_tokens> result =
+            tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img.ptr.get());
+
+        cache_images[img.hash] = { result, ggml_time_us() };
 
         return result;
     }
@@ -5119,11 +5116,6 @@ struct httpserver {
         if (req->images.empty()) {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
-                SRV_WRN("rid %s | prompt tokens size exceeds the context size, force context shift\n", req->get_id());
-                tokenized_prompt.erase(tokenized_prompt.begin(), tokenized_prompt.end() - n_ctx + 1);
-                n_prefilling_request = int32_t(tokenized_prompt.size());
-            }
             tokenized_prompts.emplace_back(std::move(tokenized_prompt));
         }
         /* VISION */
@@ -5132,9 +5124,10 @@ struct httpserver {
 
             std::string prompt = req->chat_params.prompt;
 
-            size_t images_count = 0;
-            size_t image_pos    = prompt.find(image_sign);
-            while (image_pos != std::string::npos) {
+            int32_t n_image   = int32_t(req->images.size());
+            int32_t i_image   = -1;
+            size_t  image_pos = prompt.find(image_sign);
+            while (image_pos != std::string::npos && ++i_image < n_image) {
                 // process text
                 if (const std::string text = prompt.substr(0, image_pos); !text.empty()) {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, text, tokenized_prompts.empty(), true);
@@ -5143,17 +5136,16 @@ struct httpserver {
                 }
 
                 // process image
-                std::vector<llama_image_tokens> tokenized_images =
-                    cache_tokenize_image(req->images[images_count].get());
+                std::vector<llama_image_tokens> tokenized_images = cache_tokenize_image(req->images[i_image]);
                 if (tokenized_images.empty()) {
                     return send_string(request, response, httplib::InternalServerError_500,
                                        "Failed to embed the image");
                 }
+                bool add_bos = tokenized_prompts.empty();
                 // minicpmv
                 if (clip_is_minicpmv(llm_ctx_clip) != 0) {
                     // <image>
-                    llama_tokens tokenized_text =
-                        common_tokenize(llm_vocab, "<image>", tokenized_prompts.empty(), true);
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<image>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // lead patch <IMG/>
@@ -5162,11 +5154,11 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                     tokenized_images.erase(tokenized_images.begin());
                     // </image>
-                    tokenized_text = common_tokenize(llm_vocab, "</image>", tokenized_prompts.empty(), true);
+                    tokenized_text = common_tokenize(llm_vocab, "</image>", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     if (!tokenized_images.empty()) {
-                        auto img_size = clip_image_size{ req->images[images_count]->nx, req->images[images_count]->ny };
+                        auto img_size = clip_image_size{ req->images[i_image].ptr->nx, req->images[i_image].ptr->ny };
                         const int32_t n_img_embd_col = clip_uhd_num_image_embeds_col2(llm_ctx_clip, &img_size);
                         const int32_t n_img_embd_row = (int32_t) tokenized_images.size() / n_img_embd_col;
                         const int32_t version        = clip_is_minicpmv(llm_ctx_clip);
@@ -5209,8 +5201,7 @@ struct httpserver {
                 // qwen2vl
                 else if (clip_is_qwen2vl(llm_ctx_clip)) {
                     // <|vision_start|>
-                    llama_tokens tokenized_text =
-                        common_tokenize(llm_vocab, "<|vision_start|>", tokenized_prompts.empty(), true);
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|vision_start|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
@@ -5225,8 +5216,7 @@ struct httpserver {
                 // gemma3
                 else if (clip_is_gemma3(llm_ctx_clip)) {
                     // <|start_of_image|>
-                    llama_tokens tokenized_text =
-                        common_tokenize(llm_vocab, "<|start_of_image|>", tokenized_prompts.empty(), true);
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|start_of_image|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
@@ -5242,8 +5232,8 @@ struct httpserver {
                 // NB(thxCode): clip_is_smolvlm is a patch.
                 else if (clip_is_smolvlm(llm_ctx_clip)) {
                     // <fake_token_around_image><global-img>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image><global-img>",
-                                                                  tokenized_prompts.empty(), true);
+                    llama_tokens tokenized_text =
+                        common_tokenize(llm_vocab, "<fake_token_around_image><global-img>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
@@ -5271,7 +5261,7 @@ struct httpserver {
                 // NB(thxCode): clip_is_internvl is a patch.
                 else if (clip_is_internvl(llm_ctx_clip)) {
                     // <img>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<img>", tokenized_prompts.empty(), true);
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<img>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // <IMG/>
@@ -5290,14 +5280,14 @@ struct httpserver {
                     n_prefilling_request += int32_t(tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(tokenized_image));
                 }
-                req->images[images_count++] = nullptr;  // release image asap
 
                 prompt    = prompt.substr(image_pos + image_sign.size());
                 image_pos = prompt.find(image_sign);
             }
+
             // process remain text
             if (!prompt.empty()) {
-                llama_tokens tokenized_text = common_tokenize(llm_vocab, prompt, tokenized_prompts.empty(), true);
+                llama_tokens tokenized_text = common_tokenize(llm_vocab, prompt, false, true);
                 n_prefilling_request += int32_t(tokenized_text.size());
                 tokenized_prompts.emplace_back(std::move(tokenized_text));
             }
