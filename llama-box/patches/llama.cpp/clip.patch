@@ -61,7 +61,7 @@ index 23036ba7..969cbb93 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 41ba45a7..360c35bf 100644
+index 41ba45a7..13610fbc 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -361,6 +361,8 @@ struct clip_ctx {
@@ -100,19 +100,33 @@ index 41ba45a7..360c35bf 100644
          }
  
          // other hparams
-@@ -2231,6 +2246,11 @@ struct clip_model_loader {
-         clip_image_f32_ptr img(clip_image_f32_init());
-         img->nx = ctx_clip.vision_model.hparams.warmup_image_size;
-         img->ny = ctx_clip.vision_model.hparams.warmup_image_size;
-+        if (ctx_clip.max_image_size > 0 &&
-+            (ctx_clip.proj_type == PROJECTOR_TYPE_QWEN2VL || ctx_clip.proj_type == PROJECTOR_TYPE_QWEN25VL)) {
-+            img->nx  = ctx_clip.max_image_size;
-+            img->ny = ctx_clip.max_image_size;
-+        }
-         img->buf.resize(img->nx * img->ny * 3);
-         batch.entries.push_back(std::move(img));
- 
-@@ -2930,6 +2950,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
+@@ -1895,6 +1910,7 @@ struct clip_model_loader {
+                     } break;
+                 case PROJECTOR_TYPE_PIXTRAL:
+                     {
++                        hparams.image_size = ctx_clip.max_image_size <= 0 ? hparams.image_size : ctx_clip.max_image_size;
+                         hparams.rope_theta = 10000.0f;
+                         hparams.warmup_image_size = hparams.patch_size * 8;
+                         get_u32(KEY_SPATIAL_MERGE_SIZE, hparams.spatial_merge_size, false);
+@@ -1913,7 +1929,7 @@ struct clip_model_loader {
+                         // ref: https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/blob/main/preprocessor_config.json
+                         // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
+                         // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
+-                        hparams.image_size = 1024;
++                        hparams.image_size = ctx_clip.max_image_size <= 0 ? hparams.image_size : ctx_clip.max_image_size;
+                         hparams.warmup_image_size = hparams.patch_size * 8;
+                     } break;
+                 case PROJECTOR_TYPE_QWEN25VL:
+@@ -1922,7 +1938,7 @@ struct clip_model_loader {
+                         // https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/preprocessor_config.json
+                         // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
+                         // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
+-                        hparams.image_size = 1024;
++                        hparams.image_size = ctx_clip.max_image_size <= 0 ? hparams.image_size : ctx_clip.max_image_size;
+                         hparams.warmup_image_size = hparams.patch_size * 8;
+                         get_u32(KEY_WIN_ATTN_PATTERN, hparams.n_wa_pattern);
+                     } break;
+@@ -2930,6 +2946,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
      return inst.grid_size.width;
  }
  
@@ -124,7 +138,16 @@ index 41ba45a7..360c35bf 100644
  // returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns the normalized image patch tensors as a vector
  // res_imgs memory is being allocated here, previous allocations will be freed if found
  bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, struct clip_image_f32_batch * res_imgs) {
-@@ -3780,6 +3805,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -2957,7 +2978,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
+         clip_image_u8 resized;
+         auto patch_size = params.patch_size * 2;
+         auto new_size = image_manipulation::calc_size_preserved_ratio(original_size, patch_size, params.image_size);
+-        image_manipulation::bicubic_resize(*img, resized, new_size.width, new_size.height);
++        image_manipulation::bilinear_resize(*img, resized, new_size.width, new_size.height);
+ 
+         clip_image_f32_ptr img_f32(clip_image_f32_init());
+         // clip_image_f32_ptr res(clip_image_f32_init());
+@@ -3780,6 +3801,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  

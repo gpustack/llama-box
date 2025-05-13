@@ -874,7 +874,7 @@ struct chat_complete_req : complete_req {
     // std::string user;
 };
 
-static inline clip_image_u8_ptr get_clip_image(std::vector<uint8_t> && img_buff, const int32_t max_image_size) {
+static inline clip_image_u8_ptr get_clip_image(std::vector<uint8_t> && img_buff) {
     int32_t   w  = 0;
     int32_t   h  = 0;
     int32_t   c  = 0;
@@ -882,44 +882,14 @@ static inline clip_image_u8_ptr get_clip_image(std::vector<uint8_t> && img_buff,
     if (dt == nullptr) {
         throw std::invalid_argument("Illegal param: provided image is invalid: " + std::string(stbi_failure_reason()));
     }
-
-    if (c < 3) {
+    if (w <= 0 || h <= 0 || c < 3) {
         stbi_image_free(dt);
-        throw std::invalid_argument("Illegal param: provided image must be a valid RGB image");
+        throw std::invalid_argument("Illegal param: provided image is invalid");
     }
-
     clip_image_u8_ptr img(clip_image_u8_init());
-
-    int32_t m = std::max(w, h);
-    if (max_image_size <= 0 || m <= max_image_size) {
-        img->nx  = w;
-        img->ny  = h;
-        img->buf = std::vector<uint8_t>(dt, dt + w * h * 3);
-        return img;
-    }
-
-    float   nr = float(max_image_size) / float(m);
-    int32_t nw = std::max(int(std::ceil(float(w) * nr)), 1);
-    int32_t nh = std::max(int(std::ceil(float(h) * nr)), 1);
-
-    auto * ndt     = (uint8_t *) malloc(nw * nh * 3);
-    bool   resized = stbir_resize(dt, w, h, 0, ndt, nw, nh, 0, STBIR_TYPE_UINT8,
-                                  3,                                                 // RGB
-                                  STBIR_ALPHA_CHANNEL_NONE,                          // no Alpha
-                                  0,                                                 // flags
-                                  STBIR_EDGE_CLAMP, STBIR_EDGE_CLAMP,                // clamp edge mode
-                                  STBIR_FILTER_CATMULLROM, STBIR_FILTER_CATMULLROM,  // catmull-rom filter
-                                  STBIR_COLORSPACE_SRGB,                             // sRGB
-                                  nullptr);
-    stbi_image_free(dt);
-    if (!resized) {
-        throw std::runtime_error("Illegal param: provide image exceeds the max image size, but failed to resize: " +
-                                 std::string(stbi_failure_reason()));
-    }
-
-    img->nx  = nw;
-    img->ny  = nh;
-    img->buf = std::vector<uint8_t>(ndt, ndt + nw * nh * 3);
+    img->nx  = w;
+    img->ny  = h;
+    img->buf = std::vector<uint8_t>(dt, dt + w * h * c);
     return img;
 }
 
@@ -1005,8 +975,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                 }
                                 try {
                                     std::vector<uint8_t> img_buff = decode_base64(img);
-                                    clip_image_u8_ptr    clip_img =
-                                        get_clip_image(std::move(img_buff), hparams.max_image_size);
+                                    clip_image_u8_ptr    clip_img = get_clip_image(std::move(img_buff));
                                     ptr->images.push_back(std::move(clip_img));
                                 } catch (const std::exception & e) {
                                     throw std::invalid_argument(
@@ -1048,8 +1017,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                         ", reason: " + (resp ? resp->reason : "unknown"));
                                 }
                                 std::vector<uint8_t> img_buff(resp->body.begin(), resp->body.end());
-                                clip_image_u8_ptr    clip_img =
-                                    get_clip_image(std::move(img_buff), hparams.max_image_size);
+                                clip_image_u8_ptr    clip_img = get_clip_image(std::move(img_buff));
                                 ptr->images.push_back(std::move(clip_img));
                             }
                             n_img++;
@@ -2712,9 +2680,6 @@ struct httpserver {
             if (llm_ctx_clip == nullptr) {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
                 return false;
-            }
-            if (!clip_is_qwen2vl(llm_ctx_clip)) {
-                params.max_image_size = 0;  // disable image size check
             }
         }
 
