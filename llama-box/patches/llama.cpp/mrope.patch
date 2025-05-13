@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 710bf1fe..b1fae2e6 100644
+index 2b1d8da5..c14a3f31 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -903,6 +903,11 @@ struct common_init_result common_init_from_params(common_params & params) {
@@ -68,7 +68,7 @@ index 576f9581..2c1b0ead 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
-index 05a2f4e6..cb7cd406 100644
+index 58694604..03191055 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
 @@ -4616,10 +4616,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const

@@ -61,7 +61,7 @@ index 23036ba7..969cbb93 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 0adf0316..aa933c0f 100644
+index 41ba45a7..360c35bf 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -361,6 +361,8 @@ struct clip_ctx {
@@ -100,7 +100,7 @@ index 0adf0316..aa933c0f 100644
          }
  
          // other hparams
-@@ -2227,6 +2242,11 @@ struct clip_model_loader {
+@@ -2231,6 +2246,11 @@ struct clip_model_loader {
          clip_image_f32_ptr img(clip_image_f32_init());
          img->nx = ctx_clip.vision_model.hparams.warmup_image_size;
          img->ny = ctx_clip.vision_model.hparams.warmup_image_size;
@@ -112,7 +112,7 @@ index 0adf0316..aa933c0f 100644
          img->buf.resize(img->nx * img->ny * 3);
          batch.entries.push_back(std::move(img));
  
-@@ -2926,6 +2946,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
+@@ -2930,6 +2950,11 @@ int clip_uhd_num_image_embeds_col(struct clip_ctx * ctx_clip) {
      return inst.grid_size.width;
  }
  
@@ -124,7 +124,7 @@ index 0adf0316..aa933c0f 100644
  // returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns the normalized image patch tensors as a vector
  // res_imgs memory is being allocated here, previous allocations will be freed if found
  bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, struct clip_image_f32_batch * res_imgs) {
-@@ -3776,6 +3801,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3780,6 +3805,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  

@@ -139,10 +139,10 @@ index 9aad84e8..733556aa 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 6c6d377f..a15d99f9 100644
+index 99e5fba2..6e2b3c89 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -396,6 +396,11 @@ extern "C" {
+@@ -397,6 +397,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -154,7 +154,7 @@ index 6c6d377f..a15d99f9 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -1123,6 +1128,35 @@ extern "C" {
+@@ -1128,6 +1133,35 @@ extern "C" {
      // Chat templates
      //
  
@@ -700,10 +700,10 @@ index db24ade2..b5f3c4b0 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama.cpp b/src/llama.cpp
-index d5164720..b21050ee 100644
+index 9fdddf7b..27e146e7 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -257,6 +257,49 @@ struct llama_model * llama_model_load_from_splits(
+@@ -265,6 +265,49 @@ void llama_model_save_to_file(const struct llama_model * model, const char * pat
  // chat templates
  //
  
