@@ -12,7 +12,7 @@ index a6106944..40ecffea 100644
  
  #ifdef __cplusplus
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 576f9581..000875f8 100644
+index f4b3d9cf..11fbb387 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1521,6 +1521,7 @@ static bool ggml_backend_metal_buffer_rset_init(

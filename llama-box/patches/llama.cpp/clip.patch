@@ -1,5 +1,5 @@
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index 23036ba7..969cbb93 100644
+index 23036ba7..a927f74b 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
 @@ -199,17 +199,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
@@ -17,7 +17,7 @@ index 23036ba7..969cbb93 100644
 -#define LOG_ERR(...) LOG_TMPL(GGML_LOG_LEVEL_ERROR, __VA_ARGS__)
 -#define LOG_DBG(...) LOG_TMPL(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
 -#define LOG_CNT(...) LOG_TMPL(GGML_LOG_LEVEL_CONT,  __VA_ARGS__)
-+#include "common/log.h"
++#include "log.h"
  
  //
  // cpp wrappers
@@ -56,12 +56,12 @@ index 23036ba7..969cbb93 100644
 -    builder.append(s, last_pos, std::string::npos);
 -    s = std::move(builder);
 -}
-+#include "common/common.h"
++#include "common.h"
  
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 41ba45a7..13610fbc 100644
+index a0f42e8c..2090d595 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -361,6 +361,8 @@ struct clip_ctx {
@@ -147,7 +147,7 @@ index 41ba45a7..13610fbc 100644
  
          clip_image_f32_ptr img_f32(clip_image_f32_init());
          // clip_image_f32_ptr res(clip_image_f32_init());
-@@ -3780,6 +3801,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -3645,6 +3666,18 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
  }
  
