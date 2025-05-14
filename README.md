@@ -732,7 +732,7 @@ The available endpoints for the LLaMA Box server mode are:
           "chunk_result": true,   // split the final image b64_json into chunks to avoid browser caching
           "chunk_size": 4096,     // split the final image b64_json into chunks with the given size, default 4k
           "preview": true,        // enable preview mode
-          "preview_faster": true  // enable faster preview mode
+          "preview_faster": true  // enable preview mode (deprecated)
         }
       }
       
@@ -767,7 +767,7 @@ The available endpoints for the LLaMA Box server mode are:
           "chunk_result": true,          // split the final image b64_json into chunks to avoid browser caching
           "chunk_size": 4096,            // split the final image b64_json into chunks with the given size, default 4k
           "preview": true,               // enable preview mode
-          "preview_faster": true         // enable faster preview mode
+          "preview_faster": true         // enable preview mode (deprecated)
         },
         "lora": [                        // specify LoRA adapters' scale
           {"id": 0, "scale": 1.0},
@@ -803,7 +803,7 @@ The available endpoints for the LLaMA Box server mode are:
       stream_options_chunk_result=true   // split the final image b64_json into chunks to avoid browser caching
       stream_options_chunk_size=4096     // split the final image b64_json into chunks with the given size, default 4k
       stream_options_preview=true        // enable preview mode
-      stream_options_preview_faster=true // enable faster preview mode
+      stream_options_preview_faster=true // enable preview mode (deprecated)
       
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
@@ -839,7 +839,7 @@ The available endpoints for the LLaMA Box server mode are:
       stream_options_chunk_result=true   // split the final image b64_json into chunks to avoid browser caching
       stream_options_chunk_size=4096     // split the final image b64_json into chunks with the given size, default 4k
       stream_options_preview=true        // enable preview mode
-      stream_options_preview_faster=true // enable faster preview mode
+      stream_options_preview_faster=true // enable preview mode (deprecated)
       lora="[{\"id\":0,\"scale\":1.0}]"  // specify LoRA adapters' scale
 
       RESPONSE : (text/event-stream)

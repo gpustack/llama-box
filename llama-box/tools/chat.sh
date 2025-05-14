@@ -52,6 +52,8 @@ RESPONSE_FORMAT="${RESPONSE_FORMAT:-"text"}"
 SEED="${SEED:-"$(date +%s)"}"
 STOP="${STOP:-"null"}"
 TEMP="${TEMP:-"1"}"
+TOOLS_WITH="${TOOLS_WITH:-"false"}"
+SYSTEM_PROMPT_WITH="${SYSTEM_PROMPT_WITH:-"true"}"
 TOP_P="${TOP_P:-"0.95"}"
 MAX_TOKENS_PER_SECOND="${MAX_TOKENS_PER_SECOND:-"0"}"
 
@@ -214,25 +216,31 @@ chat_completion() {
     done
 }
 
-if [[ "${TOOLS_WITH:-"false"}" == "false" ]]; then
+if [[ "${TOOLS_WITH}" == "false" ]]; then
     TOOLNAMES=()
     TOOLS=()
 fi
 
+if [[ "${SYSTEM_PROMPT_WITH}" == "false" ]]; then
+    MESSAGES=()
+fi
+
 echo "====================================================="
-echo "LOG_FILE          : ${LOG_FILE}"
-echo "API_URL           : ${API_URL}"
-echo "FREQUENCY_PENALTY : ${FREQUENCY_PENALTY}"
-echo "LOGPROBS          : ${LOGPROBS}"
-echo "TOP_LOGPROBS      : ${TOP_LOGPROBS}"
-echo "MAX_TOKENS        : ${MAX_TOKENS}"
-echo "PRESENCE_PENALTY  : ${PRESENCE_PENALTY}"
-echo "RESPONSE_FORMAT   : ${RESPONSE_FORMAT}"
-echo "SEED              : ${SEED}"
-echo "STOP              : ${STOP}"
-echo "TEMP              : ${TEMP}"
-echo "TOP_P             : ${TOP_P}"
-echo "TOOLS             : $(printf '%s\n' "${TOOLNAMES[@]}" | jq -R . | jq -cs .)"
+echo "LOG_FILE           : ${LOG_FILE}"
+echo "API_URL            : ${API_URL}"
+echo "FREQUENCY_PENALTY  : ${FREQUENCY_PENALTY}"
+echo "LOGPROBS           : ${LOGPROBS}"
+echo "TOP_LOGPROBS       : ${TOP_LOGPROBS}"
+echo "MAX_TOKENS         : ${MAX_TOKENS}"
+echo "PRESENCE_PENALTY   : ${PRESENCE_PENALTY}"
+echo "RESPONSE_FORMAT    : ${RESPONSE_FORMAT}"
+echo "SEED               : ${SEED}"
+echo "STOP               : ${STOP}"
+echo "TEMP               : ${TEMP}"
+echo "TOP_P              : ${TOP_P}"
+echo "TOOLS_WITH         : ${TOOLS_WITH}"
+echo "TOOLS              : $(printf '%s\n' "${TOOLNAMES[@]}" | jq -R . | jq -cs .)"
+echo "SYSTEM_PROMPT_WITH : ${SYSTEM_PROMPT_WITH}"
 printf "=====================================================\n\n"
 
 if [[ -f "${LOG_FILE}" ]]; then

@@ -367,6 +367,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     // server // embedding //
     opts.push_back({ "server/embedding" });
     opts.push_back({ "server/embedding",                   "       --pooling {none,mean,cls,last,rank}",    "Pooling type for embeddings, use model default if unspecified" });
+    opts.push_back({ "server/embedding",                   "       --attention {causal,non-causal}",        "Attention type for embeddings, use model default if unspecified" });
     // server // embedding //
     // server // images //
     opts.push_back({ "server/images" });
@@ -1728,6 +1729,21 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                     invalid("--pooling");
                 }
                 continue;
+            }
+
+            if (!strcmp(flag, "--attention")) {
+                if (i == argc) {
+                    missing("--attention");
+                }
+                char *      arg = argv[i++];
+                std::string value(arg);
+                if (value == "causal") {
+                    params_.hs_params.llm_params.attention_type = LLAMA_ATTENTION_TYPE_CAUSAL;
+                } else if (value == "non-causal") {
+                    params_.hs_params.llm_params.attention_type = LLAMA_ATTENTION_TYPE_NON_CAUSAL;
+                } else {
+                    invalid("--attention");
+                }
             }
 
             // server // image //
