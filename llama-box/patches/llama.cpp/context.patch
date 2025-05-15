@@ -1,5 +1,5 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 62246c10..c5292d06 100644
+index a3b84a6a..f09b3205 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -81,7 +81,7 @@ llama_context::llama_context(
@@ -116,7 +116,7 @@ index 62246c10..c5292d06 100644
          return encode(inp_batch);
      }
  
-@@ -2120,8 +2119,8 @@ llama_context * llama_init_from_model(
+@@ -2122,8 +2121,8 @@ llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {

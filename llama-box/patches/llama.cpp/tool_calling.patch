@@ -1,8 +1,8 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index ad3d4aa9..e3e477e1 100644
+index f138c7bc..7475dd88 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
-@@ -349,6 +349,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
+@@ -359,6 +359,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
      delete tmpls;
  }
  
@@ -16,7 +16,7 @@ index ad3d4aa9..e3e477e1 100644
  bool common_chat_templates_was_explicit(const struct common_chat_templates * tmpls) {
      return tmpls->has_explicit_template;
  }
-@@ -1670,6 +1677,83 @@ static common_chat_params common_chat_templates_apply_jinja(
+@@ -1690,6 +1697,83 @@ static common_chat_params common_chat_templates_apply_jinja(
      return common_chat_params_init_generic(tmpl, params);
  }
  
@@ -100,7 +100,7 @@ index ad3d4aa9..e3e477e1 100644
  // Legacy template route (adhoc C++ implementation of known templates), forward to llama_chat_apply_template.
  static common_chat_params common_chat_templates_apply_legacy(
      const struct common_chat_templates * tmpls,
-@@ -1728,6 +1812,17 @@ static common_chat_params common_chat_templates_apply_legacy(
+@@ -1748,6 +1832,17 @@ static common_chat_params common_chat_templates_apply_legacy(
      return params;
  }
  
@@ -119,10 +119,10 @@ index ad3d4aa9..e3e477e1 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
 diff --git a/common/chat.h b/common/chat.h
-index 9aad84e8..733556aa 100644
+index d26a09c2..8678f50b 100644
 --- a/common/chat.h
 +++ b/common/chat.h
-@@ -98,10 +98,15 @@ common_chat_templates_ptr common_chat_templates_init(
+@@ -100,10 +100,15 @@ common_chat_templates_ptr common_chat_templates_init(
                                             const std::string & bos_token_override = "",
                                             const std::string & eos_token_override = "");
  

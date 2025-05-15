@@ -47,7 +47,7 @@ index 41a023da..64746362 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_NOMIC_BERT_MOE,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index f652f4b8..47f0419f 100644
+index 7fd094b6..cfcb4a23 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -674,6 +674,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
@@ -170,7 +170,7 @@ index f652f4b8..47f0419f 100644
              } else if (model.arch == LLM_ARCH_BERT || model.arch == LLM_ARCH_NOMIC_BERT_MOE) {
                  cur = build_ffn(cur,
                          model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   NULL,
-@@ -13120,6 +13139,7 @@ llm_graph_result_ptr llama_model::build_graph(
+@@ -13119,6 +13138,7 @@ llm_graph_result_ptr llama_model::build_graph(
              {
                  llm = std::make_unique<llm_build_refact>(*this, params, gf);
              } break;
@@ -178,7 +178,7 @@ index f652f4b8..47f0419f 100644
          case LLM_ARCH_BERT:
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
-@@ -13483,6 +13503,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
+@@ -13482,6 +13502,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
          case LLM_ARCH_FALCON:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
