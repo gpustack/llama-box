@@ -3265,13 +3265,13 @@ struct httpserver {
 
     inline bool support_image() const { return sd_ctx != nullptr; }
 
-    inline void shift_cmpl_task_ctx(completions_task * task, const int32_t n_discard_exp = 1) {
+    inline void shift_task_kv_cache(completions_task * task, const int32_t n_discard_exp = 1) {
         if (!llama_kv_self_can_shift(llm_ctx)) {
             return;
         }
         const std::string rid       = task->get_r_id();
         const int32_t     seq_id    = task->get_seq_id();
-        const int32_t     n_keep    = params.llm_params.n_keep + llama_vocab_get_add_bos(llm_vocab);
+        const int32_t     n_keep    = params.llm_params.n_keep + 1;
         const int32_t     n_left    = task->pos - n_keep;
         const int32_t     n_discard = n_discard_exp > 0 ? n_left >> n_discard_exp : n_left - (n_left >> -n_discard_exp);
         llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
@@ -3280,8 +3280,10 @@ struct httpserver {
             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, n_keep, n_keep + n_discard);
             llama_kv_self_seq_add(llm_ctx_draft, seq_id, n_keep + n_discard, task->pos, -n_discard);
         }
-        SRV_WRN("rid %s | shift context, kv cache move, seq = %d, [%d, %d) -> [%d, %d)\n", rid.c_str(), seq_id,
-                n_keep + n_discard, task->pos, n_keep, task->pos - n_discard);
+        SRV_WRN(
+            "rid %s | shift kv cache, "
+            "seq = %d, [%d, %d) -> [%d, %d)\n",
+            rid.c_str(), seq_id, n_keep + n_discard, task->pos, n_keep, task->pos - n_discard);
         task->pos -= n_discard;
         task->pos_discard += n_discard;
     }
@@ -3669,8 +3671,8 @@ struct httpserver {
                         }
 
                         // prepare cache - truncate cache
-                        if (task->pos >= llm_ctx_size_shifting && params.llm_params.ctx_shift) {
-                            shift_cmpl_task_ctx(task, 2);
+                        if (task->pos >= llm_ctx_size_shifting) {
+                            shift_task_kv_cache(task, 2);
                         }
 
                         // batching
@@ -3800,53 +3802,55 @@ struct httpserver {
                     // -3 compute failed, -2 allocate failed, -1 no tokens, 0 ok, 1 no kv cache, 2 compute aborted
                     if (decoded != 0) {
                         // try to recover
-                        if (params.llm_params.ctx_shift) {
-                            int32_t decoded_again = decoded;
-                            while (decoded_again == 1) {
-                                SRV_WRN("%s", "decode in batch, try shifting context\n");
-                                // shift the decoding task which has largest pos
-                                int32_t target_idx = -1;
-                                int32_t target_pos = -1;
-                                for (int32_t i = 0; i < int32_t(batch_task_ptrs.size()); i++) {
-                                    auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[i].get());
-                                    if (task->n_decoded > 0 && task->pos > target_pos) {
-                                        target_idx = i;
-                                        target_pos = task->pos;
-                                    }
+                        int32_t decoded_again = decoded;
+                        while (decoded_again == 1) {
+                            SRV_WRN("%s", "decode in batch, try shifting context\n");
+                            // shift the decoding task which has largest pos
+                            int32_t target_idx = -1;
+                            int32_t target_pos = -1;
+                            for (int32_t i = 0; i < int32_t(batch_task_ptrs.size()); i++) {
+                                auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[i].get());
+                                if (task->n_decoded > 0 && task->pos > target_pos) {
+                                    target_idx = i;
+                                    target_pos = task->pos;
                                 }
-                                if (target_idx == -1) {
-                                    break;
-                                }
-                                auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
-                                shift_cmpl_task_ctx(task, -2);
-                                // adjust batch pos
-                                const llama_pos new_pos = task->pos;
-                                if (llm_model_rope_mrope) {
-                                    for (int32_t i = 0; i < 3; i++) {
-                                        batch.pos[task->i_batch_seq_end + i] = new_pos - 1;
-                                    }
-                                } else {
-                                    batch.pos[task->i_batch_seq_end] = new_pos - 1;
-                                }
-                                // decode again
-                                decoded_again = llama_decode(llm_ctx, batch);
                             }
-                            if (decoded_again == 0) {
+                            if (target_idx == -1) {
                                 break;
                             }
+                            auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
+                            shift_task_kv_cache(task, -2);
+                            // adjust batch pos
+                            const llama_pos new_pos = task->pos;
+                            if (llm_model_rope_mrope) {
+                                for (int32_t i = 0; i < 3; i++) {
+                                    batch.pos[task->i_batch_seq_end + i] = new_pos - 1;
+                                }
+                            } else {
+                                batch.pos[task->i_batch_seq_end] = new_pos - 1;
+                            }
+                            // decode again
+                            decoded_again = llama_decode(llm_ctx, batch);
                         }
+                        if (decoded_again == 0) {
+                            break;
+                        }
+                        // otherwise, we failed to recover
                         SRV_ERR(
                             "decode in batch, failed to decode, try again, increasing context size, or reducing "
                             "parallel: "
                             "result = %d\n",
                             decoded);
-                        // clean kv cache
-                        llama_kv_self_clear(llm_ctx);
-                        if (llm_ctx_draft != nullptr) {
-                            llama_kv_self_clear(llm_ctx_draft);
-                        }
                         // output
                         for (auto & task_ptr : batch_task_ptrs) {
+                            const std::string rid    = task_ptr->get_r_id();
+                            const int32_t     seq_id = task_ptr->get_seq_id();
+                            // clean kv cache
+                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                            if (llm_ctx_draft != nullptr) {
+                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                            }
+                            SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                             json data = {
                                 { "message",
                                  "failed to decode, try again, increasing context size, or reducing parallel" }
@@ -5022,8 +5026,20 @@ struct httpserver {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
             if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
-                SRV_WRN("rid %s | prompt tokens size exceeds the context size, force context shift\n", req->get_id());
-                tokenized_prompt.erase(tokenized_prompt.begin(), tokenized_prompt.end() - n_ctx + 1);
+                const int32_t n_left       = n_ctx - params.llm_params.n_keep;
+                const int32_t n_block_size = n_left / 2;
+                const int32_t n_block_erased =
+                    (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
+                if (n_block_erased > 0) {
+                    SRV_WRN(
+                        "rid %s | prompt tokens size exceeds the context size, "
+                        "shifting context [%d, %d) -> [%d, %d)\n",
+                        req->get_id(), params.llm_params.n_keep + n_block_size * n_block_erased, n_prefilling_request,
+                        params.llm_params.n_keep, n_prefilling_request - n_block_size * n_block_erased);
+                    tokenized_prompt.erase(
+                        tokenized_prompt.begin() + params.llm_params.n_keep,
+                        tokenized_prompt.begin() + params.llm_params.n_keep + n_block_size * n_block_erased);
+                }
                 n_prefilling_request = int32_t(tokenized_prompt.size());
             }
             tokenized_prompts.emplace_back(std::move(tokenized_prompt));
@@ -5129,6 +5145,23 @@ struct httpserver {
         if (req->images.empty()) {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
+            if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
+                const int32_t n_left       = n_ctx - params.llm_params.n_keep;
+                const int32_t n_block_size = n_left / 2;
+                const int32_t n_block_erased =
+                    (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
+                if (n_block_erased > 0) {
+                    SRV_WRN(
+                        "rid %s | prompt tokens size exceeds the context size, "
+                        "shifting context [%d, %d) -> [%d, %d)\n",
+                        req->get_id(), params.llm_params.n_keep + n_block_size * n_block_erased, n_prefilling_request,
+                        params.llm_params.n_keep, n_prefilling_request - n_block_size * n_block_erased);
+                    tokenized_prompt.erase(
+                        tokenized_prompt.begin() + params.llm_params.n_keep,
+                        tokenized_prompt.begin() + params.llm_params.n_keep + n_block_size * n_block_erased);
+                }
+                n_prefilling_request = int32_t(tokenized_prompt.size());
+            }
             tokenized_prompts.emplace_back(std::move(tokenized_prompt));
         }
         /* VISION */
@@ -5401,7 +5434,10 @@ struct httpserver {
                 return send_json(request, response, httplib::BadRequest_400,
                                  "Illegal param: \"input\" tokens size exceeds the context size");
             }
-            SRV_WRN("rid %s | input tokens size exceeds the context size, force context shift\n", req->get_id());
+            SRV_WRN(
+                "rid %s | input tokens size exceeds the context size, "
+                "shifting context [%d, %d) -> [0, %d)\n",
+                req->get_id(), n_prefilling_request - n_ctx, n_prefilling_request, n_ctx);
             tokenized_input.erase(tokenized_input.begin(), tokenized_input.end() - n_ctx);
             n_prefilling_request += int32_t(n_ctx);
         }
