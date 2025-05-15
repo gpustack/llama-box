@@ -966,10 +966,14 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
         for (const json & msg : messages) {
             std::string role = json_value(msg, "role", std::string());
             std::string content;
+            // content
             if (msg.contains("content") && !msg.at("content").is_null()) {
+                // string content
                 if (msg.at("content").is_string()) {
                     content = msg.at("content").get<std::string>();
-                } else if (msg.at("content").is_array()) {
+                }
+                // array content
+                else if (msg.at("content").is_array()) {
                     int32_t n_img = 0;
                     for (const json & part : msg.at("content")) {
                         if (part.contains("type") && part.at("type") == "image_url") {
@@ -1049,11 +1053,16 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                     for (int32_t i = 0; i < n_img; i++) {
                         content += "\n<IMG/>";
                     }
-                } else {
+                }
+                // illegal
+                else {
                     throw std::invalid_argument("Illegal param: invalid \"content\"");
                 }
                 ptr->messages.push_back({ role, content, {}, {}, "", "", "" });
-            } else if (msg.contains("tool_calls") && !msg.at("tool_calls").is_null()) {
+            }
+            // tool_calls
+            else if (msg.contains("tool_calls") && !msg.at("tool_calls").is_null()) {
+                // array tool_calls
                 if (msg.at("tool_calls").is_array()) {
                     std::vector<common_chat_tool_call> chat_tcs;
                     for (const json & part : msg.at("tool_calls")) {
@@ -1079,10 +1088,14 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                         chat_tcs.push_back(chat_tc);
                     }
                     ptr->messages.push_back({ role, "", {}, chat_tcs, "", "", "" });
-                } else {
+                }
+                // illegal
+                else {
                     throw std::invalid_argument("Illegal param: invalid \"tool_calls\"");
                 }
-            } else {
+            }
+            // illegal
+            else {
                 throw std::invalid_argument("Illegal param: missing 'content' or 'tool_calls' in \"messages\" item");
             }
         }
