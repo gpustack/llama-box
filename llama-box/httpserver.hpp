@@ -3269,11 +3269,21 @@ struct httpserver {
         if (!llama_kv_self_can_shift(llm_ctx)) {
             return;
         }
-        const std::string rid       = task->get_r_id();
-        const int32_t     seq_id    = task->get_seq_id();
-        const int32_t     n_keep    = params.llm_params.n_keep + 1;
-        const int32_t     n_left    = task->pos - n_keep;
-        const int32_t     n_discard = n_discard_exp > 0 ? n_left >> n_discard_exp : n_left - (n_left >> -n_discard_exp);
+        const std::string rid    = task->get_r_id();
+        const int32_t     seq_id = task->get_seq_id();
+        const int32_t     n_keep = params.llm_params.n_keep + 1;
+        const int32_t     n_left = task->pos - n_keep;
+
+        // select n_discard strategy
+        int32_t n_discard = 0;
+        if (n_discard_exp > 0) {
+            // keep most of the tokens to make the model see clearer
+            n_discard = std::min(n_left >> n_discard_exp, 2048);
+        } else {
+            // remove most of the tokens to make the kv cache smaller
+            n_discard = n_left - std::min(n_left >> -n_discard_exp, 2048);
+        }
+
         llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
         llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
         if (llm_ctx_draft != nullptr) {
@@ -3819,7 +3829,7 @@ struct httpserver {
                                 break;
                             }
                             auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
-                            shift_task_kv_cache(task, -2);
+                            shift_task_kv_cache(task, -1);
                             // adjust batch pos
                             const llama_pos new_pos = task->pos;
                             if (llm_model_rope_mrope) {
