@@ -282,7 +282,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "-n,    --predict N",                            "Number of tokens to predict (default: %d, -1 = infinity, when --context-shift)", llm_params.n_predict });
     opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "Physical batch size, which is the maximum number of tokens that may be processed at a time.\n"
                                                                                                             "Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: %d)", llm_params.n_ubatch });
-    opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d, -1 = all)", llm_params.n_keep });
+    opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d)", llm_params.n_keep });
     opts.push_back({ "server/completion",                  "       --no-escape",                            "Disable process escape sequences" });
     opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(Process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", llm_params.escape ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "Samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
@@ -1073,6 +1073,9 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 }
                 char * arg                          = argv[i++];
                 params_.hs_params.llm_params.n_keep = std::stoi(std::string(arg));
+                if (params_.hs_params.llm_params.n_keep < 0) {
+                    invalid("--keep");
+                }
                 continue;
             }
 

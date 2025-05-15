@@ -438,7 +438,7 @@ server/completion:
   -n,    --predict N              Number of tokens to predict (default: -1, -1 = infinity, when --context-shift)
   -ub,   --ubatch-size N          Physical batch size, which is the maximum number of tokens that may be processed at a time.
                                   Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: 512)
-         --keep N                 Number of tokens to keep from the initial prompt (default: 0, -1 = all)
+         --keep N                 Number of tokens to keep from the initial prompt (default: 0)
          --no-escape              Disable process escape sequences
   -e,    --escape                 Process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
          --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature)
