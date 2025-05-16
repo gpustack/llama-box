@@ -3447,18 +3447,20 @@ struct httpserver {
                                     }
                                 }
                             }
-                            const size_t n_tokens    = tokens.size();
-                            size_t       seq_lcp_l   = 0;
-                            int32_t      seq_lcp_id  = seq_id;
-                            llama_pos    seq_lcp_pos = 0;
+                            const size_t n_tokens            = tokens.size();
+                            int32_t      seq_lcp_id          = seq_id;
+                            size_t       seq_lcp_l           = 0;
+                            llama_pos    seq_lcp_pos         = 0;
+                            llama_pos    seq_lcp_pos_discard = 0;
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
                                 if (!cache.used) {
                                     size_t lcp_l = common_lcp(cache.tokens, tokens);
-                                    if (lcp_l > seq_lcp_l && (cache.pos_discard == 0 || lcp_l != n_tokens)) {
-                                        seq_lcp_l   = std::max(int32_t(lcp_l) - 1, 0);
-                                        seq_lcp_id  = i;
-                                        seq_lcp_pos = std::max(cache.pos - 2, 0);
+                                    if (lcp_l > seq_lcp_l) {
+                                        seq_lcp_id          = i;
+                                        seq_lcp_l           = lcp_l;
+                                        seq_lcp_pos         = cache.pos;
+                                        seq_lcp_pos_discard = cache.pos_discard;
                                     }
                                 }
                             }
@@ -3467,9 +3469,13 @@ struct httpserver {
                             if (seq_lcp_l == 0) {
                                 SRV_INFV(2, "rid %s | miss prompt cache, seq = %d\n", rid.c_str(), seq_id);
                             }
+                            // hit cache but need to redirect
+                            else if (seq_lcp_pos_discard != 0 && seq_lcp_l == n_tokens) {
+                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = 0\n", rid.c_str(), seq_id);
+                            }
                             // hit cache
                             else {
-                                task->pos                     = std::min(seq_lcp_pos, llama_pos(seq_lcp_l));
+                                task->pos                     = std::min(seq_lcp_pos - 1, llama_pos(seq_lcp_l));
                                 task->n_processed_detokenized = int32_t(seq_lcp_l);
                                 task->n_prefilled             = int32_t(seq_lcp_l);
                                 task->n_prefilled_cached      = int32_t(seq_lcp_l);
