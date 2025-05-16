@@ -525,6 +525,15 @@ inline void rpcserver_signal_handler(int32_t signal) {
 struct rpcserver {
     explicit rpcserver(rpcserver_params & params) : params(params) { llama_numa_init(params.numa); }
 
+    rpcserver(const rpcserver & src) :
+        params(src.params),
+        backend(src.backend),
+        cache_dir(src.cache_dir),
+        index(src.index),
+        capacity(src.capacity) {
+        // copy constructor
+    }
+
     ~rpcserver() {
         for (ggml_backend_buffer * buffer : buffers) {
             ggml_backend_buffer_free(buffer);
@@ -671,7 +680,8 @@ struct rpcserver {
 
             thread_pool->enqueue([this, sockfd, cli_ip, cli_port]() {
                 SRV_FUNC_INF("loop", "accepted %s:%d\n", cli_ip, cli_port);
-                this->process(sockfd);
+                rpcserver conn(*this);
+                conn.process(sockfd);
                 SRV_FUNC_INF("loop", "closed %s:%d\n", cli_ip, cli_port);
             });
         }
