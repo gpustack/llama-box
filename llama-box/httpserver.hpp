@@ -3282,10 +3282,10 @@ struct httpserver {
         int32_t n_discard = 0;
         if (n_discard_exp > 0) {
             // keep most of the tokens to make the model see clearer
-            n_discard = std::min(n_left >> n_discard_exp, 2048);
+            n_discard = std::min(n_left >> n_discard_exp, 2047);
         } else {
             // remove most of the tokens to make the kv cache smaller
-            n_discard = n_left - std::min(n_left >> -n_discard_exp, 2048);
+            n_discard = n_left - std::min(n_left >> -n_discard_exp, 2047);
         }
 
         llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
@@ -3447,17 +3447,18 @@ struct httpserver {
                                     }
                                 }
                             }
-                            size_t    seq_lcp_l   = 0;
-                            int32_t   seq_lcp_id  = seq_id;
-                            llama_pos seq_lcp_pos = 0;
+                            const size_t n_tokens    = tokens.size();
+                            size_t       seq_lcp_l   = 0;
+                            int32_t      seq_lcp_id  = seq_id;
+                            llama_pos    seq_lcp_pos = 0;
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
                                 if (!cache.used) {
                                     size_t lcp_l = common_lcp(cache.tokens, tokens);
-                                    if (lcp_l > seq_lcp_l) {
-                                        seq_lcp_l   = lcp_l;
+                                    if (lcp_l > seq_lcp_l && (cache.pos_discard == 0 || lcp_l != n_tokens)) {
+                                        seq_lcp_l   = std::max(int32_t(lcp_l) - 1, 0);
                                         seq_lcp_id  = i;
-                                        seq_lcp_pos = cache.pos - 1;
+                                        seq_lcp_pos = std::max(cache.pos - 2, 0);
                                     }
                                 }
                             }
@@ -3468,18 +3469,19 @@ struct httpserver {
                             }
                             // hit cache
                             else {
-                                auto n_prefilled              = int32_t(std::min(tokens.size() - 1, seq_lcp_l));
-                                auto pos                      = std::min(seq_lcp_pos, llama_pos(seq_lcp_l));
-                                task->n_prefilled_cached      = n_prefilled;
-                                task->n_prefilled             = n_prefilled;
-                                task->pos                     = pos;
-                                task->n_processed_detokenized = n_prefilled;
+                                task->pos                     = std::min(seq_lcp_pos, llama_pos(seq_lcp_l));
+                                task->n_processed_detokenized = int32_t(seq_lcp_l);
+                                task->n_prefilled             = int32_t(seq_lcp_l);
+                                task->n_prefilled_cached      = int32_t(seq_lcp_l);
                                 SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = %d\n", rid.c_str(), seq_id,
-                                         pos);
+                                         task->pos);
                             }
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                            cache.used                 = true;
+                            cache.tokens.clear();
+                            cache.used        = true;
+                            cache.pos         = 0;
+                            cache.pos_discard = task->pos > 0 ? cache.pos_discard : 0;
                             task->set_seq_id(seq_id);
 
                             // mask kv cache
@@ -4364,10 +4366,10 @@ struct httpserver {
                     else {
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         cache.tokens.clear();
-                        cache.tokens      = std::move(task->processed_tokens);
-                        cache.used        = false;
-                        cache.pos         = task->pos;
-                        cache.pos_discard = task->pos_discard;
+                        cache.tokens = std::move(task->processed_tokens);
+                        cache.used   = false;
+                        cache.pos    = task->pos;
+                        cache.pos_discard += task->pos_discard;
                     }
                 }
                 return;
