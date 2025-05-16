@@ -2832,7 +2832,9 @@ struct httpserver {
             chat_templates = common_chat_templates_init(llm_model, params.llm_params.chat_template);
 
             // NB(thxCode): llama_chat_template_alias is a patch.
-            std::string alias = llama_chat_template_alias(common_chat_templates_source(chat_templates.get()));
+            std::string alias     = llama_chat_template_alias(common_chat_templates_source(chat_templates.get()));
+            // NB(thxCode): llama_model_arch_name is a patch.
+            std::string arch_name = llama_model_arch_name(llm_model);
 
             if (params.llm_params.use_jinja) {
                 // NB(thxCode): common_chat_templates_supports_tool_calls is a patch.
@@ -2895,7 +2897,7 @@ struct httpserver {
             }
 
             {
-                if (alias == "deepseek3") {
+                if (alias == "deepseek3" || string_starts_with(arch_name, "qwen3")) {
                     llama_tokens ids = common_tokenize(llm_vocab, "<think>", false, true);
                     if (ids.size() == 1) {
                         reasoning_start_token = ids[0];
@@ -2950,11 +2952,13 @@ struct httpserver {
                 prompt                       = example.prompt;
             }
 
-            SRV_INF("chat template, built-in: %s, jinja rendering: %s, tool call: %s, reasoning: %s, example:\n%s\n",
-                    params.llm_params.chat_template.empty() || !params.llm_params.use_jinja ? "true" : "false",
-                    params.llm_params.use_jinja ? "enabled" : "disabled",
-                    support_tool_calls ? "supported" : "unsupported", support_reasoning ? "supported" : "unsupported",
-                    prompt.c_str());
+            SRV_INF(
+                "chat template, alias: %s, built-in: %s, jinja rendering: %s, tool call: %s, reasoning: %s, "
+                "example:\n%s\n",
+                alias.c_str(),
+                params.llm_params.chat_template.empty() || !params.llm_params.use_jinja ? "true" : "false",
+                params.llm_params.use_jinja ? "enabled" : "disabled", support_tool_calls ? "supported" : "unsupported",
+                support_reasoning ? "supported" : "unsupported", prompt.c_str());
         }
 
         // sample tokens per second
