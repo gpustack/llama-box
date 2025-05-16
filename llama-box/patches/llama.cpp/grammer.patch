@@ -1,0 +1,27 @@
+diff --git a/src/llama-grammar.cpp b/src/llama-grammar.cpp
+index 973b47ae..b3a1fa04 100644
+--- a/src/llama-grammar.cpp
++++ b/src/llama-grammar.cpp
+@@ -1168,7 +1168,7 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
+             grammar.awaiting_trigger = false;
+             grammar.trigger_buffer.clear();
+             llama_grammar_accept_str(grammar, piece);
+-            LLAMA_LOG_DEBUG("Grammar triggered on token %u (`%s`)", token, piece.c_str());
++//            LLAMA_LOG_DEBUG("Grammar triggered on token %u (`%s`)", token, piece.c_str());
+             return;
+         } else {
+             grammar.trigger_buffer += piece;
+@@ -1182,11 +1182,11 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
+                     // std::string constrained_str(match[1].first, grammar.trigger_buffer.end());
+                     grammar.trigger_buffer.clear();
+                     llama_grammar_accept_str(grammar, constrained_str);
+-                    LLAMA_LOG_DEBUG("Grammar triggered on regex: '%s'\n", constrained_str.c_str());
++//                    LLAMA_LOG_DEBUG("Grammar triggered on regex: '%s'\n", constrained_str.c_str());
+                     return;
+                 }
+             }
+-            LLAMA_LOG_DEBUG("Grammar still awaiting trigger after token %d (`%s`)\n", token, piece.c_str());
++//            LLAMA_LOG_DEBUG("Grammar still awaiting trigger after token %d (`%s`)\n", token, piece.c_str());
+             return;
+         }
+     }

@@ -2118,7 +2118,7 @@ struct completions_task : btask {
     bool                    reasoning_end_found   = false;
     bool                    reasoning_finished    = false;
     //// tool call
-    bool                    tool_call_parallel    = true;  // collect from request
+    bool                    tool_call_stop_fast   = false;  // collect from request
     ////// tool call
     bool                    tool_call_start_found = false;
     //////// non-jinja too calls
@@ -3986,7 +3986,7 @@ struct httpserver {
                                                                  task->req->sampling.preserved_tokens.end();
                             sampled_str += common_token_to_piece(llm_ctx, tok, special);
                             // check if the token is a reasoning token
-                            if (support_reasoning) {
+                            if (support_reasoning && !task->reasoning_finished) {
                                 if (!task->reasoning_start_found) {
                                     task->reasoning_start_found = tok == reasoning_start_token;
                                 } else if (!task->reasoning_end_found) {
@@ -4081,7 +4081,7 @@ struct httpserver {
                                                             { "id",       tc.id.empty() ? gen_call_id() : tc.id     },
                                                         });
                                                     }
-                                                    if (!task->tool_call_parallel) {
+                                                    if (task->tool_call_stop_fast) {
                                                         SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
                                                         task->generated_finish_reason = "tool_calls";
                                                     }
@@ -4205,7 +4205,7 @@ struct httpserver {
                                                 } else {
                                                     append_tool_calls(functions);
                                                 }
-                                                if (!task->tool_call_parallel) {
+                                                if (task->tool_call_stop_fast) {
                                                     SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
                                                     task->generated_finish_reason = "tool_calls";
                                                 }
@@ -5416,6 +5416,13 @@ struct httpserver {
             }
         }
 
+        bool tool_call_stop_fast = !req->parallel_tool_calls || req->tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED;
+
+        // NB(thxCode): disable reasoning process if we need to generate tool calls in jinja.
+        bool reasoning_finished = !support_reasoning || (params.llm_params.use_jinja &&
+                                                         req->tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED &&
+                                                         tokenized_prompts_include_tools);
+
         std::unique_ptr<completions_task> task =
             std::make_unique<completions_task>(get_task_id(), request.is_connection_closed);
         task->token_bucket                         = std::move(token_bucket);
@@ -5427,13 +5434,13 @@ struct httpserver {
         task->n_prefilling_request                 = n_prefilling_request;
         task->sampler                              = sampler;
         task->sampler_draft                        = sampler_draft;
-        task->tool_call_parallel                   = req->parallel_tool_calls;
+        task->tool_call_stop_fast                  = tool_call_stop_fast;
         task->tool_call_start_token                = req->tool_call_start_token;
         task->tool_call_start_token_word           = req->tool_call_start_token_word;
         task->tool_call_start_words                = std::move(req->tool_call_start_words);
         task->tool_call_start_words_longest_length = req->tool_call_start_words_longest_length;
         task->cmpl_id                              = gen_chat_completion_id();
-        task->reasoning_finished                   = !support_reasoning;
+        task->reasoning_finished                   = reasoning_finished;
         task->req                                  = std::move(req);
         task->t_start_prefill                      = ggml_time_us();
 
