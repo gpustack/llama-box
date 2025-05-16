@@ -3447,11 +3447,10 @@ struct httpserver {
                                     }
                                 }
                             }
-                            const size_t n_tokens            = tokens.size();
-                            int32_t      seq_lcp_id          = seq_id;
-                            size_t       seq_lcp_l           = 0;
-                            llama_pos    seq_lcp_pos         = 0;
-                            llama_pos    seq_lcp_pos_discard = 0;
+                            int32_t   seq_lcp_id          = seq_id;
+                            size_t    seq_lcp_l           = 0;
+                            llama_pos seq_lcp_pos         = 0;
+                            llama_pos seq_lcp_pos_discard = 0;
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
                                 if (!cache.used) {
@@ -3470,17 +3469,19 @@ struct httpserver {
                                 SRV_INFV(2, "rid %s | miss prompt cache, seq = %d\n", rid.c_str(), seq_id);
                             }
                             // hit cache but need to redirect
-                            else if (seq_lcp_pos_discard != 0 && seq_lcp_l == n_tokens) {
+                            else if (seq_lcp_pos_discard != 0 && seq_lcp_l == tokens.size()) {
                                 SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = 0\n", rid.c_str(), seq_id);
                             }
                             // hit cache
                             else {
-                                task->pos                     = std::min(seq_lcp_pos - 1, llama_pos(seq_lcp_l));
-                                task->n_processed_detokenized = int32_t(seq_lcp_l);
-                                task->n_prefilled             = int32_t(seq_lcp_l);
-                                task->n_prefilled_cached      = int32_t(seq_lcp_l);
-                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = %d\n", rid.c_str(), seq_id,
-                                         task->pos);
+                                int32_t   cached              = int32_t(seq_lcp_l) - 1;
+                                llama_pos pos                 = std::min(seq_lcp_pos - 1, cached);
+                                task->pos                     = pos;
+                                task->n_processed_detokenized = cached;
+                                task->n_prefilled             = cached;
+                                task->n_prefilled_cached      = cached;
+                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, cached = %d, pos = %d\n", rid.c_str(),
+                                         seq_id, cached, pos);
                             }
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
@@ -4081,6 +4082,7 @@ struct httpserver {
                                                         });
                                                     }
                                                     if (!task->tool_call_parallel) {
+                                                        SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
                                                         task->generated_finish_reason = "tool_calls";
                                                     }
                                                     // eat the rest of the text
@@ -4204,6 +4206,7 @@ struct httpserver {
                                                     append_tool_calls(functions);
                                                 }
                                                 if (!task->tool_call_parallel) {
+                                                    SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
                                                     task->generated_finish_reason = "tool_calls";
                                                 }
                                                 // eat the rest of the text
@@ -4223,8 +4226,13 @@ struct httpserver {
                         if (task->generated_finish_reason.empty()) {
                             //// check eog
                             if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
-                                SRV_DBG("rid %s | stopped by EOG\n", rid.c_str());
-                                task->generated_finish_reason = "stop";
+                                if (task->generated_tool_calls.empty()) {
+                                    SRV_DBG("rid %s | stopped by EOG\n", rid.c_str());
+                                    task->generated_finish_reason = "stop";
+                                } else {
+                                    SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
+                                    task->generated_finish_reason = "tool_calls";
+                                }
                             }
                             //// check budget
                             else if (task->n_decoding_budget <= 0) {
