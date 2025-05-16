@@ -3988,8 +3988,9 @@ struct httpserver {
                                     } else {
                                         task->n_reasoning++;
                                     }
-                                } else {
+                                } else if (!task->reasoning_finished) {
                                     task->reasoning_finished = true;
+                                    task->generated_text.clear();  // avoid to remember the thinking content
                                 }
                             }
                         }
