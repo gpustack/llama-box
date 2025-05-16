@@ -1,11 +1,11 @@
 diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
-index 381a9c7d..e14511cd 100644
+index 8667a80b..70fd7042 100644
 --- a/ggml/src/gguf.cpp
 +++ b/ggml/src/gguf.cpp
 @@ -408,7 +408,7 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
              for (size_t j = 0; ok && j < ctx->kv.size(); ++j) {
                  if (key == ctx->kv[j].key) {
-                     fprintf(stderr, "%s: duplicate key '%s' for tensors %zu and %" PRIi64 " \n", __func__, key.c_str(), j, i);
+                     GGML_LOG_ERROR("%s: duplicate key '%s' for tensors %zu and %" PRIi64 " \n", __func__, key.c_str(), j, i);
 -                    ok = false;
 +                    break;
                  }
