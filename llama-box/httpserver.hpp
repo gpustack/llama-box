@@ -2742,15 +2742,11 @@ struct httpserver {
             SRV_ERR("failed to load model, '%s'\n", params.llm_params.model.path.c_str());
             return false;
         }
-        llm_vocab          = llama_model_get_vocab(llm_model);
-        llm_ctx_size       = int32_t(llama_n_ctx(llm_ctx));
-        llm_ctx_embed_size = llama_model_n_embd(llm_model);
-        if (params.llm_params.n_threads_http != 1) {
-            float ratio           = llm_ctx_clip == nullptr ? 1.0f : 1.5f;
-            llm_ctx_size_shifting = int32_t(float(llm_ctx_size) / float(params.llm_params.n_threads_http) * ratio) - 1;
-        } else {
-            llm_ctx_size_shifting = llm_ctx_size - 1;
-        }
+        llm_vocab            = llama_model_get_vocab(llm_model);
+        llm_ctx_size         = int32_t(llama_n_ctx(llm_ctx));
+        llm_ctx_embed_size   = llama_model_n_embd(llm_model);
+        llm_kv_cache_limit   = llm_ctx_size - 1;
+        llm_kv_cache_shift   = llama_kv_self_can_shift(llm_ctx);
         // NB(thxCode): llama_causal_attn is a patch.
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
@@ -3182,15 +3178,17 @@ struct httpserver {
 
     // model
     common_init_result  llm_init;
-    llama_model *       llm_model             = nullptr;
-    llama_context *     llm_ctx               = nullptr;
-    const llama_vocab * llm_vocab             = nullptr;
-    int32_t             llm_ctx_size          = 0;
-    int32_t             llm_ctx_embed_size    = 0;
-    int32_t             llm_ctx_size_shifting = 0;
-    bool                llm_model_casual      = true;
-    bool                llm_model_rope_mrope  = false;
-    llama_batch         batch                 = {};
+    llama_model *       llm_model            = nullptr;
+    llama_context *     llm_ctx              = nullptr;
+    const llama_vocab * llm_vocab            = nullptr;
+    int32_t             llm_ctx_size         = 0;
+    int32_t             llm_ctx_embed_size   = 0;
+    int32_t             llm_kv_cache_used    = 0;
+    int32_t             llm_kv_cache_limit   = 0;
+    bool                llm_kv_cache_shift   = false;
+    bool                llm_model_casual     = true;
+    bool                llm_model_rope_mrope = false;
+    llama_batch         batch                = {};
 
     // model addition
 
@@ -3269,24 +3267,56 @@ struct httpserver {
 
     inline bool support_image() const { return sd_ctx != nullptr; }
 
-    inline void shift_task_kv_cache(completions_task * task, const int32_t n_discard_exp = 1) {
-        if (!llama_kv_self_can_shift(llm_ctx)) {
+    inline void shift_task_kv_cache(completions_task * task) {
+        if (!llm_kv_cache_shift) {
+            return;
+        }
+
+        // try to reduce the kv cache of the storing cache
+
+        int32_t cache_id  = -1;
+        int32_t cache_pos = 0;
+        for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
+            cache_prompt_entry & cache = cache_prompts.at(i);
+            if (!cache.used && cache.pos > cache_pos) {
+                cache_id  = i;
+                cache_pos = cache.pos;
+            }
+        }
+        if (cache_id != -1) {
+            int32_t n_discard = std::min(cache_pos >> 2, params.llm_params.n_ubatch);
+            if (n_discard <= 4) {
+                return;
+            }
+            llama_kv_self_seq_rm(llm_ctx, cache_id, 0, n_discard);
+            llama_kv_self_seq_add(llm_ctx, cache_id, n_discard, cache_pos, -n_discard);
+            if (llm_ctx_draft != nullptr) {
+                llama_kv_self_seq_rm(llm_ctx_draft, cache_id, 0, n_discard);
+                llama_kv_self_seq_add(llm_ctx_draft, cache_id, n_discard, cache_pos, -n_discard);
+            }
+            SRV_WRN("squash cache %d, [%d, %d) -> [0, %d)\n", cache_id, n_discard, cache_pos, cache_pos - n_discard);
+            // stat
+            cache_prompt_entry & cache = cache_prompts.at(cache_id);
+            cache.pos -= n_discard;
+            cache.pos_discard += n_discard;
+            llm_kv_cache_used -= n_discard;
+            return;
+        }
+
+        if (task == nullptr) {
+            return;
+        }
+
+        // otherwise, reduce the kv cache of the given task
+
+        const int32_t n_keep    = params.llm_params.n_keep + 1;
+        const int32_t n_left    = task->pos - n_keep;
+        const int32_t n_discard = std::min(n_left >> 2, params.llm_params.n_ubatch);
+        if (n_discard <= 4) {
             return;
         }
         const std::string rid    = task->get_r_id();
         const int32_t     seq_id = task->get_seq_id();
-        const int32_t     n_keep = params.llm_params.n_keep + 1;
-        const int32_t     n_left = task->pos - n_keep;
-
-        // select n_discard strategy
-        int32_t n_discard = 0;
-        if (n_discard_exp > 0) {
-            // keep most of the tokens to make the model see clearer
-            n_discard = std::min(n_left >> n_discard_exp, 2047);
-        } else {
-            // remove most of the tokens to make the kv cache smaller
-            n_discard = n_left - std::min(n_left >> -n_discard_exp, 2047);
-        }
 
         llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
         llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
@@ -3298,8 +3328,11 @@ struct httpserver {
             "rid %s | shift kv cache, "
             "seq = %d, [%d, %d) -> [%d, %d)\n",
             rid.c_str(), seq_id, n_keep + n_discard, task->pos, n_keep, task->pos - n_discard);
+
+        // stat
         task->pos -= n_discard;
         task->pos_discard += n_discard;
+        llm_kv_cache_used -= n_discard;
     }
 
     //
@@ -3485,6 +3518,7 @@ struct httpserver {
                             }
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                            llm_kv_cache_used -= cache.pos;
                             cache.tokens.clear();
                             cache.used        = true;
                             cache.pos         = 0;
@@ -3498,6 +3532,7 @@ struct httpserver {
                             }
                             SRV_DBG("rid %s | prefix cache, kv cache mask, seq %d = [%d, end)\n", rid.c_str(), seq_id,
                                     task->pos);
+                            llm_kv_cache_used += task->pos;
                         }
 
                         // batching
@@ -3526,6 +3561,7 @@ struct httpserver {
                                 }
                                 task->pos++;
                                 task->n_prefilled++;
+                                llm_kv_cache_used++;
                             }
                             // enqueue task if not prefilled all,
                             // which means there is not enough space to place all tokens
@@ -3561,6 +3597,7 @@ struct httpserver {
                                         }
                                         task->pos++;
                                         task->n_prefilled++;
+                                        llm_kv_cache_used++;
                                     }
                                     if (batch.n_tokens > 0 && i_prompt + 1 < n_prompt) {
                                         // decode immediately
@@ -3575,6 +3612,7 @@ struct httpserver {
                                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                                             SRV_DBG("rid %s | decode text, kv cache clean, seq %d = [0, end)",
                                                     rid.c_str(), seq_id);
+                                            llm_kv_cache_used -= task->pos;
                                             // output
                                             json data = {
                                                 { "message",
@@ -3620,7 +3658,6 @@ struct httpserver {
                                                                                 mrope_pos.data(), seq_id);
                                             // decode immediately
                                             decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                            task->pos += tokenized_image.n_pos;
                                         }
                                         // Gemma3
                                         else if (clip_is_gemma3(llm_ctx_clip)) {
@@ -3631,7 +3668,6 @@ struct httpserver {
                                             llama_set_causal_attn(llm_ctx, false);
                                             decoded_image = llama_decode(llm_ctx, batch_image.batch);
                                             llama_set_causal_attn(llm_ctx, true);
-                                            task->pos += tokenized_image.n_pos;
                                         }
                                         // Others
                                         else {
@@ -3640,8 +3676,9 @@ struct httpserver {
                                                                                 task->pos, seq_id);
                                             // decode immediately
                                             decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                            task->pos += tokenized_image.n_pos;
                                         }
+                                        task->pos += tokenized_image.n_pos;
+                                        llm_kv_cache_used += tokenized_image.n_pos;
                                         if (decoded_image != 0) {
                                             SRV_ERR(
                                                 "rid %s | decode vision image, failed to decode, try again, increasing "
@@ -3652,6 +3689,7 @@ struct httpserver {
                                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                                             SRV_DBG("rid %s | decode image, kv cache clean, seq %d = [0, end)",
                                                     rid.c_str(), seq_id);
+                                            llm_kv_cache_used -= task->pos;
                                             // output
                                             json data = {
                                                 { "message",
@@ -3694,8 +3732,8 @@ struct httpserver {
                         }
 
                         // prepare cache - truncate cache
-                        if (task->pos >= llm_ctx_size_shifting) {
-                            shift_task_kv_cache(task, 2);
+                        if (llm_kv_cache_used >= llm_kv_cache_limit) {
+                            shift_task_kv_cache(task);
                         }
 
                         // batching
@@ -3706,6 +3744,7 @@ struct httpserver {
                             common_batch_add(batch, task->processed_tokens.back(), task->pos, { seq_id }, true);
                         }
                         task->pos++;
+                        llm_kv_cache_used++;
                         if (!task->drafted_tokens.empty()) {
                             for (const llama_token & tok : task->drafted_tokens) {
                                 if (llm_model_rope_mrope) {
@@ -3714,6 +3753,7 @@ struct httpserver {
                                     common_batch_add(batch, tok, task->pos, { seq_id }, true);
                                 }
                                 task->pos++;
+                                llm_kv_cache_used++;
                             }
                         }
 
@@ -3731,7 +3771,8 @@ struct httpserver {
                  * embeddings
                  */
 
-                auto * task = dynamic_cast<embeddings_task *>(task_ptr.get());
+                auto * task       = dynamic_cast<embeddings_task *>(task_ptr.get());
+                llm_kv_cache_used = 0;
 
                 // prefill first
                 const bool need_embed = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
@@ -3825,8 +3866,9 @@ struct httpserver {
                     // -3 compute failed, -2 allocate failed, -1 no tokens, 0 ok, 1 no kv cache, 2 compute aborted
                     if (decoded != 0) {
                         // try to recover
+                        int32_t retries       = 10;
                         int32_t decoded_again = decoded;
-                        while (decoded_again == 1) {
+                        while (decoded_again == 1 && retries-- > 0) {
                             SRV_WRN("%s", "decode in batch, try shifting context\n");
                             // shift the decoding task which has largest pos
                             int32_t target_idx = -1;
@@ -3838,19 +3880,20 @@ struct httpserver {
                                     target_pos = task->pos;
                                 }
                             }
-                            if (target_idx == -1) {
-                                break;
-                            }
-                            auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
-                            shift_task_kv_cache(task, -1);
-                            // adjust batch pos
-                            const llama_pos new_pos = task->pos;
-                            if (llm_model_rope_mrope) {
-                                for (int32_t i = 0; i < 3; i++) {
-                                    batch.pos[task->i_batch_seq_end + i] = new_pos - 1;
+                            if (target_idx != -1) {
+                                auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
+                                shift_task_kv_cache(task);
+                                // adjust batch pos
+                                const llama_pos new_pos = task->pos;
+                                if (llm_model_rope_mrope) {
+                                    for (int32_t i = 0; i < 3; i++) {
+                                        batch.pos[task->i_batch_seq_end + i] = new_pos - 1;
+                                    }
+                                } else {
+                                    batch.pos[task->i_batch_seq_end] = new_pos - 1;
                                 }
                             } else {
-                                batch.pos[task->i_batch_seq_end] = new_pos - 1;
+                                shift_task_kv_cache(nullptr);
                             }
                             // decode again
                             decoded_again = llama_decode(llm_ctx, batch);
@@ -3864,21 +3907,23 @@ struct httpserver {
                             "parallel: "
                             "result = %d\n",
                             decoded);
-                        // output
                         for (auto & task_ptr : batch_task_ptrs) {
-                            const std::string rid    = task_ptr->get_r_id();
-                            const int32_t     seq_id = task_ptr->get_seq_id();
+                            auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
+                            const std::string rid    = task->get_r_id();
+                            const int32_t     seq_id = task->get_seq_id();
                             // clean kv cache
                             llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                             }
                             SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                            llm_kv_cache_used -= task->pos;
+                            // output
                             json data = {
                                 { "message",
                                  "failed to decode, try again, increasing context size, or reducing parallel" }
                             };
-                            process_task_results[task_ptr->get_id()]->enqueue(
+                            process_task_results[task->get_id()]->enqueue(
                                 std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
                         return;
@@ -3896,11 +3941,16 @@ struct httpserver {
                             "decode draft in batch, failed to decode, try increasing context size or reducing "
                             "parallel: result = %d\n",
                             decoded_draft);
-                        // clean kv cache
-                        llama_kv_self_clear(llm_ctx);
-                        llama_kv_self_clear(llm_ctx_draft);
-                        // output
                         for (auto & task_ptr : batch_task_ptrs) {
+                            auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
+                            const std::string rid    = task->get_r_id();
+                            const int32_t     seq_id = task->get_seq_id();
+                            // clean kv cache
+                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                            SRV_DBG("rid %s | decode, kv cache mask, seq %d = [0, end)", rid.c_str(), seq_id);
+                            llm_kv_cache_used -= task->pos;
+                            // output
                             json data = {
                                 { "message",
                                  "failed to decode draft, try again, increasing context size, or reducing "
@@ -3954,6 +4004,7 @@ struct httpserver {
                                     }
                                     SRV_DBG("rid %s | decode, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id,
                                             task->pos);
+                                    llm_kv_cache_used -= d;
                                     break;
                                 }
                                 task->n_drafted_accepted++;
@@ -4270,10 +4321,6 @@ struct httpserver {
                                         "rid %s | decode draft, failed to decode, try again, increasing context size "
                                         "or reducing requests: result = %d\n",
                                         rid.c_str(), decoded_draft);
-                                    // clean kv cache
-                                    llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                    SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(),
-                                            seq_id);
                                     // output
                                     json data = {
                                         { "message",
@@ -4309,8 +4356,6 @@ struct httpserver {
                                     }
                                     decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                                     if (decoded_draft != 0) {
-                                        // clean kv cache
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                                         SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(),
                                                 seq_id);
                                         break;
@@ -4376,6 +4421,7 @@ struct httpserver {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
                         SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
+                        llm_kv_cache_used -= task->pos;
                     }
                     // cache prompt
                     else {
@@ -5063,7 +5109,7 @@ struct httpserver {
             n_prefilling_request          = int32_t(tokenized_prompt.size());
             if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
                 const int32_t n_left       = n_ctx - params.llm_params.n_keep;
-                const int32_t n_block_size = n_left / 2;
+                const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
                     (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
                 if (n_block_erased > 0) {
@@ -5183,7 +5229,7 @@ struct httpserver {
             n_prefilling_request          = int32_t(tokenized_prompt.size());
             if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
                 const int32_t n_left       = n_ctx - params.llm_params.n_keep;
-                const int32_t n_block_size = n_left / 2;
+                const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
                     (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
                 if (n_block_erased > 0) {
