@@ -723,10 +723,10 @@ index 7fd094b6..7ad53001 100644
      return model->hparams.n_ctx_train;
  }
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 9fdddf7b..27e146e7 100644
+index 2f06e0f8..b0a8d2b5 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
-@@ -265,6 +265,49 @@ void llama_model_save_to_file(const struct llama_model * model, const char * pat
+@@ -270,6 +270,49 @@ void llama_model_save_to_file(const struct llama_model * model, const char * pat
  // chat templates
  //
  
