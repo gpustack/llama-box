@@ -5098,8 +5098,6 @@ struct httpserver {
 
         std::unique_ptr<legacy_complete_req> req = get_legacy_complete_req(request, response, params, llm_ctx);
 
-        const auto n_ctx = int32_t(llama_n_ctx(llm_ctx));
-
         int32_t n_prefilling_request = 0;
 
         std::vector<std::variant<llama_tokens, llama_image_tokens>> tokenized_prompts;
@@ -5107,8 +5105,8 @@ struct httpserver {
         {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
-                const int32_t n_left       = n_ctx - params.llm_params.n_keep;
+            if (n_prefilling_request >= llm_ctx_size && params.llm_params.ctx_shift) {
+                const int32_t n_left       = llm_ctx_size - params.llm_params.n_keep;
                 const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
                     (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
@@ -5135,7 +5133,7 @@ struct httpserver {
         if (req->max_tokens == -1 && params.llm_params.ctx_shift) {
             n_decoding_budget = INT32_MAX;
         } else if (req->max_tokens == -1) {
-            n_decoding_budget = n_ctx - n_prefilling_request;
+            n_decoding_budget = llm_ctx_size - n_prefilling_request;
         } else {
             n_decoding_budget = req->max_tokens - n_prefilling_request;
         }
@@ -5218,8 +5216,6 @@ struct httpserver {
         std::unique_ptr<chat_complete_req> req =
             get_chat_complete_req(request, response, params, llm_ctx, support_tool_calls, chat_templates.get());
 
-        const auto n_ctx = int32_t(llama_n_ctx(llm_ctx));
-
         int32_t n_prefilling_request = 0;
 
         std::vector<std::variant<llama_tokens, llama_image_tokens>> tokenized_prompts;
@@ -5227,8 +5223,8 @@ struct httpserver {
         if (req->images.empty()) {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= n_ctx && params.llm_params.ctx_shift) {
-                const int32_t n_left       = n_ctx - params.llm_params.n_keep;
+            if (n_prefilling_request >= llm_ctx_size && params.llm_params.ctx_shift) {
+                const int32_t n_left       = llm_ctx_size - params.llm_params.n_keep;
                 const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
                     (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
@@ -5434,7 +5430,7 @@ struct httpserver {
         if (req->max_tokens == -1 && params.llm_params.ctx_shift) {
             n_decoding_budget = INT32_MAX;
         } else if (req->max_tokens == -1) {
-            n_decoding_budget = n_ctx - n_prefilling_request;
+            n_decoding_budget = llm_ctx_size - n_prefilling_request;
         } else {
             n_decoding_budget = req->max_tokens - n_prefilling_request;
         }
