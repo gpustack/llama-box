@@ -163,9 +163,9 @@ static inline common_params_sampling prepare_sampling(const json & data, const c
     }
 
     {
-        json samplers = data.at("samplers");
+        const json & samplers = data.at("samplers");
         if (samplers.is_array()) {
-            params.samplers = common_sampler_types_from_names(samplers, false);
+            params.samplers = common_sampler_types_from_names(samplers.get<std::vector<std::string>>(), false);
         } else if (samplers.is_string()) {
             params.samplers = common_sampler_types_from_chars(samplers.get<std::string>());
         }
@@ -422,7 +422,7 @@ static inline void sort_rerank_results(json & result, int32_t low, int32_t high)
 
 // common_batch_add_with_mrope, mocks common_batch_add but works in mrope.
 static inline void common_batch_add_with_mrope(struct llama_batch & batch, llama_token id, llama_pos st_pos_id,
-                                               int32_t n_eval, const std::vector<llama_seq_id> & seq_ids, bool logits) {
+                                               int32_t n_eval, const std::vector<llama_seq_id> & seq_ids, bool logit) {
     GGML_ASSERT(batch.seq_id[batch.n_tokens] && "llama_batch size exceeded");
 
     batch.token[batch.n_tokens] = id;
@@ -436,7 +436,7 @@ static inline void common_batch_add_with_mrope(struct llama_batch & batch, llama
     for (size_t j = 0; j < seq_ids.size(); ++j) {
         batch.seq_id[batch.n_tokens][j] = seq_ids[j];
     }
-    batch.logits[batch.n_tokens] = logits;
+    batch.logits[batch.n_tokens] = int8_t(logit);
     batch.n_tokens++;
 }
 
@@ -3442,18 +3442,12 @@ struct httpserver {
                     // prefill first (n_prefilled < n_prefilling_request)
                     if (task->n_prefilled < task->n_prefilling_request) {
                         // filter
-                        //// for text only, can place partial tokens
-                        if (!task->tokenized_prompts_include_images && batch.n_tokens > llm_ctx_size) {
-                            SRV_INF(
-                                "rid %s | batching, waiting previous batch finished: not enough space to place all "
-                                "tokens\n",
-                                rid.c_str());
-                            process_tasks->enqueue(std::move(task_ptr));
-                            continue;
-                        }
-                        //// for vision, must place all tokens once
-                        else if (task->tokenized_prompts_include_images &&
-                                 (task->n_prefilling_request + batch.n_tokens > llm_ctx_size)) {
+                        bool waited = (
+                            //// for text only, can place partial tokens
+                            (!task->tokenized_prompts_include_images && batch.n_tokens > llm_ctx_size) ||
+                            //// for vision, must place all tokens once
+                            ((task->n_prefilling_request + batch.n_tokens > llm_ctx_size)));
+                        if (waited) {
                             SRV_INF(
                                 "rid %s | batching, waiting previous batch finished: not enough space to place all "
                                 "tokens\n",
