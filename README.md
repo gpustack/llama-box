@@ -32,11 +32,16 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - [x] MobileVLM Series (w/ `--chat-template deepseek`)
         - [x] Mistral Small 3.1 (w/ `--chat-template mistral-v7`)
         - [x] Qwen2.5 VL Series, please
-          use [ggml-org/Qwen2.5-VL-3B-Instruct-GGUF](https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF) repo,
-          or the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402).
-          The popular [Mungert/Qwen2.5-VL-*B-Instruct-GGUF](https://huggingface.co/Mungert?search_models=Qwen2.5-VL)
-          repos are broken.
+          use the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402).
         - [x] InternVL2/InternVL3 Series
+        - [x] LLaMA4 Series, please
+          test
+          with [ggml-org/Llama-4-Scout-17B-16E-Instruct-GGUF](https://huggingface.co/ggml-org/Llama-4-Scout-17B-16E-Instruct-GGUF)
+          repo, or the model files converted
+          by [ggml-org/llama.cpp#13282](https://github.com/ggml-org/llama.cpp/pull/13282).
+          The
+          popular [unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF](https://huggingface.co/unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF)
+          repos are not supported vision yet.
         - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.

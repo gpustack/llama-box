@@ -5262,24 +5262,37 @@ struct httpserver {
                 bool add_bos = tokenized_prompts.empty();
                 // minicpmv
                 if (clip_is_minicpmv(llm_ctx_clip) != 0) {
+                    // format:
+                    // 2.5: <image> (overview image) </image>
+                    //      <slice>
+                    //          <image> (tile image) </image> ... <image> (tile image) </image>\n
+                    //          <image> (tile image) </image> ... <image> (tile image) </image>\n
+                    //          ...
+                    //      </slice>
+                    // 2.6: <image> (overview image) </image>
+                    //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
+                    //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
+                    //      ...
+
                     // <image>
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<image>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // lead patch <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
-                    tokenized_images.erase(tokenized_images.begin());
+                    // overview <IMG/>
+                    llama_image_tokens overview_tokenized_image = tokenized_images.front();
+                    clip_image_size    grid_size                = overview_tokenized_image.grid_size;
+                    n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
+                    tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
                     // </image>
                     tokenized_text = common_tokenize(llm_vocab, "</image>", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    // process tile images
+                    tokenized_images.erase(tokenized_images.begin());
                     if (!tokenized_images.empty()) {
-                        auto img_size = clip_image_size{ req->images[i_image].ptr->nx, req->images[i_image].ptr->ny };
-                        const int32_t n_img_embd_col = clip_uhd_num_image_embeds_col2(llm_ctx_clip, &img_size);
-                        const int32_t n_img_embd_row = (int32_t) tokenized_images.size() / n_img_embd_col;
-                        const int32_t version        = clip_is_minicpmv(llm_ctx_clip);
+                        const int32_t n_x     = grid_size.width;
+                        const int32_t n_y     = grid_size.height;
+                        const int32_t version = clip_is_minicpmv(llm_ctx_clip);
                         if (version < 3) {
                             // <slice>
                             tokenized_text = common_tokenize(llm_vocab, "<slice>", false, true);
@@ -5292,18 +5305,24 @@ struct httpserver {
                             ifmt = "<image>";
                             ofmt = "</image>";
                         }
-                        for (int y = 0; y < n_img_embd_row; y++) {
-                            for (int x = 0; x < n_img_embd_col; x++) {
+                        for (int y = 0; y < n_y; y++) {
+                            for (int x = 0; x < n_x; x++) {
                                 // <slice> | <image>
                                 tokenized_text = common_tokenize(llm_vocab, ifmt, false, true);
                                 n_prefilling_request += int32_t(tokenized_text.size());
                                 tokenized_prompts.emplace_back(std::move(tokenized_text));
-                                // other patches <IMG/>
-                                tokenized_image = tokenized_images[y * n_img_embd_col + x];
+                                // tile <IMG/>
+                                llama_image_tokens tokenized_image = tokenized_images[y * n_x + x];
                                 n_prefilling_request += int32_t(tokenized_image.n_pos);
                                 tokenized_prompts.emplace_back(std::move(tokenized_image));
                                 // </slice> | </image>
                                 tokenized_text = common_tokenize(llm_vocab, ofmt, false, true);
+                                n_prefilling_request += int32_t(tokenized_text.size());
+                                tokenized_prompts.emplace_back(std::move(tokenized_text));
+                            }
+                            if (y != n_y - 1) {
+                                // \n
+                                tokenized_text = common_tokenize(llm_vocab, "\n", false, true);
                                 n_prefilling_request += int32_t(tokenized_text.size());
                                 tokenized_prompts.emplace_back(std::move(tokenized_text));
                             }
@@ -5316,8 +5335,65 @@ struct httpserver {
                         }
                     }
                 }
+                // llama4
+                // NB(thxCode): clip_is_llama4 is a patch.
+                else if (clip_is_llama4(llm_ctx_clip)) {
+                    // format:
+                    // <|image_start|>
+                    // (tile image) <|tile_x_separator|> (tile image) <|tile_x_separator|> ... <|tile_y_separator|>
+                    // (tile image) <|tile_x_separator|> (tile image) <|tile_x_separator|> ... <|tile_y_separator|>
+                    // ...
+                    // <|tile_y_separator|>
+                    // <|image|> (overview image)
+                    // <|image_end|>
+
+                    // <|image_start|>
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|image_start|>", add_bos, true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    llama_image_tokens overview_tokenized_image = tokenized_images.front();
+                    clip_image_size    grid_size                = overview_tokenized_image.grid_size;
+                    // process tile images
+                    tokenized_images.erase(tokenized_images.begin());
+                    if (!tokenized_images.empty()) {
+                        const int32_t n_x = grid_size.width;
+                        const int32_t n_y = grid_size.height;
+                        for (int y = 0; y < n_y; y++) {
+                            for (int x = 0; x < n_x; x++) {
+                                // slice <IMG/>
+                                llama_image_tokens tokenized_image = tokenized_images[y * n_x + x];
+                                n_prefilling_request += int32_t(tokenized_image.n_pos);
+                                tokenized_prompts.emplace_back(std::move(tokenized_image));
+                                // <|tile_x_separator|>
+                                if (x != n_x - 1) {
+                                    tokenized_text = common_tokenize(llm_vocab, "<|tile_x_separator|>", false, true);
+                                    n_prefilling_request += int32_t(tokenized_text.size());
+                                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                                }
+                            }
+                            // <|tile_y_separator|>
+                            tokenized_text = common_tokenize(llm_vocab, "<|tile_y_separator|>", false, true);
+                            n_prefilling_request += int32_t(tokenized_text.size());
+                            tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        }
+                    }
+                    // <|image|>
+                    tokenized_text = common_tokenize(llm_vocab, "<|image|>", add_bos, true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    // overview <IMG/>
+                    n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
+                    tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
+                    // <|image_end|>
+                    tokenized_text = common_tokenize(llm_vocab, "<|image_end|>", false, true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                }
                 // qwen2vl
                 else if (clip_is_qwen2vl(llm_ctx_clip)) {
+                    // format:
+                    // <|vision_start|> (image) <|vision_end|>
+
                     // <|vision_start|>
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|vision_start|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5333,6 +5409,9 @@ struct httpserver {
                 }
                 // gemma3
                 else if (clip_is_gemma3(llm_ctx_clip)) {
+                    // format:
+                    // <|start_of_image|> (image) <|end_of_image|>
+
                     // <|start_of_image|>
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|start_of_image|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5349,6 +5428,9 @@ struct httpserver {
                 // smolvlm
                 // NB(thxCode): clip_is_smolvlm is a patch.
                 else if (clip_is_smolvlm(llm_ctx_clip)) {
+                    // format:
+                    // <fake_token_around_image><global-img> (image) <fake_token_around_image>
+
                     // <fake_token_around_image><global-img>
                     llama_tokens tokenized_text =
                         common_tokenize(llm_vocab, "<fake_token_around_image><global-img>", add_bos, true);
@@ -5366,6 +5448,9 @@ struct httpserver {
                 // pixtral
                 // NB(thxCode): clip_is_pixtral is a patch.
                 else if (clip_is_pixtral(llm_ctx_clip)) {
+                    // format:
+                    // (image) <IMG/>
+
                     // <IMG/>
                     llama_image_tokens tokenized_image = tokenized_images.front();
                     n_prefilling_request += int32_t(tokenized_image.n_pos);
@@ -5378,6 +5463,9 @@ struct httpserver {
                 // internvl
                 // NB(thxCode): clip_is_internvl is a patch.
                 else if (clip_is_internvl(llm_ctx_clip)) {
+                    // format:
+                    // <img> (image) </img>
+
                     // <img>
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<img>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());

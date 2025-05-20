@@ -20,6 +20,7 @@ struct llama_image_tokens {
     int32_t            n_pos       = 0;
     std::vector<float> embed;
     clip_image_size    size;
+    clip_image_size    grid_size;
 };
 
 // implementations
@@ -109,13 +110,13 @@ static inline std::vector<llama_image_tokens> tokenize_image(clip_ctx * ctx_clip
         const auto & entries   = batch.entries;
         const size_t n_entries = entries.size();
         for (size_t i = 0; i < n_entries; i++) {
-            size_t n_embed     = clip_embd_nbytes_by_img(ctx_clip, entries[i]->nx, entries[i]->ny);
-            result[i].n_tokens = clip_n_output_tokens(ctx_clip, entries[i].get());
-            result[i].n_pos    = result[i].n_tokens;
-            result[i].size     = clip_image_size{ entries[i]->nx, entries[i]->ny };
+            size_t n_embed      = clip_embd_nbytes_by_img(ctx_clip, entries[i]->nx, entries[i]->ny);
+            result[i].n_tokens  = clip_n_output_tokens(ctx_clip, entries[i].get());
+            result[i].n_pos     = result[i].n_tokens;
+            result[i].size      = clip_image_size{ entries[i]->nx, entries[i]->ny };
+            result[i].grid_size = clip_image_size{ batch.grid_x, batch.grid_y };
             result[i].embed.resize(n_embed);
             // encode
-            clip_add_load_image_size(ctx_clip, &result[i].size);
             const int64_t t_start = ggml_time_us();
             bool          encoded = clip_image_encode(ctx_clip, n_threads, entries[i].get(),
                                                       embed.data() + i * n_mmproj_embd * result[i].n_tokens);
@@ -124,25 +125,25 @@ static inline std::vector<llama_image_tokens> tokenize_image(clip_ctx * ctx_clip
                 return {};
             }
             std::memcpy(result[i].embed.data(), embed.data() + i * n_mmproj_embd * result[i].n_tokens, n_embed);
-            LOG_INF("encoded image %2zu/%zu in %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
+            LOG_INFV(3, "encoded image %2zu/%zu in %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
                     (ggml_time_us() - t_start) / 1000.0, result[i].n_tokens);
             result[i].dummy_token = image_dummy_token--;
         }
     } else {
         // init
-        result[0].n_tokens = clip_n_output_tokens(ctx_clip, batch.entries[0].get());
-        result[0].n_pos    = result[0].n_tokens;
-        result[0].size     = clip_image_size{ batch.entries[0]->nx, batch.entries[0]->ny };
+        result[0].n_tokens  = clip_n_output_tokens(ctx_clip, batch.entries[0].get());
+        result[0].n_pos     = result[0].n_tokens;
+        result[0].size      = clip_image_size{ batch.entries[0]->nx, batch.entries[0]->ny };
+        result[0].grid_size = clip_image_size{ batch.grid_x, batch.grid_y };
         result[0].embed.resize(result[0].n_tokens * n_mmproj_embd);
         // encode
-        clip_add_load_image_size(ctx_clip, &result[0].size);
         const int64_t t_start = ggml_time_us();
         bool          encoded = clip_image_batch_encode(ctx_clip, n_threads, &batch, result[0].embed.data());
         if (!encoded) {
             LOG_ERR("%s", "failed to encode image 1/1\n");
             return {};
         }
-        LOG_INF("encoded image 1/1 in %8.2f ms, n_tokens = %d\n", (ggml_time_us() - t_start) / 1000.0,
+        LOG_INFV(3, "encoded image 1/1 in %8.2f ms, n_tokens = %d\n", (ggml_time_us() - t_start) / 1000.0,
                 result[0].n_tokens);
         if (clip_is_qwen2vl(ctx_clip)) {
             const int32_t ps = clip_get_patch_size(ctx_clip) * 2;
