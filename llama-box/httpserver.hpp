@@ -772,9 +772,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     }
 
     ptr->max_tokens = json_value(req, "max_tokens", params.n_predict);
-    if (ptr->max_tokens <= 0) {
-        ptr->max_tokens = int32_t(llama_n_ctx(llm_ctx));
-    } else if (ptr->max_tokens > int32_t(llama_n_ctx(llm_ctx))) {
+    if (ptr->max_tokens > int32_t(llama_n_ctx(llm_ctx))) {
         throw std::invalid_argument(
             "Illegal param: \"max_tokens\" must be less than or equal to the model's context length");
     }
@@ -1152,9 +1150,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
     } else {
         ptr->max_tokens = json_value(req, "max_tokens", params.n_predict);
     }
-    if (ptr->max_tokens <= 0) {
-        ptr->max_tokens = int32_t(llama_n_ctx(llm_ctx));
-    } else if (ptr->max_tokens > int32_t(llama_n_ctx(llm_ctx))) {
+    if (ptr->max_tokens > int32_t(llama_n_ctx(llm_ctx))) {
         throw std::invalid_argument(
             R"(Illegal param: "max_completion_tokens" or "max_tokens" must be less than or equal to the model's context length)");
     }
@@ -5099,7 +5095,15 @@ struct httpserver {
         {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= llm_ctx_size && params.llm_params.ctx_shift) {
+            if (n_prefilling_request >= llm_ctx_size) {
+                if (!params.llm_params.ctx_shift) {
+                    SRV_ERR(
+                        "rid %s | prompt tokens size exceeds the context size, please enable context shift "
+                        "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
+                        req->get_id(), n_prefilling_request, llm_ctx_size);
+                    return send_json(request, response, httplib::BadRequest_400,
+                                     "Illegal param: prompt tokens size exceeds the context size");
+                }
                 const int32_t n_left       = llm_ctx_size - params.llm_params.n_keep;
                 const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
@@ -5123,17 +5127,11 @@ struct httpserver {
             return send_json(request, response, httplib::BadRequest_400, "Illegal param: empty completions tokens");
         }
 
-        int32_t n_decoding_budget = 0;
-        if (req->max_tokens == -1 && params.llm_params.ctx_shift) {
+        int32_t n_decoding_budget = llm_ctx_size;
+        if (req->max_tokens > 0) {
+            n_decoding_budget = req->max_tokens;
+        } else if (req->max_tokens < 0) {
             n_decoding_budget = INT32_MAX;
-        } else if (req->max_tokens == -1) {
-            n_decoding_budget = llm_ctx_size - n_prefilling_request;
-        } else {
-            n_decoding_budget = req->max_tokens - n_prefilling_request;
-        }
-        if (n_decoding_budget <= 0) {
-            return send_json(request, response, httplib::BadRequest_400,
-                             "Illegal param: \"prompt\" tokens size exceeds the context size");
         }
 
         common_sampler * sampler       = nullptr;
@@ -5217,7 +5215,15 @@ struct httpserver {
         if (req->images.empty()) {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= llm_ctx_size && params.llm_params.ctx_shift) {
+            if (n_prefilling_request >= llm_ctx_size) {
+                if (!params.llm_params.ctx_shift) {
+                    SRV_ERR(
+                        "rid %s | prompt tokens size exceeds the context size, please enable context shift "
+                        "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
+                        req->get_id(), n_prefilling_request, llm_ctx_size);
+                    return send_json(request, response, httplib::BadRequest_400,
+                                     "Illegal param: prompt tokens size exceeds the context size");
+                }
                 const int32_t n_left       = llm_ctx_size - params.llm_params.n_keep;
                 const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
@@ -5497,6 +5503,15 @@ struct httpserver {
                 n_prefilling_request += int32_t(tokenized_text.size());
                 tokenized_prompts.emplace_back(std::move(tokenized_text));
             }
+
+            if (n_prefilling_request >= llm_ctx_size) {
+                SRV_ERR(
+                    "rid %s | prompt tokens size exceeds the context size, please increase the context size "
+                    "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
+                    req->get_id(), n_prefilling_request, llm_ctx_size);
+                return send_json(request, response, httplib::BadRequest_400,
+                                 "Illegal param: prompt tokens size exceeds the context size");
+            }
         }
 
         if (n_prefilling_request == 0) {
@@ -5508,17 +5523,11 @@ struct httpserver {
 
         bool tokenized_prompts_include_tools = !req->tools.empty();
 
-        int32_t n_decoding_budget = 0;
-        if (req->max_tokens == -1 && params.llm_params.ctx_shift) {
+        int32_t n_decoding_budget = llm_ctx_size;
+        if (req->max_tokens > 0) {
+            n_decoding_budget = req->max_tokens;
+        } else if (req->max_tokens < 0) {
             n_decoding_budget = INT32_MAX;
-        } else if (req->max_tokens == -1) {
-            n_decoding_budget = llm_ctx_size - n_prefilling_request;
-        } else {
-            n_decoding_budget = req->max_tokens - n_prefilling_request;
-        }
-        if (n_decoding_budget <= 0) {
-            return send_json(request, response, httplib::BadRequest_400,
-                             "Illegal param: \"prompt\" tokens size exceeds the context size");
         }
 
         common_sampler * sampler       = nullptr;
