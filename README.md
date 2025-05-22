@@ -431,7 +431,8 @@ server/completion:
   -c,    --ctx-size N             Size of the prompt context (default: 4096, 0 = loaded from model)
          --no-context-shift       Disable context shift on infinite text generation and long prompt embedding
          --context-shift          Enable context shift on infinite text generation and long prompt embedding
-  -n,    --predict N              Number of tokens to predict (default: -1, -1 = infinity, when --context-shift)
+  -b,    --batch-size N           Logical batch size.
+                                  Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: 2048)
   -ub,   --ubatch-size N          Physical batch size, which is the maximum number of tokens that may be processed at a time.
                                   Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: 512)
          --keep N                 Number of tokens to keep from the initial prompt (default: 0)
@@ -521,11 +522,15 @@ server/completion/visual:
 
          --visual-max-image-size N
                                   Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: 0, 0 = disabled)
+         --visual-max-image-cache N
+                                  Specify how many images to cache after encoding, which is used to speed up chat completion (default: 20, 0 = disabled)
 
 server/embedding:
 
          --pooling {none,mean,cls,last,rank}
                                   Pooling type for embeddings, use model default if unspecified
+         --attention {causal,non-causal}
+                                  Attention type for embeddings, use model default if unspecified
 
 server/images:
 

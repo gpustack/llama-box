@@ -279,7 +279,8 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "-c,    --ctx-size N",                           "Size of the prompt context (default: %d, 0 = loaded from model)", llm_params.n_ctx });
     opts.push_back({ "server/completion",                  "       --no-context-shift",                     "Disable context shift on infinite text generation and long prompt embedding" });
     opts.push_back({ "server/completion",                  "       --context-shift",                        "Enable context shift on infinite text generation and long prompt embedding" });
-    opts.push_back({ "server/completion",                  "-n,    --predict N",                            "Number of tokens to predict (default: %d, -1 = infinity, when --context-shift)", llm_params.n_predict });
+    opts.push_back({ "server/completion",                  "-b,    --batch-size N",                         "Logical batch size.\n"
+                                                                                                            "Increasing this value above the value of the physical batch size may improve prompt processing performance when using multiple GPUs with pipeline parallelism. (default: %d)", llm_params.n_batch });
     opts.push_back({ "server/completion",                  "-ub,   --ubatch-size N",                        "Physical batch size, which is the maximum number of tokens that may be processed at a time.\n"
                                                                                                             "Increasing this value may improve performance during prompt processing, at the expense of higher memory usage. (default: %d)", llm_params.n_ubatch });
     opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d)", llm_params.n_keep });
@@ -363,6 +364,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     // server // completion // visual //
     opts.push_back({ "server/completion/visual" });
     opts.push_back({ "server/completion/visual",           "       --visual-max-image-size N",              "Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: %d, 0 = disabled)", params_.hs_params.max_image_size});
+    opts.push_back({ "server/completion/visual",           "       --visual-max-image-cache N",             "Specify how many images to cache after encoding, which is used to speed up chat completion (default: %d, 0 = disabled)", params_.hs_params.max_image_cache});
     // server // completion // visual //
     // server // embedding //
     opts.push_back({ "server/embedding" });
@@ -1038,23 +1040,23 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
             }
 
             if (!strcmp(flag, "--no-context-shift")) {
-                params_.hs_params.force_context_shift  = false;
+                params_.hs_params.force_ctx_shift      = false;
                 params_.hs_params.llm_params.ctx_shift = false;
                 continue;
             }
 
             if (!strcmp(flag, "--context-shift")) {
-                params_.hs_params.force_context_shift  = true;
+                params_.hs_params.force_ctx_shift      = true;
                 params_.hs_params.llm_params.ctx_shift = true;
                 continue;
             }
 
-            if (!strcmp(flag, "-n") || !strcmp(flag, "--predict")) {
+            if (!strcmp(flag, "-b") || !strcmp(flag, "--batch-size")) {
                 if (i == argc) {
-                    missing("--predict");
+                    missing("--batch-size");
                 }
-                char * arg                             = argv[i++];
-                params_.hs_params.llm_params.n_predict = std::stoi(std::string(arg));
+                char * arg                           = argv[i++];
+                params_.hs_params.llm_params.n_batch = std::stoi(std::string(arg));
                 continue;
             }
 
@@ -1707,6 +1709,15 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (params_.hs_params.max_image_size % 14 != 0) {
                     invalid("--visual-max-image-size, must be a multiple of 14");
                 }
+                continue;
+            }
+
+            if (!strcmp(flag, "--visual-max-image-cache")) {
+                if (i == argc) {
+                    missing("--visual-max-image-cache");
+                }
+                char * arg                        = argv[i++];
+                params_.hs_params.max_image_cache = std::stoi(std::string(arg));
                 continue;
             }
 

@@ -43,14 +43,15 @@ struct httpserver_params {
     common_params          llm_params;
     stablediffusion_params sd_params;
 
-    bool    force_context_shift = false;  // use context shift even if not allowed
-    bool    cache_prompt        = true;
-    bool    endpoint_images     = false;
-    int32_t conn_idle           = 60;  // connection idle in seconds
-    int32_t conn_keepalive      = 15;  // connection keep-alive in seconds
-    int32_t n_tps               = 0;   // maximum number of tokens per seconds
-    int32_t lookup_ngram_min    = 0;   // minimum n-gram size for lookup cache
-    int32_t max_image_size      = 0;   // maximum image size for vision image processing
+    bool    force_ctx_shift  = false;  // use context shift even if not allowed
+    bool    cache_prompt     = true;
+    bool    endpoint_images  = false;
+    int32_t conn_idle        = 60;  // connection idle in seconds
+    int32_t conn_keepalive   = 15;  // connection keep-alive in seconds
+    int32_t n_tps            = 0;   // maximum number of tokens per seconds
+    int32_t lookup_ngram_min = 0;   // minimum n-gram size for lookup cache
+    int32_t max_image_size   = 0;   // maximum image size for vision image processing
+    int32_t max_image_cache  = 10;  // maximum number of encoded images in cache
 };
 
 // implementations
@@ -637,7 +638,7 @@ struct complete_req : breq {
     /* OPEN AI */
 
     // decode
-    int32_t                  max_tokens = -1;
+    int32_t                  max_tokens = 0;
     int32_t                  logprobs   = -1;
     std::vector<std::string> stop;
 
@@ -771,7 +772,7 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
         }
     }
 
-    ptr->max_tokens = json_value(req, "max_tokens", params.n_predict);
+    ptr->max_tokens = json_value(req, "max_tokens", ptr->max_tokens);
     if (ptr->max_tokens > int32_t(llama_n_ctx(llm_ctx))) {
         throw std::invalid_argument(
             "Illegal param: \"max_tokens\" must be less than or equal to the model's context length");
@@ -830,9 +831,11 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
 struct clip_image {
     clip_image_u8_ptr ptr;
     std::string       hash;
+
+    clip_image(clip_image_u8_ptr && ptr, std::string && hash) : ptr(std::move(ptr)), hash(std::move(hash)) {}
 };
 
-static inline clip_image get_clip_image(std::vector<uint8_t> && img_buff) {
+static inline std::unique_ptr<clip_image> get_clip_image(std::vector<uint8_t> && img_buff) {
     std::string hash;
     try {
         hash = hash_fnv(img_buff.data(), img_buff.size());
@@ -855,9 +858,11 @@ static inline clip_image get_clip_image(std::vector<uint8_t> && img_buff) {
     clip_image_u8_ptr ptr(clip_image_u8_init());
     ptr->nx  = w;
     ptr->ny  = h;
-    ptr->buf = std::vector<uint8_t>(dt, dt + w * h * c);
+    ptr->buf.resize(w * h * 3);
+    memcpy(ptr->buf.data(), dt, ptr->buf.size());
+    stbi_image_free(dt);
 
-    return { std::move(ptr), hash };
+    return std::make_unique<clip_image>(std::move(ptr), std::move(hash));
 }
 
 struct chat_complete_req : complete_req {
@@ -866,13 +871,13 @@ struct chat_complete_req : complete_req {
     /* LLAMA BOX */
 
     // images, temporary use, will not value in "process"
-    std::vector<clip_image>  images;
-    common_chat_params       chat_params;
+    std::vector<std::unique_ptr<clip_image>> images;
+    common_chat_params                       chat_params;
     // tool calls
-    llama_token              tool_call_start_token = LLAMA_TOKEN_NULL;
-    std::string              tool_call_start_token_word;
-    std::vector<std::string> tool_call_start_words;
-    size_t                   tool_call_start_words_longest_length = 0;
+    llama_token                              tool_call_start_token = LLAMA_TOKEN_NULL;
+    std::string                              tool_call_start_token_word;
+    std::vector<std::string>                 tool_call_start_words;
+    size_t                                   tool_call_start_words_longest_length = 0;
 
     /* OPEN AI*/
 
@@ -1146,9 +1151,9 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
     }
 
     if (req.contains("max_completion_tokens")) {
-        ptr->max_tokens = json_value(req, "max_completion_tokens", params.n_predict);
+        ptr->max_tokens = json_value(req, "max_completion_tokens", ptr->max_tokens);
     } else {
-        ptr->max_tokens = json_value(req, "max_tokens", params.n_predict);
+        ptr->max_tokens = json_value(req, "max_tokens", ptr->max_tokens);
     }
     if (ptr->max_tokens > int32_t(llama_n_ctx(llm_ctx))) {
         throw std::invalid_argument(
@@ -2815,9 +2820,8 @@ struct httpserver {
         }
 
         // context shift
-        SRV_INF("context shifting %s\n", params.force_context_shift ?
-                                             "enabled" :
-                                             (params.llm_params.ctx_shift ? "partial supported" : "disabled"));
+        SRV_INF("context shifting %s\n",
+                params.force_ctx_shift ? "enabled" : (params.llm_params.ctx_shift ? "partial supported" : "disabled"));
 
         // chat template
         {
@@ -3208,7 +3212,6 @@ struct httpserver {
         int64_t                         last_used = 0;
     };
 
-    size_t                                             cache_images_size = 20;
     std::unordered_map<std::string, cache_image_entry> cache_images;
 
     // speculative decoding
@@ -3509,7 +3512,6 @@ struct httpserver {
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
                             llm_kv_cache_used -= cache.pos;
-                            cache.tokens.clear();
                             cache.used        = true;
                             cache.pos         = 0;
                             cache.pos_discard = task->pos > 0 ? cache.pos_discard : 0;
@@ -3589,7 +3591,7 @@ struct httpserver {
                                         task->n_prefilled++;
                                         llm_kv_cache_used++;
                                     }
-                                    if (batch.n_tokens > 0 && i_prompt + 1 < n_prompt) {
+                                    if (batch.n_tokens > 0) {
                                         // decode immediately
                                         const int32_t decoded_text = llama_decode(llm_ctx, batch);
                                         common_batch_clear(batch);
@@ -3636,7 +3638,7 @@ struct httpserver {
                                             mrope_pos.resize(n_image * 4);
                                             for (int32_t y = 0; y < ph; y++) {
                                                 for (int32_t x = 0; x < pw; x++) {
-                                                    const int i                = y * ph + x;
+                                                    const int i                = y * pw + x;
                                                     mrope_pos[i]               = task->pos;
                                                     mrope_pos[i + n_image * 1] = task->pos + y;
                                                     mrope_pos[i + n_image * 2] = task->pos + x;
@@ -3702,6 +3704,10 @@ struct httpserver {
                             // abort task if not prefilled all,
                             // which means there is an error in decoding text or image
                             if (task->n_prefilled < task->n_prefilling_request) {
+                                SRV_WRN(
+                                    "rid %s | batching, waiting previous batch finished: not enough space to place all "
+                                    "tokens\n",
+                                    rid.c_str());
                                 continue;
                             }
                             // save for cache prompts,
@@ -3781,10 +3787,9 @@ struct httpserver {
                                 seq_id);
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                        cache.tokens.clear();
-                        cache.used        = false;
-                        cache.pos         = 0;
-                        cache.pos_discard = 0;
+                        cache.used                 = false;
+                        cache.pos                  = 0;
+                        cache.pos_discard          = 0;
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
@@ -4416,10 +4421,9 @@ struct httpserver {
                     // cache prompt
                     else {
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                        cache.tokens.clear();
-                        cache.tokens = std::move(task->processed_tokens);
-                        cache.used   = false;
-                        cache.pos    = task->pos;
+                        cache.tokens.swap(task->processed_tokens);
+                        cache.used = false;
+                        cache.pos  = task->pos;
                         cache.pos_discard += task->pos_discard;
                     }
                 }
@@ -4707,46 +4711,74 @@ struct httpserver {
         return httplib::OK_200;
     }
 
-    std::vector<llama_image_tokens> cache_tokenize_image(const clip_image & img) {
+    std::vector<llama_image_tokens> cache_tokenize_image(const char * rid, std::unique_ptr<clip_image> && img) {
         if (llm_ctx_clip == nullptr) {
             return {};
         }
 
+        std::vector<llama_image_tokens> result;
+
         std::unique_lock<std::mutex> lock(llm_ctx_clip_mtx);
 
-        if (img.hash.empty()) {
-            LOG_WRN("failed to hash image, tokenizing directly\n");
-            return tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img.ptr.get());
+        // check if image hash is empty or cache is disabled.
+        if (img->hash.empty() || params.max_image_cache <= 0) {
+            SRV_INFV(2,
+                     "rid %s | disable image cache, "
+                     "hash = %s, n_caching = %zu, tokenizing...\n",
+                     rid, img->hash.c_str(), cache_images.size());
+            result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img->ptr.get());
         }
-
         // check if image is already cached.
-        if (auto it = cache_images.find(img.hash); it != cache_images.end()) {
-            LOG_INFV(2, "hit image cache, hash = %s, n_cached = %zu\n", img.hash.c_str(), cache_images.size());
-            it->second.last_used = ggml_time_us();
-            return it->second.tokens;
+        else if (auto hit = cache_images.find(img->hash); hit != cache_images.end()) {
+            SRV_INFV(2,
+                     "rid %s | hit image cache, "
+                     "hash = %s, n_caching = %zu\n",
+                     rid, img->hash.c_str(), cache_images.size());
+            hit->second.last_used = ggml_time_us();
+            result                = hit->second.tokens;
         }
-
-        // evict the oldest image if the cache is full.
-        if (cache_images.size() >= cache_images_size) {
-            // find the oldest image,
-            // remove it and add the new image.
-            auto oldest_it = cache_images.begin();
-            for (auto it = cache_images.begin(); it != cache_images.end(); ++it) {
-                if (it->second.last_used < oldest_it->second.last_used) {
-                    oldest_it = it;
+        // cache image.
+        else {
+            // evict the oldest image if the cache is full.
+            if (int32_t(cache_images.size()) >= params.max_image_cache) {
+                // find the oldest image,
+                // remove it and add the new image.
+                auto oldest_it = cache_images.begin();
+                for (auto it = cache_images.begin(); it != cache_images.end(); ++it) {
+                    if (it->second.last_used < oldest_it->second.last_used) {
+                        oldest_it = it;
+                    }
                 }
+                SRV_INFV(2,
+                         "rid %s | evict image cache, "
+                         "hash = %s, n_caching = %zu\n",
+                         rid, oldest_it->first.c_str(), cache_images.size());
+                cache_images.erase(oldest_it);
             }
-            cache_images.erase(oldest_it);
-            LOG_INFV(2, "evict image cache, hash = %s, n_cached = %zu\n", oldest_it->first.c_str(),
-                     cache_images.size());
+            SRV_INFV(2,
+                     "rid %s | miss image cache, "
+                     "hash = %s, n_caching = %zu, tokenizing...\n",
+                     rid, img->hash.c_str(), cache_images.size());
+            result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img->ptr.get());
+            cache_images[img->hash] = { result, ggml_time_us() };
         }
 
-        LOG_INFV(2, "miss image cache, hash = %s, n_cached = %zu, tokenizing...\n", img.hash.c_str(),
-                 cache_images.size());
-        std::vector<llama_image_tokens> result =
-            tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img.ptr.get());
+        lock.unlock();
 
-        cache_images[img.hash] = { result, ggml_time_us() };
+        if (common_log_verbosity_thold >= 2) {
+            int32_t n_tokens     = 0;
+            int32_t n_pos        = 0;
+            size_t  n_embed_size = 0;
+            for (const auto & token : result) {
+                n_tokens += token.n_tokens;
+                n_pos += token.n_pos;
+                n_embed_size += token.embed.size() * sizeof(float);
+            }
+            SRV_INF(
+                "rid %s | tokenized image, "
+                "hash = %s, n_tokens = %d, n_pos = %d, n_embed_size = %zu kib\n",
+                rid, img->hash.c_str(), n_tokens, n_pos, n_embed_size >> 10);
+        }
 
         return result;
     }
@@ -5260,7 +5292,8 @@ struct httpserver {
                 }
 
                 // process image
-                std::vector<llama_image_tokens> tokenized_images = cache_tokenize_image(req->images[i_image]);
+                std::vector<llama_image_tokens> tokenized_images =
+                    cache_tokenize_image(req->get_id(), std::move(req->images[i_image]));
                 if (tokenized_images.empty()) {
                     return send_string(request, response, httplib::InternalServerError_500,
                                        "Failed to embed the image");
@@ -5520,6 +5553,7 @@ struct httpserver {
 
         bool tokenized_prompts_include_images = !req->images.empty();
         req->images.clear();  // release images asap
+        req->images.shrink_to_fit();
 
         bool tokenized_prompts_include_tools = !req->tools.empty();
 
@@ -5606,7 +5640,7 @@ struct httpserver {
                 n_prefilling_request += int32_t(tokenized_input.size());
                 continue;
             }
-            if (!params.force_context_shift) {
+            if (!params.force_ctx_shift) {
                 return send_json(request, response, httplib::BadRequest_400,
                                  "Illegal param: \"input\" tokens size exceeds the context size");
             }
