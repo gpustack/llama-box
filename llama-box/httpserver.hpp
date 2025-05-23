@@ -436,7 +436,7 @@ static inline void common_batch_add_with_mrope(struct llama_batch & batch, llama
     for (size_t j = 0; j < seq_ids.size(); ++j) {
         batch.seq_id[batch.n_tokens][j] = seq_ids[j];
     }
-    batch.logits[batch.n_tokens] = int8_t(logit);
+    batch.logits[batch.n_tokens] = logit;
     batch.n_tokens++;
 }
 
@@ -2601,6 +2601,7 @@ struct httpserver {
 
     ~httpserver() {
         llama_batch_free(batch);
+        llama_batch_free(batch_temp);
         if (llm_ctx != nullptr) {
             llama_detach_threadpool(llm_ctx);
         }
@@ -2751,6 +2752,7 @@ struct httpserver {
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
         batch                = llama_batch_init(llm_ctx_size, 0, 1);
+        batch_temp           = llama_batch_init(llm_ctx_size, 0, 1);
         batch_view_max       = int32_t(llama_n_batch(llm_ctx));
 
         // check multimodal projection model compatibility
@@ -3189,6 +3191,7 @@ struct httpserver {
     bool                llm_model_casual     = true;
     bool                llm_model_rope_mrope = false;
     llama_batch         batch                = {};
+    llama_batch         batch_temp           = {};
     int32_t             batch_view_max       = 0;
 
     // model addition
@@ -3267,6 +3270,14 @@ struct httpserver {
     }
 
     inline bool support_image() const { return sd_ctx != nullptr; }
+
+    inline void batch_add(struct llama_batch & b, llama_token t, llama_pos p, llama_seq_id sid, bool l) const {
+        if (llm_model_rope_mrope) {
+            common_batch_add_with_mrope(b, t, p, 1, { sid }, l);
+        } else {
+            common_batch_add(b, t, p, { sid }, l);
+        }
+    }
 
     inline void shift_task_kv_cache(completions_task * task) {
         if (!llm_kv_cache_shift) {
@@ -3552,19 +3563,11 @@ struct httpserver {
                                     SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
                                     break;
                                 }
-                                const llama_token tok        = tokenized_text[task->n_prefilled];
-                                const bool        need_embed = task->n_prefilled + 1 == task->n_prefilling_request;
-                                if (llm_model_rope_mrope) {
-                                    common_batch_add_with_mrope(batch, tok, task->pos, 1, { seq_id }, need_embed);
-                                    if (llm_ctx_draft != nullptr) {
-                                        common_batch_add_with_mrope(batch_draft, tok, task->pos, 1, { seq_id },
-                                                                    need_embed);
-                                    }
-                                } else {
-                                    common_batch_add(batch, tok, task->pos, { seq_id }, need_embed);
-                                    if (llm_ctx_draft != nullptr) {
-                                        common_batch_add(batch_draft, tok, task->pos, { seq_id }, need_embed);
-                                    }
+                                const llama_token tok = tokenized_text[task->n_prefilled];
+                                const bool        emb = task->n_prefilled + 1 == task->n_prefilling_request;
+                                batch_add(batch, tok, task->pos, seq_id, emb);
+                                if (llm_ctx_draft != nullptr) {
+                                    batch_add(batch_draft, tok, task->pos, seq_id, emb);
                                 }
                                 task->pos++;
                                 task->n_prefilled++;
@@ -3593,23 +3596,23 @@ struct httpserver {
                                         std::get<llama_tokens>(task->tokenized_prompts[i_prompt]);
                                     const auto    n_text   = int32_t(tokenized_text.size());
                                     const int32_t n_text_s = task->n_prefilled - c_prefilled;
+                                    const bool    last     = i_prompt + 1 == n_prompt;
                                     for (int32_t i_text = n_text_s; i_text < n_text; i_text++) {
-                                        const llama_token tok        = tokenized_text[i_text];
-                                        const bool        need_embed = i_text + 1 == n_text && i_prompt + 1 == n_prompt;
-                                        if (llm_model_rope_mrope) {
-                                            common_batch_add_with_mrope(batch, tok, task->pos, 1, { seq_id },
-                                                                        need_embed);
+                                        const llama_token tok = tokenized_text[i_text];
+                                        const bool        emb = i_text + 1 == n_text && last;
+                                        if (last) {
+                                            batch_add(batch, tok, task->pos, seq_id, emb);
                                         } else {
-                                            common_batch_add(batch, tok, task->pos, { seq_id }, need_embed);
+                                            batch_add(batch_temp, tok, task->pos, seq_id, emb);
                                         }
                                         task->pos++;
                                         task->n_prefilled++;
                                         llm_kv_cache_used++;
                                     }
-                                    if (batch.n_tokens > 0) {
+                                    if (batch_temp.n_tokens > 0 && !last) {
                                         // decode immediately
-                                        const int32_t decoded_text = llama_decode(llm_ctx, batch);
-                                        common_batch_clear(batch);
+                                        const int32_t decoded_text = llama_decode(llm_ctx, batch_temp);
+                                        common_batch_clear(batch_temp);
                                         if (decoded_text != 0) {
                                             SRV_ERR(
                                                 "rid %s | decode vision text, failed to decode, try increasing context "
@@ -3748,21 +3751,12 @@ struct httpserver {
                         }
 
                         // batching
-                        if (llm_model_rope_mrope) {
-                            common_batch_add_with_mrope(batch, task->processed_tokens.back(), task->pos, 1, { seq_id },
-                                                        true);
-                        } else {
-                            common_batch_add(batch, task->processed_tokens.back(), task->pos, { seq_id }, true);
-                        }
+                        batch_add(batch, task->processed_tokens.back(), task->pos, seq_id, true);
                         task->pos++;
                         llm_kv_cache_used++;
                         if (!task->drafted_tokens.empty()) {
                             for (const llama_token & tok : task->drafted_tokens) {
-                                if (llm_model_rope_mrope) {
-                                    common_batch_add_with_mrope(batch, tok, task->pos, 1, { seq_id }, true);
-                                } else {
-                                    common_batch_add(batch, tok, task->pos, { seq_id }, true);
-                                }
+                                batch_add(batch, tok, task->pos, seq_id, true);
                                 task->pos++;
                                 llm_kv_cache_used++;
                             }
@@ -3785,8 +3779,8 @@ struct httpserver {
                 auto * task = dynamic_cast<embeddings_task *>(task_ptr.get());
 
                 // prefill first
-                const bool need_embed = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
-                const auto n_input    = int32_t(task->tokenized_inputs.size());
+                const bool emb     = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
+                const auto n_input = int32_t(task->tokenized_inputs.size());
                 if (task->i_input_prefilled < n_input) {
                     llama_tokens tokenized_input = task->tokenized_inputs[task->i_input_prefilled];
                     const auto   n_pos           = int32_t(tokenized_input.size());
@@ -3820,11 +3814,7 @@ struct httpserver {
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
-                        if (llm_model_rope_mrope) {
-                            common_batch_add_with_mrope(batch, tokenized_input[pos], pos, 1, { seq_id }, need_embed);
-                        } else {
-                            common_batch_add(batch, tokenized_input[pos], pos, { seq_id }, need_embed);
-                        }
+                        batch_add(batch, tokenized_input[pos], pos, seq_id, emb);
                     }
                     task->n_prefilled += n_pos;
                     task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : std::min(task->n_min_prefilled, n_pos);
@@ -3999,8 +3989,8 @@ struct httpserver {
                     }
                     //// include drafted tokens
                     else {
-                        for (int32_t j = 0, s = int32_t(task->drafted_tokens.size());
-                             j < s + 1 /* +1 for main model decoded token */; ++j) {
+                        // +1 for main model decoded token
+                        for (int32_t j = 0, s = int32_t(task->drafted_tokens.size()); j < s + 1; ++j) {
                             // greedy verification only
                             const int32_t     tok_idx = task->i_batch_seq_end - s + j;
                             const llama_token tok     = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
@@ -4327,13 +4317,7 @@ struct httpserver {
                             if (llm_ctx_draft != nullptr) {
                                 // clean batch for later adding
                                 common_batch_clear(batch_draft);
-                                if (llm_model_rope_mrope) {
-                                    common_batch_add_with_mrope(batch_draft, task->processed_tokens.back(), task->pos,
-                                                                1, { seq_id }, true);
-                                } else {
-                                    common_batch_add(batch_draft, task->processed_tokens.back(), task->pos, { seq_id },
-                                                     true);
-                                }
+                                batch_add(batch_draft, task->processed_tokens.back(), task->pos, seq_id, true);
                                 int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                                 if (decoded_draft != 0) {
                                     SRV_ERR(
@@ -4367,12 +4351,7 @@ struct httpserver {
                                     task->drafted_tokens.push_back(tok);
                                     // clean batch for later adding
                                     common_batch_clear(batch_draft);
-                                    if (llm_model_rope_mrope) {
-                                        common_batch_add_with_mrope(batch_draft, tok, task->pos + 1 + j, 1, { seq_id },
-                                                                    true);
-                                    } else {
-                                        common_batch_add(batch_draft, tok, task->pos + 1 + j, { seq_id }, true);
-                                    }
+                                    batch_add(batch_draft, tok, task->pos + 1 + j, seq_id, true);
                                     decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
                                     if (decoded_draft != 0) {
                                         SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(),

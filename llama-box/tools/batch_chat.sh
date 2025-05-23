@@ -15,8 +15,6 @@ user_contents=(
 api_url="${API_URL:-http://127.0.0.1:8080}"
 temp=${TEMP:-1}
 top_p=${TOP_P:-0.95}
-min_p=${MIN_P:-0.05}
-top_k=${TOP_K:-40}
 max_tokens=${MAX_TOKENS:-1024}
 seed=${SEED:-$(date +%s)}
 stream=${STREAM:-false}
@@ -70,16 +68,12 @@ function request() {
         data="$(echo -n "$xct" | jq -cr \
             --argjson temperature "${temp}" \
             --argjson top_p "${top_p}" \
-            --argjson min_p "${min_p}" \
-            --argjson top_k "${top_k}" \
             --argjson max_tokens "${max_tokens}" \
             --argjson seed "${seed}" \
             --argjson stream "${stream}" \
             '{
                temperature: $temperature,
                top_p: $top_p,
-               min_p: $min_p,
-               top_k: $top_k,
                max_tokens: $max_tokens,
                seed: $seed,
                stream: $stream,
@@ -173,7 +167,7 @@ function request() {
     printf " %2d (%2d) |%8d ms |%7d (%7d, %7d) |%9.2f tps |%9.2f tps |%9.2f tps \n" "$cc" "$oks" $tt $tts $pts $dts "$tps" "$avg_pps" "$avg_dps"
 }
 
-echo "STREAM=${stream} API_URL=${api_url} TEMP=${temp} TOP_P=${top_p} MIN_P=${min_p} TOP_K=${top_k} MAX_TOKENS=${max_tokens} SEED=${seed}"
+echo "STREAM=${stream} API_URL=${api_url} TEMP=${temp} TOP_P=${top_p} MAX_TOKENS=${max_tokens} SEED=${seed}"
 echo " cc (ok) |    cost    | tokens (prefill, decoded) |  throughput  | avg. prefill | avg. decoded  "
 echo "---------|------------|---------------------------|--------------|--------------|-------------- "
 if [[ -n "${1:-}" ]]; then
