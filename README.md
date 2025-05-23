@@ -523,7 +523,7 @@ server/completion/visual:
          --visual-max-image-size N
                                   Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: 0, 0 = disabled)
          --visual-max-image-cache N
-                                  Specify how many images to cache after encoding, which is used to speed up chat completion (default: 20, 0 = disabled)
+                                  Specify how many images to cache after encoding, which is used to speed up chat completion (default: 0, 0 = disabled)
 
 server/embedding:
 

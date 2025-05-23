@@ -1040,13 +1040,11 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
             }
 
             if (!strcmp(flag, "--no-context-shift")) {
-                params_.hs_params.force_ctx_shift      = false;
                 params_.hs_params.llm_params.ctx_shift = false;
                 continue;
             }
 
             if (!strcmp(flag, "--context-shift")) {
-                params_.hs_params.force_ctx_shift      = true;
                 params_.hs_params.llm_params.ctx_shift = true;
                 continue;
             }

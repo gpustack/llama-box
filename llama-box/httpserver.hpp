@@ -43,7 +43,6 @@ struct httpserver_params {
     common_params          llm_params;
     stablediffusion_params sd_params;
 
-    bool    force_ctx_shift  = false;  // use context shift even if not allowed
     bool    cache_prompt     = true;
     bool    endpoint_images  = false;
     int32_t conn_idle        = 60;  // connection idle in seconds
@@ -51,7 +50,7 @@ struct httpserver_params {
     int32_t n_tps            = 0;   // maximum number of tokens per seconds
     int32_t lookup_ngram_min = 0;   // minimum n-gram size for lookup cache
     int32_t max_image_size   = 0;   // maximum image size for vision image processing
-    int32_t max_image_cache  = 10;  // maximum number of encoded images in cache
+    int32_t max_image_cache  = 0;   // maximum number of encoded images in cache
 };
 
 // implementations
@@ -856,10 +855,10 @@ static inline std::unique_ptr<clip_image> get_clip_image(std::vector<uint8_t> &&
     }
 
     clip_image_u8_ptr ptr(clip_image_u8_init());
-    ptr->nx  = w;
-    ptr->ny  = h;
+    ptr->nx = w;
+    ptr->ny = h;
     ptr->buf.resize(w * h * 3);
-    memcpy(ptr->buf.data(), dt, ptr->buf.size());
+    std::memcpy(ptr->buf.data(), dt, ptr->buf.size());
     stbi_image_free(dt);
 
     return std::make_unique<clip_image>(std::move(ptr), std::move(hash));
@@ -2752,6 +2751,7 @@ struct httpserver {
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
         batch                = llama_batch_init(llm_ctx_size, 0, 1);
+        batch_view_max       = int32_t(llama_n_batch(llm_ctx));
 
         // check multimodal projection model compatibility
         if (llm_ctx_clip != nullptr) {
@@ -2809,7 +2809,7 @@ struct httpserver {
         }
 
         // prompt cache
-        cache_prompt = llm_model_casual && params.cache_prompt;
+        cache_prompt = llm_model_casual && params.cache_prompt && llm_kv_cache_shift;
         if (cache_prompt) {
             cache_prompts.resize(params.llm_params.n_threads_http);
         }
@@ -2820,8 +2820,8 @@ struct httpserver {
         }
 
         // context shift
-        SRV_INF("context shifting %s\n",
-                params.force_ctx_shift ? "enabled" : (params.llm_params.ctx_shift ? "partial supported" : "disabled"));
+        shift_context = params.llm_params.ctx_shift && llm_kv_cache_shift;
+        SRV_INF("context shifting %s\n", shift_context ? "enabled" : "disabled");
 
         // chat template
         {
@@ -3189,6 +3189,7 @@ struct httpserver {
     bool                llm_model_casual     = true;
     bool                llm_model_rope_mrope = false;
     llama_batch         batch                = {};
+    int32_t             batch_view_max       = 0;
 
     // model addition
 
@@ -3199,7 +3200,8 @@ struct httpserver {
         llama_pos    pos_discard = 0;  // count the discard position
     };
 
-    bool                            cache_prompt = false;
+    bool                            cache_prompt  = false;
+    bool                            shift_context = false;
     common_chat_templates_ptr       chat_templates;
     std::vector<cache_prompt_entry> cache_prompts;
 
@@ -3273,33 +3275,36 @@ struct httpserver {
 
         // try to reduce the kv cache of the storing cache
 
-        int32_t cache_id  = -1;
-        int32_t cache_pos = 0;
-        for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
-            cache_prompt_entry & cache = cache_prompts.at(i);
-            if (!cache.used && cache.pos > cache_pos) {
-                cache_id  = i;
-                cache_pos = cache.pos;
+        if (cache_prompt) {
+            int32_t cache_id  = -1;
+            int32_t cache_pos = 0;
+            for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
+                cache_prompt_entry & cache = cache_prompts.at(i);
+                if (!cache.used && cache.pos > cache_pos) {
+                    cache_id  = i;
+                    cache_pos = cache.pos;
+                }
             }
-        }
-        if (cache_id != -1) {
-            int32_t n_discard = std::min(cache_pos >> 2, params.llm_params.n_ubatch);
-            if (n_discard <= 4) {
+            if (cache_id != -1) {
+                int32_t n_discard = std::min(cache_pos >> 2, params.llm_params.n_ubatch);
+                if (n_discard <= 4) {
+                    return;
+                }
+                llama_kv_self_seq_rm(llm_ctx, cache_id, 0, n_discard);
+                llama_kv_self_seq_add(llm_ctx, cache_id, n_discard, cache_pos, -n_discard);
+                if (llm_ctx_draft != nullptr) {
+                    llama_kv_self_seq_rm(llm_ctx_draft, cache_id, 0, n_discard);
+                    llama_kv_self_seq_add(llm_ctx_draft, cache_id, n_discard, cache_pos, -n_discard);
+                }
+                SRV_WRN("squash cache %d, [%d, %d) -> [0, %d)\n", cache_id, n_discard, cache_pos,
+                        cache_pos - n_discard);
+                // stat
+                cache_prompt_entry & cache = cache_prompts.at(cache_id);
+                cache.pos -= n_discard;
+                cache.pos_discard += n_discard;
+                llm_kv_cache_used -= n_discard;
                 return;
             }
-            llama_kv_self_seq_rm(llm_ctx, cache_id, 0, n_discard);
-            llama_kv_self_seq_add(llm_ctx, cache_id, n_discard, cache_pos, -n_discard);
-            if (llm_ctx_draft != nullptr) {
-                llama_kv_self_seq_rm(llm_ctx_draft, cache_id, 0, n_discard);
-                llama_kv_self_seq_add(llm_ctx_draft, cache_id, n_discard, cache_pos, -n_discard);
-            }
-            SRV_WRN("squash cache %d, [%d, %d) -> [0, %d)\n", cache_id, n_discard, cache_pos, cache_pos - n_discard);
-            // stat
-            cache_prompt_entry & cache = cache_prompts.at(cache_id);
-            cache.pos -= n_discard;
-            cache.pos_discard += n_discard;
-            llm_kv_cache_used -= n_discard;
-            return;
         }
 
         if (task == nullptr) {
@@ -3492,11 +3497,17 @@ struct httpserver {
                             seq_id = seq_lcp_id;
                             // miss cache
                             if (seq_lcp_l == 0) {
-                                SRV_INFV(2, "rid %s | miss prompt cache, seq = %d\n", rid.c_str(), seq_id);
+                                SRV_INFV(2,
+                                         "rid %s | miss prompt cache, "
+                                         "seq = %d\n",
+                                         rid.c_str(), seq_id);
                             }
                             // hit cache but need to redirect
                             else if (seq_lcp_pos_discard != 0 && seq_lcp_l == tokens.size()) {
-                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, pos = 0\n", rid.c_str(), seq_id);
+                                SRV_INFV(2,
+                                         "rid %s | hit prompt cache, "
+                                         "seq = %d, pos = 0\n",
+                                         rid.c_str(), seq_id);
                             }
                             // hit cache
                             else {
@@ -3506,8 +3517,10 @@ struct httpserver {
                                 task->n_processed_detokenized = cached;
                                 task->n_prefilled             = cached;
                                 task->n_prefilled_cached      = cached;
-                                SRV_INFV(2, "rid %s | hit prompt cache, seq = %d, cached = %d, pos = %d\n", rid.c_str(),
-                                         seq_id, cached, pos);
+                                SRV_INFV(2,
+                                         "rid %s | hit prompt cache, "
+                                         "seq = %d, cached = %d, pos = %d\n",
+                                         rid.c_str(), seq_id, cached, pos);
                             }
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
@@ -3522,8 +3535,10 @@ struct httpserver {
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
                             }
-                            SRV_DBG("rid %s | prefix cache, kv cache mask, seq %d = [%d, end)\n", rid.c_str(), seq_id,
-                                    task->pos);
+                            SRV_DBG(
+                                "rid %s | prefix cache, "
+                                "kv cache mask, seq %d = [%d, end)\n",
+                                rid.c_str(), seq_id, task->pos);
                             llm_kv_cache_used += task->pos;
                         }
 
@@ -5043,7 +5058,8 @@ struct httpserver {
                 { "n_ctx",                 llama_n_ctx(llm_ctx)                             },
                 { "n_slot",                1                                                },
                 { "n_slot_ctx",            llama_n_ctx(llm_ctx)                             },
-                { "ctx_shift",             params.llm_params.ctx_shift                      },
+                { "ctx_shift",             shift_context                                    },
+                { "prompt_cache",          cache_prompt                                     },
                 { "seed",                  int32_t(params.llm_params.sampling.seed)         },
                 { "temperature",           params.llm_params.sampling.temp                  },
                 { "dynatemp_range",        params.llm_params.sampling.dynatemp_range        },
@@ -5128,7 +5144,7 @@ struct httpserver {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
             if (n_prefilling_request >= llm_ctx_size) {
-                if (!params.llm_params.ctx_shift) {
+                if (!shift_context) {
                     SRV_ERR(
                         "rid %s | prompt tokens size exceeds the context size, please enable context shift "
                         "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
@@ -5248,7 +5264,7 @@ struct httpserver {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
             if (n_prefilling_request >= llm_ctx_size) {
-                if (!params.llm_params.ctx_shift) {
+                if (!shift_context) {
                     SRV_ERR(
                         "rid %s | prompt tokens size exceeds the context size, please enable context shift "
                         "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
@@ -5640,7 +5656,7 @@ struct httpserver {
                 n_prefilling_request += int32_t(tokenized_input.size());
                 continue;
             }
-            if (!params.force_ctx_shift) {
+            if (!shift_context) {
                 return send_json(request, response, httplib::BadRequest_400,
                                  "Illegal param: \"input\" tokens size exceeds the context size");
             }
