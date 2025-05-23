@@ -2103,9 +2103,6 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
             }
 
             if (!strcmp(flag, "--rpc-server-cache")) {
-                if (i == argc) {
-                    missing("--rpc-server-cache");
-                }
                 params_.rs_params.use_cache = true;
                 continue;
             }
