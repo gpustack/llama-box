@@ -3453,8 +3453,8 @@ struct httpserver {
                             ((task->n_prefilling_request + batch.n_tokens > llm_ctx_size)));
                         if (waited) {
                             SRV_INF(
-                                "rid %s | batching, waiting previous batch finished: not enough space to place all "
-                                "tokens\n",
+                                "rid %s | batching, waiting previous batch finished: "
+                                "not enough space to place all tokens\n",
                                 rid.c_str());
                             process_tasks->enqueue(std::move(task_ptr));
                             continue;
@@ -3499,14 +3499,14 @@ struct httpserver {
                             if (seq_lcp_l == 0) {
                                 SRV_INFV(2,
                                          "rid %s | miss prompt cache, "
-                                         "seq = %d\n",
+                                         "seq = %d, next_pos = 0\n",
                                          rid.c_str(), seq_id);
                             }
                             // hit cache but need to redirect
                             else if (seq_lcp_pos_discard != 0 && seq_lcp_l == tokens.size()) {
                                 SRV_INFV(2,
                                          "rid %s | hit prompt cache, "
-                                         "seq = %d, pos = 0\n",
+                                         "seq = %d, next_pos = 0\n",
                                          rid.c_str(), seq_id);
                             }
                             // hit cache
@@ -3519,7 +3519,7 @@ struct httpserver {
                                 task->n_prefilled_cached      = cached;
                                 SRV_INFV(2,
                                          "rid %s | hit prompt cache, "
-                                         "seq = %d, cached = %d, pos = %d\n",
+                                         "seq = %d, cached = %d, next_pos = %d\n",
                                          rid.c_str(), seq_id, cached, pos);
                             }
                             // mark cache
@@ -3782,38 +3782,48 @@ struct httpserver {
                  * embeddings
                  */
 
-                auto * task       = dynamic_cast<embeddings_task *>(task_ptr.get());
-                llm_kv_cache_used = 0;
+                auto * task = dynamic_cast<embeddings_task *>(task_ptr.get());
 
                 // prefill first
                 const bool need_embed = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
                 const auto n_input    = int32_t(task->tokenized_inputs.size());
-                do {
-                    const auto n_pos = int32_t(task->tokenized_inputs[task->i_input_prefilled].size());
-                    if (n_pos + batch.n_tokens > llm_ctx_size) {  // allow batch's tokens size be equal to llm_ctx_size
+                if (task->i_input_prefilled < n_input) {
+                    llama_tokens tokenized_input = task->tokenized_inputs[task->i_input_prefilled];
+                    const auto   n_pos           = int32_t(tokenized_input.size());
+                    // allow batch's tokens size be equal to llm_ctx_size
+                    if (batch.n_tokens + n_pos > llm_ctx_size) {
                         SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
-                        break;
+                        continue;
+                    }
+                    // avoid smaller batch size
+                    else if (batch.n_tokens + n_pos <= seq_id) {
+                        seq_id = batch.n_tokens + n_pos - 1;
+                        task->set_seq_id(seq_id);
                     }
 
                     // prepare cache - clean cache
                     if (cache_prompt) {
                         llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
-                        SRV_DBG("rid %s | batching, clean cache, kv cache mask, seq %d = [0, end)", rid.c_str(),
-                                seq_id);
+                        if (llm_ctx_draft != nullptr) {
+                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                        }
+                        SRV_DBG(
+                            "rid %s | batching, clean cache, "
+                            "kv cache mask, seq %d = [0, end)",
+                            rid.c_str(), seq_id);
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                        cache.used                 = false;
-                        cache.pos                  = 0;
-                        cache.pos_discard          = 0;
+                        llm_kv_cache_used -= cache.pos;
+                        cache.used        = false;
+                        cache.pos         = 0;
+                        cache.pos_discard = 0;
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
                         if (llm_model_rope_mrope) {
-                            common_batch_add_with_mrope(batch, task->tokenized_inputs[task->i_input_prefilled][pos],
-                                                        pos, 1, { seq_id }, need_embed);
+                            common_batch_add_with_mrope(batch, tokenized_input[pos], pos, 1, { seq_id }, need_embed);
                         } else {
-                            common_batch_add(batch, task->tokenized_inputs[task->i_input_prefilled][pos], pos,
-                                             { seq_id }, need_embed);
+                            common_batch_add(batch, tokenized_input[pos], pos, { seq_id }, need_embed);
                         }
                     }
                     task->n_prefilled += n_pos;
@@ -3824,8 +3834,7 @@ struct httpserver {
 
                     task->i_batch_seq_end = batch.n_tokens - 1;
                     batch_task_ptrs.push_back(std::move(task_ptr));
-                    break;
-                } while (task->i_input_prefilled < n_input);
+                }
 
                 SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
 
@@ -4499,6 +4508,14 @@ struct httpserver {
                 } else {
                     task->embeds[task->embeds.size() - 1][0] = embed[0];
                 }
+                // clean kv cache
+                if (!cache_prompt) {
+                    llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                    if (llm_ctx_draft != nullptr) {
+                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                    }
+                    SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
+                }
                 // continue if not finished
                 bool opened = true;
                 if (task->embeds.size() < n_input) {
@@ -4525,11 +4542,6 @@ struct httpserver {
                     "stop_r = %s\n",
                     rid.c_str(), task->n_prefilled, task->p_prefilled_tps, task->t_prefilled, task->n_prefilled,
                     task->n_min_prefilled, task->n_max_prefilled, opened ? "stop" : "closed");
-                // clean kv cache
-                if (!cache_prompt) {
-                    llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
-                    SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
-                }
             }
             return;
         }
@@ -5055,9 +5067,9 @@ struct httpserver {
                 { "n_embd",                llama_model_n_embd(llm_model)                    },
                 { "n_params",              llama_model_n_params(llm_model)                  },
                 { "size",                  llama_model_size(llm_model)                      },
-                { "n_ctx",                 llama_n_ctx(llm_ctx)                             },
+                { "n_ctx",                 llm_ctx_size                                     },
                 { "n_slot",                1                                                },
-                { "n_slot_ctx",            llama_n_ctx(llm_ctx)                             },
+                { "n_slot_ctx",            llm_ctx_size                                     },
                 { "ctx_shift",             shift_context                                    },
                 { "prompt_cache",          cache_prompt                                     },
                 { "seed",                  int32_t(params.llm_params.sampling.seed)         },
@@ -5646,26 +5658,24 @@ struct httpserver {
 
         std::unique_ptr<embed_req> req = get_embed_req(request, response, params);
 
-        const uint32_t n_ctx = llama_n_ctx(llm_ctx);
-
         int32_t n_prefilling_request = 0;
 
         std::vector<llama_tokens> tokenized_inputs = tokenize_prompts(llm_vocab, req->input, true, true);
-        for (llama_tokens & tokenized_input : tokenized_inputs) {
-            if (tokenized_input.size() <= n_ctx) {
-                n_prefilling_request += int32_t(tokenized_input.size());
-                continue;
+        for (size_t i = 0; i < tokenized_inputs.size(); i++) {
+            auto n_pos = int32_t(tokenized_inputs[i].size());
+            if (n_pos > llm_ctx_size) {
+                if (!shift_context) {
+                    return send_json(request, response, httplib::BadRequest_400,
+                                     "Illegal param: \"input\" tokens size exceeds the context size");
+                }
+                SRV_WRN(
+                    "rid %s | input item %zu tokens size exceeds the context size, "
+                    "shifting context [%d, %d) -> [0, %d)\n",
+                    req->get_id(), i, n_pos - llm_ctx_size, n_pos, llm_ctx_size);
+                tokenized_inputs[i].erase(tokenized_inputs[i].begin(), tokenized_inputs[i].end() - llm_ctx_size);
+                n_pos = llm_ctx_size;
             }
-            if (!shift_context) {
-                return send_json(request, response, httplib::BadRequest_400,
-                                 "Illegal param: \"input\" tokens size exceeds the context size");
-            }
-            SRV_WRN(
-                "rid %s | input tokens size exceeds the context size, "
-                "shifting context [%d, %d) -> [0, %d)\n",
-                req->get_id(), n_prefilling_request - n_ctx, n_prefilling_request, n_ctx);
-            tokenized_input.erase(tokenized_input.begin(), tokenized_input.end() - n_ctx);
-            n_prefilling_request += int32_t(n_ctx);
+            n_prefilling_request += n_pos;
         }
 
         if (n_prefilling_request == 0) {
@@ -5690,7 +5700,6 @@ struct httpserver {
 
         std::unique_ptr<rerank_req> req = get_rerank_req(request, response, params);
 
-        const uint32_t    n_ctx          = llama_n_ctx(llm_ctx);
         const llama_token tok_bos        = llama_vocab_bos(llm_vocab);
         const llama_token tok_eos        = llama_vocab_eos(llm_vocab);
         const llama_token tok_sep        = llama_vocab_sep(llm_vocab);
@@ -5699,21 +5708,21 @@ struct httpserver {
         int32_t n_prefilling_request = 0;
 
         llama_tokens tokenized_query = tokenize_prompt(llm_vocab, req->query, false, true);
-        if (req->normalize && tokenized_query.size() * 2 + n_tok_addition > n_ctx) {
+        if (req->normalize && tokenized_query.size() * 2 + n_tok_addition > size_t(llm_ctx_size)) {
             return send_json(
                 request, response, httplib::BadRequest_400,
                 R"(Illegal param: "query" length exceeds the context size, disable "normalize" to bypass this check)");
         }
         auto decorate = [&](const llama_tokens & tokenized_document) {
-            const size_t n_tok = tokenized_query.size() + tokenized_document.size() + n_tok_addition;
-            if (n_tok > n_ctx) {
+            auto n_pos = int32_t(tokenized_query.size() + tokenized_document.size() + n_tok_addition);
+            if (n_pos > llm_ctx_size) {
                 throw std::invalid_argument(
                     R"(Illegal param: the sum of the lengths of "query" and "document" exceeds the context size)");
             }
-            n_prefilling_request += int32_t(n_tok);
+            n_prefilling_request += n_pos;
             // format input: [BOS]query[EOS][SEP]document[EOS]
             llama_tokens tokenized_input;
-            tokenized_input.reserve(n_tok);
+            tokenized_input.reserve(n_pos);
             tokenized_input.push_back(tok_bos);
             tokenized_input.insert(tokenized_input.end(), tokenized_query.begin(), tokenized_query.end());
             tokenized_input.push_back(tok_sep);
