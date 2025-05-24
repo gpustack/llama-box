@@ -3180,19 +3180,20 @@ struct httpserver {
 
     // model
     common_init_result  llm_init;
-    llama_model *       llm_model            = nullptr;
-    llama_context *     llm_ctx              = nullptr;
-    const llama_vocab * llm_vocab            = nullptr;
-    int32_t             llm_ctx_size         = 0;
-    int32_t             llm_ctx_embed_size   = 0;
-    int32_t             llm_kv_cache_used    = 0;
-    int32_t             llm_kv_cache_limit   = 0;
-    bool                llm_kv_cache_shift   = false;
-    bool                llm_model_casual     = true;
-    bool                llm_model_rope_mrope = false;
-    llama_batch         batch                = {};
-    llama_batch         batch_temp           = {};
-    int32_t             batch_view_max       = 0;
+    llama_model *       llm_model             = nullptr;
+    llama_context *     llm_ctx               = nullptr;
+    const llama_vocab * llm_vocab             = nullptr;
+    int32_t             llm_ctx_size          = 0;
+    int32_t             llm_ctx_embed_size    = 0;
+    int32_t             llm_kv_cache_used     = 0;  // include llm_kv_cache_inactive
+    int32_t             llm_kv_cache_inactive = 0;
+    int32_t             llm_kv_cache_limit    = 0;
+    bool                llm_kv_cache_shift    = false;
+    bool                llm_model_casual      = true;
+    bool                llm_model_rope_mrope  = false;
+    llama_batch         batch                 = {};
+    llama_batch         batch_temp            = {};
+    int32_t             batch_view_max        = 0;
 
     // model addition
 
@@ -3309,11 +3310,13 @@ struct httpserver {
                 }
                 SRV_WRN("squash cache %d, [%d, %d) -> [0, %d)\n", cache_id, n_discard, cache_pos,
                         cache_pos - n_discard);
-                // stat
+
+                // stats
                 cache_prompt_entry & cache = cache_prompts.at(cache_id);
                 cache.pos -= n_discard;
                 cache.pos_discard += n_discard;
                 llm_kv_cache_used -= n_discard;
+                llm_kv_cache_inactive -= n_discard;
                 return;
             }
         }
@@ -3344,7 +3347,7 @@ struct httpserver {
             "seq = %d, [%d, %d) -> [%d, %d)\n",
             rid.c_str(), seq_id, n_keep + n_discard, task->pos, n_keep, task->pos - n_discard);
 
-        // stat
+        // stats
         task->pos -= n_discard;
         task->pos_discard += n_discard;
         llm_kv_cache_used -= n_discard;
@@ -3434,11 +3437,17 @@ struct httpserver {
                     }
                 }
             } else if (batch_task_type != ttype) {
-                SRV_INF("rid %s | batching, waiting previous batch finished: not the same kind batch\n", rid.c_str());
+                SRV_INF(
+                    "rid %s | "
+                    "batching, waiting previous batch finished: not the same kind batch\n",
+                    rid.c_str());
                 process_tasks->enqueue(std::move(task_ptr));
                 continue;
             } else if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
-                SRV_INF("rid %s | batching, waiting previous batch finished: lora adapters not matched\n", rid.c_str());
+                SRV_INF(
+                    "rid %s | "
+                    "batching, waiting previous batch finished: lora adapters not matched\n",
+                    rid.c_str());
                 process_tasks->enqueue(std::move(task_ptr));
                 continue;
             }
@@ -3457,15 +3466,11 @@ struct httpserver {
                     // prefill first (n_prefilled < n_prefilling_request)
                     if (task->n_prefilled < task->n_prefilling_request) {
                         // filter
-                        bool waited = (
-                            //// for text only, can place partial tokens
-                            (!task->tokenized_prompts_include_images && batch.n_tokens > llm_ctx_size) ||
-                            //// for vision, must place all tokens once
-                            ((task->n_prefilling_request + batch.n_tokens > llm_ctx_size)));
-                        if (waited) {
-                            SRV_INF(
-                                "rid %s | batching, waiting previous batch finished: "
-                                "not enough space to place all tokens\n",
+                        if (llm_kv_cache_used - llm_kv_cache_inactive + task->n_prefilling_request >
+                            llm_kv_cache_limit) {
+                            SRV_DBG(
+                                "rid %s | "
+                                "batching, waiting previous batch finished: not enough space to place all tokens\n",
                                 rid.c_str());
                             process_tasks->enqueue(std::move(task_ptr));
                             continue;
@@ -3474,9 +3479,12 @@ struct httpserver {
                         // prepare cache - prefix cache
                         if (task->n_prefilled == 0 && cache_prompt) {
                             llama_tokens tokens;
+                            // get tokens of plain text
                             if (!task->tokenized_prompts_include_images) {
                                 tokens = std::get<llama_tokens>(task->tokenized_prompts[0]);
-                            } else {
+                            }
+                            // get tokens of vision
+                            else {
                                 for (const auto & tokenized_prompt : task->tokenized_prompts) {
                                     if (std::holds_alternative<llama_tokens>(tokenized_prompt)) {
                                         llama_tokens tokenized_text = std::get<llama_tokens>(tokenized_prompt);
@@ -3536,6 +3544,7 @@ struct httpserver {
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
                             llm_kv_cache_used -= cache.pos;
+                            llm_kv_cache_inactive -= cache.pos;
                             cache.used        = true;
                             cache.pos         = 0;
                             cache.pos_discard = task->pos > 0 ? cache.pos_discard : 0;
@@ -3722,10 +3731,6 @@ struct httpserver {
                             // abort task if not prefilled all,
                             // which means there is an error in decoding text or image
                             if (task->n_prefilled < task->n_prefilling_request) {
-                                SRV_WRN(
-                                    "rid %s | batching, waiting previous batch finished: not enough space to place all "
-                                    "tokens\n",
-                                    rid.c_str());
                                 continue;
                             }
                             // save for cache prompts,
@@ -3808,6 +3813,7 @@ struct httpserver {
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         llm_kv_cache_used -= cache.pos;
+                        llm_kv_cache_inactive -= cache.pos;
                         cache.used        = false;
                         cache.pos         = 0;
                         cache.pos_discard = 0;
@@ -4428,6 +4434,7 @@ struct httpserver {
                         cache.used = false;
                         cache.pos  = task->pos;
                         cache.pos_discard += task->pos_discard;
+                        llm_kv_cache_inactive += task->pos;
                     }
                 }
                 return;
