@@ -30,7 +30,7 @@ struct llama_image_embed_batch_wrapper {
     std::vector<llama_seq_id>   seq_id_0;
     std::vector<llama_seq_id *> seq_ids;
     std::vector<int8_t>         logits;
-    llama_batch                 batch = {};
+    llama_batch                 temp = {};
 
     llama_image_embed_batch_wrapper() = default;
 
@@ -41,7 +41,7 @@ struct llama_image_embed_batch_wrapper {
         seq_id_0.resize(1);
         seq_id_0[0]       = seq_id;
         seq_ids[n_tokens] = nullptr;
-        batch             = {
+        temp              = {
             /*n_tokens       =*/n_tokens,
             /*tokens         =*/nullptr,
             /*embd           =*/embd,
@@ -51,9 +51,9 @@ struct llama_image_embed_batch_wrapper {
             /*logits         =*/logits.data(),
         };
         for (int i = 0; i < n_tokens; i++) {
-            batch.n_seq_id[i] = 1;
-            batch.seq_id[i]   = seq_id_0.data();
-            batch.logits[i]   = false;
+            temp.n_seq_id[i] = 1;
+            temp.seq_id[i]   = seq_id_0.data();
+            temp.logits[i]   = false;
         }
     }
 
@@ -67,7 +67,7 @@ struct llama_image_embed_batch_wrapper {
         seq_id_0.resize(1);
         seq_id_0[0]       = seq_id;
         seq_ids[n_tokens] = nullptr;
-        batch             = {
+        temp              = {
             /*n_tokens       =*/n_tokens,
             /*tokens         =*/nullptr,
             /*embd           =*/embd,
@@ -77,10 +77,10 @@ struct llama_image_embed_batch_wrapper {
             /*logits         =*/logits.data(),
         };
         for (int i = 0; i < n_tokens; i++) {
-            batch.pos[i]      = pos_0 + i;
-            batch.n_seq_id[i] = 1;
-            batch.seq_id[i]   = seq_id_0.data();
-            batch.logits[i]   = false;
+            temp.pos[i]      = pos_0 + i;
+            temp.n_seq_id[i] = 1;
+            temp.seq_id[i]   = seq_id_0.data();
+            temp.logits[i]   = false;
         }
     }
 };

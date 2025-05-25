@@ -1,16 +1,7 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index a3b84a6a..f09b3205 100644
+index a3b84a6a..3e0fd302 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@ -81,7 +81,7 @@ llama_context::llama_context(
-     }
- 
-     // with causal attention, the batch size is limited by the context size
--    cparams.n_batch = cparams.causal_attn ? std::min(cparams.n_ctx, params.n_batch) : params.n_batch;
-+    cparams.n_batch = params.n_ctx;
- 
-     // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
-     // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
 @@ -99,7 +99,6 @@ llama_context::llama_context(
  
      LLAMA_LOG_INFO("%s: n_seq_max     = %u\n",   __func__, cparams.n_seq_max);

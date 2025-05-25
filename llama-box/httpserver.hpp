@@ -420,26 +420,6 @@ static inline void sort_rerank_results(json & result, int32_t low, int32_t high)
     sort_rerank_results(result, i + 1, high);
 }
 
-// common_batch_add_with_mrope, mocks common_batch_add but works in mrope.
-static inline void common_batch_add_with_mrope(struct llama_batch & batch, llama_token id, llama_pos st_pos_id,
-                                               int32_t n_eval, const std::vector<llama_seq_id> & seq_ids, bool logit) {
-    GGML_ASSERT(batch.seq_id[batch.n_tokens] && "llama_batch size exceeded");
-
-    batch.token[batch.n_tokens] = id;
-    for (int32_t i = 0; i < 4; i++) {
-        if (i == 3) {
-            st_pos_id = 0;
-        }
-        batch.pos[batch.n_tokens + n_eval * i] = st_pos_id;
-    }
-    batch.n_seq_id[batch.n_tokens] = int32_t(seq_ids.size());
-    for (size_t j = 0; j < seq_ids.size(); ++j) {
-        batch.seq_id[batch.n_tokens][j] = seq_ids[j];
-    }
-    batch.logits[batch.n_tokens] = logit;
-    batch.n_tokens++;
-}
-
 // equal_lora returns true if both lora adapters are the same.
 static inline bool equal_lora(const std::vector<common_adapter_lora_info> & l1,
                               const std::vector<common_adapter_lora_info> & l2) {
@@ -1993,6 +1973,12 @@ static inline std::unique_ptr<image_edit_req> get_image_edit_req(const httplib::
     return ptr;
 }
 
+enum process_type {
+    PROCESS_PREFILL,
+    PROCESS_DECODE,
+    PROCESS_UNKNOWN,
+};
+
 enum task_type {
     TASK_COMPLETIONS,
     TASK_EMBEDDINGS,
@@ -2600,8 +2586,8 @@ struct httpserver {
     }
 
     ~httpserver() {
-        llama_batch_free(batch);
-        llama_batch_free(batch_temp);
+        llama_batch_free(batch_text);
+        llama_batch_free(batch_text_temp);
         if (llm_ctx != nullptr) {
             llama_detach_threadpool(llm_ctx);
         }
@@ -2610,7 +2596,7 @@ struct httpserver {
         }
 
         if (llm_ctx_draft != nullptr) {
-            llama_batch_free(batch_draft);
+            llama_batch_free(batch_text_draft);
             llama_detach_threadpool(llm_ctx_draft);
         }
 
@@ -2730,8 +2716,8 @@ struct httpserver {
                 SRV_ERR("failed to load draft model, '%s'\n", params.llm_params.speculative.model.path.c_str());
                 return false;
             }
-            llm_vocab_draft = llama_model_get_vocab(llm_model_draft);
-            batch_draft     = llama_batch_init(int32_t(llama_n_ctx(llm_ctx_draft)), 0, 1);
+            llm_vocab_draft  = llama_model_get_vocab(llm_model_draft);
+            batch_text_draft = llama_batch_init(int32_t(llama_n_ctx(llm_ctx_draft)), 0, 1);
         }
 
         common_params llm_params = params.llm_params;
@@ -2751,9 +2737,9 @@ struct httpserver {
         // NB(thxCode): llama_causal_attn is a patch.
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
-        batch                = llama_batch_init(llm_ctx_size, 0, 1);
-        batch_temp           = llama_batch_init(llm_ctx_size, 0, 1);
         batch_view_max       = int32_t(llama_n_batch(llm_ctx));
+        batch_text           = llama_batch_init(llm_ctx_size, 0, 1);
+        batch_text_temp      = llama_batch_init(llm_ctx_size, 0, 1);
 
         // check multimodal projection model compatibility
         if (llm_ctx_clip != nullptr) {
@@ -3191,9 +3177,9 @@ struct httpserver {
     bool                llm_kv_cache_shift    = false;
     bool                llm_model_casual      = true;
     bool                llm_model_rope_mrope  = false;
-    llama_batch         batch                 = {};
-    llama_batch         batch_temp            = {};
     int32_t             batch_view_max        = 0;
+    llama_batch         batch_text            = {};
+    llama_batch         batch_text_temp       = {};
 
     // model addition
 
@@ -3222,10 +3208,10 @@ struct httpserver {
 
     // speculative decoding
     common_init_result  llm_init_draft;
-    llama_model *       llm_model_draft = nullptr;
-    llama_context *     llm_ctx_draft   = nullptr;
-    const llama_vocab * llm_vocab_draft = nullptr;
-    llama_batch         batch_draft     = {};
+    llama_model *       llm_model_draft  = nullptr;
+    llama_context *     llm_ctx_draft    = nullptr;
+    const llama_vocab * llm_vocab_draft  = nullptr;
+    llama_batch         batch_text_draft = {};
 
     // thread pool
     ggml_threadpool * threadpool       = nullptr;
@@ -3272,15 +3258,7 @@ struct httpserver {
 
     inline bool support_image() const { return sd_ctx != nullptr; }
 
-    inline void batch_add(struct llama_batch & b, llama_token t, llama_pos p, llama_seq_id sid, bool l) const {
-        if (llm_model_rope_mrope) {
-            common_batch_add_with_mrope(b, t, p, 1, { sid }, l);
-        } else {
-            common_batch_add(b, t, p, { sid }, l);
-        }
-    }
-
-    inline void shift_task_kv_cache(completions_task * task) {
+    inline void shift_completion_task_cache(completions_task * task) {
         if (!llm_kv_cache_shift) {
             return;
         }
@@ -3353,6 +3331,96 @@ struct httpserver {
         llm_kv_cache_used -= n_discard;
     }
 
+    inline int32_t decode_completion_task_batch(llama_context * input_ctx, llama_batch & input_batch,
+                                                const std::vector<std::unique_ptr<btask>> & batch_task_ptrs) {
+        // decoded results:
+        // -3 compute failed,
+        // -2 allocate failed,
+        // -1 no tokens,
+        //  0 ok,
+        //  1 no kv cache,
+        //  2 compute aborted
+        int32_t                decoded       = 0;
+        bool                   is_mrope_view = llm_model_rope_mrope && input_batch.n_tokens > batch_view_max;
+        std::vector<llama_pos> mrope_pos_view;
+
+        for (int32_t i_batch_view = 0; i_batch_view < input_batch.n_tokens; i_batch_view += batch_view_max) {
+            const int32_t n_batch_view = std::min(batch_view_max, input_batch.n_tokens - i_batch_view);
+            llama_batch   input_batch_view;
+            if (input_batch.embd == nullptr) {
+                input_batch_view = {
+                    n_batch_view,
+                    input_batch.token + i_batch_view,
+                    nullptr,
+                    input_batch.pos + i_batch_view,
+                    input_batch.n_seq_id + i_batch_view,
+                    input_batch.seq_id + i_batch_view,
+                    input_batch.logits + i_batch_view,
+                };
+            } else if (is_mrope_view) {
+                mrope_pos_view.clear();
+                mrope_pos_view.reserve(n_batch_view * 4);
+                for (int32_t i_pos_view = 0; i_pos_view < 4; i_pos_view++) {
+                    size_t pos_view_offset = i_pos_view * input_batch.n_tokens + i_batch_view;
+                    mrope_pos_view.insert(mrope_pos_view.end(), input_batch.pos + pos_view_offset,
+                                          input_batch.pos + pos_view_offset + n_batch_view);
+                }
+                input_batch_view = {
+                    n_batch_view,
+                    nullptr,
+                    input_batch.embd + i_batch_view * llm_ctx_embed_size,
+                    mrope_pos_view.data(),
+                    input_batch.n_seq_id + i_batch_view,
+                    input_batch.seq_id + i_batch_view,
+                    input_batch.logits + i_batch_view,
+                };
+            } else {
+                input_batch_view = {
+                    n_batch_view,
+                    nullptr,
+                    input_batch.embd + i_batch_view * llm_ctx_embed_size,
+                    input_batch.pos + i_batch_view,
+                    input_batch.n_seq_id + i_batch_view,
+                    input_batch.seq_id + i_batch_view,
+                    input_batch.logits + i_batch_view,
+                };
+            }
+            decoded = llama_decode(input_ctx, input_batch_view);
+            for (int32_t retries = 3; decoded == 1 && retries > 0; retries--) {
+                SRV_WRN("failed to decode in batch, try shifting kv cache within %d times\n", retries);
+                // find a task in the same batch who has largest pos and finished prefilling
+                completions_task * task       = nullptr;
+                int32_t            target_pos = -1;
+                for (const std::unique_ptr<btask> & task_ptr : batch_task_ptrs) {
+                    auto * candidate = dynamic_cast<completions_task *>(task_ptr.get());
+                    if (candidate->n_decoded > 0 && candidate->pos > target_pos) {
+                        task       = candidate;
+                        target_pos = candidate->pos;
+                    }
+                }
+                // shift the target task if found
+                if (task != nullptr) {
+                    int32_t pos_previous = task->pos;
+                    shift_completion_task_cache(task);
+                    task->pos -= (pos_previous - task->pos);
+                    // adjust batch pos
+                    input_batch.pos[task->i_batch_seq_end] = task->pos - 1;
+                }
+                // otherwise, shift the cache
+                else {
+                    shift_completion_task_cache(nullptr);
+                }
+                // decode again
+                decoded = llama_decode(input_ctx, input_batch_view);
+            }
+            if (decoded != 0) {
+                break;
+            }
+        }
+
+        return decoded;
+    }
+
     //
     // Logics
     //
@@ -3387,7 +3455,8 @@ struct httpserver {
         }
 
         // batch tasks
-        task_type                           batch_task_type = TASK_UNKNOWN;
+        task_type                           batch_task_type    = TASK_UNKNOWN;
+        process_type                        batch_process_type = PROCESS_UNKNOWN;
         std::vector<std::unique_ptr<btask>> batch_task_ptrs;
         batch_task_ptrs.reserve(n_dequeue_tasks);
         for (auto & task_ptr : task_ptrs) {
@@ -3418,9 +3487,9 @@ struct httpserver {
                         }
                     }
                     // clean batch for later adding
-                    common_batch_clear(batch);
+                    common_batch_clear(batch_text);
                     if (llm_ctx_draft != nullptr) {
-                        common_batch_clear(batch_draft);
+                        common_batch_clear(batch_text_draft);
                     }
                 }
 
@@ -3462,9 +3531,14 @@ struct httpserver {
 
                 if (batch_task_type == TASK_COMPLETIONS) {
                     auto * task = dynamic_cast<completions_task *>(task_ptr.get());
+                    if (task->processed_tokens.capacity() == 0) {
+                        task->processed_tokens.reserve(task->n_decoding_budget >= INT32_MAX ?
+                                                           task->n_prefilling_request :
+                                                           task->n_decoding_budget);
+                    }
 
                     // prefill first (n_prefilled < n_prefilling_request)
-                    if (task->n_prefilled < task->n_prefilling_request) {
+                    if (batch_process_type == PROCESS_UNKNOWN && task->n_prefilled < task->n_prefilling_request) {
                         // filter
                         if (llm_kv_cache_used - llm_kv_cache_inactive + task->n_prefilling_request >
                             llm_kv_cache_limit) {
@@ -3475,6 +3549,8 @@ struct httpserver {
                             process_tasks->enqueue(std::move(task_ptr));
                             continue;
                         }
+
+                        batch_process_type = PROCESS_PREFILL;
 
                         // prepare cache - prefix cache
                         if (task->n_prefilled == 0 && cache_prompt) {
@@ -3563,89 +3639,44 @@ struct httpserver {
                         }
 
                         // batching
-                        //// plain text
-                        if (!task->tokenized_prompts_include_images) {
-                            llama_tokens tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[0]);
-                            for (; task->n_prefilled < task->n_prefilling_request;) {
-                                // disallow batch's tokens size be equal to llm_ctx_size
-                                if (batch.n_tokens + 1 >= llm_ctx_size) {
-                                    SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
-                                    break;
-                                }
-                                const llama_token tok = tokenized_text[task->n_prefilled];
-                                const bool        emb = task->n_prefilled + 1 == task->n_prefilling_request;
-                                batch_add(batch, tok, task->pos, seq_id, emb);
-                                if (llm_ctx_draft != nullptr) {
-                                    batch_add(batch_draft, tok, task->pos, seq_id, emb);
-                                }
-                                task->pos++;
-                                task->n_prefilled++;
-                                llm_kv_cache_used++;
-                            }
-                            // enqueue task if not prefilled all,
-                            // which means there is not enough space to place all tokens
-                            if (task->n_prefilled < task->n_prefilling_request) {
-                                process_tasks->enqueue(std::move(task_ptr));
-                                continue;
-                            }
-                            // save for cache prompts,
-                            // so we need to mark the base in n_processed_detokenized
-                            task->processed_tokens        = std::move(tokenized_text);
-                            task->n_processed_detokenized = task->n_prefilling_request;
-                            SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
-                        }
-                        //// vision
-                        else {
-                            const auto n_prompt    = int32_t(task->tokenized_prompts.size());
-                            int32_t    c_prefilled = 0;
-                            for (int32_t i_prompt = 0; i_prompt < n_prompt; i_prompt++) {
+                        const auto n_prompt    = int32_t(task->tokenized_prompts.size());
+                        int32_t    c_prefilled = 0;
+                        if (n_prompt > 1) {
+                            // process n-1 prompts
+                            for (int32_t i_prompt = 0; i_prompt < (n_prompt - 1); i_prompt++) {
                                 // text
                                 if (std::holds_alternative<llama_tokens>(task->tokenized_prompts[i_prompt])) {
                                     llama_tokens tokenized_text =
                                         std::get<llama_tokens>(task->tokenized_prompts[i_prompt]);
                                     const auto    n_text   = int32_t(tokenized_text.size());
                                     const int32_t n_text_s = task->n_prefilled - c_prefilled;
-                                    const bool    last     = i_prompt + 1 == n_prompt;
-                                    for (int32_t i_text = n_text_s; i_text < n_text; i_text++) {
-                                        const llama_token tok = tokenized_text[i_text];
-                                        const bool        emb = i_text + 1 == n_text && last;
-                                        if (last) {
-                                            batch_add(batch, tok, task->pos, seq_id, emb);
-                                        } else {
-                                            batch_add(batch_temp, tok, task->pos, seq_id, emb);
+                                    if (n_text_s < n_text) {
+                                        const int32_t n_text_d = n_text - n_text_s;
+                                        // in batch
+                                        for (int32_t i_text = n_text_s; i_text < n_text; i_text++) {
+                                            const llama_token tok = tokenized_text[i_text];
+                                            common_batch_add(batch_text_temp, tok, task->pos, { seq_id }, false);
+                                            task->pos++;
                                         }
-                                        task->pos++;
-                                        task->n_prefilled++;
-                                        llm_kv_cache_used++;
-                                    }
-                                    if (batch_temp.n_tokens > 0 && !last) {
+                                        task->n_prefilled += n_text_d;
+                                        llm_kv_cache_used += n_text_d;
                                         // decode immediately
-                                        const int32_t decoded_text = llama_decode(llm_ctx, batch_temp);
-                                        common_batch_clear(batch_temp);
+                                        const int32_t decoded_text =
+                                            decode_completion_task_batch(llm_ctx, batch_text_temp, batch_task_ptrs);
+                                        common_batch_clear(batch_text_temp);
                                         if (decoded_text != 0) {
                                             SRV_ERR(
-                                                "rid %s | decode vision text, failed to decode, try increasing context "
-                                                "size or reducing requests: result = %d\n",
+                                                "rid %s | decode vision text, failed to decode, try again, "
+                                                "increasing context size or reducing requests: result = %d\n",
                                                 rid.c_str(), decoded_text);
-                                            // clean kv cache
-                                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                            SRV_DBG("rid %s | decode text, kv cache clean, seq %d = [0, end)",
-                                                    rid.c_str(), seq_id);
-                                            llm_kv_cache_used -= task->pos;
-                                            // output
-                                            json data = {
-                                                { "message",
-                                                 "failed to decode text, try increasing context size or reducing "
-                                                  "requests" }
-                                            };
-                                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(
-                                                httplib::InternalServerError_500, std::move(data)));
                                             break;
                                         }
                                     }
+                                    // accumulate prefilled
+                                    c_prefilled += n_text;
+                                    // append processed tokens
                                     task->processed_tokens.insert(task->processed_tokens.end(), tokenized_text.begin(),
                                                                   tokenized_text.end());
-                                    c_prefilled += n_text;
                                 }
                                 // image
                                 else {
@@ -3654,9 +3685,11 @@ struct httpserver {
                                     const int32_t n_image   = tokenized_image.n_tokens;
                                     const int32_t n_image_s = task->n_prefilled - c_prefilled;
                                     if (n_image_s < tokenized_image.n_pos) {
-                                        int32_t decoded_image = -1;
-                                        // Qwen2VL
-                                        if (clip_is_qwen2vl(llm_ctx_clip)) {
+                                        const int32_t                   n_image_d = tokenized_image.n_pos;
+                                        // in batch
+                                        llama_image_embed_batch_wrapper batch_image;
+                                        //// mrope
+                                        if (llm_model_rope_mrope) {
                                             std::vector<llama_pos> mrope_pos;
                                             clip_image_size &      is = tokenized_image.size;
                                             const int32_t          ps = clip_get_patch_size(llm_ctx_clip) * 2;
@@ -3672,76 +3705,94 @@ struct httpserver {
                                                     mrope_pos[i + n_image * 3] = 0;
                                                 }
                                             }
-                                            llama_image_embed_batch_wrapper batch_image =
-                                                llama_image_embed_batch_wrapper(tokenized_image.embed.data(), n_image,
-                                                                                mrope_pos.data(), seq_id);
-                                            // decode immediately
-                                            decoded_image = llama_decode(llm_ctx, batch_image.batch);
+                                            batch_image = llama_image_embed_batch_wrapper(
+                                                tokenized_image.embed.data(), n_image, mrope_pos.data(), seq_id);
                                         }
-                                        // Gemma3
-                                        else if (clip_is_gemma3(llm_ctx_clip)) {
-                                            llama_image_embed_batch_wrapper batch_image =
-                                                llama_image_embed_batch_wrapper(tokenized_image.embed.data(), n_image,
-                                                                                task->pos, seq_id);
-                                            // decode immediately
-                                            llama_set_causal_attn(llm_ctx, false);
-                                            decoded_image = llama_decode(llm_ctx, batch_image.batch);
-                                            llama_set_causal_attn(llm_ctx, true);
-                                        }
-                                        // Others
+                                        //// non-mrope
                                         else {
-                                            llama_image_embed_batch_wrapper batch_image =
-                                                llama_image_embed_batch_wrapper(tokenized_image.embed.data(), n_image,
-                                                                                task->pos, seq_id);
-                                            // decode immediately
-                                            decoded_image = llama_decode(llm_ctx, batch_image.batch);
+                                            batch_image = llama_image_embed_batch_wrapper(tokenized_image.embed.data(),
+                                                                                          n_image, task->pos, seq_id);
                                         }
-                                        task->pos += tokenized_image.n_pos;
-                                        llm_kv_cache_used += tokenized_image.n_pos;
+                                        task->pos += n_image_d;
+                                        task->n_prefilled += n_image_d;
+                                        llm_kv_cache_used += n_image_d;
+                                        // decode immediately
+                                        if (clip_is_gemma3(llm_ctx_clip)) {
+                                            llama_set_causal_attn(llm_ctx, false);
+                                        }
+                                        const int32_t decoded_image =
+                                            decode_completion_task_batch(llm_ctx, batch_image.temp, batch_task_ptrs);
+                                        if (clip_is_gemma3(llm_ctx_clip)) {
+                                            llama_set_causal_attn(llm_ctx, false);
+                                        }
                                         if (decoded_image != 0) {
                                             SRV_ERR(
-                                                "rid %s | decode vision image, failed to decode, try again, increasing "
-                                                "context "
-                                                "size or reducing requests: result = %d\n",
+                                                "rid %s | decode vision image, failed to decode, try again, "
+                                                "increasing context size or reducing requests: result = %d\n",
                                                 rid.c_str(), decoded_image);
-                                            // clean kv cache
-                                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                                            SRV_DBG("rid %s | decode image, kv cache clean, seq %d = [0, end)",
-                                                    rid.c_str(), seq_id);
-                                            llm_kv_cache_used -= task->pos;
-                                            // output
-                                            json data = {
-                                                { "message",
-                                                 "failed to decode image, try again, increasing context size or "
-                                                  "reducing "
-                                                  "requests" }
-                                            };
-                                            process_task_results[tid]->enqueue(std::make_unique<btask_result>(
-                                                httplib::InternalServerError_500, std::move(data)));
                                             break;
                                         }
-                                        task->n_prefilled += tokenized_image.n_pos;
                                     }
+                                    // accumulate prefilled
+                                    c_prefilled += tokenized_image.n_pos;
+                                    // append processed tokens
                                     llama_tokens dummy_tokens(tokenized_image.n_pos, tokenized_image.dummy_token);
                                     task->processed_tokens.insert(task->processed_tokens.end(), dummy_tokens.begin(),
                                                                   dummy_tokens.end());
-                                    c_prefilled += tokenized_image.n_pos;
                                 }
                             }
-                            // abort task if not prefilled all,
-                            // which means there is an error in decoding text or image
-                            if (task->n_prefilled < task->n_prefilling_request) {
-                                continue;
-                            }
-                            // save for cache prompts,
-                            // so we need to mark the base in n_processed_detokenized
-                            task->n_processed_detokenized = task->n_prefilling_request;
-                            SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
                         }
+                        llama_tokens  tokenized_text = std::get<llama_tokens>(task->tokenized_prompts[n_prompt - 1]);
+                        const auto    n_text         = int32_t(tokenized_text.size());
+                        const int32_t n_text_s       = task->n_prefilled - c_prefilled;
+                        const int32_t n_text_d       = n_text - n_text_s;
+                        // in batch
+                        for (int32_t i_text = n_text_s; i_text < n_text; i_text++) {
+                            const llama_token tok = tokenized_text[i_text];
+                            const bool        emb = i_text + 1 == n_text;
+                            common_batch_add(batch_text, tok, task->pos, { seq_id }, emb);
+                            if (llm_ctx_draft != nullptr) {
+                                common_batch_add(batch_text_draft, tok, task->pos, { seq_id }, emb);
+                            }
+                            task->pos++;
+                        }
+                        task->n_prefilled += n_text_d;
+                        llm_kv_cache_used += n_text_d;
+                        // abort if incomplete prefilling
+                        if (task->n_prefilled < task->n_prefilling_request) {
+                            // clean kv cache
+                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                            if (llm_ctx_draft != nullptr) {
+                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                            }
+                            SRV_DBG("rid %s | prefill, incomplete, kv cache clean, seq %d = [0, end)", rid.c_str(),
+                                    seq_id);
+                            llm_kv_cache_used -= task->pos;
+                            // output
+                            json data = {
+                                { "message",
+                                 "failed to prefill, try again, "
+                                  "increasing context size or reducing requests" }
+                            };
+                            process_task_results[tid]->enqueue(
+                                std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
+                            continue;
+                        }
+                        // append processed tokens
+                        task->processed_tokens.insert(task->processed_tokens.end(), tokenized_text.begin(),
+                                                      tokenized_text.end());
+                        // save for cache prompts,
+                        // so we need to mark the base in n_processed_detokenized
+                        task->n_processed_detokenized = task->n_prefilling_request;
+                        SRV_DBG("rid %s | batching, decode, seq = %d\n", rid.c_str(), seq_id);
+
+                        task->i_batch_seq_end = (batch_text.n_tokens + (batch_view_max - 1)) % batch_view_max;
+                        batch_task_ptrs.push_back(std::move(task_ptr));
                     }
 
                     // decode next (n_decoded > 0)
-                    else if (batch.n_tokens + 1 < llm_ctx_size && task->n_decoded > 0) {
+                    else if (batch_process_type != PROCESS_PREFILL && task->n_decoded > 0 &&
+                             batch_text.n_tokens + params.llm_params.speculative.n_max < batch_view_max) {
                         // token throttling
                         if (task->token_bucket != nullptr) {
                             if (!task->token_bucket->try_acquire()) {
@@ -3750,18 +3801,20 @@ struct httpserver {
                             }
                         }
 
+                        batch_process_type = PROCESS_DECODE;
+
                         // prepare cache - truncate cache
                         if (llm_kv_cache_used >= llm_kv_cache_limit) {
-                            shift_task_kv_cache(task);
+                            shift_completion_task_cache(task);
                         }
 
                         // batching
-                        batch_add(batch, task->processed_tokens.back(), task->pos, seq_id, true);
+                        common_batch_add(batch_text, task->processed_tokens.back(), task->pos, { seq_id }, true);
                         task->pos++;
                         llm_kv_cache_used++;
                         if (!task->drafted_tokens.empty()) {
                             for (const llama_token & tok : task->drafted_tokens) {
-                                batch_add(batch, tok, task->pos, seq_id, true);
+                                common_batch_add(batch_text, tok, task->pos, { seq_id }, true);
                                 task->pos++;
                                 llm_kv_cache_used++;
                             }
@@ -3770,10 +3823,20 @@ struct httpserver {
                         if (task->n_decoded == 1) {
                             SRV_DBG("rid %s | batching, decode next, seq = %d\n", rid.c_str(), seq_id);
                         }
+
+                        task->i_batch_seq_end = batch_text.n_tokens - 1;
+                        batch_task_ptrs.push_back(std::move(task_ptr));
                     }
 
-                    task->i_batch_seq_end = batch.n_tokens - 1;
-                    batch_task_ptrs.push_back(std::move(task_ptr));
+                    // otherwise, wait for next
+                    else {
+                        SRV_DBG(
+                            "rid %s | "
+                            "batching, waiting previous batch finished: different processing type\n",
+                            rid.c_str());
+                        process_tasks->enqueue(std::move(task_ptr));
+                    }
+
                     continue;
                 }
 
@@ -3790,13 +3853,13 @@ struct httpserver {
                     llama_tokens tokenized_input = task->tokenized_inputs[task->i_input_prefilled];
                     const auto   n_pos           = int32_t(tokenized_input.size());
                     // allow batch's tokens size be equal to llm_ctx_size
-                    if (batch.n_tokens + n_pos > llm_ctx_size) {
+                    if (batch_text.n_tokens + n_pos > llm_ctx_size) {
                         SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
                         continue;
                     }
                     // avoid smaller batch size
-                    else if (batch.n_tokens + n_pos <= seq_id) {
-                        seq_id = batch.n_tokens + n_pos - 1;
+                    else if (batch_text.n_tokens + n_pos <= seq_id) {
+                        seq_id = batch_text.n_tokens + n_pos - 1;
                         task->set_seq_id(seq_id);
                     }
 
@@ -3820,7 +3883,7 @@ struct httpserver {
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
-                        batch_add(batch, tokenized_input[pos], pos, seq_id, emb);
+                        common_batch_add(batch_text, tokenized_input[pos], pos, { seq_id }, emb);
                     }
                     task->n_prefilled += n_pos;
                     task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : std::min(task->n_min_prefilled, n_pos);
@@ -3828,7 +3891,7 @@ struct httpserver {
 
                     task->i_input_prefilled++;
 
-                    task->i_batch_seq_end = batch.n_tokens - 1;
+                    task->i_batch_seq_end = batch_text.n_tokens - 1;
                     batch_task_ptrs.push_back(std::move(task_ptr));
                 }
 
@@ -3876,53 +3939,14 @@ struct httpserver {
 
             if (batch_task_type == TASK_COMPLETIONS) {
                 // decode
-                while (batch.n_tokens > 0) {
-                    const int32_t decoded = llama_decode(llm_ctx, batch);
-                    // -3 compute failed, -2 allocate failed, -1 no tokens, 0 ok, 1 no kv cache, 2 compute aborted
+                if (batch_text.n_tokens > 0) {
+                    const int32_t decoded = decode_completion_task_batch(llm_ctx, batch_text, batch_task_ptrs);
                     if (decoded != 0) {
-                        // try to recover
-                        int32_t retries       = 10;
-                        int32_t decoded_again = decoded;
-                        while (decoded_again == 1 && retries-- > 0) {
-                            SRV_WRN("%s", "decode in batch, try shifting context\n");
-                            // shift the decoding task which has largest pos
-                            int32_t target_idx = -1;
-                            int32_t target_pos = -1;
-                            for (int32_t i = 0; i < int32_t(batch_task_ptrs.size()); i++) {
-                                auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[i].get());
-                                if (task->n_decoded > 0 && task->pos > target_pos) {
-                                    target_idx = i;
-                                    target_pos = task->pos;
-                                }
-                            }
-                            if (target_idx != -1) {
-                                auto * task = dynamic_cast<completions_task *>(batch_task_ptrs[target_idx].get());
-                                shift_task_kv_cache(task);
-                                // adjust batch pos
-                                const llama_pos new_pos = task->pos;
-                                if (llm_model_rope_mrope) {
-                                    for (int32_t i = 0; i < 3; i++) {
-                                        batch.pos[task->i_batch_seq_end + i] = new_pos - 1;
-                                    }
-                                } else {
-                                    batch.pos[task->i_batch_seq_end] = new_pos - 1;
-                                }
-                            } else {
-                                shift_task_kv_cache(nullptr);
-                            }
-                            // decode again
-                            decoded_again = llama_decode(llm_ctx, batch);
-                        }
-                        if (decoded_again == 0) {
-                            break;
-                        }
-                        // otherwise, we failed to recover
                         SRV_ERR(
-                            "decode in batch, failed to decode, try again, increasing context size, or reducing "
-                            "parallel: "
-                            "result = %d\n",
+                            "decode in batch, failed to decode, try again, "
+                            "increasing context size or reducing parallel: result = %d\n",
                             decoded);
-                        for (auto & task_ptr : batch_task_ptrs) {
+                        for (const std::unique_ptr<btask> & task_ptr : batch_task_ptrs) {
                             auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
                             const std::string rid    = task->get_r_id();
                             const int32_t     seq_id = task->get_seq_id();
@@ -3931,30 +3955,31 @@ struct httpserver {
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                             }
-                            SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                            SRV_DBG("rid %s | decode, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
                             json data = {
                                 { "message",
-                                 "failed to decode, try again, increasing context size, or reducing parallel" }
+                                 "failed to decode, try again, "
+                                  "increasing context size or reducing parallel" }
                             };
                             process_task_results[task->get_id()]->enqueue(
                                 std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
                         }
                         return;
                     }
-                    break;
                 }
                 // speculative - draft
                 // NB(thxCode): we don't need to decode in a loop like above,
                 // as the previous llm_ctx decode also shift the draft kv cache during failure decoding.
-                if (batch_draft.n_tokens > 0) {
-                    const int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
+                if (batch_text_draft.n_tokens > 0) {
+                    const int32_t decoded_draft =
+                        decode_completion_task_batch(llm_ctx_draft, batch_text_draft, batch_task_ptrs);
                     if (decoded_draft != 0) {
                         // NB(thxCode): we should not reach here.
                         SRV_ERR(
-                            "decode draft in batch, failed to decode, try increasing context size or reducing "
-                            "parallel: result = %d\n",
+                            "decode draft in batch, failed to decode, try increasing context size "
+                            "or reducing parallel: result = %d\n",
                             decoded_draft);
                         for (auto & task_ptr : batch_task_ptrs) {
                             auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
@@ -3968,8 +3993,8 @@ struct httpserver {
                             // output
                             json data = {
                                 { "message",
-                                 "failed to decode draft, try again, increasing context size, or reducing "
-                                  "parallel" }
+                                 "failed to decode draft, try again, "
+                                  "increasing context size or reducing parallel" }
                             };
                             process_task_results[task_ptr->get_id()]->enqueue(
                                 std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));
@@ -4322,19 +4347,20 @@ struct httpserver {
                             //// draft
                             if (llm_ctx_draft != nullptr) {
                                 // clean batch for later adding
-                                common_batch_clear(batch_draft);
-                                batch_add(batch_draft, task->processed_tokens.back(), task->pos, seq_id, true);
-                                int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
+                                common_batch_clear(batch_text_draft);
+                                common_batch_add(batch_text_draft, task->processed_tokens.back(), task->pos, { seq_id },
+                                                 true);
+                                int32_t decoded_draft = llama_decode(llm_ctx_draft, batch_text_draft);
                                 if (decoded_draft != 0) {
                                     SRV_ERR(
-                                        "rid %s | decode draft, failed to decode, try again, increasing context size "
-                                        "or reducing requests: result = %d\n",
+                                        "rid %s | decode draft, failed to decode, try again, "
+                                        "increasing context size or reducing requests: result = %d\n",
                                         rid.c_str(), decoded_draft);
                                     // output
                                     json data = {
                                         { "message",
-                                         "failed to decode draft, try again, increasing context size "
-                                          "or reducing parallel" }
+                                         "failed to decode draft, try again, "
+                                          "increasing context size or reducing parallel" }
                                     };
                                     process_task_results[tid]->enqueue(std::make_unique<btask_result>(
                                         httplib::InternalServerError_500, std::move(data)));
@@ -4356,9 +4382,9 @@ struct httpserver {
                                     }
                                     task->drafted_tokens.push_back(tok);
                                     // clean batch for later adding
-                                    common_batch_clear(batch_draft);
-                                    batch_add(batch_draft, tok, task->pos + 1 + j, seq_id, true);
-                                    decoded_draft = llama_decode(llm_ctx_draft, batch_draft);
+                                    common_batch_clear(batch_text_draft);
+                                    common_batch_add(batch_text_draft, tok, task->pos + 1 + j, { seq_id }, true);
+                                    decoded_draft = llama_decode(llm_ctx_draft, batch_text_draft);
                                     if (decoded_draft != 0) {
                                         SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(),
                                                 seq_id);
@@ -4444,18 +4470,20 @@ struct httpserver {
              * embeddings
              */
 
-            const int32_t decoded = llama_decode(llm_ctx, batch);
+            const int32_t decoded = llama_decode(llm_ctx, batch_text);
             if (decoded != 0) {
                 SRV_ERR(
-                    "decode in batch, failed to decode, try again, increasing context size, or reducing parallel: "
-                    "result = %d\n",
+                    "decode in batch, failed to decode, try again, "
+                    "increasing context size or reducing parallel: result = %d\n",
                     decoded);
                 // clean kv cache
                 llama_kv_self_clear(llm_ctx);
                 // output
                 for (auto & task_ptr : batch_task_ptrs) {
                     json data = {
-                        { "message", "failed to decode, try again, increasing context size, or reducing parallel" }
+                        { "message",
+                         "failed to decode, try again, "
+                          "increasing context size or reducing parallel" }
                     };
                     process_task_results[task_ptr->get_id()]->enqueue(
                         std::make_unique<btask_result>(httplib::InternalServerError_500, std::move(data)));

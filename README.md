@@ -486,7 +486,6 @@ server/completion:
   -ctv,  --cache-type-v TYPE      KV cache data type for V, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
   -np,   --parallel N             (Deprecated, use --threads-http instead) Number of parallel sequences to decode (default: 1)
-  -nocb, --no-cont-batching       Disable continuous batching
          --mmproj FILE            Path to a multimodal projector file for LLaVA
          --mlock                  Force system to keep model in RAM rather than swapping or compressing
          --no-mmap                Disable memory-map model, slower load but may reduce pageouts if not using mlock

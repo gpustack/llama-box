@@ -330,7 +330,6 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V, allowed values: %s (default: %s)", get_all_cache_kv_types_string().c_str(), ggml_type_name(llm_params.cache_type_v) });
     opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)llm_params.defrag_thold });
     opts.push_back({ "server/completion",                  "-np,   --parallel N",                           "(Deprecated, use --threads-http instead) Number of parallel sequences to decode (default: %d)", llm_params.n_parallel });
-    opts.push_back({ "server/completion",                  "-nocb, --no-cont-batching",                     "Disable continuous batching" });
     opts.push_back({ "server/completion",                  "       --mmproj FILE",                          "Path to a multimodal projector file for LLaVA" });
     if (llama_supports_mlock()) {
         opts.push_back({ "server/completion",              "       --mlock",                                "Force system to keep model in RAM rather than swapping or compressing" });
@@ -1527,11 +1526,6 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (params_.hs_params.llm_params.n_threads_http <= 0) {
                     invalid("--parallel");
                 }
-                continue;
-            }
-
-            if (!strcmp(flag, "-nocb") || !strcmp(flag, "--no-cont-batching")) {
-                params_.hs_params.llm_params.cont_batching = false;
                 continue;
             }
 
