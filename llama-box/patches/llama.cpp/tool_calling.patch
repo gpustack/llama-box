@@ -139,10 +139,10 @@ index d26a09c2..8678f50b 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 99e5fba2..7dd31988 100644
+index 52cd7a5a..f3db442a 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -397,6 +397,11 @@ extern "C" {
+@@ -398,6 +398,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -154,7 +154,7 @@ index 99e5fba2..7dd31988 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -495,6 +500,7 @@ extern "C" {
+@@ -496,6 +501,7 @@ extern "C" {
      LLAMA_API const struct llama_vocab * llama_model_get_vocab(const struct llama_model * model);
      LLAMA_API enum llama_rope_type       llama_model_rope_type(const struct llama_model * model);
  
@@ -162,7 +162,7 @@ index 99e5fba2..7dd31988 100644
      LLAMA_API int32_t llama_model_n_ctx_train(const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_embd     (const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_layer    (const struct llama_model * model);
-@@ -1128,6 +1134,35 @@ extern "C" {
+@@ -1028,6 +1034,35 @@ extern "C" {
      // Chat templates
      //
  
@@ -708,10 +708,10 @@ index db24ade2..b5f3c4b0 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 7fd094b6..7ad53001 100644
+index 82557ea0..a7e3a9b0 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -13394,6 +13394,10 @@ void llama_model_free(llama_model * model) {
+@@ -13569,6 +13569,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  
