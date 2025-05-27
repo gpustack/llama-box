@@ -43,14 +43,14 @@ struct httpserver_params {
     common_params          llm_params;
     stablediffusion_params sd_params;
 
-    bool    cache_prompt     = true;
-    bool    endpoint_images  = false;
-    int32_t conn_idle        = 60;  // connection idle in seconds
-    int32_t conn_keepalive   = 15;  // connection keep-alive in seconds
-    int32_t n_tps            = 0;   // maximum number of tokens per seconds
-    int32_t lookup_ngram_min = 0;   // minimum n-gram size for lookup cache
-    int32_t max_image_size   = 0;   // maximum image size for vision image processing
-    int32_t max_image_cache  = 0;   // maximum number of encoded images in cache
+    bool    cache_prompt        = true;
+    bool    endpoint_images     = false;
+    int32_t conn_idle           = 60;  // connection idle in seconds
+    int32_t conn_keepalive      = 15;  // connection keep-alive in seconds
+    int32_t n_tps               = 0;   // maximum number of tokens per seconds
+    int32_t lookup_ngram_min    = 0;   // minimum n-gram size for lookup cache
+    int32_t max_image_size      = 0;   // maximum image size for vision image processing
+    int32_t max_projected_cache = 0;   // maximum number of projected embedding in cache
 };
 
 // implementations
@@ -4762,7 +4762,7 @@ struct httpserver {
         std::unique_lock<std::mutex> lock(llm_ctx_clip_mtx);
 
         // check if image hash is empty or cache is disabled.
-        if (img->hash.empty() || params.max_image_cache <= 0) {
+        if (img->hash.empty() || params.max_projected_cache <= 0) {
             SRV_INFV(2,
                      "rid %s | disable image cache, "
                      "hash = %s, n_caching = %zu, tokenizing...\n",
@@ -4781,7 +4781,7 @@ struct httpserver {
         // cache image.
         else {
             // evict the oldest image if the cache is full.
-            if (int32_t(cache_images.size()) >= params.max_image_cache) {
+            if (int32_t(cache_images.size()) >= params.max_projected_cache) {
                 // find the oldest image,
                 // remove it and add the new image.
                 auto oldest_it = cache_images.begin();

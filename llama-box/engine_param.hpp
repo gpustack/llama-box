@@ -361,11 +361,12 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
                                                                                                             "Number of layers to store in VRAM for the draft model" });
     opts.push_back({ "server/completion/speculative",      "       --lookup-ngram-min N",                   "Minimum n-gram size for lookup cache (default: %d, 0 = disabled)", params_.hs_params.lookup_ngram_min });
     // server // completion // speculative //
-    // server // completion // visual //
-    opts.push_back({ "server/completion/visual" });
-    opts.push_back({ "server/completion/visual",           "       --visual-max-image-size N",              "Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: %d, 0 = disabled)", params_.hs_params.max_image_size});
-    opts.push_back({ "server/completion/visual",           "       --visual-max-image-cache N",             "Specify how many images to cache after encoding, which is used to speed up chat completion (default: %d, 0 = disabled)", params_.hs_params.max_image_cache});
-    // server // completion // visual //
+    // server // completion // multimodal //
+    opts.push_back({ "server/completion/multimodal" });
+    opts.push_back({ "server/completion/multimodal",       "       --visual-max-image-size N",              "Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: %d, 0 = disabled)", params_.hs_params.max_image_size});
+    opts.push_back({ "server/completion/multimodal",       "       --visual-max-image-cache N",             "(Deprecated, use --max-projected-cache instead) Specify how many images to cache after encoding, which is used to speed up chat completion (default: %d, 0 = disabled)", params_.hs_params.max_projected_cache});
+    opts.push_back({ "server/completion/multimodal",       "       --max-projected-cache N",                "Specify how many projected embedding cache (default: %d, 0 = disabled)", params_.hs_params.max_projected_cache});
+    // server // completion // multimodal //
     // server // embedding //
     opts.push_back({ "server/embedding" });
     opts.push_back({ "server/embedding",                   "       --pooling {none,mean,cls,last,rank}",    "Pooling type for embeddings, use model default if unspecified" });
@@ -1693,7 +1694,7 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 continue;
             }
 
-            // server // completion // visual //
+            // server // completion // multimodal //
 
             if (!strcmp(flag, "--visual-max-image-size")) {
                 if (i == argc) {
@@ -1714,8 +1715,17 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (i == argc) {
                     missing("--visual-max-image-cache");
                 }
-                char * arg                        = argv[i++];
-                params_.hs_params.max_image_cache = std::stoi(std::string(arg));
+                char * arg                            = argv[i++];
+                params_.hs_params.max_projected_cache = std::stoi(std::string(arg));
+                continue;
+            }
+
+            if (!strcmp(flag, "--max-projected-cache")) {
+                if (i == argc) {
+                    missing("--max-projected-cache");
+                }
+                char * arg                            = argv[i++];
+                params_.hs_params.max_projected_cache = std::stoi(std::string(arg));
                 continue;
             }
 

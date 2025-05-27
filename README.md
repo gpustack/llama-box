@@ -518,12 +518,13 @@ server/completion/speculative:
                                   Number of layers to store in VRAM for the draft model
          --lookup-ngram-min N     Minimum n-gram size for lookup cache (default: 0, 0 = disabled)
 
-server/completion/visual:
+server/completion/multimodal:
 
          --visual-max-image-size N
                                   Maximum image size when completion with vision, resize the image size automatically if exceed, must be larger than 224 and be multiples of 14 (default: 0, 0 = disabled)
          --visual-max-image-cache N
-                                  Specify how many images to cache after encoding, which is used to speed up chat completion (default: 0, 0 = disabled)
+                                  (Deprecated, use --max-projected-cache instead) Specify how many images to cache after encoding, which is used to speed up chat completion (default: 0, 0 = disabled)
+         --max-projected-cache N  Specify how many projected embedding cache (default: 0, 0 = disabled)
 
 server/embedding:
 
