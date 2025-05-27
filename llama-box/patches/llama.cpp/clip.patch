@@ -61,9 +61,18 @@ index 15ec3db9..fb828851 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 34c4ce84..a621774a 100644
+index 34c4ce84..7e59bfb2 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
+@@ -170,7 +170,7 @@ struct clip_hparams {
+     bool has_audio = false;
+ 
+     int32_t image_size;
+-    int32_t patch_size;
++    int32_t patch_size = 1;
+     int32_t n_embd;
+     int32_t n_ff;
+     int32_t projection_dim;
 @@ -375,6 +375,8 @@ struct clip_ctx {
      int max_nodes = 8192;
      ggml_backend_sched_ptr sched;

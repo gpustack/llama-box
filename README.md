@@ -34,15 +34,10 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - [x] Qwen2.5 VL Series, please
           use the model files converted by [ggml-org/llama.cpp#12402](https://github.com/ggml-org/llama.cpp/pull/12402).
         - [x] InternVL2/InternVL3 Series
-        - [x] LLaMA4 Series, please
-          test
-          with [ggml-org/Llama-4-Scout-17B-16E-Instruct-GGUF](https://huggingface.co/ggml-org/Llama-4-Scout-17B-16E-Instruct-GGUF)
-          repo, or the model files converted
-          by [ggml-org/llama.cpp#13282](https://github.com/ggml-org/llama.cpp/pull/13282).
-          The
-          popular [unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF](https://huggingface.co/unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF)
-          repos are not supported vision yet.
+        - [x] LLaMA4 Series
         - [x] ...
+    + Support [OpenAI Chat Audio-In API](https://platform.openai.com/docs/guides/audio?example=audio-in)
+        - [x] UltraVox Series
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
@@ -156,32 +151,33 @@ LLaMA Box supports the following platforms.
 > [LM Studio](https://lmstudio.ai/) provides a fantastic UI for downloading the GGUF model from Hugging Face.
 > The GGUF model files used in the following examples are downloaded via LM Studio.
 
-- Chat completion via [Nous-Hermes-2-Mistral-7B-DPO](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO)
+- Chat completion via [Qwen/Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B)
   model. Use GGUF files
-  from [NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF](https://huggingface.co/NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF/tree/main?show_file_info=Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf).
+  from [unsloth/Qwen3-8B-GGUF](https://huggingface.co/unsloth/Qwen3-8B-GGUF/tree/main?show_file_info=Qwen3-8B-Q8_0.gguf).
 
     ```shell
-    $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 2048 tokens per session.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/NousResearch/Nous-Hermes-2-Mistral-7B-DPO-GGUF/Nous-Hermes-2-Mistral-7B-DPO.Q5_K_M.gguf
+    $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 8192 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/unsloth/Qwen3-8B-GGUF/Qwen3-8B-Q8_0.gguf
     
     $ # Call with curl,
-    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "hermes2", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen3", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
 
     $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh "Introduce Beijing in 50 words."
     ```
 
-- Chat completion with vision explanation via [Qwen2-VL-2B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct)
+- Chat completion with vision explanation
+  via [Qwen/Qwen2.5-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct)
   model. Use GGUF files
-  from [bartowski/Qwen2-VL-2B-Instruct-GGUF](https://huggingface.co/bartowski/Qwen2-VL-2B-Instruct-GGUF/tree/main?show_file_info=Qwen2-VL-2B-Instruct-Q4_0.gguf).
+  from [ggml-org/Qwen2.5-VL-7B-Instruct-GGUF](https://huggingface.co/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/tree/main?show_file_info=Qwen2.5-VL-7B-Instruct-Q8_0.gguf).
 
     ```shell
-    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/bartowski/Qwen2-VL-2B-Instruct-GGUF/Qwen2-VL-2B-Instruct-Q4_0.gguf --mmproj ~/.cache/lm-studio/models/bartowski/Qwen2-VL-2B-Instruct-GGUF/mmproj-Qwen2-VL-2B-Instruct-f32.gguf
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q8_0.gguf --mmproj ~/.cache/lm-studio/models/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf
     
     $ # Chat with image base64.
     $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://raw.githubusercontent.com/haotian-liu/LLaVA/main/llava/serve/examples/extreme_ironing.jpg --output - | base64)")"; \
-      echo "{\"model\": \"qwen2-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
+      echo "{\"model\": \"qwen2.5-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
     
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
@@ -191,11 +187,31 @@ LLaMA Box supports the following platforms.
   
     $ # Chat with image url.
     $ IMAGE_URL="https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"; \
-      echo "{\"model\": \"tsinghua\", \"temperature\": 0.1, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\":\"text\",\"text\":\"What is in this image?\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}]}]}" > /tmp/data.json
+      echo "{\"model\": \"qwen2.5-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\":\"text\",\"text\":\"What is in this image?\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}]}]}" > /tmp/data.json
     
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
   
+    $ # or use the chat.sh tool.
+    $ ./llama-box/tools/chat.sh @/tmp/data.json
+    ```
+
+- Chat completion with audio explanation
+  via [fixie-ai/ultravox-v0_5-llama-3_2-1b](https://huggingface.co/fixie-ai/ultravox-v0_5-llama-3_2-1b) model. Use GGUF
+  files
+  from [ggml-org/ultravox-v0_5-llama-3_2-1b-GGU](https://huggingface.co/ggml-org/ultravox-v0_5-llama-3_2-1b-GGUF/tree/main?show_file_info=Llama-3.2-1B-Instruct-Q8_0.gguf)
+
+    ```shell
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/ggml-org/ultravox-v0_5-llama-3_2-1b-GGUF/Llama-3.2-1B-Instruct-Q8_0.gguf --mmproj ~/.cache/lm-studio/models/ggml-org/ultravox-v0_5-llama-3_2-1b-GGUF/mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf
+  
+    $ # Chat with audio base64.
+    $ AUDIO_DATA="$(curl https://upload.wikimedia.org/wikipedia/commons/transcoded/6/6f/Apollo13-wehaveaproblem.ogg/Apollo13-wehaveaproblem.ogg.mp3 --output - | base64)"; \
+      echo "{\"model\": \"ultravox\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"input_audio\", \"input_audio\": {  \"format\": \"mp3\", \"data\": \"$AUDIO_DATA\"}}, {\"type\": \"text\", \"text\": \"How many times has roger appeared?\"}]}]}" > /tmp/data.json
+    
+    $ # Call with curl,
+    $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
+
     $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
@@ -205,7 +221,7 @@ LLaMA Box supports the following platforms.
   from [Qwen/Qwen2.5-0.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/tree/main?show_file_info=qwen2.5-0.5b-instruct-fp16.gguf).
 
     ```shell
-    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/Qwen/Qwen2-0.5B-Instruct-GGUF/qwen2-0_5b-instruct-fp16.gguf
     
     $ # Call with curl,
@@ -215,7 +231,8 @@ LLaMA Box supports the following platforms.
     $ TOOLS_WITH=true ./llama-box/tools/chat.sh "What is the weather like in Paris today?"
     ```
 
-- Image generation via [Stable Diffusion 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
+- Image generation
+  via [stabilityai/stable-diffusion-3.5-medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium)
   model.
   Use GGUF files
   from [gpustack/stable-diffusion-v3-5-medium-GGUF](https://huggingface.co/gpustack/stable-diffusion-v3-5-medium-GGUF/tree/main?show_file_info=stable-diffusion-v3-5-medium-FP16.gguf).
@@ -231,9 +248,10 @@ LLaMA Box supports the following platforms.
     $ ./llama-box/tools/image_generate.sh "A lovely cat"
     ```
 
-- Image editing(inpainting) via [FLUX.1-Fill-dev](https://huggingface.co/black-forest-labs/FLUX.1-Fill-dev) model. Use
+- Image editing(inpainting)
+  via [black-forest-labs/FLUX.1-Fill-dev](https://huggingface.co/black-forest-labs/FLUX.1-Fill-dev) model. Use
   GGUF files
-  from [FLUX.1-Fill-dev-GGUF](https://huggingface.co/gpustack/FLUX.1-Fill-dev-GGUF/tree/main?show_file_info=FLUX.1-Fill-dev-Q8_0.gguf).
+  from [gpustack/FLUX.1-Fill-dev-GGUF](https://huggingface.co/gpustack/FLUX.1-Fill-dev-GGUF/tree/main?show_file_info=FLUX.1-Fill-dev-Q8_0.gguf).
 
     ```shell
     $ # Provide 1 session(allowing 1 parallel chat user).
@@ -247,17 +265,17 @@ LLaMA Box supports the following platforms.
     $ IMAGE=/tmp/input.png MASK=/tmp/mask.png ./llama-box/tools/image_edit.sh "a tiger sitting on a park bench"
     ```
 
-- Draft model speculative decoding via [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
-  and [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct) models. Use GGUF files
-  from [QuantFactory/Qwen2-7B-Instruct-GGUF](https://huggingface.co/QuantFactory/Qwen2-7B-Instruct-GGUF/tree/main?show_file_info=Qwen2-7B-Instruct.Q5_K_M.gguf)
-  and [QuantFactory/Qwen2-1.5B-Instruct-GGUF](https://huggingface.co/QuantFactory/Qwen2-1.5B-Instruct-GGUF/tree/main?show_file_info=Qwen2-1.5B-Instruct.Q5_K_M.gguf).
+- Draft model speculative decoding via [Qwen/Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+  and [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) models. Use GGUF files
+  from [Qwen/Qwen2.5-7B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/tree/main?show_file_info=qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf)
+  and [Qwen/Qwen2.5-1.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/tree/main?show_file_info=qwen2.5-1.5b-instruct-q8_0.gguf).
 
     ```shell
-    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
-    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Qwen2-7B-Instruct-GGUF/Qwen2-7B-Instruct.Q5_K_M.gguf -md ~/.cache/lm-studio/models/QuantFactory/Qwen2-1.5B-Instruct-GGUF/Qwen2-1.5B-Instruct.Q5_K_M.gguf --draft 8
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
+    $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/Qwen/Qwen2.5-7B-Instruct-GGUF/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf -md ~/.cache/lm-studio/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF/qwen2.5-1.5b-instruct-q8_0.gguf --draft 8
 
     $ # Call with curl,
-    $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "qwen2", "stream": true, "prompt": "Write a short story about a cat and a dog, more than 100 words."}'
+    $ curl http://localhost:8080/v1/completions -H "Content-Type: application/json" -d '{"model": "qwen2.5", "stream": true, "prompt": "Write a short story about a cat and a dog, more than 100 words."}'
 
     $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh "Write a short story about a cat and a dog, more than 100 words."
@@ -268,7 +286,7 @@ LLaMA Box supports the following platforms.
   from [QuantFactory/Mistral-Nemo-Instruct-2407-GGUF](https://huggingface.co/QuantFactory/Mistral-Nemo-Instruct-2407-GGUF/tree/main?show_file_info=Mistral-Nemo-Instruct-2407.Q5_K_M.gguf).
 
     ```shell
-    $ # Provide 2 session(allowing 2 parallel chat users), with a max of 8192 tokens per session.
+    $ # Provide 2 session(allowing 2 parallel chat users), with a max of 16384 tokens per session.
     $ llama-box -c 16384 -np 2 --host 0.0.0.0 -m ~/.cache/lm-studio/models/QuantFactory/Mistral-Nemo-Instruct-2407-GGUF/Mistral-Nemo-Instruct-2407.Q5_K_M.gguf --lookup-ngram-min 1 --draft 8
 
     $ CONTENT="$(curl https://en.wikipedia.org/w/api.php\?action\=query\&format\=json\&titles\=Medusa\&prop\=extracts\&exintro\&explaintext | jq '.query.pages | to_entries | .[0].value.extract | gsub("\n"; "\\n") | gsub("\t"; "\\t")')"; \
@@ -286,7 +304,7 @@ LLaMA Box supports the following platforms.
   from [gpustack/jina-reranker-v1-tiny-en-GGUF](https://huggingface.co/gpustack/jina-reranker-v1-tiny-en-GGUF/tree/main?show_file_info=jina-reranker-v1-tiny-en-FP16.gguf).
 
     ```shell
-    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 2048 tokens per session.
+    $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/jina-reranker-v1-tiny-en-GGUF/jina-reranker-v1-tiny-en-FP16.gguf --rerank
     
     $ # Call with curl.

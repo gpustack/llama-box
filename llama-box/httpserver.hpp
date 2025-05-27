@@ -21,9 +21,9 @@
 #include "stable-diffusion.cpp/stable-diffusion.h"
 
 #define SELF_PACKAGE 0
+#include "z_multimodal.hpp"
 #include "z_stablediffusion.hpp"
 #include "z_utils.hpp"
-#include "z_vision.hpp"
 
 // defines
 
@@ -535,10 +535,10 @@ static inline std::unique_ptr<tokenize_req> get_tokenize_req(const httplib::Requ
     const std::string rid = response.get_header_value(HEADER_X_REQUEST_ID);
     const json        req = json::parse(request.body);
     if (!req.contains("content")) {
-        throw std::invalid_argument("Illegal param: \"content\" is required");
+        throw std::invalid_argument(R"(Illegal param: "content" is required)");
     }
     if (!json_is_array_or_string(req.at("content"))) {
-        throw std::invalid_argument("Illegal param: \"content\" must be a string or a list");
+        throw std::invalid_argument(R"(Illegal param: "content" must be a string or a list)");
     }
 
     // print32_t the request for debugging
@@ -807,14 +807,18 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
     return ptr;
 }
 
-struct clip_image {
+struct clip_multimedia {
     clip_image_u8_ptr ptr;
     std::string       hash;
+    bool              is_audio = false;
 
-    clip_image(clip_image_u8_ptr && ptr, std::string && hash) : ptr(std::move(ptr)), hash(std::move(hash)) {}
+    clip_multimedia(clip_image_u8_ptr && ptr, std::string && hash, bool is_audio = false) :
+        ptr(std::move(ptr)),
+        hash(std::move(hash)),
+        is_audio(is_audio) {}
 };
 
-static inline std::unique_ptr<clip_image> get_clip_image(std::vector<uint8_t> && img_buff) {
+static inline std::unique_ptr<clip_multimedia> get_clip_image(std::vector<uint8_t> && img_buff) {
     std::string hash;
     try {
         hash = hash_fnv(img_buff.data(), img_buff.size());
@@ -841,7 +845,29 @@ static inline std::unique_ptr<clip_image> get_clip_image(std::vector<uint8_t> &&
     std::memcpy(ptr->buf.data(), dt, ptr->buf.size());
     stbi_image_free(dt);
 
-    return std::make_unique<clip_image>(std::move(ptr), std::move(hash));
+    return std::make_unique<clip_multimedia>(std::move(ptr), std::move(hash));
+}
+
+static inline std::unique_ptr<clip_multimedia> get_clip_audio(std::vector<uint8_t> && aud_buff) {
+    std::string hash;
+    try {
+        hash = hash_fnv(aud_buff.data(), aud_buff.size());
+    } catch (std::exception & e) {
+        LOG_WRN("failed to hash audio: %s\n", e.what());
+    }
+
+    std::vector<float> dt;
+    if (!audio_helpers::decode_audio_from_buf(aud_buff.data(), aud_buff.size(), COMMON_SAMPLE_RATE, dt)) {
+        throw std::invalid_argument("Illegal param: provided audio is invalid");
+    }
+
+    clip_image_u8_ptr ptr(clip_image_u8_init());
+    ptr->nx = int(dt.size());
+    ptr->ny = 1;
+    ptr->buf.resize(dt.size() * sizeof(float));
+    std::memcpy(ptr->buf.data(), dt.data(), ptr->buf.size());
+
+    return std::make_unique<clip_multimedia>(std::move(ptr), std::move(hash), true);
 }
 
 struct chat_complete_req : complete_req {
@@ -849,14 +875,14 @@ struct chat_complete_req : complete_req {
 
     /* LLAMA BOX */
 
-    // images, temporary use, will not value in "process"
-    std::vector<std::unique_ptr<clip_image>> images;
-    common_chat_params                       chat_params;
+    std::vector<std::unique_ptr<clip_multimedia>> multimedias;  // images and audios
+    // template
+    common_chat_params                            chat_params;
     // tool calls
-    llama_token                              tool_call_start_token = LLAMA_TOKEN_NULL;
-    std::string                              tool_call_start_token_word;
-    std::vector<std::string>                 tool_call_start_words;
-    size_t                                   tool_call_start_words_longest_length = 0;
+    llama_token                                   tool_call_start_token = LLAMA_TOKEN_NULL;
+    std::string                                   tool_call_start_token_word;
+    std::vector<std::string>                      tool_call_start_words;
+    size_t                                        tool_call_start_words_longest_length = 0;
 
     /* OPEN AI*/
 
@@ -956,43 +982,63 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                 }
                 // array content
                 else if (msg.at("content").is_array()) {
-                    int32_t n_img = 0;
+                    int32_t n_mtmd = 0;
                     for (const json & part : msg.at("content")) {
-                        if (part.contains("type") && part.at("type") == "image_url") {
+                        if (!part.is_object()) {
+                            throw std::invalid_argument("Illegal param: \"content\" must be a list of objects");
+                        }
+                        std::string part_type = json_value(part, "type", std::string());
+                        if (part_type.empty()) {
+                            throw std::invalid_argument(R"(Illegal param: "content" item must have a "type" field)");
+                        }
+                        if (!part.contains(part_type)) {
+                            throw std::invalid_argument(R"(Illegal param: "content" item with type ")" + part_type +
+                                                        R"(" must have a field with the same name)");
+                        }
+                        // image_url
+                        if (part_type == "image_url") {
                             // process image
-                            std::string img = json_value(part.at("image_url"), "url", std::string());
-                            if (img.find("data:image/") != std::string::npos) {
+                            const json & img = part.at("image_url");
+                            if (img.empty() || !img.is_object()) {
+                                throw std::invalid_argument(R"(Illegal param: "image_url" must be a non-empty object)");
+                            }
+                            std::string url = json_value(img, "url", std::string());
+                            if (url.empty()) {
+                                throw std::invalid_argument(
+                                    R"(Illegal param: "image_url" must have a "url" field with non-empty value)");
+                            }
+                            if (url.find("data:image/") != std::string::npos) {
                                 const std::string split = "base64,";
-                                const size_t      idx   = img.find(split);
+                                const size_t      idx   = url.find(split);
                                 if (idx == std::string::npos) {
                                     throw std::invalid_argument(
-                                        "Illegal param: \"image_url\" must be a valid base64-encoded image");
+                                        "Illegal param: \"url\" must be a valid base64-encoded image");
                                 }
-                                img = img.substr(idx + split.length());
+                                url = url.substr(idx + split.length());
                                 if (img.empty()) {
                                     throw std::invalid_argument(
-                                        "Illegal param: \"image_url\" is an empty image base64-encoded data");
+                                        "Illegal param: \"url\" is an empty image base64-encoded data");
                                 }
                                 try {
-                                    std::vector<uint8_t> img_buff = decode_base64(img);
-                                    ptr->images.push_back(get_clip_image(std::move(img_buff)));
+                                    std::vector<uint8_t> img_buff = decode_base64(url);
+                                    ptr->multimedias.push_back(get_clip_image(std::move(img_buff)));
                                 } catch (const std::exception & e) {
                                     throw std::invalid_argument(
-                                        "Illegal param: \"image_url\" must be a valid base64-encoded image");
+                                        "Illegal param: \"url\" must be a valid base64-encoded image");
                                 }
                             } else {
                                 std::string host, path;
-                                if (size_t pos = img.find("://"); pos == std::string::npos) {
+                                if (size_t pos = url.find("://"); pos == std::string::npos) {
                                     throw std::invalid_argument(
-                                        "Illegal param: \"image_url\" must be a data URI or a valid URL");
+                                        "Illegal param: \"url\" must be a data URI or a valid URL");
                                 } else {
-                                    pos = img.find('/', pos + 3);
+                                    pos = url.find('/', pos + 3);
                                     if (pos == std::string::npos) {
                                         host = img;
                                         path = "/";
                                     } else {
-                                        host = img.substr(0, pos);
-                                        path = img.substr(pos);
+                                        host = url.substr(0, pos);
+                                        path = url.substr(pos);
                                     }
                                 }
                                 httplib::Client cli(host);
@@ -1011,29 +1057,61 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                 httplib::Result resp = cli.Get(path);
                                 if (!resp || resp->status != httplib::StatusCode::OK_200) {
                                     throw std::invalid_argument(
-                                        "Illegal param: invalid \"image_url\", failed to fetch image from URL: " + img +
+                                        R"(Illegal param: invalid "url", failed to fetch image from URL: )" + url +
                                         ", status: " + std::to_string(resp ? resp->status : -1) +
                                         ", reason: " + (resp ? resp->reason : "unknown"));
                                 }
                                 std::vector<uint8_t> img_buff(resp->body.begin(), resp->body.end());
-                                ptr->images.push_back(get_clip_image(std::move(img_buff)));
+                                ptr->multimedias.push_back(get_clip_image(std::move(img_buff)));
                             }
-                            n_img++;
-                            continue;
+                            n_mtmd++;
                         }
-                        if (part.contains("text")) {
+                        // input_audio
+                        else if (part_type == "input_audio") {
+                            // process audio
+                            const json & audio = part.at("input_audio");
+                            if (audio.empty() || !audio.is_object()) {
+                                throw std::invalid_argument(
+                                    R"(Illegal param: "input_audio" must be a non-empty object)");
+                            }
+                            std::string format = json_value(audio, "format", std::string());
+                            if (format != "wav" && format != "mp3") {
+                                throw std::invalid_argument(
+                                    R"(Illegal param: "input_audio" must have a "format" field with value "wav" or "mp3")");
+                            }
+                            std::string data = json_value(audio, "data", std::string());
+                            if (data.empty()) {
+                                throw std::invalid_argument(
+                                    R"(Illegal param: "input_audio" must have a "data" field with non-empty value)");
+                            }
+                            try {
+                                std::vector<uint8_t> aud_buff = decode_base64(data);
+                                ptr->multimedias.push_back(get_clip_audio(std::move(aud_buff)));
+                            } catch (const std::exception & e) {
+                                throw std::invalid_argument(
+                                    R"(Illegal param: "data" of "input_audio" must be a valid base64-encoded string)");
+                            }
+                            n_mtmd++;
+                        }
+                        // text
+                        else if (part_type == "text") {
                             if (!content.empty()) {
                                 content += "\n";
                             }
-                            for (int32_t i = 0; i < n_img; i++) {
-                                content += "<IMG/>\n";
+                            for (int32_t i = 0; i < n_mtmd; i++) {
+                                content += "<MTMD/>\n";
                             }
-                            content += part.at("text").get<std::string>();
-                            n_img = 0;
+                            content += json_value(part, "text", std::string());
+                            n_mtmd = 0;
+                        }
+                        // other
+                        else {
+                            throw std::invalid_argument(R"(Illegal param: "content" item with type ")" + part_type +
+                                                        R"(" is not supported)");
                         }
                     }
-                    for (int32_t i = 0; i < n_img; i++) {
-                        content += "\n<IMG/>";
+                    for (int32_t i = 0; i < n_mtmd; i++) {
+                        content += "\n<MTMD/>";
                     }
                 }
                 // illegal
@@ -2057,15 +2135,15 @@ struct completions_task : btask {
     [[nodiscard]] json & get_stream_options() const override { return req->stream_options; }
 
     // input
-    std::unique_ptr<RatelimitTokenBucket>                       token_bucket = nullptr;
-    std::vector<std::variant<llama_tokens, llama_image_tokens>> tokenized_prompts;
-    common_chat_format            tokenized_prompts_format         = COMMON_CHAT_FORMAT_CONTENT_ONLY;
-    bool                          tokenized_prompts_include_images = false;
-    bool                          tokenized_prompts_include_tools  = false;
-    llama_token                   tool_call_start_token            = LLAMA_TOKEN_NULL;  // move from chat_complete_req
-    std::string                   tool_call_start_token_word;                           // move from chat_complete_req
-    std::vector<std::string>      tool_call_start_words;                                // move from chat_complete_req
-    size_t                        tool_call_start_words_longest_length = 0;             // move from chat_complete_req
+    std::unique_ptr<RatelimitTokenBucket>                            token_bucket = nullptr;
+    std::vector<std::variant<llama_tokens, llama_multimodal_tokens>> tokenized_prompts;
+    common_chat_format            tokenized_prompts_format              = COMMON_CHAT_FORMAT_CONTENT_ONLY;
+    bool                          tokenized_prompts_include_multimedias = false;
+    bool                          tokenized_prompts_include_tools       = false;
+    llama_token                   tool_call_start_token = LLAMA_TOKEN_NULL;  // move from chat_complete_req
+    std::string                   tool_call_start_token_word;                // move from chat_complete_req
+    std::vector<std::string>      tool_call_start_words;                     // move from chat_complete_req
+    size_t                        tool_call_start_words_longest_length = 0;  // move from chat_complete_req
     std::string                   cmpl_id;
     std::unique_ptr<complete_req> req;
 
@@ -2521,10 +2599,10 @@ struct btask_result {
 struct httpserver_metrics {
     /* STABLE DIFFUSION */
 
-    std::atomic<double>   t_image_forwarded_total       = 0;
-    std::atomic<uint64_t> n_image_steps_forwarded_total = 0;
-    std::atomic<double>   t_image_reversed_total        = 0;
-    std::atomic<uint64_t> n_image_steps_reversed_total  = 0;
+    std::atomic<double>   t_image_forwarded_total      = 0;
+    std::atomic<uint64_t> n_mtmd_steps_forwarded_total = 0;
+    std::atomic<double>   t_image_reversed_total       = 0;
+    std::atomic<uint64_t> n_mtmd_steps_reversed_total  = 0;
 
     /* LLAMA */
 
@@ -2535,14 +2613,14 @@ struct httpserver_metrics {
     std::atomic<uint64_t> n_tokens_drafted_total          = 0;
     std::atomic<uint64_t> n_tokens_drafted_accepted_total = 0;
 
-    void on_image_forwarded(double t, uint64_t n_steps) {
-        t_image_forwarded_total       = t_image_forwarded_total + t;
-        n_image_steps_forwarded_total = n_image_steps_forwarded_total + n_steps;
+    void on_mtmd_forwarded(double t, uint64_t n_steps) {
+        t_image_forwarded_total      = t_image_forwarded_total + t;
+        n_mtmd_steps_forwarded_total = n_mtmd_steps_forwarded_total + n_steps;
     }
 
-    void on_image_reversed(double t, uint64_t n_steps) {
-        t_image_reversed_total       = t_image_reversed_total + t;
-        n_image_steps_reversed_total = n_image_steps_reversed_total + n_steps;
+    void on_mtmd_reversed(double t, uint64_t n_steps) {
+        t_image_reversed_total      = t_image_reversed_total + t;
+        n_mtmd_steps_reversed_total = n_mtmd_steps_reversed_total + n_steps;
     }
 
     void on_tokens_prefilled(double t, uint64_t n) {
@@ -3199,12 +3277,12 @@ struct httpserver {
     std::mutex llm_ctx_clip_mtx;
     clip_ctx * llm_ctx_clip = nullptr;
 
-    struct cache_image_entry {
-        std::vector<llama_image_tokens> tokens;
-        int64_t                         last_used = 0;
+    struct cache_multimodal_entry {
+        std::vector<llama_multimodal_tokens> tokens;
+        int64_t                              last_used = 0;
     };
 
-    std::unordered_map<std::string, cache_image_entry> cache_images;
+    std::unordered_map<std::string, cache_multimodal_entry> cache_multimodals;
 
     // speculative decoding
     common_init_result  llm_init_draft;
@@ -3556,19 +3634,19 @@ struct httpserver {
                         if (task->n_prefilled == 0 && cache_prompt) {
                             llama_tokens tokens;
                             // get tokens of plain text
-                            if (!task->tokenized_prompts_include_images) {
+                            if (!task->tokenized_prompts_include_multimedias) {
                                 tokens = std::get<llama_tokens>(task->tokenized_prompts[0]);
                             }
-                            // get tokens of vision
+                            // get tokens of multimedia
                             else {
                                 for (const auto & tokenized_prompt : task->tokenized_prompts) {
                                     if (std::holds_alternative<llama_tokens>(tokenized_prompt)) {
                                         llama_tokens tokenized_text = std::get<llama_tokens>(tokenized_prompt);
                                         tokens.insert(tokens.end(), tokenized_text.begin(), tokenized_text.end());
                                     } else {
-                                        llama_image_tokens tokenized_image =
-                                            std::get<llama_image_tokens>(tokenized_prompt);
-                                        llama_tokens dummy_tokens(tokenized_image.n_pos, tokenized_image.dummy_token);
+                                        llama_multimodal_tokens tokenized_mtmd =
+                                            std::get<llama_multimodal_tokens>(tokenized_prompt);
+                                        llama_tokens dummy_tokens(tokenized_mtmd.n_pos, tokenized_mtmd.dummy_token);
                                         tokens.insert(tokens.end(), dummy_tokens.begin(), dummy_tokens.end());
                                     }
                                 }
@@ -3678,50 +3756,50 @@ struct httpserver {
                                     task->processed_tokens.insert(task->processed_tokens.end(), tokenized_text.begin(),
                                                                   tokenized_text.end());
                                 }
-                                // image
+                                // multimedia
                                 else {
-                                    auto tokenized_image =
-                                        std::get<llama_image_tokens>(std::move(task->tokenized_prompts[i_prompt]));
-                                    const int32_t n_image   = tokenized_image.n_tokens;
-                                    const int32_t n_image_s = task->n_prefilled - c_prefilled;
-                                    if (n_image_s < tokenized_image.n_pos) {
-                                        const int32_t                   n_image_d = tokenized_image.n_pos;
+                                    auto tokenized_mtmd =
+                                        std::get<llama_multimodal_tokens>(std::move(task->tokenized_prompts[i_prompt]));
+                                    const int32_t n_mtmd   = tokenized_mtmd.n_tokens;
+                                    const int32_t n_mtmd_s = task->n_prefilled - c_prefilled;
+                                    if (n_mtmd_s < tokenized_mtmd.n_pos) {
+                                        const int32_t                        n_mtmd_d = tokenized_mtmd.n_pos;
                                         // in batch
-                                        llama_image_embed_batch_wrapper batch_image;
+                                        llama_multimodal_embed_batch_wrapper batch_mtmd;
                                         //// mrope
                                         if (llm_model_rope_mrope) {
                                             std::vector<llama_pos> mrope_pos;
-                                            clip_image_size &      is = tokenized_image.size;
+                                            clip_image_size &      is = tokenized_mtmd.size;
                                             const int32_t          ps = clip_get_patch_size(llm_ctx_clip) * 2;
                                             const int32_t          ph = is.height / ps + (is.height % ps > 0);
                                             const int32_t          pw = is.width / ps + (is.width % ps > 0);
-                                            mrope_pos.resize(n_image * 4);
+                                            mrope_pos.resize(n_mtmd * 4);
                                             for (int32_t y = 0; y < ph; y++) {
                                                 for (int32_t x = 0; x < pw; x++) {
-                                                    const int i                = y * pw + x;
-                                                    mrope_pos[i]               = task->pos;
-                                                    mrope_pos[i + n_image * 1] = task->pos + y;
-                                                    mrope_pos[i + n_image * 2] = task->pos + x;
-                                                    mrope_pos[i + n_image * 3] = 0;
+                                                    const int i               = y * pw + x;
+                                                    mrope_pos[i]              = task->pos;
+                                                    mrope_pos[i + n_mtmd * 1] = task->pos + y;
+                                                    mrope_pos[i + n_mtmd * 2] = task->pos + x;
+                                                    mrope_pos[i + n_mtmd * 3] = 0;
                                                 }
                                             }
-                                            batch_image = llama_image_embed_batch_wrapper(
-                                                tokenized_image.embed.data(), n_image, mrope_pos.data(), seq_id);
+                                            batch_mtmd = llama_multimodal_embed_batch_wrapper(
+                                                tokenized_mtmd.embed.data(), n_mtmd, mrope_pos.data(), seq_id);
                                         }
                                         //// non-mrope
                                         else {
-                                            batch_image = llama_image_embed_batch_wrapper(tokenized_image.embed.data(),
-                                                                                          n_image, task->pos, seq_id);
+                                            batch_mtmd = llama_multimodal_embed_batch_wrapper(
+                                                tokenized_mtmd.embed.data(), n_mtmd, task->pos, seq_id);
                                         }
-                                        task->pos += n_image_d;
-                                        task->n_prefilled += n_image_d;
-                                        llm_kv_cache_used += n_image_d;
+                                        task->pos += n_mtmd_d;
+                                        task->n_prefilled += n_mtmd_d;
+                                        llm_kv_cache_used += n_mtmd_d;
                                         // decode immediately
                                         if (clip_is_gemma3(llm_ctx_clip)) {
                                             llama_set_causal_attn(llm_ctx, false);
                                         }
                                         const int32_t decoded_image =
-                                            decode_completion_task_batch(llm_ctx, batch_image.temp, batch_task_ptrs);
+                                            decode_completion_task_batch(llm_ctx, batch_mtmd.temp, batch_task_ptrs);
                                         if (clip_is_gemma3(llm_ctx_clip)) {
                                             llama_set_causal_attn(llm_ctx, false);
                                         }
@@ -3734,9 +3812,9 @@ struct httpserver {
                                         }
                                     }
                                     // accumulate prefilled
-                                    c_prefilled += tokenized_image.n_pos;
+                                    c_prefilled += tokenized_mtmd.n_pos;
                                     // append processed tokens
-                                    llama_tokens dummy_tokens(tokenized_image.n_pos, tokenized_image.dummy_token);
+                                    llama_tokens dummy_tokens(tokenized_mtmd.n_pos, tokenized_mtmd.dummy_token);
                                     task->processed_tokens.insert(task->processed_tokens.end(), dummy_tokens.begin(),
                                                                   dummy_tokens.end());
                                 }
@@ -4342,7 +4420,7 @@ struct httpserver {
                                 std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
                         }
                         // speculative
-                        if (!task->tokenized_prompts_include_images) {
+                        if (!task->tokenized_prompts_include_multimedias) {
                             task->drafted_tokens.clear();
                             //// draft
                             if (llm_ctx_draft != nullptr) {
@@ -4575,7 +4653,7 @@ struct httpserver {
             if (task->progressed_steps[0] == 0) {
                 task->t_start_reverse = ggml_time_us();
                 task->t_forwarded     = double(task->t_start_reverse - task->t_start_forward) / 1.e3;
-                metrics.on_image_forwarded(task->t_forwarded, task->n_forward_steps);
+                metrics.on_mtmd_forwarded(task->t_forwarded, task->n_forward_steps);
                 task->p_forwarded_sps = 1.e3 / task->t_forwarded * task->n_forward_steps;
             }
             bool incomplete = false;
@@ -4635,7 +4713,7 @@ struct httpserver {
             }
             // stats
             task->t_reversed = double(ggml_time_us() - task->t_start_reverse) / 1.e3;
-            metrics.on_image_reversed(task->t_reversed, task->n_reverse_steps);
+            metrics.on_mtmd_reversed(task->t_reversed, task->n_reverse_steps);
             task->p_reversed_sps = 1.e3 / task->t_reversed * task->n_reverse_steps;
             // output
             if (opened) {
@@ -4752,74 +4830,119 @@ struct httpserver {
         return httplib::OK_200;
     }
 
-    std::vector<llama_image_tokens> cache_tokenize_image(const char * rid, std::unique_ptr<clip_image> && img) {
+    std::vector<llama_multimodal_tokens> cache_tokenize_multimedia(const char *                        rid,
+                                                                   std::unique_ptr<clip_multimedia> && mtmd) {
         if (llm_ctx_clip == nullptr) {
             return {};
         }
 
-        std::vector<llama_image_tokens> result;
+        std::string type = mtmd->is_audio ? "audio" : "image";
+
+        std::vector<llama_multimodal_tokens> result;
 
         std::unique_lock<std::mutex> lock(llm_ctx_clip_mtx);
 
-        // check if image hash is empty or cache is disabled.
-        if (img->hash.empty() || params.max_projected_cache <= 0) {
+        // check if resource hash is empty or cache is disabled.
+        if (mtmd->hash.empty() || params.max_projected_cache <= 0) {
             SRV_INFV(2,
-                     "rid %s | disable image cache, "
-                     "hash = %s, n_caching = %zu, tokenizing...\n",
-                     rid, img->hash.c_str(), cache_images.size());
-            result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img->ptr.get());
+                     "rid %s | tokenizing, "
+                     "type = %s, hash = %s\n",
+                     rid, type.c_str(), mtmd->hash.c_str());
+            if (mtmd->is_audio) {
+                result = tokenize_audio(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+            } else {
+                result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+            }
+            if (common_log_verbosity_thold >= 2) {
+                int32_t n_tokens     = 0;
+                int32_t n_pos        = 0;
+                size_t  n_embed_size = 0;
+                for (const auto & token : result) {
+                    n_tokens += token.n_tokens;
+                    n_pos += token.n_pos;
+                    n_embed_size += token.embed.size() * sizeof(float);
+                }
+                SRV_INF(
+                    "rid %s | tokenized,  "
+                    "type = %s, hash = %s, n_tokens = %d, n_pos = %d, n_embed_size = %zu kib\n",
+                    rid, type.c_str(), mtmd->hash.c_str(), n_tokens, n_pos, n_embed_size >> 10);
+            }
         }
-        // check if image is already cached.
-        else if (auto hit = cache_images.find(img->hash); hit != cache_images.end()) {
-            SRV_INFV(2,
-                     "rid %s | hit image cache, "
-                     "hash = %s, n_caching = %zu\n",
-                     rid, img->hash.c_str(), cache_images.size());
+        // check if resource is already cached.
+        else if (auto hit = cache_multimodals.find(mtmd->hash); hit != cache_multimodals.end()) {
             hit->second.last_used = ggml_time_us();
             result                = hit->second.tokens;
+            if (common_log_verbosity_thold >= 2) {
+                int32_t n_tokens     = 0;
+                int32_t n_pos        = 0;
+                size_t  n_embed_size = 0;
+                for (const auto & token : result) {
+                    n_tokens += token.n_tokens;
+                    n_pos += token.n_pos;
+                    n_embed_size += token.embed.size() * sizeof(float);
+                }
+                SRV_INF(
+                    "rid %s | cached,     "
+                    "type = %s, hash = %s, n_tokens = %d, n_pos = %d, n_embed_size = %zu kib\n",
+                    rid, type.c_str(), mtmd->hash.c_str(), n_tokens, n_pos, n_embed_size >> 10);
+            }
         }
-        // cache image.
+        // cache resource.
         else {
             // evict the oldest image if the cache is full.
-            if (int32_t(cache_images.size()) >= params.max_projected_cache) {
+            if (int32_t(cache_multimodals.size()) >= params.max_projected_cache) {
                 // find the oldest image,
                 // remove it and add the new image.
-                auto oldest_it = cache_images.begin();
-                for (auto it = cache_images.begin(); it != cache_images.end(); ++it) {
+                auto oldest_it = cache_multimodals.begin();
+                for (auto it = cache_multimodals.begin(); it != cache_multimodals.end(); ++it) {
                     if (it->second.last_used < oldest_it->second.last_used) {
                         oldest_it = it;
                     }
                 }
-                SRV_INFV(2,
-                         "rid %s | evict image cache, "
-                         "hash = %s, n_caching = %zu\n",
-                         rid, oldest_it->first.c_str(), cache_images.size());
-                cache_images.erase(oldest_it);
+                auto oldest_mtmd = oldest_it->second.tokens;
+                if (common_log_verbosity_thold >= 2) {
+                    int32_t n_tokens     = 0;
+                    int32_t n_pos        = 0;
+                    size_t  n_embed_size = 0;
+                    for (const auto & token : oldest_mtmd) {
+                        n_tokens += token.n_tokens;
+                        n_pos += token.n_pos;
+                        n_embed_size += token.embed.size() * sizeof(float);
+                    }
+                    SRV_INF(
+                        "rid %s | decached,   "
+                        "type = %s, hash = %s, n_tokens = %d, n_pos = %d, n_embed_size = %zu kib\n",
+                        rid, type.c_str(), oldest_it->first.c_str(), n_tokens, n_pos, n_embed_size >> 10);
+                }
+                cache_multimodals.erase(oldest_it);
             }
             SRV_INFV(2,
-                     "rid %s | miss image cache, "
-                     "hash = %s, n_caching = %zu, tokenizing...\n",
-                     rid, img->hash.c_str(), cache_images.size());
-            result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, img->ptr.get());
-            cache_images[img->hash] = { result, ggml_time_us() };
+                     "rid %s | tokenizing, "
+                     "type = %s, hash = %s\n",
+                     rid, type.c_str(), mtmd->hash.c_str());
+            if (mtmd->is_audio) {
+                result = tokenize_audio(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+            } else {
+                result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+            }
+            if (common_log_verbosity_thold >= 2) {
+                int32_t n_tokens     = 0;
+                int32_t n_pos        = 0;
+                size_t  n_embed_size = 0;
+                for (const auto & token : result) {
+                    n_tokens += token.n_tokens;
+                    n_pos += token.n_pos;
+                    n_embed_size += token.embed.size() * sizeof(float);
+                }
+                SRV_INF(
+                    "rid %s | tokenized,  "
+                    "type = %s, hash = %s, n_tokens = %d, n_pos = %d, n_embed_size = %zu kib\n",
+                    rid, type.c_str(), mtmd->hash.c_str(), n_tokens, n_pos, n_embed_size >> 10);
+            }
+            cache_multimodals[mtmd->hash] = { result, ggml_time_us() };
         }
 
         lock.unlock();
-
-        if (common_log_verbosity_thold >= 2) {
-            int32_t n_tokens     = 0;
-            int32_t n_pos        = 0;
-            size_t  n_embed_size = 0;
-            for (const auto & token : result) {
-                n_tokens += token.n_tokens;
-                n_pos += token.n_pos;
-                n_embed_size += token.embed.size() * sizeof(float);
-            }
-            SRV_INF(
-                "rid %s | tokenized image, "
-                "hash = %s, n_tokens = %d, n_pos = %d, n_embed_size = %zu kib\n",
-                rid, img->hash.c_str(), n_tokens, n_pos, n_embed_size >> 10);
-        }
 
         return result;
     }
@@ -4837,9 +4960,9 @@ struct httpserver {
 
     int32_t handle_metrics(const httplib::Request & request, httplib::Response & response) {
         double   t_image_forwarded_total         = metrics.t_image_forwarded_total.load();
-        uint64_t n_image_steps_forwarded_total   = metrics.n_image_steps_forwarded_total.load();
+        uint64_t n_mtmd_steps_forwarded_total    = metrics.n_mtmd_steps_forwarded_total.load();
         double   t_image_reversed_total          = metrics.t_image_reversed_total.load();
-        uint64_t n_image_steps_reversed_total    = metrics.n_image_steps_reversed_total.load();
+        uint64_t n_mtmd_steps_reversed_total     = metrics.n_mtmd_steps_reversed_total.load();
         double   t_tokens_prefilled_total        = metrics.t_tokens_prefilled_total.load();
         uint64_t n_tokens_prefilled_total        = metrics.n_tokens_prefilled_total.load();
         double   t_tokens_decoded_total          = metrics.t_tokens_decoded_total.load();
@@ -4854,7 +4977,7 @@ struct httpserver {
                     {
                         { "name", "image_forward_total" },
                         { "help", "Number of image forwarded (steps) in diffusion processing." },
-                        { "value", n_image_steps_forwarded_total },
+                        { "value", n_mtmd_steps_forwarded_total },
                     },
                     {
                         { "name", "image_forward_seconds_total" },
@@ -4864,7 +4987,7 @@ struct httpserver {
                     {
                         { "name", "image_reverse_total" },
                         { "help", "Number of image reversed (steps) in diffusion processing." },
-                        { "value", n_image_steps_reversed_total },
+                        { "value", n_mtmd_steps_reversed_total },
                     },
                     {
                         { "name", "image_reverse_seconds_total" },
@@ -4912,15 +5035,15 @@ struct httpserver {
                     {
                         { "name", "image_forward_steps_per_second" },
                         { "help", "Average image forwarded diffusion throughput in steps/s." },
-                        { "value", n_image_steps_forwarded_total ?
-                                       1.e3 / double(t_image_forwarded_total) * double(n_image_steps_forwarded_total) :
+                        { "value", n_mtmd_steps_forwarded_total ?
+                                       1.e3 / double(t_image_forwarded_total) * double(n_mtmd_steps_forwarded_total) :
                                        0. },
                     },
                     {
                         { "name", "image_reverse_steps_per_second" },
                         { "help", "Average image reversed diffusion throughput in steps/s." },
-                        { "value", n_image_steps_reversed_total ?
-                                       1.e3 / double(t_image_reversed_total) * double(n_image_steps_reversed_total) :
+                        { "value", n_mtmd_steps_reversed_total ?
+                                       1.e3 / double(t_image_reversed_total) * double(n_mtmd_steps_reversed_total) :
                                        0. },
                     },
 
@@ -5164,7 +5287,7 @@ struct httpserver {
 
         int32_t n_prefilling_request = 0;
 
-        std::vector<std::variant<llama_tokens, llama_image_tokens>> tokenized_prompts;
+        std::vector<std::variant<llama_tokens, llama_multimodal_tokens>> tokenized_prompts;
         /* PLAIN TEXT */
         {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->prompt, true, true);
@@ -5284,9 +5407,9 @@ struct httpserver {
 
         int32_t n_prefilling_request = 0;
 
-        std::vector<std::variant<llama_tokens, llama_image_tokens>> tokenized_prompts;
+        std::vector<std::variant<llama_tokens, llama_multimodal_tokens>> tokenized_prompts;
         /* PLAIN TEXT */
-        if (req->images.empty()) {
+        if (req->multimedias.empty()) {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
             if (n_prefilling_request >= llm_ctx_size) {
@@ -5318,27 +5441,27 @@ struct httpserver {
         }
         /* VISION */
         else {
-            const std::string image_sign = "<IMG/>";
+            const std::string mtmd_sign = "<MTMD/>";
 
             std::string prompt = req->chat_params.prompt;
 
-            int32_t n_image   = int32_t(req->images.size());
-            int32_t i_image   = -1;
-            size_t  image_pos = prompt.find(image_sign);
-            while (image_pos != std::string::npos && ++i_image < n_image) {
+            auto    n_mtmd   = int32_t(req->multimedias.size());
+            int32_t i_mtmd   = -1;
+            size_t  mtmd_pos = prompt.find(mtmd_sign);
+            while (mtmd_pos != std::string::npos && ++i_mtmd < n_mtmd) {
                 // process text
-                if (const std::string text = prompt.substr(0, image_pos); !text.empty()) {
+                if (const std::string text = prompt.substr(0, mtmd_pos); !text.empty()) {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, text, tokenized_prompts.empty(), true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                 }
 
                 // process image
-                std::vector<llama_image_tokens> tokenized_images =
-                    cache_tokenize_image(req->get_id(), std::move(req->images[i_image]));
-                if (tokenized_images.empty()) {
+                std::vector<llama_multimodal_tokens> tokenized_mtmds =
+                    cache_tokenize_multimedia(req->get_id(), std::move(req->multimedias[i_mtmd]));
+                if (tokenized_mtmds.empty()) {
                     return send_string(request, response, httplib::InternalServerError_500,
-                                       "Failed to embed the image");
+                                       "Failed to embed the multimedia");
                 }
                 bool add_bos = tokenized_prompts.empty();
                 // minicpmv
@@ -5359,9 +5482,9 @@ struct httpserver {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<image>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // overview <IMG/>
-                    llama_image_tokens overview_tokenized_image = tokenized_images.front();
-                    clip_image_size    grid_size                = overview_tokenized_image.grid_size;
+                    // overview <MTMD/>
+                    llama_multimodal_tokens overview_tokenized_image = tokenized_mtmds.front();
+                    clip_image_size         grid_size                = overview_tokenized_image.grid_size;
                     n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
                     // </image>
@@ -5369,8 +5492,8 @@ struct httpserver {
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                     // process tile images
-                    tokenized_images.erase(tokenized_images.begin());
-                    if (!tokenized_images.empty()) {
+                    tokenized_mtmds.erase(tokenized_mtmds.begin());
+                    if (!tokenized_mtmds.empty()) {
                         const int32_t n_x     = grid_size.width;
                         const int32_t n_y     = grid_size.height;
                         const int32_t version = clip_is_minicpmv(llm_ctx_clip);
@@ -5392,10 +5515,10 @@ struct httpserver {
                                 tokenized_text = common_tokenize(llm_vocab, ifmt, false, true);
                                 n_prefilling_request += int32_t(tokenized_text.size());
                                 tokenized_prompts.emplace_back(std::move(tokenized_text));
-                                // tile <IMG/>
-                                llama_image_tokens tokenized_image = tokenized_images[y * n_x + x];
-                                n_prefilling_request += int32_t(tokenized_image.n_pos);
-                                tokenized_prompts.emplace_back(std::move(tokenized_image));
+                                // tile <MTMD/>
+                                llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds[y * n_x + x];
+                                n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                                tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                                 // </slice> | </image>
                                 tokenized_text = common_tokenize(llm_vocab, ofmt, false, true);
                                 n_prefilling_request += int32_t(tokenized_text.size());
@@ -5432,19 +5555,19 @@ struct httpserver {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|image_start|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    llama_image_tokens overview_tokenized_image = tokenized_images.front();
-                    clip_image_size    grid_size                = overview_tokenized_image.grid_size;
+                    llama_multimodal_tokens overview_tokenized_image = tokenized_mtmds.front();
+                    clip_image_size         grid_size                = overview_tokenized_image.grid_size;
                     // process tile images
-                    tokenized_images.erase(tokenized_images.begin());
-                    if (!tokenized_images.empty()) {
+                    tokenized_mtmds.erase(tokenized_mtmds.begin());
+                    if (!tokenized_mtmds.empty()) {
                         const int32_t n_x = grid_size.width;
                         const int32_t n_y = grid_size.height;
                         for (int y = 0; y < n_y; y++) {
                             for (int x = 0; x < n_x; x++) {
-                                // slice <IMG/>
-                                llama_image_tokens tokenized_image = tokenized_images[y * n_x + x];
-                                n_prefilling_request += int32_t(tokenized_image.n_pos);
-                                tokenized_prompts.emplace_back(std::move(tokenized_image));
+                                // slice <MTMD/>
+                                llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds[y * n_x + x];
+                                n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                                tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                                 // <|tile_x_separator|>
                                 if (x != n_x - 1) {
                                     tokenized_text = common_tokenize(llm_vocab, "<|tile_x_separator|>", false, true);
@@ -5462,7 +5585,7 @@ struct httpserver {
                     tokenized_text = common_tokenize(llm_vocab, "<|image|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // overview <IMG/>
+                    // overview <MTMD/>
                     n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
                     tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
                     // <|image_end|>
@@ -5479,10 +5602,10 @@ struct httpserver {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|vision_start|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
+                    // <MTMD/>
+                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                     // <|vision_end|>
                     tokenized_text = common_tokenize(llm_vocab, "<|vision_end|>", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5497,10 +5620,10 @@ struct httpserver {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|start_of_image|>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
+                    // <MTMD/>
+                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                     // <|end_of_image|>
                     tokenized_text = common_tokenize(llm_vocab, "<|end_of_image|>", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5517,10 +5640,10 @@ struct httpserver {
                         common_tokenize(llm_vocab, "<fake_token_around_image><global-img>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
+                    // <MTMD/>
+                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                     // <fake_token_around_image>
                     tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image>", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5530,12 +5653,12 @@ struct httpserver {
                 // NB(thxCode): clip_is_pixtral is a patch.
                 else if (clip_is_pixtral(llm_ctx_clip)) {
                     // format:
-                    // (image) <IMG/>
+                    // (image) [IMG_END]
 
-                    // <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
+                    // <MTMD/>
+                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                     // [IMG_END]
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "[IMG_END]", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5551,10 +5674,10 @@ struct httpserver {
                     llama_tokens tokenized_text = common_tokenize(llm_vocab, "<img>", add_bos, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
+                    // <MTMD/>
+                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
                     // </img>
                     tokenized_text = common_tokenize(llm_vocab, "</img>", false, true);
                     n_prefilling_request += int32_t(tokenized_text.size());
@@ -5562,14 +5685,15 @@ struct httpserver {
                 }
                 // others
                 else {
-                    // <IMG/>
-                    llama_image_tokens tokenized_image = tokenized_images.front();
-                    n_prefilling_request += int32_t(tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_image));
+                    // <MTMD/>
+                    for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                    }
                 }
 
-                prompt    = prompt.substr(image_pos + image_sign.size());
-                image_pos = prompt.find(image_sign);
+                prompt   = prompt.substr(mtmd_pos + mtmd_sign.size());
+                mtmd_pos = prompt.find(mtmd_sign);
             }
 
             // process remain text
@@ -5593,9 +5717,9 @@ struct httpserver {
             return send_json(request, response, httplib::BadRequest_400, "Illegal param: empty completions tokens");
         }
 
-        bool tokenized_prompts_include_images = !req->images.empty();
-        req->images.clear();  // release images asap
-        req->images.shrink_to_fit();
+        bool tokenized_prompts_include_multimedias = !req->multimedias.empty();
+        req->multimedias.clear();  // release multimedias asap
+        req->multimedias.shrink_to_fit();
 
         bool tokenized_prompts_include_tools = !req->tools.empty();
 
@@ -5639,24 +5763,24 @@ struct httpserver {
 
         std::unique_ptr<completions_task> task =
             std::make_unique<completions_task>(get_task_id(), request.is_connection_closed);
-        task->token_bucket                         = std::move(token_bucket);
-        task->tokenized_prompts                    = std::move(tokenized_prompts);
-        task->tokenized_prompts_format             = req->chat_params.format;
-        task->tokenized_prompts_include_images     = tokenized_prompts_include_images;
-        task->tokenized_prompts_include_tools      = tokenized_prompts_include_tools;
-        task->n_decoding_budget                    = n_decoding_budget;
-        task->n_prefilling_request                 = n_prefilling_request;
-        task->sampler                              = sampler;
-        task->sampler_draft                        = sampler_draft;
-        task->tool_call_stop_fast                  = tool_call_stop_fast;
-        task->tool_call_start_token                = req->tool_call_start_token;
-        task->tool_call_start_token_word           = req->tool_call_start_token_word;
-        task->tool_call_start_words                = std::move(req->tool_call_start_words);
-        task->tool_call_start_words_longest_length = req->tool_call_start_words_longest_length;
-        task->cmpl_id                              = gen_chat_completion_id();
-        task->reasoning_finished                   = reasoning_finished;
-        task->req                                  = std::move(req);
-        task->t_start_prefill                      = ggml_time_us();
+        task->token_bucket                          = std::move(token_bucket);
+        task->tokenized_prompts                     = std::move(tokenized_prompts);
+        task->tokenized_prompts_format              = req->chat_params.format;
+        task->tokenized_prompts_include_multimedias = tokenized_prompts_include_multimedias;
+        task->tokenized_prompts_include_tools       = tokenized_prompts_include_tools;
+        task->n_decoding_budget                     = n_decoding_budget;
+        task->n_prefilling_request                  = n_prefilling_request;
+        task->sampler                               = sampler;
+        task->sampler_draft                         = sampler_draft;
+        task->tool_call_stop_fast                   = tool_call_stop_fast;
+        task->tool_call_start_token                 = req->tool_call_start_token;
+        task->tool_call_start_token_word            = req->tool_call_start_token_word;
+        task->tool_call_start_words                 = std::move(req->tool_call_start_words);
+        task->tool_call_start_words_longest_length  = req->tool_call_start_words_longest_length;
+        task->cmpl_id                               = gen_chat_completion_id();
+        task->reasoning_finished                    = reasoning_finished;
+        task->req                                   = std::move(req);
+        task->t_start_prefill                       = ggml_time_us();
 
         SRV_INFV(2, "rid %s | prefill_t = %d, decode_budget = %d\n", task->get_r_id().c_str(),
                  task->n_prefilling_request, task->n_decoding_budget);
