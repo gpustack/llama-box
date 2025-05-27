@@ -369,6 +369,7 @@ server:
   -s,    --seed N                 RNG seed (default: -1, use random seed for -1)
          --no-flash-attn          Disable Flash Attention, which can increase (V)RAM but reduce computation
   -fa,   --flash-attn             Enable Flash Attention, which can reduce (V)RAM but increase computation
+         --swa-full               Use full-size SWA cache (default disabled)
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
          --images                 Enable image endpoint (default: disabled)

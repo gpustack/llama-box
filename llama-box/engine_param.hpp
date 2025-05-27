@@ -222,6 +222,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server",                             "-s,    --seed N",                               "RNG seed (default: %d, use random seed for %d)", llm_params.sampling.seed, LLAMA_DEFAULT_SEED });
     opts.push_back({ "server",                             "       --no-flash-attn",                        "Disable Flash Attention, which can increase (V)RAM but reduce computation" });
     opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention, which can reduce (V)RAM but increase computation" });
+    opts.push_back({ "server",                             "       --swa-full",                             "Use full-size SWA cache (default %s)", llm_params.swa_full ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --images",                               "Enable image endpoint (default: %s)", params_.hs_params.endpoint_images ? "enabled" : "disabled" });
@@ -656,13 +657,18 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 continue;
             }
 
+            if (!strcmp(flag, "--no-flash-attn")) {
+                params_.hs_params.llm_params.flash_attn = false;
+                continue;
+            }
+
             if (!strcmp(flag, "-fa") || !strcmp(flag, "--flash-attn")) {
                 params_.hs_params.llm_params.flash_attn = true;
                 continue;
             }
 
-            if (!strcmp(flag, "--no-flash-attn")) {
-                params_.hs_params.llm_params.flash_attn = false;
+            if (!strcmp(flag, "--swa-full")) {
+                params_.hs_params.llm_params.swa_full = true;
                 continue;
             }
 
