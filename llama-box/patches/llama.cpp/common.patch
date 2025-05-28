@@ -42,10 +42,10 @@ index 2afa9b2d..e7cfb5b6 100644
          llama_kv_self_clear(lctx);
          llama_synchronize(lctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 85b4324b..e5497b31 100644
+index ad77cae2..8e11338e 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@ -892,9 +892,9 @@ int llama_context::decode(llama_batch & inp_batch) {
+@@ -896,9 +896,9 @@ int llama_context::decode(llama_batch & inp_batch) {
          }
      }
  

@@ -1,8 +1,8 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 78af5eaf..6eb755cf 100644
+index 7584639b..92c1e8a8 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
-@@ -488,6 +488,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
+@@ -491,6 +491,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
      delete tmpls;
  }
  
@@ -16,7 +16,7 @@ index 78af5eaf..6eb755cf 100644
  bool common_chat_templates_was_explicit(const struct common_chat_templates * tmpls) {
      return tmpls->has_explicit_template;
  }
-@@ -1748,6 +1755,83 @@ static common_chat_params common_chat_templates_apply_jinja(
+@@ -1798,6 +1805,83 @@ static common_chat_params common_chat_templates_apply_jinja(
      return common_chat_params_init_generic(tmpl, params);
  }
  
@@ -100,7 +100,7 @@ index 78af5eaf..6eb755cf 100644
  // Legacy template route (adhoc C++ implementation of known templates), forward to llama_chat_apply_template.
  static common_chat_params common_chat_templates_apply_legacy(
      const struct common_chat_templates * tmpls,
-@@ -1806,6 +1890,17 @@ static common_chat_params common_chat_templates_apply_legacy(
+@@ -1856,6 +1940,17 @@ static common_chat_params common_chat_templates_apply_legacy(
      return params;
  }
  
@@ -119,10 +119,10 @@ index 78af5eaf..6eb755cf 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
 diff --git a/common/chat.h b/common/chat.h
-index ce926777..6e2eff52 100644
+index f6b1d0ff..9f860910 100644
 --- a/common/chat.h
 +++ b/common/chat.h
-@@ -160,10 +160,15 @@ common_chat_templates_ptr common_chat_templates_init(
+@@ -162,10 +162,15 @@ common_chat_templates_ptr common_chat_templates_init(
                                             const std::string & bos_token_override = "",
                                             const std::string & eos_token_override = "");
  
@@ -139,7 +139,7 @@ index ce926777..6e2eff52 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 52cd7a5a..f3db442a 100644
+index 01762bea..06f12f8e 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -398,6 +398,11 @@ extern "C" {
@@ -154,7 +154,7 @@ index 52cd7a5a..f3db442a 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -496,6 +501,7 @@ extern "C" {
+@@ -497,6 +502,7 @@ extern "C" {
      LLAMA_API const struct llama_vocab * llama_model_get_vocab(const struct llama_model * model);
      LLAMA_API enum llama_rope_type       llama_model_rope_type(const struct llama_model * model);
  
@@ -162,7 +162,7 @@ index 52cd7a5a..f3db442a 100644
      LLAMA_API int32_t llama_model_n_ctx_train(const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_embd     (const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_layer    (const struct llama_model * model);
-@@ -1028,6 +1034,35 @@ extern "C" {
+@@ -1029,6 +1035,35 @@ extern "C" {
      // Chat templates
      //
  
