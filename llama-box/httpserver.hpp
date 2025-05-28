@@ -2137,9 +2137,9 @@ struct completions_task : btask {
     // input
     std::unique_ptr<RatelimitTokenBucket>                            token_bucket = nullptr;
     std::vector<std::variant<llama_tokens, llama_multimodal_tokens>> tokenized_prompts;
-    common_chat_format            tokenized_prompts_format              = COMMON_CHAT_FORMAT_CONTENT_ONLY;
-    bool                          tokenized_prompts_include_multimedias = false;
-    bool                          tokenized_prompts_include_tools       = false;
+    common_chat_syntax                                               tokenized_prompts_syntax;
+    bool                                                             tokenized_prompts_include_multimedias = false;
+    bool                                                             tokenized_prompts_include_tools       = false;
     llama_token                   tool_call_start_token = LLAMA_TOKEN_NULL;  // move from chat_complete_req
     std::string                   tool_call_start_token_word;                // move from chat_complete_req
     std::vector<std::string>      tool_call_start_words;                     // move from chat_complete_req
@@ -3952,9 +3952,9 @@ struct httpserver {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
                         SRV_INFV(2,
-                            "rid %s | batching, clean cache, "
-                            "clean kv cache, seq %d = [0, end)",
-                            rid.c_str(), seq_id);
+                                 "rid %s | batching, clean cache, "
+                                 "clean kv cache, seq %d = [0, end)",
+                                 rid.c_str(), seq_id);
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         llm_kv_cache_used -= cache.pos;
@@ -4038,9 +4038,9 @@ struct httpserver {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                             }
                             SRV_INFV(2,
-                                "rid %s | decode, "
-                                "clean kv cache, seq %d = [0, end)",
-                                rid.c_str(), seq_id);
+                                     "rid %s | decode, "
+                                     "clean kv cache, seq %d = [0, end)",
+                                     rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
                             json data = {
@@ -4074,9 +4074,9 @@ struct httpserver {
                             llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                             SRV_INFV(2,
-                                "rid %s | decode, "
-                                "clean kv cache, seq %d = [0, end)",
-                                rid.c_str(), seq_id);
+                                     "rid %s | decode, "
+                                     "clean kv cache, seq %d = [0, end)",
+                                     rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
                             json data = {
@@ -4131,9 +4131,9 @@ struct httpserver {
                                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
                                     }
                                     SRV_INFV(2,
-                                        "rid %s | decode, "
-                                        "clean kv cache, seq %d = [%d, end)",
-                                        rid.c_str(), seq_id, task->pos);
+                                             "rid %s | decode, "
+                                             "clean kv cache, seq %d = [%d, end)",
+                                             rid.c_str(), seq_id, task->pos);
                                     llm_kv_cache_used -= d;
                                     break;
                                 }
@@ -4251,8 +4251,8 @@ struct httpserver {
                                         if (!functions_str.empty()) {
                                             task->tool_call_start_found = false;
                                             try {
-                                                common_chat_msg msg =
-                                                    common_chat_parse(functions_str, task->tokenized_prompts_format);
+                                                common_chat_msg msg = common_chat_parse(functions_str, false,
+                                                                                        task->tokenized_prompts_syntax);
                                                 if (!msg.tool_calls.empty()) {
                                                     for (const common_chat_tool_call & tc : msg.tool_calls) {
                                                         task->generated_tool_calls.push_back({
@@ -4477,9 +4477,9 @@ struct httpserver {
                                     decoded_draft = llama_decode(llm_ctx_draft, batch_text_draft);
                                     if (decoded_draft != 0) {
                                         SRV_INFV(2,
-                                            "rid %s | decode draft, "
-                                            "clean kv cache, seq %d = [0, end)",
-                                            rid.c_str(), seq_id);
+                                                 "rid %s | decode draft, "
+                                                 "clean kv cache, seq %d = [0, end)",
+                                                 rid.c_str(), seq_id);
                                         break;
                                     }
                                 }
@@ -4543,9 +4543,9 @@ struct httpserver {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
                         SRV_INFV(2,
-                            "rid %s | decode in batch, "
-                            "clean kv cache, seq %d = [0, end)\n",
-                            rid.c_str(), seq_id);
+                                 "rid %s | decode in batch, "
+                                 "clean kv cache, seq %d = [0, end)\n",
+                                 rid.c_str(), seq_id);
                         llm_kv_cache_used -= task->pos;
                     }
                     // cache prompt
@@ -4624,9 +4624,9 @@ struct httpserver {
                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                     }
                     SRV_INFV(2,
-                        "rid %s | decode in batch, "
-                        "clean kv cache, seq %d = [0, end)\n",
-                        rid.c_str(), seq_id);
+                             "rid %s | decode in batch, "
+                             "clean kv cache, seq %d = [0, end)\n",
+                             rid.c_str(), seq_id);
                 }
                 // continue if not finished
                 bool opened = true;
@@ -5703,6 +5703,26 @@ struct httpserver {
                     n_prefilling_request += int32_t(tokenized_text.size());
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                 }
+                // qwen2 audio
+                // NB(thxCode): clip_is_qwen2a is a patch.
+                else if (clip_is_qwen2a(llm_ctx_clip)) {
+                    // format:
+                    // <|audio_bos|> (audio) <|audio_eos|>
+
+                    // <|audio_bos|>
+                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|audio_bos|>", add_bos, true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    // <MTMD/>
+                    for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                    }
+                    // <|audio_eos|>
+                    tokenized_text = common_tokenize(llm_vocab, "<|audio_eos|>", false, true);
+                    n_prefilling_request += int32_t(tokenized_text.size());
+                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                }
                 // others
                 else {
                     // <MTMD/>
@@ -5785,7 +5805,7 @@ struct httpserver {
             std::make_unique<completions_task>(get_task_id(), request.is_connection_closed);
         task->token_bucket                          = std::move(token_bucket);
         task->tokenized_prompts                     = std::move(tokenized_prompts);
-        task->tokenized_prompts_format              = req->chat_params.format;
+        task->tokenized_prompts_syntax.format       = req->chat_params.format;
         task->tokenized_prompts_include_multimedias = tokenized_prompts_include_multimedias;
         task->tokenized_prompts_include_tools       = tokenized_prompts_include_tools;
         task->n_decoding_budget                     = n_decoding_budget;

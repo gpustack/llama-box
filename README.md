@@ -36,8 +36,11 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - [x] InternVL2/InternVL3 Series
         - [x] LLaMA4 Series
         - [x] ...
-    + Support [OpenAI Chat Audio-In API](https://platform.openai.com/docs/guides/audio?example=audio-in)
+    + ([Experimental](https://github.com/ggml-org/llama.cpp/discussions/13759))
+      Support [OpenAI Chat Audio-In API](https://platform.openai.com/docs/guides/audio?example=audio-in)
         - [x] UltraVox Series
+        - [x] Qwen2 Audio Series
+        - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.
       $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ... --mmproj ... --visual-max-image-size 1344
