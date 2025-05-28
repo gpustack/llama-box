@@ -1,5 +1,5 @@
 diff --git a/src/llama-grammar.cpp b/src/llama-grammar.cpp
-index 973b47ae..b3a1fa04 100644
+index bed706bb..8ad58763 100644
 --- a/src/llama-grammar.cpp
 +++ b/src/llama-grammar.cpp
 @@ -1168,7 +1168,7 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
@@ -11,7 +11,7 @@ index 973b47ae..b3a1fa04 100644
              return;
          } else {
              grammar.trigger_buffer += piece;
-@@ -1182,11 +1182,11 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
+@@ -1192,11 +1192,11 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
                      // std::string constrained_str(match[1].first, grammar.trigger_buffer.end());
                      grammar.trigger_buffer.clear();
                      llama_grammar_accept_str(grammar, constrained_str);
