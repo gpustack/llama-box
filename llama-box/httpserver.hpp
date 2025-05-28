@@ -1364,6 +1364,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
         inputs.add_generation_prompt = json_value(req, "add_generation_prompt", true);
         inputs.use_jinja             = params.use_jinja;
         inputs.parallel_tool_calls   = ptr->parallel_tool_calls;
+        inputs.enable_thinking       = params.reasoning_budget != 0;
         // NB(thxCode): common_chat_templates_apply2 is a patch.
         ptr->chat_params             = common_chat_templates_apply2(llama_get_model(llm_ctx), chat_templates, inputs);
         SRV_INFV(3, "rid %s | formatted prompt\n%s\n", rid.c_str(), ptr->chat_params.prompt.c_str());

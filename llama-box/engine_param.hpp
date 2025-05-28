@@ -348,6 +348,8 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "Add a control vector with user defined scaling SCALE" });
     opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "Layer range to apply the control vector(s) to, start and end inclusive" });
     opts.push_back({ "server/completion",                  "-sp,   --special",                              "Special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
+    opts.push_back({ "server/completion",                  "       --enable-reasoning",                     "Enable reasoning (default: %s)", llm_params.reasoning_budget == -1 ? "true" : "false" });
+    opts.push_back({ "server/completion",                  "       --no-enable-reasoning",                  "Disable reasoning" });
     // server // completion //
     // server // completion // speculative //
     opts.push_back({ "server/completion/speculative" });
@@ -1619,6 +1621,16 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
 
             if (!strcmp(flag, "-sp") || !strcmp(flag, "--special")) {
                 params_.hs_params.llm_params.special = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "--enable-reasoning")) {
+                params_.hs_params.llm_params.reasoning_budget = -1;
+                continue;
+            }
+
+            if (!strcmp(flag, "--no-enable-reasoning")) {
+                params_.hs_params.llm_params.reasoning_budget = 0;
                 continue;
             }
 

@@ -523,6 +523,8 @@ server/completion:
          --control-vector-layer-range START END
                                   Layer range to apply the control vector(s) to, start and end inclusive
   -sp,   --special                Special tokens output enabled (default: false)
+         --enable-reasoning       Enable reasoning (default: true)
+         --no-enable-reasoning    Disable reasoning
 
 server/completion/speculative:
 
