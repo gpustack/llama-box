@@ -3364,8 +3364,10 @@ struct httpserver {
                     llama_kv_self_seq_rm(llm_ctx_draft, cache_id, 0, n_discard);
                     llama_kv_self_seq_add(llm_ctx_draft, cache_id, n_discard, cache_pos, -n_discard);
                 }
-                SRV_WRN("squash cache %d, [%d, %d) -> [0, %d)\n", cache_id, n_discard, cache_pos,
-                        cache_pos - n_discard);
+                SRV_WRN(
+                    "squash kv cache, "
+                    "seq = %d, [%d, %d) -> [0, %d)\n",
+                    cache_id, n_discard, cache_pos, cache_pos - n_discard);
 
                 // stats
                 cache_prompt_entry & cache = cache_prompts.at(cache_id);
@@ -3704,14 +3706,14 @@ struct httpserver {
                             cache.pos_discard = task->pos > 0 ? cache.pos_discard : 0;
                             task->set_seq_id(seq_id);
 
-                            // mask kv cache
+                            // clean kv cache
                             llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
                             }
                             SRV_DBG(
                                 "rid %s | prefix cache, "
-                                "kv cache mask, seq %d = [%d, end)\n",
+                                "clean kv cache, seq %d = [%d, end)\n",
                                 rid.c_str(), seq_id, task->pos);
                             llm_kv_cache_used += task->pos;
                         }
@@ -3843,8 +3845,10 @@ struct httpserver {
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                             }
-                            SRV_DBG("rid %s | prefill, incomplete, kv cache clean, seq %d = [0, end)", rid.c_str(),
-                                    seq_id);
+                            SRV_DBG(
+                                "rid %s | prefill, incomplete, "
+                                "clean kv cache, seq %d = [0, end)",
+                                rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
                             json data = {
@@ -3947,9 +3951,9 @@ struct httpserver {
                         if (llm_ctx_draft != nullptr) {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
-                        SRV_DBG(
+                        SRV_INFV(2,
                             "rid %s | batching, clean cache, "
-                            "kv cache mask, seq %d = [0, end)",
+                            "clean kv cache, seq %d = [0, end)",
                             rid.c_str(), seq_id);
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
@@ -4033,7 +4037,10 @@ struct httpserver {
                             if (llm_ctx_draft != nullptr) {
                                 llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                             }
-                            SRV_DBG("rid %s | decode, kv cache clean, seq %d = [0, end)", rid.c_str(), seq_id);
+                            SRV_INFV(2,
+                                "rid %s | decode, "
+                                "clean kv cache, seq %d = [0, end)",
+                                rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
                             json data = {
@@ -4066,7 +4073,10 @@ struct httpserver {
                             // clean kv cache
                             llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
-                            SRV_DBG("rid %s | decode, kv cache mask, seq %d = [0, end)", rid.c_str(), seq_id);
+                            SRV_INFV(2,
+                                "rid %s | decode, "
+                                "clean kv cache, seq %d = [0, end)",
+                                rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
                             json data = {
@@ -4115,13 +4125,15 @@ struct httpserver {
                                     // stats drafted tokens size
                                     task->n_decoded += d;
                                     task->n_decoding_budget -= d;
-                                    // mask kv cache
+                                    // clean kv cache
                                     llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
                                     if (llm_ctx_draft != nullptr) {
                                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
                                     }
-                                    SRV_DBG("rid %s | decode, kv cache mask, seq %d = [%d, end)", rid.c_str(), seq_id,
-                                            task->pos);
+                                    SRV_INFV(2,
+                                        "rid %s | decode, "
+                                        "clean kv cache, seq %d = [%d, end)",
+                                        rid.c_str(), seq_id, task->pos);
                                     llm_kv_cache_used -= d;
                                     break;
                                 }
@@ -4464,8 +4476,10 @@ struct httpserver {
                                     common_batch_add(batch_text_draft, tok, task->pos + 1 + j, { seq_id }, true);
                                     decoded_draft = llama_decode(llm_ctx_draft, batch_text_draft);
                                     if (decoded_draft != 0) {
-                                        SRV_DBG("rid %s | decode draft, kv cache clean, seq %d = [0, end)", rid.c_str(),
-                                                seq_id);
+                                        SRV_INFV(2,
+                                            "rid %s | decode draft, "
+                                            "clean kv cache, seq %d = [0, end)",
+                                            rid.c_str(), seq_id);
                                         break;
                                     }
                                 }
@@ -4528,7 +4542,10 @@ struct httpserver {
                         if (llm_ctx_draft != nullptr) {
                             llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                         }
-                        SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
+                        SRV_INFV(2,
+                            "rid %s | decode in batch, "
+                            "clean kv cache, seq %d = [0, end)\n",
+                            rid.c_str(), seq_id);
                         llm_kv_cache_used -= task->pos;
                     }
                     // cache prompt
@@ -4606,7 +4623,10 @@ struct httpserver {
                     if (llm_ctx_draft != nullptr) {
                         llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
                     }
-                    SRV_DBG("rid %s | decode in batch, kv cache clean, seq %d = [0, end)\n", rid.c_str(), seq_id);
+                    SRV_INFV(2,
+                        "rid %s | decode in batch, "
+                        "clean kv cache, seq %d = [0, end)\n",
+                        rid.c_str(), seq_id);
                 }
                 // continue if not finished
                 bool opened = true;
