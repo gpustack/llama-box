@@ -52,10 +52,10 @@ index f78e7eee..a978d443 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
-index d5412069..b853c94e 100644
+index 5dbe97ab..e5d4e8bd 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
-@@ -4776,10 +4776,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const
+@@ -5258,10 +5258,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
