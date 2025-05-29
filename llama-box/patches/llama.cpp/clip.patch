@@ -61,7 +61,7 @@ index 62c936ed..2c5e8099 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 6ae2c2ce..c9d1582c 100644
+index 6ae2c2ce..f0cddb44 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -167,7 +167,7 @@ enum patch_merge_type {
@@ -119,8 +119,8 @@ index 6ae2c2ce..c9d1582c 100644
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
  
-+#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_METAL)
-+        if ((model.proj_type == PROJECTOR_TYPE_QWEN2VL || model.proj_type == PROJECTOR_TYPE_QWEN25VL) && !ggml_backend_is_cpu(ctx_clip.backend)) {
++#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_HIP) && (!defined GGML_USE_MUSA) && (!defined GGML_USE_METAL)
++        if ((model.proj_type == PROJECTOR_TYPE_QWEN2VL || model.proj_type == PROJECTOR_TYPE_QWEN25VL || model.proj_type == PROJECTOR_TYPE_QWEN2A) && !ggml_backend_is_cpu(ctx_clip.backend)) {
 +            LOG_WRN("%s", "Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n");
 +            ggml_backend_free(ctx_clip.backend);
 +            ctx_clip.backend = ctx_clip.backend_cpu;
