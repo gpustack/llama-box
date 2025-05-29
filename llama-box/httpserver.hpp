@@ -2670,8 +2670,11 @@ struct httpserver {
         if (llm_ctx != nullptr) {
             llama_detach_threadpool(llm_ctx);
         }
-        if (llm_ctx_clip != nullptr) {
-            clip_free(llm_ctx_clip);
+        if (llm_ctx_clip_v != nullptr) {
+            clip_free(llm_ctx_clip_v);
+        }
+        if (llm_ctx_clip_a != nullptr) {
+            clip_free(llm_ctx_clip_a);
         }
 
         if (llm_ctx_draft != nullptr) {
@@ -2767,11 +2770,13 @@ struct httpserver {
                 /* verbosity */ common_log_verbosity_thold > 3 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_INFO,
                 /* max_image_size */ params.max_image_size,
             };
-            llm_ctx_clip = clip_init(params.llm_params.mmproj.path.c_str(), llm_params_clip);
-            if (llm_ctx_clip == nullptr) {
+            llm_init_clip = clip_init(params.llm_params.mmproj.path.c_str(), llm_params_clip);
+            if (llm_init_clip.ctx_a == nullptr && llm_init_clip.ctx_v == nullptr) {
                 SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
                 return false;
             }
+            llm_ctx_clip_v = llm_init_clip.ctx_v;
+            llm_ctx_clip_a = llm_init_clip.ctx_a;
         }
 
         // load the draft model if needed
@@ -2821,14 +2826,28 @@ struct httpserver {
         batch_text_temp      = llama_batch_init(llm_ctx_size, 0, 1);
 
         // check multimodal projection model compatibility
-        if (llm_ctx_clip != nullptr) {
-            const int32_t n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip);
-            const int32_t n_embd      = llama_model_n_embd(llm_model);
-            if (n_embd_clip != n_embd) {
-                SRV_ERR(
-                    "multimodal projector embedding length is not equal to the model, n_embd_clip = %d, n_embd = %d\n",
-                    n_embd_clip, n_embd);
-                return false;
+        if (llm_ctx_clip_v != nullptr || llm_ctx_clip_a != nullptr) {
+            if (llm_ctx_clip_v != nullptr) {
+                const int32_t n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip_v);
+                const int32_t n_embd      = llama_model_n_embd(llm_model);
+                if (n_embd_clip != n_embd) {
+                    SRV_ERR(
+                        "multimodal projector embedding length is not equal to the model, n_embd_clip = %d, n_embd = "
+                        "%d\n",
+                        n_embd_clip, n_embd);
+                    return false;
+                }
+            }
+            if (llm_ctx_clip_a != nullptr) {
+                const int32_t n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip_a);
+                const int32_t n_embd      = llama_model_n_embd(llm_model);
+                if (n_embd_clip != n_embd) {
+                    SRV_ERR(
+                        "multimodal projector audio embedding length is not equal to the model, n_embd_clip = %d, "
+                        "n_embd = %d\n",
+                        n_embd_clip, n_embd);
+                    return false;
+                }
             }
         }
 
@@ -3275,8 +3294,10 @@ struct httpserver {
     std::vector<cache_prompt_entry> cache_prompts;
 
     // clip model
-    std::mutex llm_ctx_clip_mtx;
-    clip_ctx * llm_ctx_clip = nullptr;
+    std::mutex       llm_ctx_clip_mtx;
+    clip_init_result llm_init_clip  = {};
+    clip_ctx *       llm_ctx_clip_v = nullptr;
+    clip_ctx *       llm_ctx_clip_a = nullptr;
 
     struct cache_multimodal_entry {
         std::vector<llama_multimodal_tokens> tokens;
@@ -3772,20 +3793,33 @@ struct httpserver {
                                         //// mrope
                                         if (llm_model_rope_mrope) {
                                             std::vector<llama_pos> mrope_pos;
-                                            clip_image_size &      is = tokenized_mtmd.size;
-                                            const int32_t          ps = clip_get_patch_size(llm_ctx_clip) * 2;
-                                            const int32_t          ph = is.height / ps + (is.height % ps > 0);
-                                            const int32_t          pw = is.width / ps + (is.width % ps > 0);
                                             mrope_pos.resize(n_mtmd * 4);
-                                            for (int32_t y = 0; y < ph; y++) {
-                                                for (int32_t x = 0; x < pw; x++) {
-                                                    const int i               = y * pw + x;
-                                                    mrope_pos[i]              = task->pos;
-                                                    mrope_pos[i + n_mtmd * 1] = task->pos + y;
-                                                    mrope_pos[i + n_mtmd * 2] = task->pos + x;
+                                            // vision (2d)
+                                            if (!tokenized_mtmd.is_audio) {
+                                                clip_image_size & is = tokenized_mtmd.size;
+                                                const int32_t     ps = clip_get_patch_size(llm_ctx_clip_v) * 2;
+                                                const int32_t     ph = is.height / ps + (is.height % ps > 0);
+                                                const int32_t     pw = is.width / ps + (is.width % ps > 0);
+                                                for (int32_t y = 0; y < ph; y++) {
+                                                    for (int32_t x = 0; x < pw; x++) {
+                                                        const int i               = y * pw + x;
+                                                        mrope_pos[i]              = task->pos;
+                                                        mrope_pos[i + n_mtmd * 1] = task->pos + y;
+                                                        mrope_pos[i + n_mtmd * 2] = task->pos + x;
+                                                        mrope_pos[i + n_mtmd * 3] = 0;
+                                                    }
+                                                }
+                                            }
+                                            // audio (1d)
+                                            else {
+                                                for (int32_t i = 0; i < n_mtmd; i++) {
+                                                    mrope_pos[i]              = task->pos + i;
+                                                    mrope_pos[i + n_mtmd * 1] = task->pos + i;
+                                                    mrope_pos[i + n_mtmd * 2] = task->pos + i;
                                                     mrope_pos[i + n_mtmd * 3] = 0;
                                                 }
                                             }
+
                                             batch_mtmd = llama_multimodal_embed_batch_wrapper(
                                                 tokenized_mtmd.embed.data(), n_mtmd, mrope_pos.data(), seq_id);
                                         }
@@ -3798,12 +3832,12 @@ struct httpserver {
                                         task->n_prefilled += n_mtmd_d;
                                         llm_kv_cache_used += n_mtmd_d;
                                         // decode immediately
-                                        if (clip_is_gemma3(llm_ctx_clip)) {
+                                        if (llm_ctx_clip_v != nullptr && clip_is_gemma3(llm_ctx_clip_v)) {
                                             llama_set_causal_attn(llm_ctx, false);
                                         }
                                         const int32_t decoded_image =
                                             decode_completion_task_batch(llm_ctx, batch_mtmd.temp, batch_task_ptrs);
-                                        if (clip_is_gemma3(llm_ctx_clip)) {
+                                        if (llm_ctx_clip_v != nullptr && clip_is_gemma3(llm_ctx_clip_v)) {
                                             llama_set_causal_attn(llm_ctx, false);
                                         }
                                         if (decoded_image != 0) {
@@ -4853,7 +4887,7 @@ struct httpserver {
 
     std::vector<llama_multimodal_tokens> cache_tokenize_multimedia(const char *                        rid,
                                                                    std::unique_ptr<clip_multimedia> && mtmd) {
-        if (llm_ctx_clip == nullptr) {
+        if (llm_ctx_clip_v == nullptr && llm_ctx_clip_a == nullptr) {
             return {};
         }
 
@@ -4870,9 +4904,9 @@ struct httpserver {
                      "type = %s, hash = %s\n",
                      rid, type.c_str(), mtmd->hash.c_str());
             if (mtmd->is_audio) {
-                result = tokenize_audio(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+                result = tokenize_audio(llm_ctx_clip_a, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             } else {
-                result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+                result = tokenize_image(llm_ctx_clip_v, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             }
             if (common_log_verbosity_thold >= 2) {
                 int32_t n_tokens     = 0;
@@ -4942,9 +4976,9 @@ struct httpserver {
                      "type = %s, hash = %s\n",
                      rid, type.c_str(), mtmd->hash.c_str());
             if (mtmd->is_audio) {
-                result = tokenize_audio(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+                result = tokenize_audio(llm_ctx_clip_a, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             } else {
-                result = tokenize_image(llm_ctx_clip, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
+                result = tokenize_image(llm_ctx_clip_v, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             }
             if (common_log_verbosity_thold >= 2) {
                 int32_t n_tokens     = 0;
@@ -5253,7 +5287,8 @@ struct httpserver {
                 { "mirostat",              params.llm_params.sampling.mirostat              },
                 { "mirostat_tau",          params.llm_params.sampling.mirostat_tau          },
                 { "mirostat_eta",          params.llm_params.sampling.mirostat_eta          },
-                { "support_vision",        llm_ctx_clip != nullptr                          },
+                { "support_vision",        llm_ctx_clip_v != nullptr                        },
+                { "support_audio",         llm_ctx_clip_a != nullptr                        },
                 { "support_speculative",   llm_ctx_draft != nullptr                         },
                 { "support_tool_calls",    support_tool_calls                               },
                 { "support_reasoning",     support_reasoning                                },
@@ -5477,7 +5512,7 @@ struct httpserver {
                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                 }
 
-                // process image
+                // process multimedia
                 std::vector<llama_multimodal_tokens> tokenized_mtmds =
                     cache_tokenize_multimedia(req->get_id(), std::move(req->multimedias[i_mtmd]));
                 if (tokenized_mtmds.empty()) {
@@ -5485,251 +5520,266 @@ struct httpserver {
                                        "Failed to embed the multimedia");
                 }
                 bool add_bos = tokenized_prompts.empty();
-                // minicpmv
-                if (clip_is_minicpmv(llm_ctx_clip) != 0) {
-                    // format:
-                    // 2.5: <image> (overview image) </image>
-                    //      <slice>
-                    //          <image> (tile image) </image> ... <image> (tile image) </image>\n
-                    //          <image> (tile image) </image> ... <image> (tile image) </image>\n
-                    //          ...
-                    //      </slice>
-                    // 2.6: <image> (overview image) </image>
-                    //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
-                    //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
-                    //      ...
+                //// vision
+                if (!tokenized_mtmds.front().is_audio) {
+                    // minicpmv
+                    if (clip_is_minicpmv(llm_ctx_clip_v) != 0) {
+                        // format:
+                        // 2.5: <image> (overview image) </image>
+                        //      <slice>
+                        //          <image> (tile image) </image> ... <image> (tile image) </image>\n
+                        //          <image> (tile image) </image> ... <image> (tile image) </image>\n
+                        //          ...
+                        //      </slice>
+                        // 2.6: <image> (overview image) </image>
+                        //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
+                        //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
+                        //      ...
 
-                    // <image>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<image>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // overview <MTMD/>
-                    llama_multimodal_tokens overview_tokenized_image = tokenized_mtmds.front();
-                    clip_image_size         grid_size                = overview_tokenized_image.grid_size;
-                    n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
-                    // </image>
-                    tokenized_text = common_tokenize(llm_vocab, "</image>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // process tile images
-                    tokenized_mtmds.erase(tokenized_mtmds.begin());
-                    if (!tokenized_mtmds.empty()) {
-                        const int32_t n_x     = grid_size.width;
-                        const int32_t n_y     = grid_size.height;
-                        const int32_t version = clip_is_minicpmv(llm_ctx_clip);
-                        if (version < 3) {
-                            // <slice>
-                            tokenized_text = common_tokenize(llm_vocab, "<slice>", false, true);
-                            n_prefilling_request += int32_t(tokenized_text.size());
-                            tokenized_prompts.emplace_back(std::move(tokenized_text));
-                        }
-                        std::string ifmt = "<slice>";
-                        std::string ofmt = "</slice>";
-                        if (version < 3) {
-                            ifmt = "<image>";
-                            ofmt = "</image>";
-                        }
-                        for (int y = 0; y < n_y; y++) {
-                            for (int x = 0; x < n_x; x++) {
-                                // <slice> | <image>
-                                tokenized_text = common_tokenize(llm_vocab, ifmt, false, true);
-                                n_prefilling_request += int32_t(tokenized_text.size());
-                                tokenized_prompts.emplace_back(std::move(tokenized_text));
-                                // tile <MTMD/>
-                                llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds[y * n_x + x];
-                                n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                                tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                                // </slice> | </image>
-                                tokenized_text = common_tokenize(llm_vocab, ofmt, false, true);
+                        // <image>
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "<image>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // overview <MTMD/>
+                        llama_multimodal_tokens overview_tokenized_image = tokenized_mtmds.front();
+                        clip_image_size         grid_size                = overview_tokenized_image.grid_size;
+                        n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
+                        tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
+                        // </image>
+                        tokenized_text = common_tokenize(llm_vocab, "</image>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // process tile images
+                        tokenized_mtmds.erase(tokenized_mtmds.begin());
+                        if (!tokenized_mtmds.empty()) {
+                            const int32_t n_x     = grid_size.width;
+                            const int32_t n_y     = grid_size.height;
+                            const int32_t version = clip_is_minicpmv(llm_ctx_clip_v);
+                            if (version < 3) {
+                                // <slice>
+                                tokenized_text = common_tokenize(llm_vocab, "<slice>", false, true);
                                 n_prefilling_request += int32_t(tokenized_text.size());
                                 tokenized_prompts.emplace_back(std::move(tokenized_text));
                             }
-                            if (y != n_y - 1) {
-                                // \n
-                                tokenized_text = common_tokenize(llm_vocab, "\n", false, true);
-                                n_prefilling_request += int32_t(tokenized_text.size());
-                                tokenized_prompts.emplace_back(std::move(tokenized_text));
+                            std::string ifmt = "<slice>";
+                            std::string ofmt = "</slice>";
+                            if (version < 3) {
+                                ifmt = "<image>";
+                                ofmt = "</image>";
                             }
-                        }
-                        if (version < 3) {
-                            // </slice>
-                            tokenized_text = common_tokenize(llm_vocab, "</slice>", false, true);
-                            n_prefilling_request += int32_t(tokenized_text.size());
-                            tokenized_prompts.emplace_back(std::move(tokenized_text));
-                        }
-                    }
-                }
-                // llama4
-                // NB(thxCode): clip_is_llama4 is a patch.
-                else if (clip_is_llama4(llm_ctx_clip)) {
-                    // format:
-                    // <|image_start|>
-                    // (tile image) <|tile_x_separator|> (tile image) <|tile_x_separator|> ... <|tile_y_separator|>
-                    // (tile image) <|tile_x_separator|> (tile image) <|tile_x_separator|> ... <|tile_y_separator|>
-                    // ...
-                    // <|tile_y_separator|>
-                    // <|image|> (overview image)
-                    // <|image_end|>
-
-                    // <|image_start|>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|image_start|>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    llama_multimodal_tokens overview_tokenized_image = tokenized_mtmds.front();
-                    clip_image_size         grid_size                = overview_tokenized_image.grid_size;
-                    // process tile images
-                    tokenized_mtmds.erase(tokenized_mtmds.begin());
-                    if (!tokenized_mtmds.empty()) {
-                        const int32_t n_x = grid_size.width;
-                        const int32_t n_y = grid_size.height;
-                        for (int y = 0; y < n_y; y++) {
-                            for (int x = 0; x < n_x; x++) {
-                                // slice <MTMD/>
-                                llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds[y * n_x + x];
-                                n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                                tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                                // <|tile_x_separator|>
-                                if (x != n_x - 1) {
-                                    tokenized_text = common_tokenize(llm_vocab, "<|tile_x_separator|>", false, true);
+                            for (int y = 0; y < n_y; y++) {
+                                for (int x = 0; x < n_x; x++) {
+                                    // <slice> | <image>
+                                    tokenized_text = common_tokenize(llm_vocab, ifmt, false, true);
+                                    n_prefilling_request += int32_t(tokenized_text.size());
+                                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                                    // tile <MTMD/>
+                                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds[y * n_x + x];
+                                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                                    // </slice> | </image>
+                                    tokenized_text = common_tokenize(llm_vocab, ofmt, false, true);
+                                    n_prefilling_request += int32_t(tokenized_text.size());
+                                    tokenized_prompts.emplace_back(std::move(tokenized_text));
+                                }
+                                if (y != n_y - 1) {
+                                    // \n
+                                    tokenized_text = common_tokenize(llm_vocab, "\n", false, true);
                                     n_prefilling_request += int32_t(tokenized_text.size());
                                     tokenized_prompts.emplace_back(std::move(tokenized_text));
                                 }
                             }
-                            // <|tile_y_separator|>
-                            tokenized_text = common_tokenize(llm_vocab, "<|tile_y_separator|>", false, true);
-                            n_prefilling_request += int32_t(tokenized_text.size());
-                            tokenized_prompts.emplace_back(std::move(tokenized_text));
+                            if (version < 3) {
+                                // </slice>
+                                tokenized_text = common_tokenize(llm_vocab, "</slice>", false, true);
+                                n_prefilling_request += int32_t(tokenized_text.size());
+                                tokenized_prompts.emplace_back(std::move(tokenized_text));
+                            }
                         }
                     }
-                    // <|image|>
-                    tokenized_text = common_tokenize(llm_vocab, "<|image|>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // overview <MTMD/>
-                    n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
-                    tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
-                    // <|image_end|>
-                    tokenized_text = common_tokenize(llm_vocab, "<|image_end|>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // qwen2vl
-                else if (clip_is_qwen2vl(llm_ctx_clip)) {
-                    // format:
-                    // <|vision_start|> (image) <|vision_end|>
+                    // llama4
+                    // NB(thxCode): clip_is_llama4 is a patch.
+                    else if (clip_is_llama4(llm_ctx_clip_v)) {
+                        // format:
+                        // <|image_start|>
+                        // (tile image) <|tile_x_separator|> (tile image) <|tile_x_separator|> ... <|tile_y_separator|>
+                        // (tile image) <|tile_x_separator|> (tile image) <|tile_x_separator|> ... <|tile_y_separator|>
+                        // ...
+                        // <|tile_y_separator|>
+                        // <|image|> (overview image)
+                        // <|image_end|>
 
-                    // <|vision_start|>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|vision_start|>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <MTMD/>
-                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
-                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                    // <|vision_end|>
-                    tokenized_text = common_tokenize(llm_vocab, "<|vision_end|>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // gemma3
-                else if (clip_is_gemma3(llm_ctx_clip)) {
-                    // format:
-                    // <|start_of_image|> (image) <|end_of_image|>
-
-                    // <|start_of_image|>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|start_of_image|>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <MTMD/>
-                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
-                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                    // <|end_of_image|>
-                    tokenized_text = common_tokenize(llm_vocab, "<|end_of_image|>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // smolvlm
-                // NB(thxCode): clip_is_smolvlm is a patch.
-                else if (clip_is_smolvlm(llm_ctx_clip)) {
-                    // format:
-                    // <fake_token_around_image><global-img> (image) <fake_token_around_image>
-
-                    // <fake_token_around_image><global-img>
-                    llama_tokens tokenized_text =
-                        common_tokenize(llm_vocab, "<fake_token_around_image><global-img>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <MTMD/>
-                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
-                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                    // <fake_token_around_image>
-                    tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // pixtral
-                // NB(thxCode): clip_is_pixtral is a patch.
-                else if (clip_is_pixtral(llm_ctx_clip)) {
-                    // format:
-                    // (image) [IMG_END]
-
-                    // <MTMD/>
-                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
-                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                    // [IMG_END]
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "[IMG_END]", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // internvl
-                // NB(thxCode): clip_is_internvl is a patch.
-                else if (clip_is_internvl(llm_ctx_clip)) {
-                    // format:
-                    // <img> (image) </img>
-
-                    // <img>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<img>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <MTMD/>
-                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
-                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
-                    // </img>
-                    tokenized_text = common_tokenize(llm_vocab, "</img>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // qwen2 audio
-                // NB(thxCode): clip_is_qwen2a is a patch.
-                else if (clip_is_qwen2a(llm_ctx_clip)) {
-                    // format:
-                    // <|audio_bos|> (audio) <|audio_eos|>
-
-                    // <|audio_bos|>
-                    llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|audio_bos|>", add_bos, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                    // <MTMD/>
-                    for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
-                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
-                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        // <|image_start|>
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|image_start|>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        llama_multimodal_tokens overview_tokenized_image = tokenized_mtmds.front();
+                        clip_image_size         grid_size                = overview_tokenized_image.grid_size;
+                        // process tile images
+                        tokenized_mtmds.erase(tokenized_mtmds.begin());
+                        if (!tokenized_mtmds.empty()) {
+                            const int32_t n_x = grid_size.width;
+                            const int32_t n_y = grid_size.height;
+                            for (int y = 0; y < n_y; y++) {
+                                for (int x = 0; x < n_x; x++) {
+                                    // slice <MTMD/>
+                                    llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds[y * n_x + x];
+                                    n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                                    tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                                    // <|tile_x_separator|>
+                                    if (x != n_x - 1) {
+                                        tokenized_text =
+                                            common_tokenize(llm_vocab, "<|tile_x_separator|>", false, true);
+                                        n_prefilling_request += int32_t(tokenized_text.size());
+                                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                                    }
+                                }
+                                // <|tile_y_separator|>
+                                tokenized_text = common_tokenize(llm_vocab, "<|tile_y_separator|>", false, true);
+                                n_prefilling_request += int32_t(tokenized_text.size());
+                                tokenized_prompts.emplace_back(std::move(tokenized_text));
+                            }
+                        }
+                        // <|image|>
+                        tokenized_text = common_tokenize(llm_vocab, "<|image|>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // overview <MTMD/>
+                        n_prefilling_request += int32_t(overview_tokenized_image.n_pos);
+                        tokenized_prompts.emplace_back(std::move(overview_tokenized_image));
+                        // <|image_end|>
+                        tokenized_text = common_tokenize(llm_vocab, "<|image_end|>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
                     }
-                    // <|audio_eos|>
-                    tokenized_text = common_tokenize(llm_vocab, "<|audio_eos|>", false, true);
-                    n_prefilling_request += int32_t(tokenized_text.size());
-                    tokenized_prompts.emplace_back(std::move(tokenized_text));
-                }
-                // others
-                else {
-                    // <MTMD/>
-                    for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                    // qwen2vl
+                    else if (clip_is_qwen2vl(llm_ctx_clip_v)) {
+                        // format:
+                        // <|vision_start|> (image) <|vision_end|>
+
+                        // <|vision_start|>
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|vision_start|>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // <MTMD/>
+                        llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
                         n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
                         tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        // <|vision_end|>
+                        tokenized_text = common_tokenize(llm_vocab, "<|vision_end|>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // gemma3
+                    else if (clip_is_gemma3(llm_ctx_clip_v)) {
+                        // format:
+                        // <|start_of_image|> (image) <|end_of_image|>
+
+                        // <|start_of_image|>
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|start_of_image|>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // <MTMD/>
+                        llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        // <|end_of_image|>
+                        tokenized_text = common_tokenize(llm_vocab, "<|end_of_image|>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // smolvlm
+                    // NB(thxCode): clip_is_smolvlm is a patch.
+                    else if (clip_is_smolvlm(llm_ctx_clip_v)) {
+                        // format:
+                        // <fake_token_around_image><global-img> (image) <fake_token_around_image>
+
+                        // <fake_token_around_image><global-img>
+                        llama_tokens tokenized_text =
+                            common_tokenize(llm_vocab, "<fake_token_around_image><global-img>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // <MTMD/>
+                        llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        // <fake_token_around_image>
+                        tokenized_text = common_tokenize(llm_vocab, "<fake_token_around_image>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // pixtral
+                    // NB(thxCode): clip_is_pixtral is a patch.
+                    else if (clip_is_pixtral(llm_ctx_clip_v)) {
+                        // format:
+                        // (image) [IMG_END]
+
+                        // <MTMD/>
+                        llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        // [IMG_END]
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "[IMG_END]", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // internvl
+                    // NB(thxCode): clip_is_internvl is a patch.
+                    else if (clip_is_internvl(llm_ctx_clip_v)) {
+                        // format:
+                        // <img> (image) </img>
+
+                        // <img>
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "<img>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // <MTMD/>
+                        llama_multimodal_tokens tokenized_mtmd = tokenized_mtmds.front();
+                        n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                        tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        // </img>
+                        tokenized_text = common_tokenize(llm_vocab, "</img>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // others
+                    else {
+                        // <MTMD/>
+                        for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                            n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                            tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        }
+                    }
+                }
+                //// audio
+                else {
+                    // qwen2 audio
+                    // NB(thxCode): clip_is_qwen2a is a patch.
+                    if (clip_is_qwen2a(llm_ctx_clip_a)) {
+                        // format:
+                        // <|audio_bos|> (audio) <|audio_eos|>
+
+                        // <|audio_bos|>
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "<|audio_bos|>", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // <MTMD/>
+                        for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                            n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                            tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        }
+                        // <|audio_eos|>
+                        tokenized_text = common_tokenize(llm_vocab, "<|audio_eos|>", false, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // others
+                    else {
+                        // <MTMD/>
+                        for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                            n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                            tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        }
                     }
                 }
 

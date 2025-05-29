@@ -19,6 +19,7 @@ struct llama_multimodal_tokens {
     llama_token        dummy_token = LLAMA_TOKEN_NULL;
     int32_t            n_tokens    = 0;
     int32_t            n_pos       = 0;
+    bool               is_audio    = false;
     std::vector<float> embed;
     clip_image_size    size;
     clip_image_size    grid_size;
@@ -215,6 +216,7 @@ static inline std::vector<llama_multimodal_tokens> tokenize_audio(clip_ctx * ctx
         // init
         result[i].n_tokens  = clip_n_output_tokens(ctx_clip, mel_f32.get());
         result[i].n_pos     = result[i].n_tokens;
+        result[i].is_audio  = true;
         result[i].size      = clip_image_size{ entries[i].n_len, entries[i].n_mel };
         result[i].grid_size = clip_image_size{ 1, 1 };
         result[i].embed.resize(result[i].n_tokens * n_mmproj_embd);
