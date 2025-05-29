@@ -1,8 +1,8 @@
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index 27ce8c43..ac733097 100644
+index 62c936ed..2c5e8099 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
-@@ -224,17 +224,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -226,17 +226,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -21,7 +21,7 @@ index 27ce8c43..ac733097 100644
  
  //
  // cpp wrappers
-@@ -290,37 +280,7 @@ struct clip_image_f32_batch {
+@@ -292,37 +282,7 @@ struct clip_image_f32_batch {
  // common utils
  //
  
@@ -61,133 +61,126 @@ index 27ce8c43..ac733097 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 6205dad5..9bc72b54 100644
+index 6ae2c2ce..73d9c56a 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
-@@ -170,7 +170,7 @@ struct clip_hparams {
-     bool has_audio = false;
+@@ -167,7 +167,7 @@ enum patch_merge_type {
  
+ struct clip_hparams {
      int32_t image_size;
 -    int32_t patch_size;
 +    int32_t patch_size = 1;
      int32_t n_embd;
      int32_t n_ff;
      int32_t projection_dim;
-@@ -377,6 +377,8 @@ struct clip_ctx {
-     int max_nodes = 8192;
-     ggml_backend_sched_ptr sched;
- 
-+    int max_image_size = 0;
-+
-     // for debugging
-     bool debug_graph = false;
-     std::vector<ggml_tensor *> debug_print_tensors;
-@@ -390,6 +392,7 @@ struct clip_ctx {
-         backend = ctx_params.use_gpu
-                     ? ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_GPU, nullptr)
-                     : nullptr;
-+        max_image_size = ctx_params.max_image_size;
- 
-         if (backend) {
-             LOG_INF("%s: CLIP using %s backend\n", __func__, ggml_backend_name(backend));
-@@ -2058,6 +2061,18 @@ struct clip_model_loader {
-             if (ctx_clip.proj_type == PROJECTOR_TYPE_UNKNOWN) {
-                 throw std::runtime_error(string_format("%s: unknown projector type: %s\n", __func__, proj_type.c_str()));
-             }
-+#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_METAL)
-+            if ((ctx_clip.proj_type == PROJECTOR_TYPE_QWEN2VL || ctx_clip.proj_type == PROJECTOR_TYPE_QWEN25VL) && !ggml_backend_is_cpu(ctx_clip.backend)) {
-+                LOG_WRN("%s", "Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n");
-+                ggml_backend_free(ctx_clip.backend);
-+                ctx_clip.backend = ctx_clip.backend_cpu;
-+                ctx_clip.backend_ptrs.erase(ctx_clip.backend_ptrs.begin());
-+                ctx_clip.backend_buft.erase(ctx_clip.backend_buft.begin());
-+                ctx_clip.sched.reset(
-+                    ggml_backend_sched_new(ctx_clip.backend_ptrs.data(), ctx_clip.backend_buft.data(), ctx_clip.backend_ptrs.size(), 8192, false, true)
-+                );
-+            }
-+#endif
+@@ -2064,7 +2064,7 @@ struct clip_model_loader {
          }
+     }
  
-         // other hparams
-@@ -2163,6 +2178,7 @@ struct clip_model_loader {
+-    void load_hparams(clip_model & model, clip_modality modality) {
++    void load_hparams(clip_model & model, clip_modality modality, int32_t max_image_size = 0) {
+         auto & hparams = model.hparams;
+         std::string log_ffn_op; // for logging
+ 
+@@ -2199,6 +2199,7 @@ struct clip_model_loader {
                      } break;
                  case PROJECTOR_TYPE_PIXTRAL:
                      {
-+                        hparams.image_size = ctx_clip.max_image_size <= 0 ? hparams.image_size : ctx_clip.max_image_size;
++                        hparams.image_size = max_image_size <= 0 ? hparams.image_size : max_image_size;
                          hparams.rope_theta = 10000.0f;
                          hparams.warmup_image_size = hparams.patch_size * 8;
                          get_u32(KEY_SPATIAL_MERGE_SIZE, hparams.spatial_merge_size, false);
-@@ -2181,7 +2197,7 @@ struct clip_model_loader {
+@@ -2217,7 +2218,7 @@ struct clip_model_loader {
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
 -                        hparams.image_size = 1024;
-+                        hparams.image_size = ctx_clip.max_image_size <= 0 ? hparams.image_size : ctx_clip.max_image_size;
++                        hparams.image_size = max_image_size <= 0 ? hparams.image_size : max_image_size;
                          hparams.warmup_image_size = hparams.patch_size * 8;
                      } break;
                  case PROJECTOR_TYPE_QWEN25VL:
-@@ -2190,7 +2206,7 @@ struct clip_model_loader {
+@@ -2226,7 +2227,7 @@ struct clip_model_loader {
                          // https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
 -                        hparams.image_size = 1024;
-+                        hparams.image_size = ctx_clip.max_image_size <= 0 ? hparams.image_size : ctx_clip.max_image_size;
++                        hparams.image_size = max_image_size <= 0 ? hparams.image_size : max_image_size;
                          hparams.warmup_image_size = hparams.patch_size * 8;
                          get_u32(KEY_WIN_ATTN_PATTERN, hparams.n_wa_pattern);
                      } break;
-@@ -3275,7 +3291,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
-         clip_image_u8 resized;
-         auto patch_size = params.patch_size * 2;
-         auto new_size = image_manipulation::calc_size_preserved_ratio(original_size, patch_size, params.image_size);
--        image_manipulation::bicubic_resize(*img, resized, new_size.width, new_size.height);
-+        image_manipulation::bilinear_resize(*img, resized, new_size.width, new_size.height);
+@@ -2292,6 +2293,19 @@ struct clip_model_loader {
+         std::map<std::string, size_t> tensor_offset;
+         std::vector<ggml_tensor *> tensors_to_load;
  
-         clip_image_f32_ptr img_f32(clip_image_f32_init());
-         // clip_image_f32_ptr res(clip_image_f32_init());
-@@ -4025,6 +4041,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
-     return ctx->proj_type == PROJECTOR_TYPE_GEMMA3;
++#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_METAL)
++        if ((model.proj_type == PROJECTOR_TYPE_QWEN2VL || model.proj_type == PROJECTOR_TYPE_QWEN25VL) && !ggml_backend_is_cpu(ctx_clip.backend)) {
++            LOG_WRN("%s", "Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n");
++            ggml_backend_free(ctx_clip.backend);
++            ctx_clip.backend = ctx_clip.backend_cpu;
++            ctx_clip.backend_ptrs.erase(ctx_clip.backend_ptrs.begin());
++            ctx_clip.backend_buft.erase(ctx_clip.backend_buft.begin());
++            ctx_clip.sched.reset(
++                ggml_backend_sched_new(ctx_clip.backend_ptrs.data(), ctx_clip.backend_buft.data(), ctx_clip.backend_ptrs.size(), 8192, false, true)
++            );
++        }
++#endif
++
+         // TODO @ngxson : support both audio and video in the future
+         const char * prefix = model.modality == CLIP_MODALITY_AUDIO ? "a" : "v";
+ 
+@@ -2689,7 +2703,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
+ 
+         if (loader.has_vision) {
+             ctx_vision = new clip_ctx(ctx_params);
+-            loader.load_hparams(ctx_vision->model, CLIP_MODALITY_VISION);
++            loader.load_hparams(ctx_vision->model, CLIP_MODALITY_VISION, ctx_params.max_image_size);
+             loader.load_tensors(*ctx_vision);
+             loader.alloc_compute_meta(*ctx_vision);
+         }
+@@ -4107,6 +4121,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+     return ctx->proj_type() == PROJECTOR_TYPE_GEMMA3;
  }
  
 +bool clip_is_smolvlm(const struct clip_ctx * ctx) {
-+    return ctx->proj_type == PROJECTOR_TYPE_IDEFICS3;
++    return ctx->proj_type() == PROJECTOR_TYPE_IDEFICS3;
 +}
 +
 +bool clip_is_pixtral(const struct clip_ctx * ctx) {
-+    return ctx->proj_type == PROJECTOR_TYPE_PIXTRAL;
++    return ctx->proj_type() == PROJECTOR_TYPE_PIXTRAL;
 +}
 +
 +bool clip_is_internvl(const struct clip_ctx * ctx) {
-+    return ctx->proj_type == PROJECTOR_TYPE_INTERNVL;
++    return ctx->proj_type() == PROJECTOR_TYPE_INTERNVL;
 +}
 +
 +bool clip_is_llama4(const struct clip_ctx * ctx) {
-+    return ctx->proj_type == PROJECTOR_TYPE_LLAMA4;
++    return ctx->proj_type() == PROJECTOR_TYPE_LLAMA4;
 +}
 +
 +bool clip_is_ultravox(const struct clip_ctx * ctx) {
-+    return ctx->proj_type == PROJECTOR_TYPE_ULTRAVOX;
++    return ctx->proj_type() == PROJECTOR_TYPE_ULTRAVOX;
 +}
 +
 +bool clip_is_qwen2a(const struct clip_ctx * ctx) {
-+    return ctx->proj_type == PROJECTOR_TYPE_QWEN2A;
++    return ctx->proj_type() == PROJECTOR_TYPE_QWEN2A;
 +}
 +
  bool clip_has_vision_encoder(const struct clip_ctx * ctx) {
-     return ctx->vision_model.hparams.has_vision;
+     return ctx->model.modality == CLIP_MODALITY_VISION;
  }
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index 5abfcd1a..9fff8867 100644
+index cb2eb261..326bb8ac 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
-@@ -20,6 +20,7 @@ struct clip_image_f32_batch;
+@@ -25,6 +25,7 @@ enum clip_modality {
  struct clip_context_params {
      bool use_gpu;
      enum ggml_log_level verbosity;
 +    int max_image_size = 0;
  };
  
- struct clip_ctx * clip_init(const char * fname, struct clip_context_params ctx_params);
-@@ -93,6 +94,12 @@ bool clip_is_glm(const struct clip_ctx * ctx);
+ struct clip_init_result {
+@@ -103,6 +104,12 @@ bool clip_is_glm(const struct clip_ctx * ctx);
  bool clip_is_qwen2vl(const struct clip_ctx * ctx);
  bool clip_is_llava(const struct clip_ctx * ctx);
  bool clip_is_gemma3(const struct clip_ctx * ctx);
