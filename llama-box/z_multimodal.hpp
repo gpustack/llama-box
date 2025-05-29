@@ -27,27 +27,29 @@ struct llama_multimodal_tokens {
 
 // implementations
 
-struct llama_multimodal_embed_batch_wrapper {
+struct llama_multimodal_embed_batch {
     std::vector<int32_t>        n_seq_id;
     std::vector<llama_seq_id>   seq_id_0;
     std::vector<llama_seq_id *> seq_ids;
     std::vector<int8_t>         logits;
+    std::vector<llama_pos>      pos;
     llama_batch                 temp = {};
 
-    llama_multimodal_embed_batch_wrapper() = default;
+    llama_multimodal_embed_batch() = default;
 
-    llama_multimodal_embed_batch_wrapper(float * embd, int32_t n_tokens, llama_pos * pos, llama_seq_id seq_id) {
+    llama_multimodal_embed_batch(float * embd, int32_t n_tokens, std::vector<llama_pos> && pos, llama_seq_id seq_id) {
         n_seq_id.resize(n_tokens);
-        seq_ids.resize(n_tokens + 1);
-        logits.resize(n_tokens);
         seq_id_0.resize(1);
-        seq_id_0[0]       = seq_id;
+        seq_id_0[0] = seq_id;
+        seq_ids.resize(n_tokens + 1);
         seq_ids[n_tokens] = nullptr;
-        temp              = {
+        logits.resize(n_tokens);
+        this->pos = std::move(pos);
+        temp      = {
             /*n_tokens       =*/n_tokens,
             /*tokens         =*/nullptr,
             /*embd           =*/embd,
-            /*pos            =*/pos,
+            /*pos            =*/this->pos.data(),
             /*n_seq_id       =*/n_seq_id.data(),
             /*seq_id         =*/seq_ids.data(),
             /*logits         =*/logits.data(),
@@ -59,17 +61,15 @@ struct llama_multimodal_embed_batch_wrapper {
         }
     }
 
-    std::vector<llama_pos> pos;
-
-    llama_multimodal_embed_batch_wrapper(float * embd, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
-        pos.resize(n_tokens);
+    llama_multimodal_embed_batch(float * embd, int32_t n_tokens, llama_pos pos_0, llama_seq_id seq_id) {
         n_seq_id.resize(n_tokens);
-        seq_ids.resize(n_tokens + 1);
-        logits.resize(n_tokens);
         seq_id_0.resize(1);
-        seq_id_0[0]       = seq_id;
+        seq_id_0[0] = seq_id;
+        seq_ids.resize(n_tokens + 1);
         seq_ids[n_tokens] = nullptr;
-        temp              = {
+        logits.resize(n_tokens);
+        pos.resize(n_tokens);
+        temp = {
             /*n_tokens       =*/n_tokens,
             /*tokens         =*/nullptr,
             /*embd           =*/embd,

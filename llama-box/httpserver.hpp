@@ -3787,13 +3787,12 @@ struct httpserver {
                                     const int32_t n_mtmd   = tokenized_mtmd.n_tokens;
                                     const int32_t n_mtmd_s = task->n_prefilled - c_prefilled;
                                     if (n_mtmd_s < tokenized_mtmd.n_pos) {
-                                        const int32_t                        n_mtmd_d = tokenized_mtmd.n_pos;
+                                        const int32_t                n_mtmd_d = tokenized_mtmd.n_pos;
                                         // in batch
-                                        llama_multimodal_embed_batch_wrapper batch_mtmd;
+                                        llama_multimodal_embed_batch batch_mtmd;
                                         //// mrope
                                         if (llm_model_rope_mrope) {
-                                            std::vector<llama_pos> mrope_pos;
-                                            mrope_pos.resize(n_mtmd * 4);
+                                            std::vector<llama_pos> pos(n_mtmd * 4);
                                             // vision (2d)
                                             if (!tokenized_mtmd.is_audio) {
                                                 clip_image_size & is = tokenized_mtmd.size;
@@ -3802,31 +3801,30 @@ struct httpserver {
                                                 const int32_t     pw = is.width / ps + (is.width % ps > 0);
                                                 for (int32_t y = 0; y < ph; y++) {
                                                     for (int32_t x = 0; x < pw; x++) {
-                                                        const int i               = y * pw + x;
-                                                        mrope_pos[i]              = task->pos;
-                                                        mrope_pos[i + n_mtmd * 1] = task->pos + y;
-                                                        mrope_pos[i + n_mtmd * 2] = task->pos + x;
-                                                        mrope_pos[i + n_mtmd * 3] = 0;
+                                                        const int i         = y * pw + x;
+                                                        pos[i]              = task->pos;
+                                                        pos[i + n_mtmd * 1] = task->pos + y;
+                                                        pos[i + n_mtmd * 2] = task->pos + x;
+                                                        pos[i + n_mtmd * 3] = 0;
                                                     }
                                                 }
                                             }
                                             // audio (1d)
                                             else {
                                                 for (int32_t i = 0; i < n_mtmd; i++) {
-                                                    mrope_pos[i]              = task->pos + i;
-                                                    mrope_pos[i + n_mtmd * 1] = task->pos + i;
-                                                    mrope_pos[i + n_mtmd * 2] = task->pos + i;
-                                                    mrope_pos[i + n_mtmd * 3] = 0;
+                                                    pos[i]              = task->pos + i;
+                                                    pos[i + n_mtmd * 1] = task->pos + i;
+                                                    pos[i + n_mtmd * 2] = task->pos + i;
+                                                    pos[i + n_mtmd * 3] = 0;
                                                 }
                                             }
-
-                                            batch_mtmd = llama_multimodal_embed_batch_wrapper(
-                                                tokenized_mtmd.embed.data(), n_mtmd, mrope_pos.data(), seq_id);
+                                            batch_mtmd = llama_multimodal_embed_batch(tokenized_mtmd.embed.data(),
+                                                                                      n_mtmd, std::move(pos), seq_id);
                                         }
                                         //// non-mrope
                                         else {
-                                            batch_mtmd = llama_multimodal_embed_batch_wrapper(
-                                                tokenized_mtmd.embed.data(), n_mtmd, task->pos, seq_id);
+                                            batch_mtmd = llama_multimodal_embed_batch(tokenized_mtmd.embed.data(),
+                                                                                      n_mtmd, task->pos, seq_id);
                                         }
                                         task->pos += n_mtmd_d;
                                         task->n_prefilled += n_mtmd_d;
