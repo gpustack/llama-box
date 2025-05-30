@@ -1,8 +1,63 @@
+diff --git a/common/sampling.cpp b/common/sampling.cpp
+index 9c04d35f..5a838d9f 100644
+--- a/common/sampling.cpp
++++ b/common/sampling.cpp
+@@ -434,6 +434,13 @@ llama_token common_sampler_last(const struct common_sampler * gsmpl) {
+     return gsmpl->prev.rat(0);
+ }
+ 
++bool common_sampler_grammer_lazy_triggered(const struct common_sampler * gsmpl) {
++    if (gsmpl->grmr) {
++        return llama_sampler_grammar_lazy_triggered(gsmpl->grmr);
++    }
++    return false;
++}
++
+ std::string common_sampler_print(const struct common_sampler * gsmpl) {
+     std::string result = "logits ";
+ 
+diff --git a/common/sampling.h b/common/sampling.h
+index 2064421d..ecfc9958 100644
+--- a/common/sampling.h
++++ b/common/sampling.h
+@@ -91,6 +91,8 @@ llama_token_data_array * common_sampler_get_candidates(struct common_sampler * g
+ // get the last accepted token
+ llama_token common_sampler_last(const struct common_sampler * gsmpl);
+ 
++bool common_sampler_grammer_lazy_triggered(const struct common_sampler * gsmpl);
++
+ // print the sampler chain into a string
+ std::string common_sampler_print(const struct common_sampler * gsmpl);
+ 
+diff --git a/include/llama.h b/include/llama.h
+index 01762bea..1743f1a8 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -1272,6 +1272,8 @@ extern "C" {
+     // Returns the seed used by the sampler if applicable, LLAMA_DEFAULT_SEED otherwise
+     LLAMA_API uint32_t llama_sampler_get_seed(const struct llama_sampler * smpl);
+ 
++    LLAMA_API bool llama_sampler_grammar_lazy_triggered(const struct llama_sampler * smpl);
++
+     /// @details Sample and accept a token from the idx-th output of the last evaluation
+     //
+     // Shorthand for:
 diff --git a/src/llama-grammar.cpp b/src/llama-grammar.cpp
-index bed706bb..8ad58763 100644
+index bed706bb..2b3bd09e 100644
 --- a/src/llama-grammar.cpp
 +++ b/src/llama-grammar.cpp
-@@ -1168,7 +1168,7 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
+@@ -1086,6 +1086,10 @@ void llama_grammar_free_impl(struct llama_grammar * grammar) {
+     delete grammar;
+ }
+ 
++bool llama_grammar_lazy_triggered(const struct llama_grammar * grammar) {
++    return grammar->lazy && !grammar->awaiting_trigger;
++}
++
+ struct llama_grammar * llama_grammar_clone_impl(const struct llama_grammar & grammar) {
+     auto * result = new llama_grammar {
+         grammar.vocab,
+@@ -1168,7 +1172,7 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
              grammar.awaiting_trigger = false;
              grammar.trigger_buffer.clear();
              llama_grammar_accept_str(grammar, piece);
@@ -11,7 +66,7 @@ index bed706bb..8ad58763 100644
              return;
          } else {
              grammar.trigger_buffer += piece;
-@@ -1192,11 +1192,11 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
+@@ -1192,11 +1196,11 @@ void llama_grammar_accept_impl(struct llama_grammar & grammar, llama_token token
                      // std::string constrained_str(match[1].first, grammar.trigger_buffer.end());
                      grammar.trigger_buffer.clear();
                      llama_grammar_accept_str(grammar, constrained_str);
@@ -25,3 +80,36 @@ index bed706bb..8ad58763 100644
              return;
          }
      }
+diff --git a/src/llama-grammar.h b/src/llama-grammar.h
+index f8c291de..c6e38937 100644
+--- a/src/llama-grammar.h
++++ b/src/llama-grammar.h
+@@ -157,6 +157,8 @@ struct llama_grammar * llama_grammar_init_impl(
+ 
+ void llama_grammar_free_impl(struct llama_grammar * grammar);
+ 
++bool llama_grammar_lazy_triggered(const struct llama_grammar * grammar);
++
+ struct llama_grammar * llama_grammar_clone_impl(const struct llama_grammar & grammar);
+ 
+ // TODO: move the API below as member functions of llama_grammar
+diff --git a/src/llama-sampling.cpp b/src/llama-sampling.cpp
+index bfbf5fa2..bc4678a7 100644
+--- a/src/llama-sampling.cpp
++++ b/src/llama-sampling.cpp
+@@ -2540,6 +2540,15 @@ uint32_t llama_sampler_get_seed(const struct llama_sampler * smpl) {
+     return LLAMA_DEFAULT_SEED;
+ }
+ 
++bool llama_sampler_grammar_lazy_triggered(const struct llama_sampler * smpl) {
++    if (smpl->iface == &llama_sampler_grammar_i) {
++        const auto * ctx = (const llama_sampler_grammar *) smpl->ctx;
++        return llama_grammar_lazy_triggered(ctx->grammar);
++    }
++
++    return false;
++}
++
+ // perf
+ 
+ struct llama_perf_sampler_data llama_perf_sampler(const struct llama_sampler * chain) {

@@ -878,11 +878,6 @@ struct chat_complete_req : complete_req {
     std::vector<std::unique_ptr<clip_multimedia>> multimedias;  // images and audios
     // template
     common_chat_params                            chat_params;
-    // tool calls
-    llama_token                                   tool_call_start_token = LLAMA_TOKEN_NULL;
-    std::string                                   tool_call_start_token_word;
-    std::vector<std::string>                      tool_call_start_words;
-    size_t                                        tool_call_start_words_longest_length = 0;
 
     /* OPEN AI*/
 
@@ -1389,33 +1384,17 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                     ptr->sampling.preserved_tokens.insert(toks[0]);
                 }
             }
-            for (const common_grammar_trigger & t : ptr->chat_params.grammar_triggers) {
+            for (common_grammar_trigger & t : ptr->chat_params.grammar_triggers) {
                 if (t.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
                     const std::string & word = t.value;
                     llama_tokens        toks = common_tokenize(vocab, word, false, true);
                     if (toks.size() == 1) {
                         ptr->sampling.grammar_triggers.push_back({ COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN, word, toks[0] });
                         ptr->sampling.preserved_tokens.insert(toks[0]);
-                        ptr->tool_call_start_token      = toks[0];
-                        ptr->tool_call_start_token_word = word;
                         continue;
                     }
-                    ptr->sampling.grammar_triggers.push_back(
-                        { COMMON_GRAMMAR_TRIGGER_TYPE_WORD, word, LLAMA_TOKEN_NULL });
-                    ptr->tool_call_start_words.push_back(word);
-                    ptr->tool_call_start_words_longest_length =
-                        std::max(ptr->tool_call_start_words_longest_length, word.length());
-                    continue;
                 }
-                ptr->sampling.grammar_triggers.push_back(t);
-            }
-            if (!ptr->tool_call_start_words.empty()) {
-                ptr->tool_call_start_words_longest_length =
-                    ptr->tool_call_start_words_longest_length +
-                    int32_t(std::ceil(float(ptr->tool_call_start_words_longest_length) / 3.0));
-            }
-            if (ptr->sampling.grammar_lazy && ptr->sampling.grammar_triggers.empty()) {
-                throw std::invalid_argument("no triggers set for lazy grammar");
+                ptr->sampling.grammar_triggers.push_back(std::move(t));
             }
             for (const std::string & s : ptr->chat_params.additional_stops) {
                 ptr->stop.push_back(s);
@@ -2141,12 +2120,8 @@ struct completions_task : btask {
     common_chat_syntax                                               tokenized_prompts_syntax;
     bool                                                             tokenized_prompts_include_multimedias = false;
     bool                                                             tokenized_prompts_include_tools       = false;
-    llama_token                   tool_call_start_token = LLAMA_TOKEN_NULL;  // move from chat_complete_req
-    std::string                   tool_call_start_token_word;                // move from chat_complete_req
-    std::vector<std::string>      tool_call_start_words;                     // move from chat_complete_req
-    size_t                        tool_call_start_words_longest_length = 0;  // move from chat_complete_req
-    std::string                   cmpl_id;
-    std::unique_ptr<complete_req> req;
+    std::string                                                      cmpl_id;
+    std::unique_ptr<complete_req>                                    req;
 
     // process
     llama_pos          pos             = 0;  // indicate the position at present
@@ -2184,9 +2159,8 @@ struct completions_task : btask {
     bool                    reasoning_finished    = false;
     //// tool call
     bool                    tool_call_stop_fast   = false;  // collect from request
-    ////// tool call
+    ////// non-jinja too calls
     bool                    tool_call_start_found = false;
-    //////// non-jinja too calls
     std::string             tool_call_start_found_word;
 
     //// speculative
@@ -2998,8 +2972,9 @@ struct httpserver {
                         reasoning_end_token = ids[0];
                     }
                 }
-                support_reasoning =
-                    reasoning_start_token != LLAMA_TOKEN_NULL && reasoning_end_token != LLAMA_TOKEN_NULL;
+                support_reasoning = params.llm_params.reasoning_budget != 0 &&
+                                    reasoning_start_token != LLAMA_TOKEN_NULL &&
+                                    reasoning_end_token != LLAMA_TOKEN_NULL;
                 if (!support_reasoning) {
                     reasoning_start_token = LLAMA_TOKEN_NULL;
                     reasoning_end_token   = LLAMA_TOKEN_NULL;
@@ -4237,52 +4212,10 @@ struct httpserver {
                             if (task->tokenized_prompts_include_tools && task->reasoning_finished) {
                                 //// jinja
                                 if (params.llm_params.use_jinja) {
-                                    bool has_tool_call_start_token = task->tool_call_start_token != LLAMA_TOKEN_NULL;
-                                    bool has_tool_call_start_words = !task->tool_call_start_words.empty();
-                                    ////// found tool call start
-                                    if (!task->tool_call_start_found &&
-                                        (has_tool_call_start_token || has_tool_call_start_words)) {
-                                        if (has_tool_call_start_token) {
-                                            // stop sending text if the start token found
-                                            for (int32_t i = n_generated_tokens_s; i < n_generated_tokens_e; i++) {
-                                                if (task->processed_tokens[i] == task->tool_call_start_token) {
-                                                    task->tool_call_start_found = true;
-                                                    size_t pos                  = task->generated_text.find(
-                                                        task->tool_call_start_token_word,
-                                                        task->generated_text.size() - sampled_str.size());
-                                                    if (pos != std::string::npos) {
-                                                        task->generated_text_keep_pos = pos;
-                                                        // within jinja we should keep the tool call start word
-                                                    }
-                                                    break;
-                                                }
-                                            }
-                                        } else {
-                                            // stop sending text if the start word found
-                                            if (task->generated_text.length() <=
-                                                task->tool_call_start_words_longest_length) {
-                                                send_text = false;
-                                            } else {
-                                                for (const std::string & word : task->tool_call_start_words) {
-                                                    if (size_t pos = task->generated_text.find(word);
-                                                        pos != std::string::npos) {
-                                                        task->tool_call_start_found   = true;
-                                                        task->generated_text_keep_pos = pos;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    ////// found tool call end
-                                    else {
-                                        send_text = false;
-                                        std::string functions_str;
-                                        if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
-                                            functions_str = task->generated_text;
-                                        }
+                                    if (common_sampler_grammer_lazy_triggered(task->sampler)) {
+                                        send_text                 = false;
+                                        std::string functions_str = task->generated_text;
                                         if (!functions_str.empty()) {
-                                            task->tool_call_start_found = false;
                                             try {
                                                 common_chat_msg msg = common_chat_parse(functions_str, false,
                                                                                         task->tokenized_prompts_syntax);
@@ -4296,6 +4229,7 @@ struct httpserver {
                                                         });
                                                     }
                                                     if (task->tool_call_stop_fast) {
+                                                        send_text = true;
                                                         SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
                                                         task->generated_finish_reason = "tool_calls";
                                                     }
@@ -4304,9 +4238,6 @@ struct httpserver {
                                                     task->generated_text.clear();
                                                 }
                                             } catch (const std::exception & e) {
-                                                SRV_ERR("rid %s | failed to parse tool call: %s, wait\n", rid.c_str(),
-                                                        e.what());
-                                                task->tool_call_start_found   = true;
                                                 task->generated_text_keep_pos = 0;
                                             }
                                         }
@@ -4322,7 +4253,7 @@ struct httpserver {
                                                 if (task->processed_tokens[i] == tool_call_start_token) {
                                                     task->tool_call_start_found = true;
                                                     size_t pos                  = task->generated_text.find(
-                                                        task->tool_call_start_token_word,
+                                                        tool_call_start_token_word,
                                                         task->generated_text.size() - sampled_str.size());
                                                     if (pos != std::string::npos) {
                                                         task->generated_text_keep_pos = pos;
@@ -5862,10 +5793,6 @@ struct httpserver {
         task->sampler                               = sampler;
         task->sampler_draft                         = sampler_draft;
         task->tool_call_stop_fast                   = tool_call_stop_fast;
-        task->tool_call_start_token                 = req->tool_call_start_token;
-        task->tool_call_start_token_word            = req->tool_call_start_token_word;
-        task->tool_call_start_words                 = std::move(req->tool_call_start_words);
-        task->tool_call_start_words_longest_length  = req->tool_call_start_words_longest_length;
         task->cmpl_id                               = gen_chat_completion_id();
         task->reasoning_finished                    = reasoning_finished;
         task->req                                   = std::move(req);
