@@ -12,7 +12,7 @@ index a6106944..40ecffea 100644
  
  #ifdef __cplusplus
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index f78e7eee..64e618b9 100644
+index bc93bc63..cc86f3ff 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1539,6 +1539,7 @@ static bool ggml_backend_metal_buffer_rset_init(
@@ -109,7 +109,7 @@ index f78e7eee..64e618b9 100644
                  GGML_ASSERT(ggml_is_contiguous_1(src0));
  
                  float eps;
-@@ -5976,6 +5976,10 @@ static ggml_backend_dev_t ggml_backend_metal_reg_device_get(ggml_backend_reg_t r
+@@ -5978,6 +5978,10 @@ static ggml_backend_dev_t ggml_backend_metal_reg_device_get(ggml_backend_reg_t r
      /* .get_proc_address = */ ggml_backend_metal_get_proc_address,
  };
  

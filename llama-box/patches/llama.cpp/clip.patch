@@ -1,45 +1,36 @@
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index 62c936ed..2c5e8099 100644
+index 62c936ed..d80e5c76 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
-@@ -226,17 +226,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -226,6 +226,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
--#define LOG_TMPL(level, ...) \
--    do { \
--        if ((level) >= g_logger_state.verbosity_thold) { \
--            clip_log_internal((level), __VA_ARGS__); \
--        } \
--    } while (0)
--#define LOG_INF(...) LOG_TMPL(GGML_LOG_LEVEL_INFO,  __VA_ARGS__)
--#define LOG_WRN(...) LOG_TMPL(GGML_LOG_LEVEL_WARN,  __VA_ARGS__)
--#define LOG_ERR(...) LOG_TMPL(GGML_LOG_LEVEL_ERROR, __VA_ARGS__)
--#define LOG_DBG(...) LOG_TMPL(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
--#define LOG_CNT(...) LOG_TMPL(GGML_LOG_LEVEL_CONT,  __VA_ARGS__)
-+#include "log.h"
++#ifndef LOG_TMPL
+ #define LOG_TMPL(level, ...) \
+     do { \
+         if ((level) >= g_logger_state.verbosity_thold) { \
+@@ -237,6 +238,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+ #define LOG_ERR(...) LOG_TMPL(GGML_LOG_LEVEL_ERROR, __VA_ARGS__)
+ #define LOG_DBG(...) LOG_TMPL(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
+ #define LOG_CNT(...) LOG_TMPL(GGML_LOG_LEVEL_CONT,  __VA_ARGS__)
++#endif
  
  //
  // cpp wrappers
-@@ -292,37 +282,7 @@ struct clip_image_f32_batch {
+@@ -292,7 +294,7 @@ struct clip_image_f32_batch {
  // common utils
  //
  
 -static std::string string_format(const char * fmt, ...) {
--    va_list ap;
--    va_list ap2;
--    va_start(ap, fmt);
--    va_copy(ap2, ap);
--    int size = vsnprintf(NULL, 0, fmt, ap);
--    GGML_ASSERT(size >= 0 && size < INT_MAX); // NOLINT
--    std::vector<char> buf(size + 1);
--    int size2 = vsnprintf(buf.data(), size + 1, fmt, ap2);
--    GGML_ASSERT(size2 == size);
--    va_end(ap2);
--    va_end(ap);
--    return std::string(buf.data(), buf.size());
--}
--
++inline std::string string_format(const char * fmt, ...) {
+     va_list ap;
+     va_list ap2;
+     va_start(ap, fmt);
+@@ -307,94 +309,18 @@ static std::string string_format(const char * fmt, ...) {
+     return std::string(buf.data(), buf.size());
+ }
+ 
 -static void string_replace_all(std::string & s, const std::string & search, const std::string & replace) {
 -    if (search.empty()) {
 -        return;
@@ -56,15 +47,102 @@ index 62c936ed..2c5e8099 100644
 -    builder.append(s, last_pos, std::string::npos);
 -    s = std::move(builder);
 -}
-+#include "common.h"
++inline void string_replace_all(std::string & s, const std::string & search, const std::string & replace);
  
  // split string by a `std::string delim` instead of `char delim`
- static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
+-static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
+-    std::vector<std::string> tokens;
+-    size_t pos = 0;
+-    std::string token;
+-    while ((pos = s.find(delimiter)) != std::string::npos) {
+-        token = s.substr(0, pos);
+-        tokens.push_back(token);
+-        s.erase(0, pos + delimiter.length());
+-    }
+-    tokens.push_back(s);
+-    return tokens;
+-}
++inline std::vector<std::string> string_split_str(std::string s, const std::string & delimiter);
+ 
+ //
+ // gguf utils
+ //
+ 
+-static std::string gguf_data_to_str(enum gguf_type type, const void * data, int i) {
+-    switch (type) {
+-        case GGUF_TYPE_UINT8:   return std::to_string(((const uint8_t  *)data)[i]);
+-        case GGUF_TYPE_INT8:    return std::to_string(((const int8_t   *)data)[i]);
+-        case GGUF_TYPE_UINT16:  return std::to_string(((const uint16_t *)data)[i]);
+-        case GGUF_TYPE_INT16:   return std::to_string(((const int16_t  *)data)[i]);
+-        case GGUF_TYPE_UINT32:  return std::to_string(((const uint32_t *)data)[i]);
+-        case GGUF_TYPE_INT32:   return std::to_string(((const int32_t  *)data)[i]);
+-        case GGUF_TYPE_UINT64:  return std::to_string(((const uint64_t *)data)[i]);
+-        case GGUF_TYPE_INT64:   return std::to_string(((const int64_t  *)data)[i]);
+-        case GGUF_TYPE_FLOAT32: return std::to_string(((const float    *)data)[i]);
+-        case GGUF_TYPE_FLOAT64: return std::to_string(((const double   *)data)[i]);
+-        case GGUF_TYPE_BOOL:    return ((const bool *)data)[i] ? "true" : "false";
+-        default:                return string_format("unknown type %d", type);
+-    }
+-}
++inline std::string gguf_data_to_str(enum gguf_type type, const void * data, int i);
+ 
+-static std::string gguf_kv_to_str(const struct gguf_context * ctx_gguf, int i) {
+-    const enum gguf_type type = gguf_get_kv_type(ctx_gguf, i);
+-
+-    switch (type) {
+-        case GGUF_TYPE_STRING:
+-            return gguf_get_val_str(ctx_gguf, i);
+-        case GGUF_TYPE_ARRAY:
+-            {
+-                const enum gguf_type arr_type = gguf_get_arr_type(ctx_gguf, i);
+-                int arr_n = gguf_get_arr_n(ctx_gguf, i);
+-                const void * data = arr_type == GGUF_TYPE_STRING ? nullptr : gguf_get_arr_data(ctx_gguf, i);
+-                std::stringstream ss;
+-                ss << "[";
+-                for (int j = 0; j < arr_n; j++) {
+-                    if (arr_type == GGUF_TYPE_STRING) {
+-                        std::string val = gguf_get_arr_str(ctx_gguf, i, j);
+-                        // escape quotes
+-                        string_replace_all(val, "\\", "\\\\");
+-                        string_replace_all(val, "\"", "\\\"");
+-                        ss << '"' << val << '"';
+-                    } else if (arr_type == GGUF_TYPE_ARRAY) {
+-                        ss << "???";
+-                    } else {
+-                        ss << gguf_data_to_str(arr_type, data, j);
+-                    }
+-                    if (j < arr_n - 1) {
+-                        ss << ", ";
+-                    }
+-                }
+-                ss << "]";
+-                return ss.str();
+-            }
+-        default:
+-            return gguf_data_to_str(type, gguf_get_val_data(ctx_gguf, i), 0);
+-    }
+-}
++inline std::string gguf_kv_to_str(const struct gguf_context * ctx_gguf, int i);
+ 
+ //
+ // debugging
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 6ae2c2ce..f0cddb44 100644
+index c25bacc1..5cad9e6a 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
-@@ -167,7 +167,7 @@ enum patch_merge_type {
+@@ -30,6 +30,11 @@
+ 
+ struct clip_logger_state g_logger_state = {GGML_LOG_LEVEL_CONT, clip_log_callback_default, NULL};
+ 
++void clip_log_set(ggml_log_callback log_callback, void * user_data) {
++    g_logger_state.log_callback = log_callback ? log_callback : clip_log_callback_default;
++    g_logger_state.log_callback_user_data = user_data;
++}
++
+ enum ffn_op_type {
+     FFN_GELU,
+     FFN_GELU_ERF,
+@@ -164,7 +169,7 @@ enum patch_merge_type {
  
  struct clip_hparams {
      int32_t image_size;
@@ -73,7 +151,7 @@ index 6ae2c2ce..f0cddb44 100644
      int32_t n_embd;
      int32_t n_ff;
      int32_t projection_dim;
-@@ -2064,7 +2064,7 @@ struct clip_model_loader {
+@@ -2061,7 +2066,7 @@ struct clip_model_loader {
          }
      }
  
@@ -82,7 +160,7 @@ index 6ae2c2ce..f0cddb44 100644
          auto & hparams = model.hparams;
          std::string log_ffn_op; // for logging
  
-@@ -2199,8 +2199,9 @@ struct clip_model_loader {
+@@ -2196,8 +2201,9 @@ struct clip_model_loader {
                      } break;
                  case PROJECTOR_TYPE_PIXTRAL:
                      {
@@ -93,7 +171,7 @@ index 6ae2c2ce..f0cddb44 100644
                          get_u32(KEY_SPATIAL_MERGE_SIZE, hparams.spatial_merge_size, false);
                      } break;
                  case PROJECTOR_TYPE_GEMMA3:
-@@ -2217,8 +2218,8 @@ struct clip_model_loader {
+@@ -2214,8 +2220,8 @@ struct clip_model_loader {
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
@@ -104,7 +182,7 @@ index 6ae2c2ce..f0cddb44 100644
                      } break;
                  case PROJECTOR_TYPE_QWEN25VL:
                      {
-@@ -2226,8 +2227,8 @@ struct clip_model_loader {
+@@ -2223,8 +2229,8 @@ struct clip_model_loader {
                          // https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
@@ -115,11 +193,11 @@ index 6ae2c2ce..f0cddb44 100644
                          get_u32(KEY_WIN_ATTN_PATTERN, hparams.n_wa_pattern);
                      } break;
                  case PROJECTOR_TYPE_LLAMA4:
-@@ -2292,6 +2293,19 @@ struct clip_model_loader {
+@@ -2289,6 +2295,19 @@ struct clip_model_loader {
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
  
-+#if (!defined GGML_USE_CUDA) && (!defined GGML_USE_HIP) && (!defined GGML_USE_MUSA) && (!defined GGML_USE_METAL)
++#if (defined GGML_USE_CANN) || (defined GGML_USE_VULKAN)
 +        if ((model.proj_type == PROJECTOR_TYPE_QWEN2VL || model.proj_type == PROJECTOR_TYPE_QWEN25VL || model.proj_type == PROJECTOR_TYPE_QWEN2A) && !ggml_backend_is_cpu(ctx_clip.backend)) {
 +            LOG_WRN("%s", "Qwen2VL/Qwen25VL merger is not supported on current backend, fallback to CPU backend\n");
 +            ggml_backend_free(ctx_clip.backend);
@@ -135,7 +213,7 @@ index 6ae2c2ce..f0cddb44 100644
          // TODO @ngxson : support both audio and video in the future
          const char * prefix = model.modality == CLIP_MODALITY_AUDIO ? "a" : "v";
  
-@@ -2689,7 +2703,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
+@@ -2686,7 +2705,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
  
          if (loader.has_vision) {
              ctx_vision = new clip_ctx(ctx_params);
@@ -144,7 +222,7 @@ index 6ae2c2ce..f0cddb44 100644
              loader.load_tensors(*ctx_vision);
              loader.alloc_compute_meta(*ctx_vision);
          }
-@@ -2828,6 +2842,11 @@ static void normalize_image_u8_to_f32(const clip_image_u8 & src, clip_image_f32
+@@ -2801,6 +2820,11 @@ static void normalize_image_u8_to_f32(const clip_image_u8 & src, clip_image_f32
  struct image_manipulation {
      // Bilinear resize function
      static void bilinear_resize(const clip_image_u8& src, clip_image_u8& dst, int target_width, int target_height) {
@@ -156,7 +234,7 @@ index 6ae2c2ce..f0cddb44 100644
          dst.nx = target_width;
          dst.ny = target_height;
          dst.buf.resize(3 * target_width * target_height);
-@@ -2864,6 +2883,11 @@ struct image_manipulation {
+@@ -2837,6 +2861,11 @@ struct image_manipulation {
      // Bicubic resize function
      // part of image will be cropped if the aspect ratio is different
      static bool bicubic_resize(const clip_image_u8 & img, clip_image_u8 & dst, int target_width, int target_height) {
@@ -168,7 +246,7 @@ index 6ae2c2ce..f0cddb44 100644
          const int nx = img.nx;
          const int ny = img.ny;
  
-@@ -2999,6 +3023,9 @@ struct image_manipulation {
+@@ -2972,6 +3001,9 @@ struct image_manipulation {
          if (inp_size.width <= 0 || inp_size.height <= 0 || align_size <= 0 || max_dimension <= 0) {
              return {0, 0};
          }
@@ -178,7 +256,7 @@ index 6ae2c2ce..f0cddb44 100644
  
          float scale = std::min(1.0f, std::min(static_cast<float>(max_dimension) / inp_size.width,
                                                static_cast<float>(max_dimension) / inp_size.height));
-@@ -3325,7 +3352,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
+@@ -3298,7 +3330,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
          clip_image_u8 resized;
          auto patch_size = params.patch_size * 2;
          auto new_size = image_manipulation::calc_size_preserved_ratio(original_size, patch_size, params.image_size);
@@ -187,7 +265,7 @@ index 6ae2c2ce..f0cddb44 100644
  
          clip_image_f32_ptr img_f32(clip_image_f32_init());
          // clip_image_f32_ptr res(clip_image_f32_init());
-@@ -4107,6 +4134,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -4080,6 +4112,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type() == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -219,18 +297,22 @@ index 6ae2c2ce..f0cddb44 100644
      return ctx->model.modality == CLIP_MODALITY_VISION;
  }
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index cb2eb261..326bb8ac 100644
+index cb2eb261..e6f27711 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
-@@ -25,6 +25,7 @@ enum clip_modality {
+@@ -25,8 +25,11 @@ enum clip_modality {
  struct clip_context_params {
      bool use_gpu;
      enum ggml_log_level verbosity;
 +    int max_image_size = 0;
  };
  
++void clip_log_set(ggml_log_callback log_callback, void * user_data);
++
  struct clip_init_result {
-@@ -103,6 +104,12 @@ bool clip_is_glm(const struct clip_ctx * ctx);
+     struct clip_ctx * ctx_v; // vision context
+     struct clip_ctx * ctx_a; // audio context
+@@ -103,6 +106,12 @@ bool clip_is_glm(const struct clip_ctx * ctx);
  bool clip_is_qwen2vl(const struct clip_ctx * ctx);
  bool clip_is_llava(const struct clip_ctx * ctx);
  bool clip_is_gemma3(const struct clip_ctx * ctx);
@@ -243,3 +325,29 @@ index cb2eb261..326bb8ac 100644
  
  bool clip_encode_float_image (struct clip_ctx * ctx, int n_threads, float * img, int h, int w, float * vec);
  
+diff --git a/tools/mtmd/mtmd-helper.cpp b/tools/mtmd/mtmd-helper.cpp
+index 686f42f3..eead1f8e 100644
+--- a/tools/mtmd/mtmd-helper.cpp
++++ b/tools/mtmd/mtmd-helper.cpp
+@@ -458,3 +458,7 @@ mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, const char *
+ 
+     return mtmd_helper_bitmap_init_from_buf(ctx, buf.data(), buf.size());
+ }
++
++bool decode_audio_from_buf(const unsigned char * buf_in, size_t len, int target_sampler_rate, std::vector<float> & pcmf32_mono) {
++    return audio_helpers::decode_audio_from_buf(buf_in, len, target_sampler_rate, pcmf32_mono);
++}
+\ No newline at end of file
+diff --git a/tools/mtmd/mtmd-helper.h b/tools/mtmd/mtmd-helper.h
+index 5c0edc69..f474b0c9 100644
+--- a/tools/mtmd/mtmd-helper.h
++++ b/tools/mtmd/mtmd-helper.h
+@@ -80,6 +80,8 @@ MTMD_API int32_t mtmd_helper_decode_image_chunk(mtmd_context * ctx,
+                                                 int32_t n_batch,
+                                                 llama_pos * new_n_past);
+ 
++MTMD_API bool decode_audio_from_buf(const unsigned char * buf_in, size_t len, int target_sampler_rate, std::vector<float> & pcmf32_mono);
++
+ #ifdef __cplusplus
+ } // extern "C"
+ #endif

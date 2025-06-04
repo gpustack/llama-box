@@ -1,8 +1,8 @@
 diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
-index 8667a80b..70fd7042 100644
+index a0a318a2..85483a5b 100644
 --- a/ggml/src/gguf.cpp
 +++ b/ggml/src/gguf.cpp
-@@ -408,7 +408,7 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+@@ -425,7 +425,7 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
              for (size_t j = 0; ok && j < ctx->kv.size(); ++j) {
                  if (key == ctx->kv[j].key) {
                      GGML_LOG_ERROR("%s: duplicate key '%s' for tensors %zu and %" PRIi64 " \n", __func__, key.c_str(), j, i);
@@ -12,10 +12,10 @@ index 8667a80b..70fd7042 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index 01762bea..001166e7 100644
+index da0f652c..c5ef559c 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -939,6 +939,7 @@ extern "C" {
+@@ -943,6 +943,7 @@ extern "C" {
      LLAMA_API llama_token llama_vocab_sep(const struct llama_vocab * vocab); // sentence separator
      LLAMA_API llama_token llama_vocab_nl (const struct llama_vocab * vocab); // next-line
      LLAMA_API llama_token llama_vocab_pad(const struct llama_vocab * vocab); // padding
@@ -24,7 +24,7 @@ index 01762bea..001166e7 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index d5a036a8..a786a98e 100644
+index b5197669..bcd3e9d3 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1467,7 +1467,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
@@ -46,7 +46,7 @@ index d5a036a8..a786a98e 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3169,6 +3170,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3174,6 +3175,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  

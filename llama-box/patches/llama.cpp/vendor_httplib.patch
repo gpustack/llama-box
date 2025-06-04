@@ -1,0 +1,12 @@
+diff --git a/vendor/cpp-httplib/httplib.h b/vendor/cpp-httplib/httplib.h
+index 0aa4e627..93640e27 100644
+--- a/vendor/cpp-httplib/httplib.h
++++ b/vendor/cpp-httplib/httplib.h
+@@ -6575,6 +6575,7 @@ inline void Server::stop() {
+     std::atomic<socket_t> sock(svr_sock_.exchange(INVALID_SOCKET));
+     detail::shutdown_socket(sock);
+     detail::close_socket(sock);
++    is_running_ = false;
+   }
+   is_decommissioned = false;
+ }

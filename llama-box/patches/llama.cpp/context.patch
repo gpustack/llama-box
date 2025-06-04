@@ -1,8 +1,8 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index e153351a..b7cd9ce8 100644
+index 4ab57438..f58dd7de 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@ -104,7 +104,6 @@ llama_context::llama_context(
+@@ -105,7 +105,6 @@ llama_context::llama_context(
  
      LLAMA_LOG_INFO("%s: n_seq_max     = %u\n",   __func__, cparams.n_seq_max);
      LLAMA_LOG_INFO("%s: n_ctx         = %u\n",   __func__, cparams.n_ctx);
@@ -10,7 +10,7 @@ index e153351a..b7cd9ce8 100644
      LLAMA_LOG_INFO("%s: n_batch       = %u\n",   __func__, cparams.n_batch);
      LLAMA_LOG_INFO("%s: n_ubatch      = %u\n",   __func__, cparams.n_ubatch);
      LLAMA_LOG_INFO("%s: causal_attn   = %d\n",   __func__, cparams.causal_attn);
-@@ -112,14 +111,14 @@ llama_context::llama_context(
+@@ -113,14 +112,14 @@ llama_context::llama_context(
      LLAMA_LOG_INFO("%s: freq_base     = %.1f\n", __func__, cparams.rope_freq_base);
      LLAMA_LOG_INFO("%s: freq_scale    = %g\n",   __func__, cparams.rope_freq_scale);
  
@@ -30,8 +30,8 @@ index e153351a..b7cd9ce8 100644
 +                __func__, cparams.n_ctx, hparams.n_ctx_train);
      }
  
-     if (!hparams.vocab_only) {
-@@ -606,7 +605,7 @@ void llama_context::set_n_threads(int32_t n_threads, int32_t n_threads_batch) {
+     if (!params.swa_full && cparams.n_seq_max > 1) {
+@@ -579,7 +578,7 @@ void llama_context::set_n_threads(int32_t n_threads, int32_t n_threads_batch) {
  }
  
  void llama_context::set_abort_callback(bool (*abort_callback)(void * data), void * abort_callback_data) {
@@ -40,7 +40,7 @@ index e153351a..b7cd9ce8 100644
  
      this->abort_callback      = abort_callback;
      this->abort_callback_data = abort_callback_data;
-@@ -621,19 +620,19 @@ void llama_context::set_abort_callback(bool (*abort_callback)(void * data), void
+@@ -594,19 +593,19 @@ void llama_context::set_abort_callback(bool (*abort_callback)(void * data), void
  }
  
  void llama_context::set_embeddings(bool value) {
@@ -63,7 +63,7 @@ index e153351a..b7cd9ce8 100644
  
      cparams.warmup = value;
  }
-@@ -641,14 +640,14 @@ void llama_context::set_warmup(bool value) {
+@@ -614,14 +613,14 @@ void llama_context::set_warmup(bool value) {
  void llama_context::set_adapter_lora(
              llama_adapter_lora * adapter,
              float scale) {
@@ -80,7 +80,7 @@ index e153351a..b7cd9ce8 100644
  
      auto pos = loras.find(adapter);
      if (pos != loras.end()) {
-@@ -660,7 +659,7 @@ bool llama_context::rm_adapter_lora(
+@@ -633,7 +632,7 @@ bool llama_context::rm_adapter_lora(
  }
  
  void llama_context::clear_adapter_lora() {
@@ -89,7 +89,7 @@ index e153351a..b7cd9ce8 100644
  
      loras.clear();
  }
-@@ -671,7 +670,7 @@ bool llama_context::apply_adapter_cvec(
+@@ -644,7 +643,7 @@ bool llama_context::apply_adapter_cvec(
                  int32_t   n_embd,
                  int32_t   il_start,
                  int32_t   il_end) {
@@ -98,7 +98,7 @@ index e153351a..b7cd9ce8 100644
  
      return cvec.apply(model, data, len, n_embd, il_start, il_end);
  }
-@@ -858,7 +857,7 @@ int llama_context::encode(llama_batch & inp_batch) {
+@@ -864,7 +863,7 @@ int llama_context::encode(llama_batch & inp_batch) {
  
  int llama_context::decode(llama_batch & inp_batch) {
      if (!memory) {
@@ -107,7 +107,7 @@ index e153351a..b7cd9ce8 100644
          return encode(inp_batch);
      }
  
-@@ -2145,8 +2144,8 @@ llama_context * llama_init_from_model(
+@@ -2232,8 +2231,8 @@ llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {
