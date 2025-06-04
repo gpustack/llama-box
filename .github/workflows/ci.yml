@@ -981,9 +981,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # AVX2 ==> Windows Server 2019.
-        # AVX512 ==> Windows Server 2019.
-        # NEON ==> Windows Server 2019.
+        # AVX2 ==> Windows Server 2022.
+        # AVX512 ==> Windows Server 2022.
+        # NEON ==> Windows Server 2022.
         include:
           - arch: 'amd64'
             instruction: 'avx2'
@@ -991,7 +991,7 @@ jobs:
             instruction: 'avx512'
           - arch: 'arm64'
             instruction: 'neon'
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1075,8 +1075,8 @@ jobs:
       matrix:
         # see https://developer.nvidia.com/cuda-12-8-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network,
         #     https://developer.nvidia.com/cuda-12-4-0-download-archive?target_os=Windows&target_arch=x86_64&target_version=Server2022&target_type=exe_network,
-        #     12.8 ==> 12.8.0, Windows Server 2019.
-        #     12.4 ==> 12.4.0, Windows Server 2019.
+        #     12.8 ==> 12.8.0, Windows Server 2022.
+        #     12.4 ==> 12.4.0, Windows Server 2022.
         # build fat binary,
         # see https://developer.nvidia.com/cuda-gpus.
         include:
@@ -1088,7 +1088,7 @@ jobs:
             version: '12.4'
             distro_binary_installer: 'https://developer.download.nvidia.com/compute/cuda/12.4.0/network_installers/cuda_12.4.0_windows_network.exe'
             cuda_arch: '60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real'
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1190,7 +1190,7 @@ jobs:
       fail-fast: false
       matrix:
         # see https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
-        #     6.2 ==> 6.2.4, Windows Server 2019.
+        #     6.2 ==> 6.2.4, Windows Server 2022.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
@@ -1204,7 +1204,7 @@ jobs:
             version: '6.2'
             distro_binary_installer: 'https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q4-WinSvr2022-For-HIP.exe'
             hip_arch: 'gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102'
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1309,12 +1309,12 @@ jobs:
       fail-fast: false
       matrix:
         # see https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?operatingsystem=windows&windows-install-type=online.
-        #     2025.0 ==> 2025.0.0, Windows Server 2019.
+        #     2025.0 ==> 2025.0.0, Windows Server 2022.
         include:
           - arch: 'amd64'
             version: '2025.0'
             distro_binary_installer: 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b380d914-366b-4b77-a74a-05e3c38b3514/intel-oneapi-base-toolkit-2025.0.0.882.exe'
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1411,12 +1411,12 @@ jobs:
       fail-fast: false
       matrix:
         # see https://vulkan.lunarg.com/sdk/home.
-        #     1.4 ==> 1.4.304.1, Windows Server 2019.
+        #     1.4 ==> 1.4.304.1, Windows Server 2022.
         include:
           - arch: 'amd64'
             version: '1.4'
             distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.4.304.1/windows/VulkanSDK-1.4.304.1-Installer.exe'
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -1537,7 +1537,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/out
           merge-multiple: true
-      - name: Generate sha256sum.txt for all files in ./out
+      - name: Generate checksums
         run: |
           cd ${{ github.workspace }}/out
           sha256sum * > sha256sum.txt
