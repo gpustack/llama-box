@@ -38,7 +38,7 @@
 #include "llama.cpp/ggml/include/ggml-rpc.h"
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "llama.cpp/ggml/src/ggml-impl.h"
-#include "llama.cpp/tools/server/httplib.h"
+#include "llama.cpp/vendor/cpp-httplib/httplib.h"
 #ifdef GGML_USE_CUDA
 #    include "llama.cpp/ggml/include/ggml-cuda.h"
 #endif
@@ -55,6 +55,7 @@
 #    include "llama.cpp/ggml/include/ggml-sycl.h"
 #endif
 
+#define SELF_PACKAGE 0
 #include "z_utils.hpp"
 
 // defines

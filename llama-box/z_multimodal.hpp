@@ -10,8 +10,8 @@
 #include <variant>
 
 #include "llama.cpp/tools/mtmd/clip-impl.h"
-#include "llama.cpp/tools/mtmd/clip.h"
 #include "llama.cpp/tools/mtmd/mtmd-audio.h"
+#include "llama.cpp/tools/mtmd/mtmd-helper.h"
 
 // types
 
@@ -122,8 +122,10 @@ static inline std::vector<llama_multimodal_tokens> tokenize_image(clip_ctx * ctx
                 LOG_ERR("failed to encode image %2zu/%zu\n", i + 1, n_entries);
                 return {};
             }
-            LOG_INFV(3, "encoded image %2zu/%zu within %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
-                     (ggml_time_us() - t_start) / 1000.0, result[i].n_tokens);
+            if (common_log_verbosity_thold >= 3) {
+                LOG_INF("encoded image %2zu/%zu within %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
+                        (ggml_time_us() - t_start) / 1000.0, result[i].n_tokens);
+            }
             result[i].dummy_token = multimodal_dummy_token_generator--;
         }
     }
@@ -154,8 +156,10 @@ static inline std::vector<llama_multimodal_tokens> tokenize_image(clip_ctx * ctx
                 LOG_ERR("failed to encode image %2zu/%zu\n", i + 1, n_entries);
                 return {};
             }
-            LOG_INFV(3, "encoded image %2zu/%zu within %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
-                     (ggml_time_us() - t_start) / 1000.0, n_entry_tokens);
+            if (common_log_verbosity_thold >= 3) {
+                LOG_INF("encoded image %2zu/%zu within %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
+                        (ggml_time_us() - t_start) / 1000.0, n_entry_tokens);
+            }
         }
         result[0].dummy_token = multimodal_dummy_token_generator--;
     }
@@ -176,8 +180,10 @@ static inline std::vector<llama_multimodal_tokens> tokenize_image(clip_ctx * ctx
             LOG_ERR("%s", "failed to encode image in batch\n");
             return {};
         }
-        LOG_INFV(3, "encoded image in batch within %8.2f ms, n_tokens = %d\n", (ggml_time_us() - t_start) / 1000.0,
-                 result[0].n_tokens);
+        if (common_log_verbosity_thold >= 3) {
+            LOG_INF("encoded image in batch within %8.2f ms, n_tokens = %d\n", (ggml_time_us() - t_start) / 1000.0,
+                    result[0].n_tokens);
+        }
         if (clip_is_qwen2vl(ctx_clip)) {
             const int32_t ps = clip_get_patch_size(ctx_clip) * 2;
             const int32_t ph = batch.entries[0]->ny / ps + (batch.entries[0]->ny % ps > 0);
@@ -230,8 +236,10 @@ static inline std::vector<llama_multimodal_tokens> tokenize_audio(clip_ctx * ctx
             LOG_ERR("failed to encode audio %2zu/%zu\n", i + 1, n_entries);
             return {};
         }
-        LOG_INFV(3, "encoded audio %2zu/%zu within %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
-                 (ggml_time_us() - t_start) / 1000.0, result[i].n_tokens);
+        if (common_log_verbosity_thold >= 3) {
+            LOG_INF("encoded audio %2zu/%zu within %8.2f ms, n_tokens = %d\n", i + 1, n_entries,
+                    (ggml_time_us() - t_start) / 1000.0, result[i].n_tokens);
+        }
         result[i].dummy_token = multimodal_dummy_token_generator--;
     }
 

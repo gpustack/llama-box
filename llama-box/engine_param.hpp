@@ -16,10 +16,10 @@
 #define JSON_ASSERT GGML_ASSERT
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/common/json-schema-to-grammar.h"
-#include "llama.cpp/common/json.hpp"
 #include "llama.cpp/common/sampling.h"
 #include "llama.cpp/ggml/include/ggml.h"
 #include "llama.cpp/include/llama.h"
+#include "llama.cpp/vendor/nlohmann/json.hpp"
 
 #define SELF_PACKAGE 0
 #include "httpserver.hpp"

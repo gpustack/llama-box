@@ -7,8 +7,8 @@
 #include <utility>
 
 #define JSON_ASSERT GGML_ASSERT
-#include "llama.cpp/common/json.hpp"
 #include "llama.cpp/common/log.h"
+#include "llama.cpp/vendor/nlohmann/json.hpp"
 
 // defines
 
