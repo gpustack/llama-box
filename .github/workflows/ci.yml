@@ -1537,6 +1537,12 @@ jobs:
         with:
           path: ${{ github.workspace }}/out
           merge-multiple: true
+      - name: Generate sha256sum.txt for all files in ./out
+        run: |
+          cd ${{ github.workspace }}/out
+          sha256sum * > sha256sum.txt
+          cat sha256sum.txt
+        shell: bash
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
