@@ -4833,8 +4833,16 @@ struct httpserver {
                      "type = %s, hash = %s\n",
                      rid, type.c_str(), mtmd->hash.c_str());
             if (mtmd->is_audio) {
+                if (llm_ctx_clip_a == nullptr) {
+                    SRV_ERR("rid %s | tokenizing, audio clip is not initialized\n", rid);
+                    return result;
+                }
                 result = tokenize_audio(llm_ctx_clip_a, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             } else {
+                if (llm_ctx_clip_v == nullptr) {
+                    SRV_ERR("rid %s | tokenizing, vision clip is not initialized\n", rid);
+                    return result;
+                }
                 result = tokenize_image(llm_ctx_clip_v, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             }
             if (common_log_verbosity_thold >= 2) {
@@ -4905,8 +4913,16 @@ struct httpserver {
                      "type = %s, hash = %s\n",
                      rid, type.c_str(), mtmd->hash.c_str());
             if (mtmd->is_audio) {
+                if (llm_ctx_clip_a == nullptr) {
+                    SRV_ERR("rid %s | tokenizing, audio clip is not initialized\n", rid);
+                    return result;
+                }
                 result = tokenize_audio(llm_ctx_clip_a, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             } else {
+                if (llm_ctx_clip_v == nullptr) {
+                    SRV_ERR("rid %s | tokenizing, vision clip is not initialized\n", rid);
+                    return result;
+                }
                 result = tokenize_image(llm_ctx_clip_v, params.llm_params.cpuparams.n_threads, mtmd->ptr.get());
             }
             if (common_log_verbosity_thold >= 2) {
