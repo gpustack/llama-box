@@ -2754,6 +2754,8 @@ struct httpserver {
 
         // load multimodal projection model
         if (!params.llm_params.mmproj.path.empty()) {
+            SRV_INF("loading multimodal projection model '%s'\n", params.llm_params.mmproj.path.c_str());
+
             if (params.llm_params.n_ctx < 2048) {
                 SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
                 params.llm_params.n_ctx = 2048;
