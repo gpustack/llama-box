@@ -2161,7 +2161,6 @@ struct completions_task : btask {
     bool                    tool_call_stop_fast   = false;  // collect from request
     ////// non-jinja too calls
     bool                    tool_call_start_found = false;
-    std::string             tool_call_start_found_word;
 
     //// speculative
     llama_tokens            drafted_tokens;          // store drafted tokens, clear before a new round drafting
@@ -2896,50 +2895,74 @@ struct httpserver {
                 // NB(thxCode): common_chat_templates_supports_tool_calls is a patch.
                 support_tool_calls = common_chat_templates_supports_tool_calls(chat_templates.get());
             } else {
+                bool get_token = false;
+                // chatml / chatglm4
                 if (alias == "chatml" || alias == "chatglm4") {
                     // <tool_call>
                     // {"name":"","arguments":{}}
                     // </tool_call>
-                    support_tool_calls = true;
-                    llama_tokens ids   = common_tokenize(llm_vocab, "<tool_call>", false, true);
-                    if (ids.size() == 1) {
-                        tool_call_start_token      = ids[0];
-                        tool_call_start_token_word = "<tool_call>";
-                    } else {
-                        tool_call_start_words = { "<tool_call>", "<tool_call>\n" };
-                        tool_call_start_trim  = true;
-                    }
-                    ids = common_tokenize(llm_vocab, "</tool_call>", false, true);
-                    if (ids.size() == 1) {
-                        tool_call_end_token      = ids[0];
-                        tool_call_end_token_word = "</tool_call>";
-                    } else {
-                        tool_call_end_words = { "</tool_call>", "</tool_call>\n", "</tool_call> " };
-                        tool_call_end_trim  = true;
-                    }
-                } else if (string_starts_with(alias, "mistral-")) {
+                    get_token             = true;
+                    support_tool_calls    = true;
+                    tool_call_start_words = { "<tool_call>", "<tool>", "<tools>", "<function_call>" };
+                    tool_call_start_trim  = true;
+                    tool_call_end_words   = { "</tool_call>", "</tool>", "</tools>", "</function_call>" };
+                    tool_call_end_trim    = true;
+                }
+                // mistral series
+                else if (string_starts_with(alias, "mistral-")) {
                     // [TOOL_CALLS][{"name":"","arguments":{}}]
-                    support_tool_calls = true;
-                    llama_tokens ids   = common_tokenize(llm_vocab, "[TOOL_CALLS]", false, true);
-                    if (ids.size() == 1) {
-                        tool_call_start_token      = ids[0];
-                        tool_call_start_token_word = "[TOOL_CALLS]";
-                    } else {
-                        tool_call_start_words = { "[TOOL_CALLS]" };
-                        tool_call_start_trim  = true;
-                    }
-                    tool_call_end_words = { "}]", "}]\n", "}] " };
-                } else if (alias == "llama3") {
+                    get_token             = true;
+                    support_tool_calls    = true;
+                    tool_call_start_words = { "[TOOL_CALLS]" };
+                    tool_call_start_trim  = true;
+                    tool_call_end_words   = { "}]", "}]\n", "}] " };
+                    tool_call_end_trim    = true;
+                }
+                // llama3 / llama4
+                else if (alias == "llama3" || alias == "llama4") {
                     // {"name":"","arguments":{}}
                     support_tool_calls    = true;
                     tool_call_start_words = { "{\"" };
                     tool_call_end_words   = { "}}", "}}\n", "}} " };
-                } else if (alias == "granite") {
+                }
+                // granite
+                else if (alias == "granite") {
                     // <tool_call>[{"name":"","arguments":{}}]
+                    get_token             = true;
                     support_tool_calls    = true;
-                    tool_call_start_words = { "<tool_call>" };
+                    tool_call_start_words = { "<|tool_call|>", "<tool_call>" };
                     tool_call_start_trim  = true;
                     tool_call_end_words   = { "}]", "}]\n", "}] " };
+                }
+                // deepseek3
+                else if (alias == "deepseek3") {
+                    // <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>tool_name
+                    //```json
+                    //{"arg1": "some_value"}
+                    //```<｜tool▁call▁end｜><｜tool▁calls▁end｜>
+                    get_token             = true;
+                    support_tool_calls    = true;
+                    tool_call_start_words = { "<｜tool▁calls▁begin｜>", "<｜tool▁call▁begin｜>",
+                                              "<｜tool calls begin｜>", "<｜tool\\\\_calls\\\\_begin｜>",
+                                              "<｜tool▁calls｜>" };
+                    tool_call_start_trim  = true;
+                    tool_call_end_words   = { "<｜tool▁calls▁end｜>", "<｜tool▁call▁end｜>" };
+                    tool_call_end_trim    = true;
+                    tool_call_format      = "function";
+                }
+                if (get_token) {
+                    for (const std::string & word : tool_call_start_words) {
+                        llama_tokens ids = common_tokenize(llm_vocab, word, false, true);
+                        if (ids.size() == 1) {
+                            tool_call_start_tokens.push_back(ids[0]);
+                        }
+                    }
+                    for (const std::string & word : tool_call_end_words) {
+                        llama_tokens ids = common_tokenize(llm_vocab, word, false, true);
+                        if (ids.size() == 1) {
+                            tool_call_end_tokens.push_back(ids[0]);
+                        }
+                    }
                 }
                 if (!tool_call_start_words.empty()) {
                     for (const std::string & word : tool_call_start_words) {
@@ -2995,6 +3018,7 @@ struct httpserver {
                     inputs.messages.push_back({ "assistant", "", {}, { { "get_weather", R"({"location":"Beijing"})", "123456789" } }, "", "", "" });
                     inputs.messages.push_back({ "tool", R"({"weather":"Sunny"})", {}, {}, "", "", "123456789" });
                     inputs.messages.push_back({ "assistant", "The weather is Sunny.", {}, {}, "", "", "123456789" });
+                    inputs.messages.push_back({ "user", "What is the temperature in Beijing?", {}, {}, "", "", "" });
                     inputs.tools = std::vector<common_chat_tool>({
                         { "get_weather",     "",                                                   R"({"type":"object","properties":{"location":{"type":"string"}}})" },
                         { "get_temperature", "Return the temperature according to the location.",  R"({"type":"object","properties":{"location":{"type":"string"}}})" },
@@ -3013,9 +3037,26 @@ struct httpserver {
                 "chat template, alias: %s, built-in: %s, jinja rendering: %s, tool call: %s, reasoning: %s, "
                 "example:\n%s\n",
                 alias.c_str(),
+                // built-in
                 params.llm_params.chat_template.empty() || !params.llm_params.use_jinja ? "true" : "false",
-                params.llm_params.use_jinja ? "enabled" : "disabled", support_tool_calls ? "supported" : "unsupported",
-                support_reasoning ? "supported" : "unsupported", prompt.c_str());
+                // jinja rendering
+                params.llm_params.use_jinja ? "enabled" : "disabled",
+                // tool call
+                support_tool_calls ? "supported" : "unsupported",
+                // reasoning
+                support_reasoning                       ? "supported" :
+                params.llm_params.reasoning_budget != 0 ? "unsupported" :
+                                                          "disabled",
+                prompt.c_str());
+            if (support_tool_calls) {
+                SRV_INF(
+                    "tool call trigger, "
+                    "start: %s, end: %s\n",
+                    // start
+                    tool_call_start_tokens.empty() ? "words" : "tokens",
+                    // end
+                    tool_call_end_tokens.empty() ? "words" : "tokens");
+            }
         }
 
         // sample tokens per second
@@ -3293,17 +3334,16 @@ struct httpserver {
     ggml_threadpool * threadpool_batch = nullptr;
 
     // tool calls
-    bool                     support_tool_calls    = false;
+    bool                     support_tool_calls                   = false;
     // non-jinja tool calls
-    llama_token              tool_call_start_token = LLAMA_TOKEN_NULL;
-    std::string              tool_call_start_token_word;
+    llama_tokens             tool_call_start_tokens               = {};
     std::vector<std::string> tool_call_start_words                = {};
     size_t                   tool_call_start_words_longest_length = 0;
     bool                     tool_call_start_trim                 = false;
-    llama_token              tool_call_end_token                  = LLAMA_TOKEN_NULL;
-    std::string              tool_call_end_token_word;
-    std::vector<std::string> tool_call_end_words = {};
-    bool                     tool_call_end_trim  = false;
+    llama_tokens             tool_call_end_tokens                 = {};
+    std::vector<std::string> tool_call_end_words                  = {};
+    bool                     tool_call_end_trim                   = false;
+    std::string              tool_call_format                     = "json";
 
     // reasoning
     bool        support_reasoning     = false;
@@ -4198,6 +4238,7 @@ struct httpserver {
                         // check stop
                         //// check stop word or tool call
                         if (send_text) {
+                            // has stop words
                             for (const std::string & word : task->req->stop) {
                                 size_t pos =
                                     task->generated_text.find(word, task->generated_text.size() - sampled_str.size());
@@ -4229,9 +4270,9 @@ struct httpserver {
                                                         });
                                                     }
                                                     if (task->tool_call_stop_fast) {
-                                                        send_text = true;
                                                         SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
-                                                        task->generated_finish_reason = "tool_calls";
+                                                        task->generated_finish_reason =
+                                                            "tool_calls";  // send_text = true;
                                                     }
                                                     // eat the rest of the text
                                                     task->generated_text_keep_pos = std::string::npos;
@@ -4247,36 +4288,39 @@ struct httpserver {
                                 else {
                                     ////// found tool call start
                                     if (!task->tool_call_start_found) {
-                                        if (tool_call_start_token != LLAMA_TOKEN_NULL) {
+                                        if (!tool_call_start_tokens.empty()) {
                                             // stop sending text if the start token found
                                             for (int32_t i = n_generated_tokens_s; i < n_generated_tokens_e; i++) {
-                                                if (task->processed_tokens[i] == tool_call_start_token) {
-                                                    task->tool_call_start_found = true;
-                                                    size_t pos                  = task->generated_text.find(
-                                                        tool_call_start_token_word,
-                                                        task->generated_text.size() - sampled_str.size());
-                                                    if (pos != std::string::npos) {
-                                                        task->generated_text_keep_pos = pos;
-                                                        // within non-jinja we should drop the tool call start word
-                                                        task->generated_text.erase(
-                                                            task->generated_text_keep_pos,
-                                                            task->generated_text_keep_pos +
-                                                                tool_call_start_token_word.size());
+                                                for (const llama_token & token : tool_call_start_tokens) {
+                                                    if (task->processed_tokens[i] == token) {
+                                                        task->tool_call_start_found = true;
+                                                        if (!sampled_str.empty() && tool_call_start_trim) {
+                                                            // trim the start word if needed
+                                                            for (const std::string & sw : tool_call_start_words) {
+                                                                if (task->generated_text.find(sw) == 0) {
+                                                                    task->generated_text =
+                                                                        task->generated_text.substr(sw.length());
+                                                                }
+                                                            }
+                                                            task->generated_text_keep_pos = task->generated_text.size();
+                                                        }
+                                                        break;
                                                     }
+                                                }
+                                                if (task->tool_call_start_found) {
                                                     break;
                                                 }
                                             }
                                         } else if (!tool_call_start_words.empty()) {
                                             // stop sending text if the start word found
-                                            if (task->generated_text.length() <= tool_call_start_words_longest_length) {
+                                            if (task->generated_text.size() <= tool_call_start_words_longest_length) {
                                                 send_text = false;
                                             } else {
-                                                for (const std::string & word : tool_call_start_words) {
-                                                    if (size_t pos = task->generated_text.find(word);
-                                                        pos != std::string::npos) {
-                                                        task->tool_call_start_found      = true;
-                                                        task->generated_text_keep_pos    = pos;
-                                                        task->tool_call_start_found_word = word;
+                                                for (const std::string & sw : tool_call_start_words) {
+                                                    if (size_t sp = task->generated_text.find(sw);
+                                                        sp != std::string::npos) {
+                                                        task->tool_call_start_found   = true;
+                                                        task->generated_text_keep_pos = sp;
                                                         break;
                                                     }
                                                 }
@@ -4287,37 +4331,48 @@ struct httpserver {
                                     else {
                                         send_text = false;
                                         std::string functions_str;
-                                        if (tool_call_end_token != LLAMA_TOKEN_NULL) {
+                                        if (!tool_call_end_tokens.empty()) {
                                             for (int32_t i = n_generated_tokens_e - 1; i >= n_generated_tokens_s; --i) {
-                                                if (task->processed_tokens[i] == tool_call_end_token) {
-                                                    // within non-jinja we should drop the tool call end word
-                                                    functions_str = task->generated_text;
-                                                    functions_str = functions_str.substr(
-                                                        0, functions_str.length() - sampled_str.size() +
-                                                               sampled_str.find(tool_call_end_token_word));
+                                                for (const llama_token & token : tool_call_end_tokens) {
+                                                    if (task->processed_tokens[i] == token) {
+                                                        functions_str = task->generated_text;
+                                                        break;
+                                                    }
+                                                }
+                                                if (!functions_str.empty()) {
+                                                    if (tool_call_end_trim) {
+                                                        for (const std::string & ew : tool_call_end_words) {
+                                                            if (size_t ep = functions_str.rfind(ew);
+                                                                ep != std::string::npos) {
+                                                                functions_str = functions_str.substr(0, ep);
+                                                            }
+                                                        }
+                                                    }
                                                     break;
                                                 }
                                             }
                                         } else if (!tool_call_end_words.empty()) {
-                                            for (const std::string & word : tool_call_end_words) {
-                                                size_t pos = task->generated_text.rfind(word);
+                                            for (const std::string & ew : tool_call_end_words) {
+                                                size_t pos = task->generated_text.rfind(ew);
                                                 if (pos == std::string::npos) {
                                                     continue;
                                                 }
-                                                functions_str = task->generated_text.substr(0, pos + word.length());
-                                                if (tool_call_start_trim && !task->tool_call_start_found_word.empty()) {
-                                                    functions_str =
-                                                        functions_str.substr(task->tool_call_start_found_word.length());
+                                                functions_str = task->generated_text.substr(0, pos + ew.length());
+                                                if (tool_call_start_trim) {
+                                                    for (const std::string & sw : tool_call_start_words) {
+                                                        if (functions_str.find(sw) == 0) {
+                                                            functions_str = functions_str.substr(sw.length());
+                                                        }
+                                                    }
                                                 }
                                                 if (tool_call_end_trim) {
                                                     functions_str =
-                                                        functions_str.substr(0, functions_str.length() - word.length());
+                                                        functions_str.substr(0, functions_str.length() - ew.length());
                                                 }
                                                 break;
                                             }
                                         }
                                         if (!functions_str.empty()) {
-                                            task->tool_call_start_found = false;
                                             try {
                                                 auto append_tool_calls = [&](json & function) {
                                                     if (!function.is_object()) {
@@ -4342,24 +4397,53 @@ struct httpserver {
                                                     };
                                                     task->generated_tool_calls.push_back(tool_call);
                                                 };
-                                                json functions = json::parse(functions_str);
-                                                if (functions.is_array()) {
-                                                    for (auto & function : functions) {
-                                                        append_tool_calls(function);
+                                                // json
+                                                if (tool_call_format == "json") {
+                                                    json functions = json::parse(functions_str);
+                                                    if (functions.is_array()) {
+                                                        for (auto & function : functions) {
+                                                            append_tool_calls(function);
+                                                        }
+                                                    } else {
+                                                        append_tool_calls(functions);
                                                     }
-                                                } else {
-                                                    append_tool_calls(functions);
                                                 }
-                                                if (task->tool_call_stop_fast) {
-                                                    SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
-                                                    task->generated_finish_reason = "tool_calls";
+                                                // function
+                                                else {
+                                                    const std::string name_s = "function";
+                                                    const std::string func_s = "```json\n";
+                                                    const std::string func_e = "```";
+                                                    size_t            sp     = functions_str.find(name_s);
+                                                    for (; sp != std::string::npos;) {
+                                                        sp += name_s.length();
+                                                        size_t ep = functions_str.find(func_s, sp);
+                                                        if (ep == std::string::npos) {
+                                                            break;  // incomplete
+                                                        }
+                                                        json fn{};
+                                                        fn["name"] = functions_str.substr(sp, ep - sp - 1);
+                                                        sp         = ep + func_s.length();
+                                                        ep         = functions_str.find(func_e, sp);
+                                                        if (ep == std::string::npos) {
+                                                            break;  // incomplete
+                                                        }
+                                                        fn["arguments"] = functions_str.substr(sp, ep - sp - 1);
+                                                        append_tool_calls(fn);
+                                                        sp = ep + func_e.length();
+                                                        sp = functions_str.find(name_s, sp);
+                                                    }
                                                 }
-                                                // eat the rest of the text
-                                                task->generated_text_keep_pos = std::string::npos;
-                                                task->generated_text.clear();
+                                                if (!task->generated_tool_calls.empty()) {
+                                                    if (task->tool_call_stop_fast) {
+                                                        SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
+                                                        task->generated_finish_reason =
+                                                            "tool_calls";  // send_text = true;
+                                                    }
+                                                    // eat the rest of the text
+                                                    task->generated_text_keep_pos = std::string::npos;
+                                                    task->generated_text.clear();
+                                                }
                                             } catch (const std::exception & e) {
-                                                SRV_ERR("rid %s | failed to parse tool call: %s, wait\n", rid.c_str(),
-                                                        e.what());
                                                 task->tool_call_start_found   = true;
                                                 task->generated_text_keep_pos = 0;
                                             }
@@ -4368,8 +4452,9 @@ struct httpserver {
                                 }
                             }
                         }
+                        //// check eog or budget
                         if (task->generated_finish_reason.empty()) {
-                            //// check eog
+                            // end of generation
                             if (llama_vocab_is_eog(llm_vocab, task->processed_tokens.back())) {
                                 if (task->generated_tool_calls.empty()) {
                                     SRV_DBG("rid %s | stopped by EOG\n", rid.c_str());
@@ -4378,8 +4463,9 @@ struct httpserver {
                                     SRV_DBG("rid %s | stopped by tool call\n", rid.c_str());
                                     task->generated_finish_reason = "tool_calls";
                                 }
+                                task->generated_text_keep_pos = task->generated_text.size();
                             }
-                            //// check budget
+                            // no enough budget
                             else if (task->n_decoding_budget <= 0) {
                                 SRV_DBG("rid %s | stopped by length\n", rid.c_str());
                                 task->generated_finish_reason = "length";

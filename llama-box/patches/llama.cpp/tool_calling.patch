@@ -1,5 +1,5 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 1d6974a8..aa6f3ae1 100644
+index 1d6974a8..4a52ab37 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
 @@ -491,6 +491,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
@@ -118,6 +118,21 @@ index 1d6974a8..aa6f3ae1 100644
  common_chat_params common_chat_templates_apply(
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
+@@ -1919,12 +2014,12 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+     try {
+         common_chat_parse(builder);
+     } catch (const common_chat_msg_partial_exception & ex) {
+-        LOG_DBG("Partial parse: %s\n", ex.what());
++//        LOG_DBG("Partial parse: %s\n", ex.what());
+         if (!is_partial) {
+             throw std::runtime_error(ex.what());
+         }
+     }
+     auto msg = builder.result();
+-    LOG_DBG("Parsed message: %s\n", common_chat_msgs_to_json_oaicompat<json>({msg}).at(0).dump().c_str());
++//    LOG_DBG("Parsed message: %s\n", common_chat_msgs_to_json_oaicompat<json>({msg}).at(0).dump().c_str());
+     return msg;
+ }
 diff --git a/common/chat.h b/common/chat.h
 index 9f59e6b0..d084a116 100644
 --- a/common/chat.h
@@ -201,10 +216,10 @@ index da0f652c..3a768bf0 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index d12743e6..a95530a1 100644
+index d12743e6..27b32baf 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
-@@ -187,6 +187,475 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -187,6 +187,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
  
@@ -231,12 +246,14 @@ index d12743e6..a95530a1 100644
 +        tmpl != LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN &&
 +        tmpl != LLM_CHAT_TEMPLATE_LLAMA_3 &&
 +        tmpl != LLM_CHAT_TEMPLATE_CHATGLM_4 &&
-+        tmpl != LLM_CHAT_TEMPLATE_GRANITE) {
++        tmpl != LLM_CHAT_TEMPLATE_GRANITE &&
++        tmpl != LLM_CHAT_TEMPLATE_DEEPSEEK_3) {
 +        return llm_chat_apply_template(tmpl, chat, dest, add_ass);
 +    }
 +
 +    // Taken from the research: https://github.com/ggml-org/llama.cpp/issues/5527
 +    std::stringstream ss;
++    // chatml
 +    if (tmpl == LLM_CHAT_TEMPLATE_CHATML) {
 +        if (!func.empty()) {
 +            const llama_chat_message *root_msg = nullptr;
@@ -300,7 +317,7 @@ index d12743e6..a95530a1 100644
 +        }
 +        bool previous_tool_response = false;
 +        // chatml template
-+        for (auto message : chat) {
++        for (const auto * message : chat) {
 +            if (!func.empty()) {
 +                std::string role(message->role);
 +                if (role == "tool_call") {
@@ -344,7 +361,9 @@ index d12743e6..a95530a1 100644
 +                ss << "<think>\n\n</think>\n\n";
 +            }
 +        }
-+    } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
++    }
++    // mistral v7
++    else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V7) {
 +        // Official mistral 'v7' template
 +        // See: https://huggingface.co/mistralai/Mistral-Large-Instruct-2411#basic-instruct-template-v7
 +        // See: https://github.com/mistralai/mistral-common/releases/tag/v1.5.0
@@ -377,7 +396,7 @@ index d12743e6..a95530a1 100644
 +            }
 +            ss << "[/SYSTEM_PROMPT]";
 +        }
-+        for (auto message : chat) {
++        for (const auto * message : chat) {
 +            std::string role(message->role);
 +            std::string content(message->content);
 +            if (role == "system") {
@@ -403,7 +422,9 @@ index d12743e6..a95530a1 100644
 +                ss << " " << content << "</s>";
 +            }
 +        }
-+    } else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V1
++    }
++    // mistral others
++    else if (tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V1
 +            || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3
 +            || tmpl == LLM_CHAT_TEMPLATE_MISTRAL_V3_TEKKEN) {
 +        // See: https://github.com/mistralai/cookbook/blob/main/concept-deep-dive/tokenization/chat_templates.md
@@ -443,7 +464,7 @@ index d12743e6..a95530a1 100644
 +                ss << "Otherwise, try to call functions without any explanations.\n\n";
 +            }
 +        }
-+        for (auto message : chat) {
++        for (const auto * message : chat) {
 +            if (!is_inside_turn) {
 +                ss << leading_space << "[INST]" << trailing_space;
 +                is_inside_turn = true;
@@ -475,7 +496,9 @@ index d12743e6..a95530a1 100644
 +                is_inside_turn = false;
 +            }
 +        }
-+    } else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3) {
++    }
++    // llama3 / llama4
++    else if (tmpl == LLM_CHAT_TEMPLATE_LLAMA_3 || tmpl == LLM_CHAT_TEMPLATE_LLAMA4) {
 +        if (!func.empty()) {
 +            const llama_chat_message *root_msg = nullptr;
 +            for (const auto *message: chat) {
@@ -498,8 +521,7 @@ index d12743e6..a95530a1 100644
 +            }
 +            ss << "<|eot_id|>";
 +        }
-+        // Llama 3
-+        for (auto message : chat) {
++        for (const auto * message : chat) {
 +            std::string role(message->role);
 +            if (!func.empty()) {
 +                if (role == "system") {
@@ -535,7 +557,9 @@ index d12743e6..a95530a1 100644
 +        if (add_ass) {
 +            ss << "<|start_header_id|>assistant<|end_header_id|>\n\n";
 +        }
-+    } else if (tmpl == LLM_CHAT_TEMPLATE_CHATGLM_4) {
++    }
++    // chatglm4
++    else if (tmpl == LLM_CHAT_TEMPLATE_CHATGLM_4) {
 +        ss << "[gMASK]" << "<sop>";
 +        if (!func.empty()) {
 +            const llama_chat_message *root_msg = nullptr;
@@ -580,7 +604,7 @@ index d12743e6..a95530a1 100644
 +            ss << "Reply based on the function results.\n";
 +        }
 +        bool previous_tool_response = false;
-+        for (auto message : chat) {
++        for (const auto * message : chat) {
 +            std::string role(message->role);
 +            if (!func.empty()) {
 +                if (role == "tool_call") {
@@ -611,7 +635,9 @@ index d12743e6..a95530a1 100644
 +        if (add_ass) {
 +            ss << "<|assistant|>\n";
 +        }
-+    } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
++    }
++    // granite
++    else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
 +        if (!func.empty()) {
 +            const llama_chat_message *root_msg = nullptr;
 +            for (const auto *message: chat) {
@@ -647,8 +673,7 @@ index d12743e6..a95530a1 100644
 +            ss << "Write the response to the user's input by strictly aligning with the facts in the provided documents.";
 +            ss << "<|end_of_text|>\n";
 +        }
-+        // IBM Granite template
-+        for (const auto & message : chat) {
++        for (const auto * message : chat) {
 +            std::string role(message->role);
 +            if (!func.empty()) {
 +                if (role == "system") {
@@ -669,7 +694,128 @@ index d12743e6..a95530a1 100644
 +        if (add_ass) {
 +            ss << "<|start_of_role|>assistant<|end_of_role|>\n";
 +        }
-+    } else {
++    }
++    // deepseek v3
++    else if (tmpl == LLM_CHAT_TEMPLATE_DEEPSEEK_3) {
++        if (!func.empty()) {
++            const llama_chat_message  *root_msg = nullptr;
++            for (const auto *message: chat) {
++                std::string role(message->role);
++                if (role == "system") {
++                    root_msg = message;
++                    break;
++                }
++            }
++            if (root_msg) {
++                ss << trim(root_msg->content) << "\n\n";
++            } else {
++                ss << "You are a helpful assistant.\n\n";
++            }
++            if (req_func) {
++                ss << "You MUST call one or more tools to assist with the user query. Do not make assumptions about what values to plug into tools.\n\n";
++            } else {
++                ss << "You CAN call tools to assist with the user query. Do not make assumptions about what values to plug into tools.\n\n";
++            }
++            ss << "You are provided with following tools:\n\n";
++            for (const auto & fn : func) {
++                ss << "- `" << fn->name << "`\n";
++                ss << "```json\n";
++                ss << "{\n";
++                ss << "  \"name\": \"" << fn->name << "\",\n";
++                ss << "  \"description\": \"" << fn->description << "\",\n";
++                ss << "  \"parameters\": " << fn->parameters << "\n";
++                ss << "}\n";
++                ss << "```\n\n";
++            }
++            ss << "For each tool call, just generate an answer, no explanation before or after your answer, MUST return as below:\n";
++            ss << LU8("<｜tool▁calls▁begin｜>") << LU8("<｜tool▁call▁begin｜>");
++            ss << "function" << LU8("<｜tool▁sep｜>") << "The name of the tool\n";
++            ss << "```json\nThe input of the tool, must be an JSON object in compact format\n```";
++            ss << LU8("<｜tool▁call▁end｜>") << LU8("<｜tool▁calls▁end｜>") << LU8("<｜end▁of▁sentence｜>");
++            //            ss << LU8("<｜tool▁outputs▁begin｜>") << LU8("<｜tool▁output▁begin｜>");
++            //            ss << "The tool results.\n";
++            //            ss << LU8("<｜tool▁output▁end｜>") << LU8("<｜tool▁outputs▁end｜>");
++            //            ss << "Reply based on the function results.\n";
++            //            ss << LU8("<｜end▁of▁sentence｜>");
++            ss << "\n\n";
++        }
++        std::string previous_role;
++        for (const auto * message : chat) {
++            std::string role(message->role);
++            if (!func.empty()) {
++                if (role == "system") {
++                    previous_role = role;
++                    continue;
++                }
++                if (previous_role == "tool_call" && role != "tool_call") {
++                    ss << LU8("<｜tool▁calls▁end｜>") << LU8("<｜end▁of▁sentence｜>");
++                }
++                if (previous_role == "tool" && role != "tool") {
++                    ss << LU8("<｜tool▁outputs▁end｜>");
++                    add_ass = message != chat.back();
++                }
++                if (role == "tool_call") {
++                    if (previous_role != "tool_call") {
++                        ss << LU8("<｜Assistant｜>") << LU8("<｜tool▁calls▁begin｜>");
++                    }
++                    ss << LU8("<｜tool▁call▁begin｜>") << "function" << LU8("<｜tool▁sep｜>");
++                    auto content = std::string(message->content);
++                    {
++                        const std::string target = "\"name\":";
++                        size_t name_sp = content.find(target);
++                        name_sp = content.find('\"', name_sp + target.size());
++                        size_t name_ep = content.find('\"', name_sp + 1);
++                        ss << content.substr(name_sp + 1, name_ep - name_sp - 1) << "\n";
++                    }
++                    ss << "```json\n";
++                    {
++                        const std::string target = "\"arguments\":";
++                        size_t args_sp = content.find(target);
++                        args_sp = content.find('{', args_sp + target.size());
++                        size_t args_ep = content.rfind('}', content.size() - 2);
++                        ss << content.substr(args_sp, args_ep - args_sp + 1) << "\n";
++                    }
++                    ss << "```" << LU8("<｜tool▁call▁end｜>");
++                    previous_role = role;
++                    continue;
++                }
++                if (role == "tool") {
++                    if (previous_role != "tool") {
++                        ss << LU8("<｜tool▁outputs▁begin｜>");
++                    }
++                    ss << LU8("<｜tool▁output▁begin｜>");
++                    ss << message->content;
++                    ss << LU8("<｜tool▁output▁end｜>");
++                    previous_role = role;
++                    continue;
++                }
++            }
++            if (role == "system") {
++                ss << message->content << "\n\n";
++                previous_role = role;
++            } else if (role == "user") {
++                ss << LU8("<｜User｜>") << message->content;
++                previous_role = role;
++            } else if (role == "assistant") {
++                if (previous_role != "tool") {
++                    ss << LU8("<｜Assistant｜>");
++                }
++                ss << message->content << LU8("<｜end▁of▁sentence｜>");
++                previous_role = role;
++            }
++        }
++        if (add_ass) {
++            if (previous_role == "tool") {
++                ss << LU8("<｜tool▁outputs▁end｜>");
++            }
++            ss << LU8("<｜Assistant｜>");
++            if (!req_think) {
++                ss << "<think>\n\n</think>";
++            }
++        }
++    }
++    // others
++    else {
 +        // template not supported
 +        return -1;
 +    }

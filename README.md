@@ -54,6 +54,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - [x] Mistral Series
         - [x] Hermes2 / Qwen2 Series
         - [x] ChatGLM4 Series
+        - [x] DeepSeekV3 Series
         - [x] CommandR Series (w/ `--jinja`)
         - [x] FunctionaryV3 Series (w/ `--jinja`)
         - [x] DeepSeekR1 Series (w/ `--jinja`, experimental)
