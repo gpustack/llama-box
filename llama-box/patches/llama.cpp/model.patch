@@ -46,7 +46,7 @@ index 930cb4ec..65f965ca 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_NOMIC_BERT_MOE,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index afef8487..0cab36e9 100644
+index afef8487..65611bd1 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -717,6 +717,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
@@ -114,6 +114,15 @@ index afef8487..0cab36e9 100644
              inpL = ggml_add(ctx0, ggml_get_rows(ctx0, model.pos_embd, inp_pos), inpL);
          }
          cb(inpL, "inp_embd", -1);
+@@ -5955,7 +5970,7 @@ struct llm_build_bert : public llm_graph_context {
+             Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
+ 
+             // RoPE
+-            if (model.arch == LLM_ARCH_NOMIC_BERT || model.arch == LLM_ARCH_NOMIC_BERT_MOE) {
++            if (model.arch == LLM_ARCH_NOMIC_BERT || model.arch == LLM_ARCH_NEW || model.arch == LLM_ARCH_NOMIC_BERT_MOE) {
+                 Qcur = ggml_rope_ext(
+                         ctx0, Qcur, inp_pos, nullptr,
+                         n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
 @@ -6015,6 +6030,13 @@ struct llm_build_bert : public llm_graph_context {
                          0.0f,
                          LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX, il);
@@ -136,7 +145,15 @@ index afef8487..0cab36e9 100644
          case LLM_ARCH_BERT:
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
-@@ -13670,6 +13693,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
+@@ -13298,6 +13321,7 @@ llm_graph_result_ptr llama_model::build_graph(
+             {
+                 llm = std::make_unique<llm_build_refact>(*this, params, gf);
+             } break;
++        case LLM_ARCH_NEW:
+         case LLM_ARCH_BERT:
+         case LLM_ARCH_JINA_BERT_V2:
+         case LLM_ARCH_NOMIC_BERT:
+@@ -13670,6 +13694,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
          case LLM_ARCH_FALCON:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:
