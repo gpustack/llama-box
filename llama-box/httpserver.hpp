@@ -2876,6 +2876,11 @@ struct httpserver {
         }
         SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : (params.cache_prompt ? "unsupported" : "disabled"));
 
+        // NB(thxCode): llama_model_arch_name is a patch.
+        std::string arch_name = llama_model_arch_name(llm_model);
+
+        need_end_eos = arch_name == "qwen3";
+
         if (!support_completion()) {
             return true;
         }
@@ -2889,9 +2894,7 @@ struct httpserver {
             chat_templates = common_chat_templates_init(llm_model, params.llm_params.chat_template);
 
             // NB(thxCode): llama_chat_template_alias is a patch.
-            std::string alias     = llama_chat_template_alias(common_chat_templates_source(chat_templates.get()));
-            // NB(thxCode): llama_model_arch_name is a patch.
-            std::string arch_name = llama_model_arch_name(llm_model);
+            std::string alias = llama_chat_template_alias(common_chat_templates_source(chat_templates.get()));
 
             if (params.llm_params.use_jinja) {
                 // NB(thxCode): common_chat_templates_supports_tool_calls is a patch.
@@ -3312,6 +3315,9 @@ struct httpserver {
     bool                            shift_context = false;
     common_chat_templates_ptr       chat_templates;
     std::vector<cache_prompt_entry> cache_prompts;
+
+    // embedding
+    bool need_end_eos = false;
 
     // clip model
     std::mutex       llm_ctx_clip_mtx;
@@ -5920,10 +5926,15 @@ struct httpserver {
 
         std::unique_ptr<embed_req> req = get_embed_req(request, response, params);
 
+        const llama_token tok_eos = llama_vocab_eos(llm_vocab);
+
         int32_t n_prefilling_request = 0;
 
         std::vector<llama_tokens> tokenized_inputs = tokenize_prompts(llm_vocab, req->input, true, true);
         for (size_t i = 0; i < tokenized_inputs.size(); i++) {
+            if (need_end_eos || tokenized_inputs[i].empty()) {
+                tokenized_inputs[i].push_back(tok_eos);
+            }
             auto n_pos = int32_t(tokenized_inputs[i].size());
             if (n_pos > llm_ctx_size) {
                 if (!shift_context) {
