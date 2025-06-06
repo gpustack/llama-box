@@ -2907,7 +2907,8 @@ struct httpserver {
                     support_tool_calls    = true;
                     tool_call_start_words = { "<tool_call>", "<tool>", "<tools>", "<function_call>" };
                     tool_call_start_trim  = true;
-                    tool_call_end_words   = { "</tool_call>", "</tool>", "</tools>", "</function_call>" };
+                    tool_call_end_words   = { "</tool_call>",   "</tool>",   "</tools>",   "</function_call>",
+                                              "</tool_call>\n", "</tool>\n", "</tools>\n", "</function_call>\n" };
                     tool_call_end_trim    = true;
                 }
                 // mistral series
@@ -2948,7 +2949,8 @@ struct httpserver {
                                               "<｜tool calls begin｜>", "<｜tool\\\\_calls\\\\_begin｜>",
                                               "<｜tool▁calls｜>" };
                     tool_call_start_trim  = true;
-                    tool_call_end_words   = { "<｜tool▁calls▁end｜>", "<｜tool▁call▁end｜>" };
+                    tool_call_end_words   = { "<｜tool▁call▁end｜>", "<｜tool▁calls▁end｜>", "<｜tool▁call▁end｜>\n",
+                                              "<｜tool▁calls▁end｜>\n" };
                     tool_call_end_trim    = true;
                     tool_call_format      = "function";
                 }
@@ -4299,12 +4301,14 @@ struct httpserver {
                                                         if (!sampled_str.empty() && tool_call_start_trim) {
                                                             // trim the start word if needed
                                                             for (const std::string & sw : tool_call_start_words) {
-                                                                if (task->generated_text.find(sw) == 0) {
-                                                                    task->generated_text =
-                                                                        task->generated_text.substr(sw.length());
+                                                                if (size_t sp = task->generated_text.find(sw);
+                                                                    sp != std::string::npos) {
+                                                                    task->generated_text_keep_pos = sp;
+                                                                    // trim the start word
+                                                                    task->generated_text = task->generated_text.erase(
+                                                                        sp, sp + sw.length());
                                                                 }
                                                             }
-                                                            task->generated_text_keep_pos = task->generated_text.size();
                                                         }
                                                         break;
                                                     }
@@ -4323,6 +4327,11 @@ struct httpserver {
                                                         sp != std::string::npos) {
                                                         task->tool_call_start_found   = true;
                                                         task->generated_text_keep_pos = sp;
+                                                        if (tool_call_start_trim) {
+                                                            // trim the start word
+                                                            task->generated_text =
+                                                                task->generated_text.erase(sp, sp + sw.length());
+                                                        }
                                                         break;
                                                     }
                                                 }
@@ -4337,7 +4346,9 @@ struct httpserver {
                                             for (int32_t i = n_generated_tokens_e - 1; i >= n_generated_tokens_s; --i) {
                                                 for (const llama_token & token : tool_call_end_tokens) {
                                                     if (task->processed_tokens[i] == token) {
-                                                        functions_str = task->generated_text;
+                                                        size_t sp     = task->generated_text_keep_pos;
+                                                        sp            = sp == std::string::npos ? 0 : sp;
+                                                        functions_str = task->generated_text.substr(sp);
                                                         break;
                                                     }
                                                 }
@@ -4355,23 +4366,16 @@ struct httpserver {
                                             }
                                         } else if (!tool_call_end_words.empty()) {
                                             for (const std::string & ew : tool_call_end_words) {
-                                                size_t pos = task->generated_text.rfind(ew);
-                                                if (pos == std::string::npos) {
-                                                    continue;
-                                                }
-                                                functions_str = task->generated_text.substr(0, pos + ew.length());
-                                                if (tool_call_start_trim) {
-                                                    for (const std::string & sw : tool_call_start_words) {
-                                                        if (functions_str.find(sw) == 0) {
-                                                            functions_str = functions_str.substr(sw.length());
-                                                        }
+                                                if (size_t ep = task->generated_text.rfind(ew);
+                                                    ep != std::string::npos) {
+                                                    if (!tool_call_end_trim) {
+                                                        ep += ew.length();
                                                     }
+                                                    size_t sp     = task->generated_text_keep_pos;
+                                                    sp            = sp == std::string::npos ? 0 : sp;
+                                                    functions_str = task->generated_text.substr(sp, ep);
+                                                    break;
                                                 }
-                                                if (tool_call_end_trim) {
-                                                    functions_str =
-                                                        functions_str.substr(0, functions_str.length() - ew.length());
-                                                }
-                                                break;
                                             }
                                         }
                                         if (!functions_str.empty()) {
@@ -4446,7 +4450,6 @@ struct httpserver {
                                                     task->generated_text.clear();
                                                 }
                                             } catch (const std::exception & e) {
-                                                task->tool_call_start_found   = true;
                                                 task->generated_text_keep_pos = 0;
                                             }
                                         }
@@ -4471,6 +4474,7 @@ struct httpserver {
                             else if (task->n_decoding_budget <= 0) {
                                 SRV_DBG("rid %s | stopped by length\n", rid.c_str());
                                 task->generated_finish_reason = "length";
+                                task->generated_text_keep_pos = task->generated_text.size();
                             }
                         }
                     }
