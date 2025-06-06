@@ -4670,12 +4670,8 @@ struct httpserver {
                     continue;
                 }
                 if (rtype == REQ_EMBED) {
-                    if (llama_pooling_type(llm_ctx) != LLAMA_POOLING_TYPE_NONE) {
-                        common_embd_normalize(embed, task->embeds[task->embeds.size() - 1].data(), llm_ctx_embed_size,
-                                              2);
-                    } else {
-                        task->embeds[task->embeds.size() - 1].assign(embed, embed + llm_ctx_embed_size);
-                    }
+                    // NB(thxCode): normalize embeddings result.
+                    common_embd_normalize(embed, task->embeds[task->embeds.size() - 1].data(), llm_ctx_embed_size, 2);
                 } else {
                     task->embeds[task->embeds.size() - 1][0] = embed[0];
                 }
