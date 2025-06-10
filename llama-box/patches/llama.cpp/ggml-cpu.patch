@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index d8de7531..6f855be9 100644
+index 08facb6d..1d43434e 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
 @@ -4812,7 +4812,9 @@ static void ggml_compute_forward_soft_max_f32(

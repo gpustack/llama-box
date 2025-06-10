@@ -1,8 +1,8 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index ec3b5697..78a0f1d2 100755
+index 7b9893c8..968f4abe 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
-@@ -4085,6 +4085,123 @@ class XLMRobertaModel(BertModel):
+@@ -4084,6 +4084,123 @@ class XLMRobertaModel(BertModel):
          return super().modify_tensors(data_torch, name, bid)
  
  
