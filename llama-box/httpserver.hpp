@@ -3401,20 +3401,23 @@ struct httpserver {
                 }
             }
             if (cache_id != -1) {
-                int32_t n_discard = std::min(cache_pos >> 2, params.llm_params.n_ubatch);
+                const int32_t n_keep    = params.llm_params.n_keep + 1;
+                const int32_t n_left    = cache_pos - n_keep;
+                int32_t       n_discard = std::min(n_left >> 2, params.llm_params.n_ubatch);
                 if (n_discard <= 4) {
                     return;
                 }
-                llama_memory_seq_rm(llama_get_memory(llm_ctx), cache_id, 0, n_discard);
-                llama_memory_seq_add(llama_get_memory(llm_ctx), cache_id, n_discard, cache_pos, -n_discard);
+                llama_memory_seq_rm(llama_get_memory(llm_ctx), cache_id, n_keep, n_keep + n_discard);
+                llama_memory_seq_add(llama_get_memory(llm_ctx), cache_id, n_keep + n_discard, cache_pos, -n_discard);
                 if (llm_ctx_draft != nullptr) {
-                    llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), cache_id, 0, n_discard);
-                    llama_memory_seq_add(llama_get_memory(llm_ctx_draft), cache_id, n_discard, cache_pos, -n_discard);
+                    llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), cache_id, n_keep, n_keep + n_discard);
+                    llama_memory_seq_add(llama_get_memory(llm_ctx_draft), cache_id, n_keep + n_discard, cache_pos,
+                                         -n_discard);
                 }
                 SRV_WRN(
                     "squash kv cache, "
-                    "seq = %d, [%d, %d) -> [0, %d)\n",
-                    cache_id, n_discard, cache_pos, cache_pos - n_discard);
+                    "seq = %d, [%d, %d) -> [%d, %d)\n",
+                    cache_id, n_discard, cache_pos, n_keep, cache_pos - n_discard);
 
                 // stats
                 cache_prompt_entry & cache = cache_prompts.at(cache_id);
