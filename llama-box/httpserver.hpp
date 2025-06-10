@@ -2744,7 +2744,7 @@ struct httpserver {
         llm_ctx_size         = int32_t(llama_n_ctx(llm_ctx));
         llm_ctx_embed_size   = llama_model_n_embd(llm_model);
         llm_kv_cache_limit   = llm_ctx_size - 1;
-        llm_kv_cache_shift   = llama_kv_self_can_shift(llm_ctx);
+        llm_kv_cache_shift   = llama_memory_can_shift(llama_get_memory(llm_ctx));
         // NB(thxCode): llama_causal_attn is a patch.
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
@@ -3092,7 +3092,7 @@ struct httpserver {
             }
             params.n_tps = ceil(1.e3 / (double(ggml_time_us() - t_start_decode) / 1.e3) * n_check_decoded);
             common_sampler_free(check_smpl);
-            llama_kv_self_clear(llm_ctx);
+            llama_memory_clear(llama_get_memory(llm_ctx), true);
             llama_synchronize(llm_ctx);
             llama_perf_context_reset(llm_ctx);
             SRV_INF("sampled tokens per second, tps = %d\n", params.n_tps);
@@ -3405,11 +3405,11 @@ struct httpserver {
                 if (n_discard <= 4) {
                     return;
                 }
-                llama_kv_self_seq_rm(llm_ctx, cache_id, 0, n_discard);
-                llama_kv_self_seq_add(llm_ctx, cache_id, n_discard, cache_pos, -n_discard);
+                llama_memory_seq_rm(llama_get_memory(llm_ctx), cache_id, 0, n_discard);
+                llama_memory_seq_add(llama_get_memory(llm_ctx), cache_id, n_discard, cache_pos, -n_discard);
                 if (llm_ctx_draft != nullptr) {
-                    llama_kv_self_seq_rm(llm_ctx_draft, cache_id, 0, n_discard);
-                    llama_kv_self_seq_add(llm_ctx_draft, cache_id, n_discard, cache_pos, -n_discard);
+                    llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), cache_id, 0, n_discard);
+                    llama_memory_seq_add(llama_get_memory(llm_ctx_draft), cache_id, n_discard, cache_pos, -n_discard);
                 }
                 SRV_WRN(
                     "squash kv cache, "
@@ -3441,11 +3441,11 @@ struct httpserver {
         const std::string rid    = task->get_r_id();
         const int32_t     seq_id = task->get_seq_id();
 
-        llama_kv_self_seq_rm(llm_ctx, seq_id, n_keep, n_keep + n_discard);
-        llama_kv_self_seq_add(llm_ctx, seq_id, n_keep + n_discard, task->pos, -n_discard);
+        llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, n_keep, n_keep + n_discard);
+        llama_memory_seq_add(llama_get_memory(llm_ctx), seq_id, n_keep + n_discard, task->pos, -n_discard);
         if (llm_ctx_draft != nullptr) {
-            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, n_keep, n_keep + n_discard);
-            llama_kv_self_seq_add(llm_ctx_draft, seq_id, n_keep + n_discard, task->pos, -n_discard);
+            llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, n_keep, n_keep + n_discard);
+            llama_memory_seq_add(llama_get_memory(llm_ctx_draft), seq_id, n_keep + n_discard, task->pos, -n_discard);
         }
         SRV_WRN(
             "rid %s | shift kv cache, "
@@ -3754,9 +3754,9 @@ struct httpserver {
                             task->set_seq_id(seq_id);
 
                             // clean kv cache
-                            llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, task->pos, -1);
                             if (llm_ctx_draft != nullptr) {
-                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
+                                llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, task->pos, -1);
                             }
                             SRV_DBG(
                                 "rid %s | prefix cache, "
@@ -3899,9 +3899,9 @@ struct httpserver {
                         // abort if incomplete prefilling
                         if (task->n_prefilled < task->n_prefilling_request) {
                             // clean kv cache
-                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
-                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                             }
                             SRV_DBG(
                                 "rid %s | prefill, incomplete, "
@@ -4005,9 +4005,9 @@ struct httpserver {
 
                     // prepare cache - clean cache
                     if (cache_prompt) {
-                        llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                        llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
-                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                         }
                         SRV_INFV(2,
                                  "rid %s | batching, clean cache, "
@@ -4091,9 +4091,9 @@ struct httpserver {
                             const std::string rid    = task->get_r_id();
                             const int32_t     seq_id = task->get_seq_id();
                             // clean kv cache
-                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
-                                llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                                llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                             }
                             SRV_INFV(2,
                                      "rid %s | decode, "
@@ -4129,8 +4129,8 @@ struct httpserver {
                             const std::string rid    = task->get_r_id();
                             const int32_t     seq_id = task->get_seq_id();
                             // clean kv cache
-                            llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
-                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                             SRV_INFV(2,
                                      "rid %s | decode, "
                                      "clean kv cache, seq %d = [0, end)",
@@ -4184,9 +4184,9 @@ struct httpserver {
                                     task->n_decoded += d;
                                     task->n_decoding_budget -= d;
                                     // clean kv cache
-                                    llama_kv_self_seq_rm(llm_ctx, seq_id, task->pos, -1);
+                                    llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, task->pos, -1);
                                     if (llm_ctx_draft != nullptr) {
-                                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, task->pos, -1);
+                                        llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, task->pos, -1);
                                     }
                                     SRV_INFV(2,
                                              "rid %s | decode, "
@@ -4600,9 +4600,9 @@ struct httpserver {
                         task->n_prefilled + task->n_decoded, opened ? task->generated_finish_reason.c_str() : "closed");
                     // clean kv cache
                     if (!cache_prompt) {
-                        llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                        llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
-                            llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                            llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                         }
                         SRV_INFV(2,
                                  "rid %s | decode in batch, "
@@ -4634,7 +4634,7 @@ struct httpserver {
                     "increasing context size or reducing parallel: result = %d\n",
                     decoded);
                 // clean kv cache
-                llama_kv_self_clear(llm_ctx);
+                llama_memory_clear(llama_get_memory(llm_ctx), true);
                 // output
                 for (auto & task_ptr : batch_task_ptrs) {
                     json data = {
@@ -4677,9 +4677,9 @@ struct httpserver {
                 }
                 // clean kv cache
                 if (!cache_prompt) {
-                    llama_kv_self_seq_rm(llm_ctx, seq_id, 0, -1);
+                    llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                     if (llm_ctx_draft != nullptr) {
-                        llama_kv_self_seq_rm(llm_ctx_draft, seq_id, 0, -1);
+                        llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                     }
                     SRV_INFV(2,
                              "rid %s | decode in batch, "
