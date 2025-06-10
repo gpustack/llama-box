@@ -154,7 +154,7 @@ index 9f59e6b0..d084a116 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index aa5330e2..53cc73c1 100644
+index 015a5789..e16c42f7 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -403,6 +403,11 @@ extern "C" {
@@ -177,7 +177,7 @@ index aa5330e2..53cc73c1 100644
      LLAMA_API int32_t llama_model_n_ctx_train(const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_embd     (const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_layer    (const struct llama_model * model);
-@@ -1116,6 +1122,37 @@ extern "C" {
+@@ -1128,6 +1134,37 @@ extern "C" {
      // Chat templates
      //
  
@@ -859,7 +859,7 @@ index db24ade2..94f99991 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 915d5a92..eedb392a 100644
+index c41ee245..a9f93b12 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -13592,6 +13592,10 @@ void llama_model_free(llama_model * model) {

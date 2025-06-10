@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 4cc40ed8..bb1c3157 100644
+index 218f1e1d..3d9fad70 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -1020,7 +1020,16 @@ struct common_init_result common_init_from_params(common_params & params) {
@@ -39,21 +39,21 @@ index 4cc40ed8..bb1c3157 100644
 +            LOG_INF("warming up decoder with %zu tokens\n", size);
 +            llama_decode(lctx, llama_batch_get_one(tmp.data(), size));
          }
-         llama_kv_self_clear(lctx);
+         llama_memory_clear(llama_get_memory(lctx), true);
          llama_synchronize(lctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index ea191068..03a1bda7 100644
+index b130b484..3d537fc4 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@ -936,9 +936,9 @@ int llama_context::decode(llama_batch & inp_batch) {
+@@ -938,9 +938,9 @@ int llama_context::decode(llama_batch & inp_batch) {
          }
      }
  
 -    GGML_ASSERT(n_tokens_all <= cparams.n_batch);
-+    // GGML_ASSERT(n_tokens_all <= cparams.n_batch);
++//    GGML_ASSERT(n_tokens_all <= cparams.n_batch);
  
 -    GGML_ASSERT((cparams.causal_attn || cparams.n_ubatch >= n_tokens_all) && "non-causal attention requires n_ubatch >= n_tokens");
-+    // GGML_ASSERT((cparams.causal_attn || cparams.n_ubatch >= n_tokens_all) && "non-causal attention requires n_ubatch >= n_tokens");
++//    GGML_ASSERT((cparams.causal_attn || cparams.n_ubatch >= n_tokens_all) && "non-causal attention requires n_ubatch >= n_tokens");
  
      if (t_compute_start_us == 0) {
          t_compute_start_us = ggml_time_us();

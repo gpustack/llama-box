@@ -1,5 +1,5 @@
 diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
-index c0590e10..c06cc23e 100644
+index 43fa60a8..d7f20f03 100644
 --- a/src/llama-arch.cpp
 +++ b/src/llama-arch.cpp
 @@ -17,6 +17,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
@@ -10,7 +10,7 @@ index c0590e10..c06cc23e 100644
      { LLM_ARCH_BERT,             "bert"             },
      { LLM_ARCH_NOMIC_BERT,       "nomic-bert"       },
      { LLM_ARCH_NOMIC_BERT_MOE,   "nomic-bert-moe"   },
-@@ -442,6 +443,22 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
+@@ -441,6 +442,22 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
              { LLM_TENSOR_FFN_UP,          "blk.%d.ffn_up" },
          },
      },
@@ -34,7 +34,7 @@ index c0590e10..c06cc23e 100644
          LLM_ARCH_BERT,
          {
 diff --git a/src/llama-arch.h b/src/llama-arch.h
-index 930cb4ec..65f965ca 100644
+index f3825528..e69d30d6 100644
 --- a/src/llama-arch.h
 +++ b/src/llama-arch.h
 @@ -21,6 +21,7 @@ enum llm_arch {
@@ -46,7 +46,7 @@ index 930cb4ec..65f965ca 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_NOMIC_BERT_MOE,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 915d5a92..0818a258 100644
+index c41ee245..0f739208 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -722,6 +722,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
