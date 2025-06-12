@@ -859,10 +859,10 @@ index db24ade2..94f99991 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index c41ee245..a9f93b12 100644
+index c64bf9de..dc2333e0 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -13592,6 +13592,10 @@ void llama_model_free(llama_model * model) {
+@@ -13583,6 +13583,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  

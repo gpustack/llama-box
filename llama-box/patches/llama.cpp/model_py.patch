@@ -1,8 +1,8 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 7b9893c8..968f4abe 100755
+index 173a103b..ef3b6f6a 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
-@@ -4084,6 +4084,123 @@ class XLMRobertaModel(BertModel):
+@@ -4087,6 +4087,123 @@ class XLMRobertaModel(BertModel):
          return super().modify_tensors(data_torch, name, bid)
  
  
@@ -127,28 +127,28 @@ index 7b9893c8..968f4abe 100755
  class GemmaModel(TextModel):
      model_arch = gguf.MODEL_ARCH.GEMMA
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 3ee2b206..ce32019e 100644
+index 3ee2b206..196398cc 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
-@@ -291,6 +291,7 @@ class MODEL_ARCH(IntEnum):
+@@ -288,6 +288,7 @@ class MODEL_ARCH(IntEnum):
+     MPT              = auto()
+     STARCODER        = auto()
+     REFACT           = auto()
++    NEW              = auto()
      BERT             = auto()
      NOMIC_BERT       = auto()
      NOMIC_BERT_MOE   = auto()
-+    NEW              = auto()
-     JINA_BERT_V2     = auto()
-     BLOOM            = auto()
-     STABLELM         = auto()
-@@ -571,6 +572,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -568,6 +569,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+     MODEL_ARCH.MPT:              "mpt",
+     MODEL_ARCH.STARCODER:        "starcoder",
+     MODEL_ARCH.REFACT:           "refact",
++    MODEL_ARCH.NEW:              "new",
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
      MODEL_ARCH.NOMIC_BERT_MOE:   "nomic-bert-moe",
-+    MODEL_ARCH.NEW:              "new",
-     MODEL_ARCH.JINA_BERT_V2:     "jina-bert-v2",
-     MODEL_ARCH.BLOOM:            "bloom",
-     MODEL_ARCH.STABLELM:         "stablelm",
-@@ -1077,6 +1079,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
-         MODEL_TENSOR.FFN_UP_EXP,
-         MODEL_TENSOR.LAYER_OUT_NORM,
+@@ -1029,6 +1031,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+         MODEL_TENSOR.FFN_DOWN,
+         MODEL_TENSOR.FFN_UP,
      ],
 +    MODEL_ARCH.NEW: [
 +        MODEL_TENSOR.TOKEN_EMBD,
@@ -164,58 +164,58 @@ index 3ee2b206..ce32019e 100644
 +        MODEL_TENSOR.CLS,
 +        MODEL_TENSOR.CLS_OUT,
 +    ],
-     MODEL_ARCH.JINA_BERT_V2: [
+     MODEL_ARCH.BERT: [
          MODEL_TENSOR.TOKEN_EMBD,
          MODEL_TENSOR.TOKEN_EMBD_NORM,
 diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index 93dd1d80..409fcf80 100644
+index 439fc1af..db0810d9 100644
 --- a/gguf-py/gguf/tensor_mapping.py
 +++ b/gguf-py/gguf/tensor_mapping.py
-@@ -158,6 +158,7 @@ class TensorNameMap:
+@@ -156,6 +156,7 @@ class TensorNameMap:
+             "model.layers.{bid}.self_attn.query_key_value",                        # persimmon
+             "h.{bid}.attn.c_attn",                                                 # gpt2
              "transformer.h.{bid}.mixer.Wqkv",                                      # phi2
++            "encoder.layer.{bid}.attention.qkv_proj",                              # new
              "encoder.layers.{bid}.attn.Wqkv",                                      # nomic-bert
              "encoder.layers.{bid}.mixer.Wqkv",                                     # jina
-+            "encoder.layer.{bid}.attention.qkv_proj",                              # new
              "model.layers.{bid}.self_attn.qkv_proj",                               # phi3
-             "encoder.layers.{bid}.self_attention.query_key_value",                 # chatglm
-             "transformer.layers.{bid}.attn.qkv_proj",                              # openelm
-@@ -230,6 +231,7 @@ class TensorNameMap:
-             "model.layers.{bid}.attention.wo",                              # internlm2
-             "encoder.layers.{bid}.attn.out_proj",                           # nomic-bert
-             "encoder.layers.{bid}.mixer.out_proj",                          # jina
+@@ -219,6 +220,7 @@ class TensorNameMap:
+             "model.layers.{bid}.self_attn.o_proj",                          # llama-hf nemotron olmoe olmo2 phimoe
+             "model.layers.{bid}.self_attn.linear_attn",                     # deci
+             "layers.{bid}.attention.wo",                                    # llama-pth
 +            "encoder.layer.{bid}.attention.o_proj",                         # new
-             "transformer.decoder_layer.{bid}.multi_head_attention.linear",  # Grok
-             "transformer.blocks.{bid}.norm_attn_norm.attn.out_proj",        # dbrx
-             "encoder.layers.{bid}.self_attention.dense",                    # chatglm
-@@ -243,6 +245,7 @@ class TensorNameMap:
+             "encoder.layer.{bid}.attention.output.dense",                   # bert
+             "transformer.layer.{bid}.attention.out_lin",                    # distillbert
+             "transformer.h.{bid}.attn.out_proj",                            # gpt-j
+@@ -240,6 +242,7 @@ class TensorNameMap:
+ 
+         # Attention output norm
+         MODEL_TENSOR.ATTN_OUT_NORM: (
++            "encoder.layer.{bid}.attn_ln",                     # new
              "encoder.layer.{bid}.attention.output.LayerNorm",  # bert
              "transformer.layer.{bid}.sa_layer_norm",           # distillbert
              "encoder.layers.{bid}.norm1",                      # nomic-bert
-+            "encoder.layer.{bid}.attn_ln",                     # new
-             "transformer.decoder_layer.{bid}.rms_norm_1",      # Grok
-             "transformer.blocks.{bid}.norm_attn_norm.norm_2",  # dbrx
-         ),
-@@ -334,6 +337,7 @@ class TensorNameMap:
-             "encoder.layers.{bid}.mlp.fc1",                           # nomic-bert-moe
-             "model.layers.{bid}.mlp.c_fc",                            # starcoder2
-             "encoder.layer.{bid}.mlp.gated_layers_v",                 # jina-bert-v2
+@@ -317,6 +320,7 @@ class TensorNameMap:
+             "h.{bid}.mlp.dense_h_to_4h",                              # bloom
+             "model.layers.{bid}.mlp.up_proj",                         # llama-hf refact nemotron olmo2
+             "layers.{bid}.feed_forward.w3",                           # llama-pth
 +            "encoder.layer.{bid}.mlp.up_gate_proj",                   # new
-             "model.layers.{bid}.residual_mlp.w3",                     # arctic
-             "encoder.layers.{bid}.mlp.dense_h_to_4h",                 # chatglm
-             "transformer.h.{bid}.mlp.c_fc_1",                         # exaone
-@@ -414,6 +418,7 @@ class TensorNameMap:
-             "encoder.layers.{bid}.mlp.fc2",                           # nomic-bert
-             "model.layers.{bid}.mlp.c_proj",                          # starcoder2
-             "encoder.layer.{bid}.mlp.wo",                             # jina-bert-v2
+             "encoder.layer.{bid}.intermediate.dense",                 # bert
+             "transformer.layer.{bid}.ffn.lin1",                       # distillbert
+             "transformer.h.{bid}.mlp.fc_in",                          # gpt-j
+@@ -403,6 +407,7 @@ class TensorNameMap:
+             "h.{bid}.mlp.dense_4h_to_h",                              # bloom
+             "model.layers.{bid}.mlp.down_proj",                       # llama-hf nemotron olmo2
+             "layers.{bid}.feed_forward.w2",                           # llama-pth
 +            "encoder.layer.{bid}.mlp.down_proj",                      # new
-             "transformer.layers.{bid}.ffn.proj_2",                    # openelm
-             "model.layers.{bid}.residual_mlp.w2",                     # arctic
-             "encoder.layer.{bid}.mlp.down_layer",                     # jina-bert-v2
-@@ -468,6 +473,7 @@ class TensorNameMap:
-             "encoder.layers.{bid}.norm2",                   # nomic-bert
-             "transformer.decoder_layer.{bid}.rms_norm_3",   # Grok
-             "encoder.layer.{bid}.mlp.layernorm",            # jina-bert-v2
-+            "encoder.layer.{bid}.mlp_ln",                   # new
-             "encoder.layer.{bid}.layer_norm_2"              # jina-v2-code
+             "encoder.layer.{bid}.output.dense",                       # bert
+             "transformer.layer.{bid}.ffn.lin2",                       # distillbert
+             "transformer.h.{bid}.mlp.fc_out",                         # gpt-j
+@@ -465,6 +470,7 @@ class TensorNameMap:
          ),
  
+         MODEL_TENSOR.LAYER_OUT_NORM: (
++            "encoder.layer.{bid}.mlp_ln",                   # new
+             "encoder.layer.{bid}.output.LayerNorm",         # bert
+             "transformer.layer.{bid}.output_layer_norm",    # distillbert
+             "encoder.layers.{bid}.norm2",                   # nomic-bert
