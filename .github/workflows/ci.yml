@@ -571,7 +571,7 @@ jobs:
       fail-fast: false
       matrix:
         # see https://sourcefind.cn/#/image/dcu/dtk.
-        #     24.04 ==> 24.04.3, Ubuntu 20.04.
+        #     25.04 ==> 25.04, Ubuntu 20.04.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
@@ -579,9 +579,9 @@ jobs:
         # see https://download.sourcefind.cn:65024/6/main.
         include:
           - arch: 'amd64'
-            version: '24.04'
-            distro_container_image: 'gpustack/devel-hygon-dtk:24.04.3-ubuntu20.04-v2'
-            hip_arch: 'gfx906;gfx926;gfx928'
+            version: '25.04'
+            distro_container_image: 'gpustack/devel-hygon-dtk:25.04-ubuntu22.04-v2'
+            hip_arch: 'gfx906;gfx926;gfx928;gfx936'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -610,19 +610,19 @@ jobs:
           echo "===== SCRIPT ====="
           cat <<EOF > /tmp/entrypoint.sh
           #!/bin/bash
-          export LD_LIBRARY_PATH="/opt/dtk/llvm/lib/clang/15.0.0/lib/linux:/opt/dtk/llvm/lib/clang/15.0.0/lib/linux/\$(uname -m):\${LD_LIBRARY_PATH}"
+          rm -rf /opt/dtk/llvm/lib/clang/lib && ln -s /opt/dtk/llvm/lib/clang/\$(clang --version | head -n 1 | awk '{print \$3}')/lib /opt/dtk/llvm/lib/clang/lib
+          rm -rf /opt/hyhal && ln -s /opt/dtk/.hyhal /opt/hyhal
           source /opt/dtk/env.sh
+          sed -i 's/"5.1.25085"/"6.1.25085"/g' /opt/dtk/hip/lib/cmake/hip/hip-config-version.cmake
           git config --system --add safe.directory '*'
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
-            -DCMAKE_C_COMPILER="hipcc" \
-            -DCMAKE_C_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DCMAKE_CXX_COMPILER="hipcc" \
-            -DCMAKE_CXX_FLAGS="--gpu-max-threads-per-block=1024" \
-            -DCMAKE_HIP_COMPILER="clang" \
-            -DCMAKE_HIP_FLAGS="--gpu-max-threads-per-block=1024" \
+            -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
+            -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
             -DGGML_NATIVE=off \
             -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
