@@ -24,7 +24,7 @@ index 015a5789..21746b76 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index ba2e1864..5b437e78 100644
+index d8c9d973..e5b9ca58 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1467,7 +1467,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
