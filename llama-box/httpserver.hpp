@@ -2801,11 +2801,6 @@ struct httpserver {
 
         // load the draft model if needed
         if (!params.llm_params.speculative.model.path.empty() && params.llm_params.speculative.n_max > 0) {
-            if (!llm_kv_cache_shift) {
-                SRV_ERR("%s", "draft model speculative decoding is not supported for non-shifting models\n");
-                return false;
-            }
-
             SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.path.c_str());
 
             common_params llm_params_draft   = params.llm_params;
