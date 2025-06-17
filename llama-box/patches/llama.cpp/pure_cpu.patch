@@ -13,10 +13,10 @@ index c36c12d6..1b1dc734 100644
  
      // Add backend dynamic loading support to the backend
 diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
-index 405d8e31..eeae3da6 100644
+index 405d8e31..4c07749e 100644
 --- a/ggml/src/ggml-backend-reg.cpp
 +++ b/ggml/src/ggml-backend-reg.cpp
-@@ -161,31 +161,42 @@ struct ggml_backend_registry {
+@@ -161,22 +161,34 @@ struct ggml_backend_registry {
  
      ggml_backend_registry() {
  #ifdef GGML_USE_CUDA
@@ -51,14 +51,13 @@ index 405d8e31..eeae3da6 100644
  #endif
  #ifdef GGML_USE_CANN
 -        register_backend(ggml_backend_cann_reg());
--#endif
--#ifdef GGML_USE_BLAS
--        register_backend(ggml_backend_blas_reg());
 +        if (ngl != 0) {
 +            register_backend(ggml_backend_cann_reg());
 +        }
  #endif
- #ifdef GGML_USE_RPC
+ #ifdef GGML_USE_BLAS
+         register_backend(ggml_backend_blas_reg());
+@@ -185,7 +197,9 @@ struct ggml_backend_registry {
          register_backend(ggml_backend_rpc_reg());
  #endif
  #ifdef GGML_USE_KOMPUTE
@@ -69,7 +68,7 @@ index 405d8e31..eeae3da6 100644
  #endif
  #ifdef GGML_USE_CPU
          register_backend(ggml_backend_cpu_reg());
-@@ -302,6 +313,10 @@ static ggml_backend_registry & get_reg() {
+@@ -302,6 +316,10 @@ static ggml_backend_registry & get_reg() {
  }
  
  // Internal API
@@ -81,7 +80,7 @@ index 405d8e31..eeae3da6 100644
      get_reg().register_backend(reg);
  }
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 2f06e0f8..0c9044c5 100644
+index 34906cdb..db75b00c 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -197,7 +197,7 @@ static struct llama_model * llama_model_load_from_file_impl(
@@ -90,6 +89,6 @@ index 2f06e0f8..0c9044c5 100644
      // if using single GPU mode, remove all except the main GPU
 -    if (params.split_mode == LLAMA_SPLIT_MODE_NONE) {
 +    if (model->devices.size() > 0 && params.split_mode == LLAMA_SPLIT_MODE_NONE) {
-         if (params.main_gpu < 0 || params.main_gpu >= (int)model->devices.size()) {
-             LLAMA_LOG_ERROR("%s: invalid value for main_gpu: %d (available devices: %d)\n", __func__, params.main_gpu, (int)model->devices.size());
-             llama_model_free(model);
+         if (params.main_gpu < 0) {
+             model->devices.clear();
+         } else {
