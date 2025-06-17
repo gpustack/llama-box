@@ -1,5 +1,5 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 1d6974a8..4a52ab37 100644
+index 0dad14fb..81f7f430 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
 @@ -491,6 +491,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
@@ -118,14 +118,16 @@ index 1d6974a8..4a52ab37 100644
  common_chat_params common_chat_templates_apply(
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
-@@ -1919,12 +2014,12 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+@@ -1919,7 +2014,7 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
      try {
          common_chat_parse(builder);
      } catch (const common_chat_msg_partial_exception & ex) {
 -        LOG_DBG("Partial parse: %s\n", ex.what());
 +//        LOG_DBG("Partial parse: %s\n", ex.what());
          if (!is_partial) {
-             throw std::runtime_error(ex.what());
+             builder.clear_tools();
+             builder.move_to(0);
+@@ -1927,6 +2022,6 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
          }
      }
      auto msg = builder.result();
@@ -154,7 +156,7 @@ index 9f59e6b0..d084a116 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 015a5789..e16c42f7 100644
+index d5e4cef6..09d2514a 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -403,6 +403,11 @@ extern "C" {
