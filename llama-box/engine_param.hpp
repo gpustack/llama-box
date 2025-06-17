@@ -226,7 +226,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --images",                               "Enable image endpoint (default: %s)", params_.hs_params.endpoint_images ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "       --rerank",                               "Enable reranking endpoint (default: %s)", llm_params.reranking ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "       --rerank",                               "Enable reranking endpoint" });
     opts.push_back({ "server",                             "       --rpc SERVERS",                          "A comma-separated list of RPC server" });
     opts.push_back({ "server",                             "-ts,   --tensor-split SPLIT",                   "Fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1\n"
                                                                                                             "For image models, indicate which device should be able to offload"});
@@ -691,7 +691,8 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
             }
 
             if (!strcmp(flag, "--reranking") || !strcmp(flag, "--rerank")) {
-                params_.hs_params.llm_params.reranking = true;
+                params_.hs_params.llm_params.embedding = true;
+                params_.hs_params.llm_params.pooling_type = LLAMA_POOLING_TYPE_RANK;
                 continue;
             }
 

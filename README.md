@@ -397,7 +397,7 @@ server:
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
          --images                 Enable image endpoint (default: disabled)
-         --rerank                 Enable reranking endpoint (default: disabled)
+         --rerank                 Enable reranking endpoint
          --rpc SERVERS            A comma-separated list of RPC server
   -ts,   --tensor-split SPLIT     Fraction of the model to offload to each device, comma-separated list of proportions, e.g. 3,1
                                   For image models, indicate which device should be able to offload

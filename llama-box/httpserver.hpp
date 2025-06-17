@@ -2748,6 +2748,8 @@ struct httpserver {
         // NB(thxCode): llama_causal_attn is a patch.
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
+        llm_model_arch_name  = llama_model_arch_name(llm_model);  // llama_model_arch_name is a patch.
+        llm_model_memory     = llama_get_memory(llm_ctx) != nullptr;
         batch_view_max       = int32_t(llama_n_batch(llm_ctx));
         batch_text           = llama_batch_init(llm_ctx_size, 0, 1);
         batch_text_temp      = llama_batch_init(llm_ctx_size, 0, 1);
@@ -2864,21 +2866,23 @@ struct httpserver {
             }
         }
 
+        if (!support_completion()) {
+            // prompt cache
+            cache_prompt = false;
+            SRV_INF("prompt caching %s\n", cache_prompt ? "unsupported" : "disabled");
+
+            // context shift
+            shift_context = params.llm_params.ctx_shift;
+            SRV_INF("context shifting %s\n", shift_context ? "enabled" : "disabled");
+            return true;
+        }
+
         // prompt cache
         cache_prompt = llm_model_casual && params.cache_prompt && llm_kv_cache_shift;
         if (cache_prompt) {
             cache_prompts.resize(params.llm_params.n_threads_http);
         }
         SRV_INF("prompt caching %s\n", cache_prompt ? "enabled" : (params.cache_prompt ? "unsupported" : "disabled"));
-
-        // NB(thxCode): llama_model_arch_name is a patch.
-        std::string arch_name = llama_model_arch_name(llm_model);
-
-        need_end_eos = arch_name == "qwen3";
-
-        if (!support_completion()) {
-            return true;
-        }
 
         // context shift
         shift_context = params.llm_params.ctx_shift && llm_kv_cache_shift;
@@ -2978,7 +2982,7 @@ struct httpserver {
             }
 
             {
-                if (alias == "deepseek3" || string_starts_with(arch_name, "qwen3")) {
+                if (alias == "deepseek3" || string_starts_with(llm_model_arch_name, "qwen3")) {
                     llama_tokens ids = common_tokenize(llm_vocab, "<think>", false, true);
                     if (ids.size() == 1) {
                         reasoning_start_token = ids[0];
@@ -3293,6 +3297,8 @@ struct httpserver {
     bool                llm_kv_cache_shift    = false;
     bool                llm_model_casual      = true;
     bool                llm_model_rope_mrope  = false;
+    std::string         llm_model_arch_name   = "";
+    bool                llm_model_memory      = true;
     int32_t             batch_view_max        = 0;
     llama_batch         batch_text            = {};
     llama_batch         batch_text_temp       = {};
@@ -3310,9 +3316,6 @@ struct httpserver {
     bool                            shift_context = false;
     common_chat_templates_ptr       chat_templates;
     std::vector<cache_prompt_entry> cache_prompts;
-
-    // embedding
-    bool need_end_eos = false;
 
     // clip model
     std::mutex       llm_ctx_clip_mtx;
@@ -3367,13 +3370,13 @@ struct httpserver {
     inline bool support_tokenize() const { return llm_vocab != nullptr; }
 
     inline bool support_completion() const {
-        return llm_ctx != nullptr && llm_model_casual && !params.llm_params.reranking;
+        return llm_ctx != nullptr && llm_model_casual && params.llm_params.pooling_type != LLAMA_POOLING_TYPE_RANK;
     }
 
     inline bool support_embedding() const { return llm_ctx != nullptr && params.llm_params.embedding; }
 
     inline bool support_reranking() const {
-        return llm_ctx != nullptr && !llm_model_casual && params.llm_params.reranking;
+        return llm_ctx != nullptr && !llm_model_casual && params.llm_params.pooling_type == LLAMA_POOLING_TYPE_RANK;
     }
 
     inline bool support_image() const { return sd_ctx != nullptr; }
@@ -3903,7 +3906,7 @@ struct httpserver {
                             }
                             SRV_DBG(
                                 "rid %s | prefill, incomplete, "
-                                "clean kv cache, seq %d = [0, end)",
+                                "clean kv cache, seq %d = [0, end)\n",
                                 rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
@@ -3985,7 +3988,6 @@ struct httpserver {
                 auto * task = dynamic_cast<embeddings_task *>(task_ptr.get());
 
                 // prefill first
-                const bool emb     = rtype == REQ_EMBED && llama_pooling_type(llm_ctx) == LLAMA_POOLING_TYPE_NONE;
                 const auto n_input = int32_t(task->tokenized_inputs.size());
                 if (task->i_input_prefilled < n_input) {
                     llama_tokens tokenized_input = task->tokenized_inputs[task->i_input_prefilled];
@@ -4002,14 +4004,14 @@ struct httpserver {
                     }
 
                     // prepare cache - clean cache
-                    if (cache_prompt) {
+                    if (cache_prompt && llm_model_memory) {
                         llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
                             llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                         }
                         SRV_INFV(2,
                                  "rid %s | batching, clean cache, "
-                                 "clean kv cache, seq %d = [0, end)",
+                                 "clean kv cache, seq %d = [0, end)\n",
                                  rid.c_str(), seq_id);
 
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
@@ -4021,7 +4023,7 @@ struct httpserver {
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
-                        common_batch_add(batch_text, tokenized_input[pos], pos, { seq_id }, emb);
+                        common_batch_add(batch_text, tokenized_input[pos], pos, { seq_id }, true);
                     }
                     task->n_prefilled += n_pos;
                     task->n_min_prefilled = task->n_min_prefilled == 0 ? n_pos : std::min(task->n_min_prefilled, n_pos);
@@ -4095,7 +4097,7 @@ struct httpserver {
                             }
                             SRV_INFV(2,
                                      "rid %s | decode, "
-                                     "clean kv cache, seq %d = [0, end)",
+                                     "clean kv cache, seq %d = [0, end)\n",
                                      rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
@@ -4131,7 +4133,7 @@ struct httpserver {
                             llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
                             SRV_INFV(2,
                                      "rid %s | decode, "
-                                     "clean kv cache, seq %d = [0, end)",
+                                     "clean kv cache, seq %d = [0, end)\n",
                                      rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
                             // output
@@ -4188,7 +4190,7 @@ struct httpserver {
                                     }
                                     SRV_INFV(2,
                                              "rid %s | decode, "
-                                             "clean kv cache, seq %d = [%d, end)",
+                                             "clean kv cache, seq %d = [%d, end)\n",
                                              rid.c_str(), seq_id, task->pos);
                                     llm_kv_cache_used -= d;
                                     break;
@@ -4538,7 +4540,7 @@ struct httpserver {
                                     if (decoded_draft != 0) {
                                         SRV_INFV(2,
                                                  "rid %s | decode draft, "
-                                                 "clean kv cache, seq %d = [0, end)",
+                                                 "clean kv cache, seq %d = [0, end)\n",
                                                  rid.c_str(), seq_id);
                                         break;
                                     }
@@ -4632,7 +4634,9 @@ struct httpserver {
                     "increasing context size or reducing parallel: result = %d\n",
                     decoded);
                 // clean kv cache
-                llama_memory_clear(llama_get_memory(llm_ctx), true);
+                if (llm_model_memory) {
+                    llama_memory_clear(llama_get_memory(llm_ctx), true);
+                }
                 // output
                 for (auto & task_ptr : batch_task_ptrs) {
                     json data = {
@@ -4674,7 +4678,7 @@ struct httpserver {
                     task->embeds[task->embeds.size() - 1][0] = embed[0];
                 }
                 // clean kv cache
-                if (!cache_prompt) {
+                if (!cache_prompt && llm_model_memory) {
                     llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                     if (llm_ctx_draft != nullptr) {
                         llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
@@ -5926,7 +5930,7 @@ struct httpserver {
 
         std::vector<llama_tokens> tokenized_inputs = tokenize_prompts(llm_vocab, req->input, true, true);
         for (size_t i = 0; i < tokenized_inputs.size(); i++) {
-            if (need_end_eos || tokenized_inputs[i].empty()) {
+            if (llm_model_arch_name == "qwen3" || tokenized_inputs[i].empty()) {
                 tokenized_inputs[i].push_back(tok_eos);
             }
             auto n_pos = int32_t(tokenized_inputs[i].size());
