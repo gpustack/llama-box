@@ -39,21 +39,6 @@
 #include "llama.cpp/ggml/src/ggml-backend-impl.h"
 #include "llama.cpp/ggml/src/ggml-impl.h"
 #include "llama.cpp/vendor/cpp-httplib/httplib.h"
-#ifdef GGML_USE_CUDA
-#    include "llama.cpp/ggml/include/ggml-cuda.h"
-#endif
-#ifdef GGML_USE_METAL
-#    include "llama.cpp/ggml/include/ggml-metal.h"
-#endif
-#ifdef GGML_USE_CANN
-#    include "llama.cpp/ggml/include/ggml-cann.h"
-#endif
-#ifdef GGML_USE_VULKAN
-#    include "llama.cpp/ggml/include/ggml-vulkan.h"
-#endif
-#ifdef GGML_USE_SYCL
-#    include "llama.cpp/ggml/include/ggml-sycl.h"
-#endif
 
 #define SELF_PACKAGE 0
 #include "z_utils.hpp"
@@ -389,44 +374,35 @@ static bool rpc_send_msg(rpc_sockfd_t sockfd, const void * msg, size_t msg_size)
 static ggml_backend_t rpcserver_create_backend(rpcserver_params & params) {
     ggml_backend_t backend = nullptr;
     int32_t        gpu     = params.main_gpu;
-#ifdef GGML_USE_CUDA
-    SRV_INF("using CUDA backend, gpu: %d\n", gpu);
-    backend = ggml_backend_cuda_init(gpu);
-    if (!backend) {
-        SRV_ERR("ggml_backend_cuda_init(%d) failed\n", gpu);
-    }
-#elif GGML_USE_METAL
-    SRV_INF("using METAL backend, gpu: %d\n", gpu);
-    backend = ggml_backend_metal_init();
-    if (!backend) {
-        SRV_ERR("%s", "ggml_backend_metal_init() failed\n");
-    }
-#elif GGML_USE_CANN
-    SRV_INF("using CANN backend, gpu: %d\n", gpu);
-    backend = ggml_backend_cann_init(gpu);
-    if (!backend) {
-        SRV_ERR("ggml_backend_cann_init(%d) failed\n", gpu);
-    }
-#elif GGML_USE_VULKAN
-    SRV_INF("using VULKAN backend, gpu: %d\n", gpu);
-    backend = ggml_backend_vk_init(gpu);
-    if (!backend) {
-        SRV_ERR("ggml_backend_vk_init(%d) failed\n", gpu);
-    }
-#elif GGML_USE_SYCL
-    SRV_INF("using SYCL backend, gpu: %d\n", gpu);
-    backend = ggml_backend_sycl_init(gpu);
-    if (!backend) {
-        SRV_ERR("ggml_backend_sycl_init(%d) failed\n", gpu);
-    }
-#endif
 
-    // if there aren't GPU Backends fallback to CPU backend
-    if (!backend) {
-        SRV_INF("%s", "fallback, using CPU backend\n");
-        backend = ggml_backend_cpu_init();
-        ggml_backend_cpu_set_n_threads(backend, params.n_threads);
+    if (gpu < 0) {
+        backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+        SRV_INF("%s", "using CPU backend\n");
+    } else {
+        auto * dev = ggml_backend_dev_get(gpu);
+        if (dev) {
+            backend = ggml_backend_dev_init(dev, nullptr);
+            SRV_INF("using GPU backend: %s\n", ggml_backend_dev_name(dev));
+        }
+        if (!backend) {
+            SRV_INF("%s", "failed to create GPU backend, fallback using CPU backend\n");
+            backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+        }
     }
+
+    // set the number of threads
+    if (backend) {
+        auto * dev = ggml_backend_get_device(backend);
+        auto * reg = dev ? ggml_backend_dev_backend_reg(dev) : nullptr;
+        if (reg) {
+            auto ggml_backend_set_n_threads_fn =
+                (ggml_backend_set_n_threads_t) ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_n_threads");
+            if (ggml_backend_set_n_threads_fn) {
+                ggml_backend_set_n_threads_fn(backend, params.n_threads);
+            }
+        }
+    }
+
     return backend;
 }
 
@@ -483,30 +459,14 @@ static void rpcserver_get_backend_memory(ggml_backend_t backend, int32_t gpu, si
 #endif
         return;
     }
-#ifdef GGML_USE_CUDA
-    ggml_backend_cuda_get_device_memory(gpu, free_mem, total_mem);
-#elif GGML_USE_METAL
-    ggml_backend_metal_get_device_memory(backend, free_mem, total_mem);
-#elif GGML_USE_CANN
-    ggml_backend_cann_get_device_memory(gpu, free_mem, total_mem);
-#elif GGML_USE_VULKAN
-    ggml_backend_vk_get_device_memory(gpu, free_mem, total_mem);
-#elif GGML_USE_SYCL
-    ggml_backend_sycl_get_device_memory(gpu, free_mem, total_mem);
-#else
-#    if defined(_WIN32)
-    MEMORYSTATUSEX status;
-    status.dwLength = sizeof(status);
-    GlobalMemoryStatusEx(&status);
-    *total_mem = status.ullTotalPhys;
-    *free_mem  = status.ullAvailPhys;
-#    else
-    long pages     = sysconf(_SC_PHYS_PAGES);
-    long page_size = sysconf(_SC_PAGE_SIZE);
-    *total_mem     = pages * page_size;
-    *free_mem      = *total_mem;
-#    endif
-#endif
+    ggml_backend_dev_t dev = ggml_backend_get_device(backend);
+    if (dev == nullptr) {
+        SRV_ERR("failed to get backend device for GPU %d\n", gpu);
+        *free_mem  = 0;
+        *total_mem = 0;
+        return;
+    }
+    ggml_backend_dev_memory(dev, free_mem, total_mem);
 }
 
 std::function<void(int)> rpcserver_shutdown_handler;
@@ -547,14 +507,7 @@ struct rpcserver {
             params.n_threads = cpu_get_num_math();
         }
 
-        if (params.main_gpu < 0) {
-            SRV_INF("%s", "using CPU backend\n");
-            backend = ggml_backend_cpu_init();
-            ggml_backend_cpu_set_n_threads(backend, params.n_threads);
-        } else {
-            SRV_INF("%s", "using GPU backend\n");
-            backend = rpcserver_create_backend(params);
-        }
+        backend = rpcserver_create_backend(params);
         if (!backend) {
             SRV_ERR("%s", "failed to create backend\n");
             return false;

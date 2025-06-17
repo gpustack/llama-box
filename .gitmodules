@@ -4,7 +4,7 @@
 [submodule "stable-diffusion.cpp"]
 	path = stable-diffusion.cpp
 	url = https://github.com/thxcode/stable-diffusion.cpp
-	branch = dev-dcf91f9e-4
+	branch = dev-dcf91f9e-5
 [submodule "concurrentqueue"]
 	path = concurrentqueue
 	url = https://github.com/cameron314/concurrentqueue

@@ -1,5 +1,7 @@
 # llama-box
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+
 if (MINGW)
     # fix: https://github.com/ggerganov/llama.cpp/actions/runs/9651004652/job/26617901362?pr=8006
     add_compile_definitions(_WIN32_WINNT=${GGML_WIN_VER})
@@ -58,10 +60,10 @@ add_custom_target(patch
 add_dependencies(patch version build_info)
 add_dependencies(ggml-base patch)
 add_dependencies(ggml patch)
+add_dependencies(llama patch)
+add_dependencies(mtmd patch)
+add_dependencies(stable-diffusion ggml patch)
 add_dependencies(common ggml ggml-base patch)
-add_dependencies(mtmd common patch)
-add_dependencies(llama common patch)
-add_dependencies(stable-diffusion common patch)
 
 #
 # llama-box
@@ -96,6 +98,9 @@ endif ()
 add_executable(${TARGET} engine.cpp engine_param.hpp httpserver.hpp rpcserver.hpp z_multimodal.hpp z_stablediffusion.hpp z_utils.hpp)
 target_link_libraries(${TARGET} PRIVATE version common mtmd stable-diffusion ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if (WIN32)
+    target_link_libraries(${TARGET} PRIVATE ws2_32)
+endif ()
 target_compile_features(${TARGET} PUBLIC cxx_std_17)
 if (LLAMA_OPENSSL)
     message(STATUS "Building with OpenSSL")
@@ -113,10 +118,12 @@ if (LLAMA_OPENSSL)
         message(WARNING "OpenSSL not found")
     endif ()
 endif ()
-if (GGML_STATIC OR GGML_CUDA OR GGML_HIP OR GGML_CANN OR GGML_MUSA)
-    message(STATUS "Building with static libraries")
-    set_target_properties(${TARGET} PROPERTIES LINKER_LANGUAGE "CXX")
-    target_link_options(${TARGET} PRIVATE -static-libgcc -static-libstdc++)
+if (NOT GGML_BACKEND_DL)
+    if (GGML_CUDA OR GGML_HIP OR GGML_CANN OR GGML_MUSA OR GGML_VULKAN OR GGML_SYCL)
+        message(STATUS "Building with static libraries")
+        set_target_properties(${TARGET} PROPERTIES LINKER_LANGUAGE "CXX")
+        target_link_options(${TARGET} PRIVATE -static-libgcc -static-libstdc++)
+    endif ()
 endif ()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Building in debug mode")

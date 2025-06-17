@@ -2656,12 +2656,10 @@ struct httpserver {
         }
 
         if (threadpool != nullptr) {
-            ggml_threadpool_free(threadpool);
-            threadpool = nullptr;
-        }
-        if (threadpool_batch != nullptr) {
-            ggml_threadpool_free(threadpool_batch);
-            threadpool_batch = nullptr;
+            auto * ggml_threadpool_free_fn =
+                (decltype(ggml_threadpool_free) *) ggml_backend_reg_get_proc_address(reg_cpu, "ggml_threadpool_free");
+            ggml_threadpool_free_fn(threadpool);
+            ggml_threadpool_free_fn(threadpool_batch);
         }
 
         llama_backend_free();
@@ -2845,8 +2843,13 @@ struct httpserver {
 
         // thread pool
         {
+            auto * back_cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+            reg_cpu         = ggml_backend_dev_backend_reg(ggml_backend_get_device(back_cpu));
+            auto * ggml_threadpool_new_fn =
+                (decltype(ggml_threadpool_new) *) ggml_backend_reg_get_proc_address(reg_cpu, "ggml_threadpool_new");
+
             struct ggml_threadpool_params tpp = ggml_threadpool_params_from_cpu_params(params.llm_params.cpuparams);
-            threadpool                        = ggml_threadpool_new(&tpp);
+            threadpool                        = ggml_threadpool_new_fn(&tpp);
             if (!threadpool) {
                 SRV_ERR("threadpool create failed : n_threads %d\n", tpp.n_threads);
                 return false;
@@ -2854,7 +2857,7 @@ struct httpserver {
 
             struct ggml_threadpool_params tpp_batch =
                 ggml_threadpool_params_from_cpu_params(params.llm_params.cpuparams_batch);
-            threadpool_batch = ggml_threadpool_new(&tpp_batch);
+            threadpool_batch = ggml_threadpool_new_fn(&tpp_batch);
             if (!threadpool_batch) {
                 SRV_ERR("threadpool_batch create failed : n_threads %d\n", tpp_batch.n_threads);
                 return false;
@@ -3338,8 +3341,9 @@ struct httpserver {
     llama_batch         batch_text_draft = {};
 
     // thread pool
-    ggml_threadpool * threadpool       = nullptr;
-    ggml_threadpool * threadpool_batch = nullptr;
+    ggml_backend_reg_t reg_cpu          = nullptr;
+    ggml_threadpool_t  threadpool       = nullptr;
+    ggml_threadpool_t  threadpool_batch = nullptr;
 
     // tool calls
     bool                     support_tool_calls                   = false;
