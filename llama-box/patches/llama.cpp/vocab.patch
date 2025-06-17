@@ -12,10 +12,10 @@ index a0a318a2..85483a5b 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index d5e4cef6..822f6eba 100644
+index b086b68e..53a56478 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1038,6 +1038,7 @@ extern "C" {
+@@ -1040,6 +1040,7 @@ extern "C" {
      LLAMA_API llama_token llama_vocab_sep(const struct llama_vocab * vocab); // sentence separator
      LLAMA_API llama_token llama_vocab_nl (const struct llama_vocab * vocab); // next-line
      LLAMA_API llama_token llama_vocab_pad(const struct llama_vocab * vocab); // padding
