@@ -218,10 +218,10 @@ index d5e4cef6..09d2514a 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index d12743e6..27b32baf 100644
+index bc4fa05a..a3862c2a 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
-@@ -187,6 +187,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -189,6 +189,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
  
@@ -829,7 +829,7 @@ index d12743e6..27b32baf 100644
  // This function uses heuristic checks to determine commonly used template. It is not a jinja parser.
  int32_t llm_chat_apply_template(
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index db24ade2..94f99991 100644
+index 38800010..a4bb355a 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -3,6 +3,7 @@
@@ -840,7 +840,7 @@ index db24ade2..94f99991 100644
  
  enum llm_chat_template {
      LLM_CHAT_TEMPLATE_CHATML,
-@@ -48,10 +49,19 @@ enum llm_chat_template {
+@@ -49,10 +50,19 @@ enum llm_chat_template {
  
  struct llama_chat_message;
  
@@ -861,10 +861,10 @@ index db24ade2..94f99991 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index c64bf9de..dc2333e0 100644
+index dcc8b0be..228f7cc6 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -13583,6 +13583,10 @@ void llama_model_free(llama_model * model) {
+@@ -13984,6 +13984,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  

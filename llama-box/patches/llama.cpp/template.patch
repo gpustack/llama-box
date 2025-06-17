@@ -1,5 +1,5 @@
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index d12743e6..12dbf2c7 100644
+index bc4fa05a..e9b57966 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -59,6 +59,9 @@ static const std::map<std::string, llm_chat_template> LLM_CHAT_TEMPLATES = {
@@ -21,7 +21,7 @@ index d12743e6..12dbf2c7 100644
      } else if (tmpl_contains("<|role_start|>")) {
          return LLM_CHAT_TEMPLATE_MEGREZ;
      } else if (tmpl_contains(" Ассистент:")) {
-@@ -573,6 +578,61 @@ int32_t llm_chat_apply_template(
+@@ -575,6 +580,61 @@ int32_t llm_chat_apply_template(
          if (add_ass) {
              ss << "assistant<|role_sep|>";
          }
@@ -84,7 +84,7 @@ index d12743e6..12dbf2c7 100644
          // Megrez template
          for (auto message : chat) {
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index db24ade2..f5c15ecd 100644
+index 38800010..761b417d 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -38,6 +38,9 @@ enum llm_chat_template {
