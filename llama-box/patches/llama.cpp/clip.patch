@@ -35,7 +35,7 @@ index 62c936ed..e393462f 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index c25bacc1..5cad9e6a 100644
+index 30283d6f..d362cff0 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -30,6 +30,11 @@
@@ -68,7 +68,7 @@ index c25bacc1..5cad9e6a 100644
          auto & hparams = model.hparams;
          std::string log_ffn_op; // for logging
  
-@@ -2196,8 +2201,9 @@ struct clip_model_loader {
+@@ -2209,8 +2214,9 @@ struct clip_model_loader {
                      } break;
                  case PROJECTOR_TYPE_PIXTRAL:
                      {
@@ -79,7 +79,7 @@ index c25bacc1..5cad9e6a 100644
                          get_u32(KEY_SPATIAL_MERGE_SIZE, hparams.spatial_merge_size, false);
                      } break;
                  case PROJECTOR_TYPE_GEMMA3:
-@@ -2214,8 +2220,8 @@ struct clip_model_loader {
+@@ -2227,8 +2233,8 @@ struct clip_model_loader {
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
@@ -90,7 +90,7 @@ index c25bacc1..5cad9e6a 100644
                      } break;
                  case PROJECTOR_TYPE_QWEN25VL:
                      {
-@@ -2223,8 +2229,8 @@ struct clip_model_loader {
+@@ -2236,8 +2242,8 @@ struct clip_model_loader {
                          // https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
@@ -101,7 +101,7 @@ index c25bacc1..5cad9e6a 100644
                          get_u32(KEY_WIN_ATTN_PATTERN, hparams.n_wa_pattern);
                      } break;
                  case PROJECTOR_TYPE_LLAMA4:
-@@ -2289,6 +2295,19 @@ struct clip_model_loader {
+@@ -2293,6 +2299,19 @@ struct clip_model_loader {
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
  
@@ -121,7 +121,7 @@ index c25bacc1..5cad9e6a 100644
          // TODO @ngxson : support both audio and video in the future
          const char * prefix = model.modality == CLIP_MODALITY_AUDIO ? "a" : "v";
  
-@@ -2686,7 +2705,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
+@@ -2705,7 +2724,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
  
          if (loader.has_vision) {
              ctx_vision = new clip_ctx(ctx_params);
@@ -130,7 +130,7 @@ index c25bacc1..5cad9e6a 100644
              loader.load_tensors(*ctx_vision);
              loader.alloc_compute_meta(*ctx_vision);
          }
-@@ -2801,6 +2820,11 @@ static void normalize_image_u8_to_f32(const clip_image_u8 & src, clip_image_f32
+@@ -2820,6 +2839,11 @@ static void normalize_image_u8_to_f32(const clip_image_u8 & src, clip_image_f32
  struct image_manipulation {
      // Bilinear resize function
      static void bilinear_resize(const clip_image_u8& src, clip_image_u8& dst, int target_width, int target_height) {
@@ -142,7 +142,7 @@ index c25bacc1..5cad9e6a 100644
          dst.nx = target_width;
          dst.ny = target_height;
          dst.buf.resize(3 * target_width * target_height);
-@@ -2837,6 +2861,11 @@ struct image_manipulation {
+@@ -2856,6 +2880,11 @@ struct image_manipulation {
      // Bicubic resize function
      // part of image will be cropped if the aspect ratio is different
      static bool bicubic_resize(const clip_image_u8 & img, clip_image_u8 & dst, int target_width, int target_height) {
@@ -154,7 +154,7 @@ index c25bacc1..5cad9e6a 100644
          const int nx = img.nx;
          const int ny = img.ny;
  
-@@ -2972,6 +3001,9 @@ struct image_manipulation {
+@@ -2991,6 +3020,9 @@ struct image_manipulation {
          if (inp_size.width <= 0 || inp_size.height <= 0 || align_size <= 0 || max_dimension <= 0) {
              return {0, 0};
          }
@@ -164,7 +164,7 @@ index c25bacc1..5cad9e6a 100644
  
          float scale = std::min(1.0f, std::min(static_cast<float>(max_dimension) / inp_size.width,
                                                static_cast<float>(max_dimension) / inp_size.height));
-@@ -3298,7 +3330,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
+@@ -3340,7 +3372,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
          clip_image_u8 resized;
          auto patch_size = params.patch_size * 2;
          auto new_size = image_manipulation::calc_size_preserved_ratio(original_size, patch_size, params.image_size);
@@ -173,7 +173,7 @@ index c25bacc1..5cad9e6a 100644
  
          clip_image_f32_ptr img_f32(clip_image_f32_init());
          // clip_image_f32_ptr res(clip_image_f32_init());
-@@ -4080,6 +4112,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -4111,6 +4143,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type() == PROJECTOR_TYPE_GEMMA3;
  }
  
@@ -205,7 +205,7 @@ index c25bacc1..5cad9e6a 100644
      return ctx->model.modality == CLIP_MODALITY_VISION;
  }
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index cb2eb261..e6f27711 100644
+index 08f3efb7..188c5c29 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
 @@ -25,8 +25,11 @@ enum clip_modality {
@@ -220,7 +220,7 @@ index cb2eb261..e6f27711 100644
  struct clip_init_result {
      struct clip_ctx * ctx_v; // vision context
      struct clip_ctx * ctx_a; // audio context
-@@ -103,6 +106,12 @@ bool clip_is_glm(const struct clip_ctx * ctx);
+@@ -100,6 +103,12 @@ bool clip_is_glm(const struct clip_ctx * ctx);
  bool clip_is_qwen2vl(const struct clip_ctx * ctx);
  bool clip_is_llava(const struct clip_ctx * ctx);
  bool clip_is_gemma3(const struct clip_ctx * ctx);
