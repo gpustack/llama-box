@@ -45,7 +45,7 @@ concurrency:
 # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
 #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
 jobs:
-  
+
   darwin:
     strategy:
       fail-fast: false
@@ -72,7 +72,6 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_METAL=off -DGGML_ACCELERATE=on \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -126,7 +125,6 @@ jobs:
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -144,11 +142,40 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/build/bin/llama-box
+
+          echo "===== DL BUILD ====="
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
+            -DGGML_NATIVE=on \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
+
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            otool --version
+            otool -L ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-darwin-${{ matrix.arch }}-metal.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-darwin-${{ matrix.arch }}-metal-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-darwin-${{ matrix.arch }}-metal-${{ matrix.version }}
 
   linux:
     strategy:
@@ -204,7 +231,6 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} \
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} \
@@ -255,7 +281,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-${{ matrix.instruction }}
 
   linux-cuda:
@@ -318,7 +344,6 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -361,11 +386,70 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+            -DGGML_NATIVE=off \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env CUDA_ARCHITECTURES \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
   linux-musa:
     strategy:
@@ -412,7 +496,6 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DMUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -455,11 +538,70 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DMUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
+            -DGGML_NATIVE=off \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env MUSA_ARCHITECTURES \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ./bin
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}
 
   linux-hip:
     strategy:
@@ -517,7 +659,6 @@ jobs:
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -560,11 +701,75 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
+            -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
+            -DGGML_NATIVE=off \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env AMDGPU_TARGETS \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}
 
   linux-dtk:
     strategy:
@@ -624,7 +829,6 @@ jobs:
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -667,11 +871,79 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          rm -rf /opt/dtk/llvm/lib/clang/lib && ln -s /opt/dtk/llvm/lib/clang/\$(clang --version | head -n 1 | awk '{print \$3}')/lib /opt/dtk/llvm/lib/clang/lib
+          rm -rf /opt/hyhal && ln -s /opt/dtk/.hyhal /opt/hyhal
+          source /opt/dtk/env.sh
+          sed -i 's/"5.1.25085"/"6.1.25085"/g' /opt/dtk/hip/lib/cmake/hip/hip-config-version.cmake
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
+            -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
+            -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
+            -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
+            -DGGML_NATIVE=off \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env AMDGPU_TARGETS \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}
 
   linux-cann:
     strategy:
@@ -742,7 +1014,6 @@ jobs:
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
             -DGGML_OPENMP=off \
@@ -785,11 +1056,75 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          export LD_LIBRARY_PATH=/usr/loca/Ascend/driver/lib64/common:/usr/loca/Ascend/driver/lib64/driver:\${LD_LIBRARY_PATH}
+          source /usr/local/Ascend/ascend-toolkit/set_env.sh
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CANN=on \
+            -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
+            -DGGML_NATIVE=off \
+            ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+          
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+          
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}
 
   linux-oneapi:
     strategy:
@@ -835,7 +1170,6 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -879,11 +1213,72 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_SYCL=on -DGGML_SYCL_F16=on \
+            -DGGML_NATIVE=off \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env CC=icx \
+            --env CXX=icpx \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
   linux-vulkan:
     strategy:
@@ -929,7 +1324,6 @@ jobs:
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_VULKAN=on \
             -DGGML_NATIVE=off \
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
@@ -971,11 +1365,175 @@ jobs:
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip ${{ github.workspace }}/build/bin/llama-box
+
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_VULKAN=on \
+            -DGGML_NATIVE=off \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on 
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip ./bin
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}/out/*.zip
+          path: ${{ github.workspace }}/out/llama-*.zip
           name: llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}
+
+  linux-cpu:
+    strategy:
+      fail-fast: false
+      matrix:
+        # AVX2 ==> CentOS 7.
+        # AVX512 ==> RockyLinux 8.9.
+        # NEON ==> Ubuntu 18.04.
+        include:
+          - arch: 'amd64'
+            distro_container_image: 'gpustack/devel-cpu:rockylinux8.9-v2'
+          - arch: 'arm64'
+            distro_container_image: 'gpustack/devel-cpu:ubuntu18.04-v2'
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
+    steps:
+      - name: Maximize Root Space
+        uses: gpustack/.github/.github/actions/maximize-root-space@main
+        with:
+          deep-clean: false
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        if: false # Disable caching in simple tasks.
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-linux-${{ matrix.arch }}-cpu
+          path: |
+            ${{ github.workspace }}/.ccache
+            ${{ github.workspace }}/.sccache
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}/.sccache"
+        run: |
+          echo "===== DL SCRIPT ====="
+          cat <<EOF > /tmp/entrypoint.sh
+          #!/bin/bash
+          # NB(thxCode): workaround to avoid using OpenMP.
+          rm -rf /opt/rh/devtoolset-9/root/usr/lib/gcc/\$(uname -m)-redhat-linux/9/libgomp* || true
+          rm -rf /opt/rh/gcc-toolset-11/root/usr/lib/gcc/\$(uname -m)-redhat-linux/11/libgomp* || true
+          rm -rf /usr/lib/gcc/\$(uname -m)-linux-gnu/11/libgomp* || true
+          rm -rf /opt/openEuler/gcc-toolset-10/root/usr/lib/gcc/\$(uname -m)-linux-gnu/10/libgomp* || true
+          git config --system --add safe.directory '*'
+          echo "===== DL BUILD ====="
+          env || true
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=off \
+            -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DGGML_STATIC=on \
+            -DGGML_BLAS=on \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on \
+            -DGGML_BACKEND_DL=on \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
+          echo "===== DL RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            ldd --version
+            ldd ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          if [ -d ${CCACHE_DIR} ]; then
+            ccache -s -v || ccache -s || true
+            chmod -R a+rwx ${CCACHE_DIR}
+          fi
+          if [ -d ${SCCACHE_DIR} ]; then
+            sccache -s || true
+            chmod -R a+rwx ${SCCACHE_DIR} || true
+          fi
+          EOF
+
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
+
+          docker run \
+            --rm \
+            --privileged \
+            --platform linux/${{ matrix.arch }} \
+            --volume ${{ github.workspace }}:${{ github.workspace }} \
+            --workdir ${{ github.workspace }} \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env CCACHE_DIR \
+            --env SCCACHE_DIR \
+            --env LLAMA_BOX_BUILD_VERSION \
+            --volume /tmp/entrypoint.sh:/entrypoint.sh \
+            --entrypoint /entrypoint.sh \
+            ${{ matrix.distro_container_image }}
+          
+          echo "===== DL PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          cd ${{ github.workspace }}/dl-build
+          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ./bin
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/dl-llama-*.zip
+          name: dl-llama-box-linux-${{ matrix.arch }}-cpu
+
 
   windows:
     strategy:
@@ -1042,7 +1600,6 @@ jobs:
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_NATIVE=off `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} `
@@ -1066,7 +1623,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}\\out\\*.zip
+          path: ${{ github.workspace }}\\out\\llama-*.zip
           name: llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}
 
   windows-cuda:
@@ -1162,7 +1719,6 @@ jobs:
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             -DGGML_NATIVE=off `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1179,11 +1735,41 @@ jobs:
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+
+          Write-Host "===== DL BUILD ====="
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
+            -DGGML_NATIVE=off `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on `
+            -DGGML_BACKEND_DL=on `
+            -DBUILD_SHARED_LIBS=on
+          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\dl-build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\dl-build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          sccache -s
+          
+          Write-Host "===== DL PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          cd "${{ github.workspace }}\dl-build"
+          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}\\out\\*.zip
+          path: ${{ github.workspace }}\\out\\llama-*.zip
           name: llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\dl-llama-*.zip
+          name: dl-llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}
 
   windows-hip:
     strategy:
@@ -1281,7 +1867,6 @@ jobs:
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DCMAKE_CXX_FLAGS="-I$($PWD.Path.Replace('\', '/'))/rocwmma/library/include/" `
             -DGGML_NATIVE=off `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1298,11 +1883,45 @@ jobs:
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
+
+          Write-Host "===== DL BUILD ====="
+          $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
+            -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
+            -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
+            -DCMAKE_CXX_FLAGS="-I$($PWD.Path.Replace('\', '/'))/rocwmma/library/include/" `
+            -DGGML_NATIVE=off `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on `
+            -DGGML_BACKEND_DL=on `
+            -DBUILD_SHARED_LIBS=on
+          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== DL RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\dl-build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\dl-build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          sccache -s
+
+          Write-Host "===== DL PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          cd "${{ github.workspace }}\dl-build"
+          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}\\out\\*.zip
+          path: ${{ github.workspace }}\\out\\llama-*.zip
           name: llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\dl-llama-*.zip
+          name: dl-llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}
 
   windows-oneapi:
     strategy:
@@ -1383,7 +2002,6 @@ jobs:
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_CXX_COMPILER=icx `
             -DGGML_NATIVE=off `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1400,11 +2018,43 @@ jobs:
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
+
+          Write-Host "===== DL BUILD ====="
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_SYCL=on -DGGML_SYCL_F16=on `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=icx `
+            -DGGML_NATIVE=off `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on `
+            -DGGML_BACKEND_DL=on `
+            -DBUILD_SHARED_LIBS=on
+          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== DL RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\dl-build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\dl-build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          sccache -s
+          
+          Write-Host "===== DL PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          cd "${{ github.workspace }}\dl-build"
+          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}\\out\\*.zip
+          path: ${{ github.workspace }}\\out\\llama-*.zip
           name: llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\dl-llama-*.zip
+          name: dl-llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}
 
   windows-vulkan:
     strategy:
@@ -1485,7 +2135,6 @@ jobs:
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
             -DGGML_VULKAN=on `
             -DGGML_NATIVE=off `
-            -DGGML_CPU_AARCH64=${{ matrix.arch == 'arm64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
@@ -1502,11 +2151,130 @@ jobs:
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip"
+
+          Write-Host "===== DL BUILD ====="
+          $env:CMAKE_PREFIX_PATH = "${env:VULKAN_SDK}"
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_VULKAN=on `
+            -DGGML_NATIVE=off `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on `
+            -DGGML_BACKEND_DL=on `
+            -DBUILD_SHARED_LIBS=on
+          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== DL RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\dl-build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\dl-build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          sccache -s
+
+          Write-Host "===== DL PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          cd "${{ github.workspace }}\dl-build"
+          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ github.workspace }}\\out\\*.zip
+          path: ${{ github.workspace }}\\out\\llama-*.zip
           name: llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\dl-llama-*.zip
+          name: dl-llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}
+
+
+  windows-cpu:
+    strategy:
+      fail-fast: false
+      matrix:
+        # AVX2 ==> Windows Server 2022.
+        # AVX512 ==> Windows Server 2022.
+        # NEON ==> Windows Server 2022.
+        include:
+          - arch: 'amd64'
+            instruction: 'avx512'
+          - arch: 'arm64'
+            instruction: 'neon'
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Setup Cache
+        if: false # Disable caching in simple tasks.
+        timeout-minutes: 5
+        uses: actions/cache@v4
+        with:
+          key: cache-windows-${{ matrix.arch }}-cpu
+          path: |
+            ${{ github.workspace }}\.ccache
+            ${{ github.workspace }}\.sccache
+      - name: Deps
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+
+          choco install sccache ninja curl -y
+          choco install openssl --version 3.4.1 -y
+      - name: Setup
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = 'SilentlyContinue'
+          
+          if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          } elseif (Test-Path -PathType Leaf -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
+            cmd /c 'call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
+              if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
+            }
+          }
+          
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build
+        env:
+          CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+          SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
+        run: |
+          Write-Host "===== DL BUILD ====="
+          Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
+          cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_NATIVE=off `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
+            -DGGML_STATIC=on `
+            -DGGML_OPENMP=off `
+            -DGGML_RPC=on `
+            -DGGML_BACKEND_DL=on `
+            -DBUILD_SHARED_LIBS=on
+          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+          cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
+          Write-Host "===== DL RESULT ====="
+          Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
+          if (Test-Path -PathType Leaf -Path "${{ github.workspace }}\dl-build\bin\llama-box.exe") {
+            llvm-objdump.exe -p "${{ github.workspace }}\dl-build\bin\llama-box.exe"
+          } else {
+            exit 1
+          }
+          sccache -s
+          
+          Write-Host "===== DL PACKAGE ====="
+          New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
+          cd "${{ github.workspace }}\dl-build"
+          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cpu.zip"
+      - name: Upload DL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}\\out\\dl-llama-*.zip
+          name: dl-llama-box-windows-${{ matrix.arch }}-cpu
 
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -1526,11 +2294,13 @@ jobs:
       - linux-musa
       - linux-dtk
       - linux-vulkan
+      - linux-cpu
       - windows
       - windows-hip
       - windows-cuda
       - windows-oneapi
       - windows-vulkan
+      - windows-cpu
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4
