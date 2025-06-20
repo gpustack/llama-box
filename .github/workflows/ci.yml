@@ -439,8 +439,7 @@ jobs:
 
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -590,8 +589,7 @@ jobs:
 
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-musa-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -759,8 +757,7 @@ jobs:
 
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-hip-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -933,8 +930,7 @@ jobs:
 
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-dtk-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1114,8 +1110,7 @@ jobs:
           
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1268,8 +1263,7 @@ jobs:
 
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1418,8 +1412,7 @@ jobs:
 
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1527,8 +1520,7 @@ jobs:
           
           echo "===== DL PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          cd ${{ github.workspace }}/dl-build
-          zip -r ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ./bin
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload DL Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1759,8 +1751,7 @@ jobs:
           
           Write-Host "===== DL PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          cd "${{ github.workspace }}\dl-build"
-          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -1911,8 +1902,7 @@ jobs:
 
           Write-Host "===== DL PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          cd "${{ github.workspace }}\dl-build"
-          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -2044,8 +2034,7 @@ jobs:
           
           Write-Host "===== DL PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          cd "${{ github.workspace }}\dl-build"
-          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -2176,8 +2165,7 @@ jobs:
 
           Write-Host "===== DL PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          cd "${{ github.workspace }}\dl-build"
-          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip"
+          Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -2269,8 +2257,7 @@ jobs:
           
           Write-Host "===== DL PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
-          cd "${{ github.workspace }}\dl-build"
-          Compress-Archive -Path ".\bin" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cpu.zip"
+          Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cpu.zip"
       - name: Upload DL Artifact
         uses: actions/upload-artifact@v4
         with:
