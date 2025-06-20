@@ -150,7 +150,8 @@ jobs:
             -DGGML_OPENMP=off \
             -DGGML_RPC=on \
             -DGGML_BACKEND_DL=on \
-            -DBUILD_SHARED_LIBS=on
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_CPU_ALL_VARIANTS=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
 
           echo "===== DL RESULT ====="
