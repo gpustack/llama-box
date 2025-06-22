@@ -1,0 +1,349 @@
+diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
+index 71b1d67b..7b53d079 100644
+--- a/ggml/src/ggml-cpu/CMakeLists.txt
++++ b/ggml/src/ggml-cpu/CMakeLists.txt
+@@ -158,47 +158,94 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+                 if (GGML_CPU_ARM_ARCH)
+                     list(APPEND ARCH_FLAGS -march=${GGML_CPU_ARM_ARCH})
+                 elseif(GGML_CPU_ALL_VARIANTS)
++                    set(DOTPROD_CODE "
++                        #include <arm_neon.h>
++                        int main()
++                        {
++                            int8x16_t _a, _b;
++                            volatile int32x4_t _s = vdotq_s32(_s, _a, _b);
++                            return 0;
++                        }")
++                    set(I8MM_CODE "
++                        #include <arm_neon.h>
++                        int main()
++                        {
++                            int8x16_t _a, _b;
++                            volatile int32x4_t _s = vmmlaq_s32(_s, _a, _b);
++                            return 0;
++                        }")
++                    set(SVE_CODE "
++                        #include <arm_sve.h>
++                        int main()
++                        {
++                            svfloat32_t _a, _b;
++                            volatile svfloat32_t _c = svadd_f32_z(svptrue_b8(), _a, _b);
++                            return 0;
++                        }")
++                    set(SME_CODE "
++                        #include <arm_sme.h>
++                        __arm_locally_streaming int main()
++                        {
++                            __asm__ volatile(\"smstart; smstop;\");
++                            return 0;
++                        }")
++                    set(EMPTY_CODE "
++                        int main()
++                        {
++                            return 0;
++                        }")
++
+                     # Begin with the lowest baseline
+                     set(ARM_MCPU "armv8-a")
+                     set(ARCH_TAGS "")
+                     set(ARCH_DEFINITIONS "")
+ 
++                    include(CheckCXXSourceRuns)
++
++                    function(check_arm_feature mcpu tag definition code)
++                        set(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
++                        set(CMAKE_REQUIRED_FLAGS "-march=${mcpu}${ARCH_TAGS}+${tag}")
++                        check_cxx_source_runs("${code}" GGML_MACHINE_SUPPORTS_${definition})
++                        if (GGML_MACHINE_SUPPORTS_${definition})
++                            set(ARM_MCPU "${mcpu}" PARENT_SCOPE)
++                            set(ARCH_TAGS "${ARCH_TAGS}+${tag}" PARENT_SCOPE)
++                            if (NOT DEFINED ARCH_DEFINITIONS_STR)
++                                set(ARCH_DEFINITIONS_STR "${definition}" PARENT_SCOPE)
++                            else()
++                                set(ARCH_DEFINITIONS_STR "${ARCH_DEFINITIONS_STR} ${definition}" PARENT_SCOPE)
++                            endif()
++                        endif()
++                        set(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS_SAVE})
++                    endfunction()
++
+                     # When a feature is selected, bump the MCPU to the first
+                     # version that supported it
+                     if (GGML_INTERNAL_DOTPROD)
+-                        set(ARM_MCPU "armv8.2-a")
+-                        set(ARCH_TAGS "${ARCH_TAGS}+dotprod")
+-                        list(APPEND ARCH_DEFINITIONS GGML_USE_DOTPROD)
++                        check_arm_feature("armv8.2-a" "dotprod" "GGML_USE_DOTPROD" "${DOTPROD_CODE}")
+                     endif()
+                     if (GGML_INTERNAL_FP16_VECTOR_ARITHMETIC)
+-                        set(ARM_MCPU "armv8.2-a")
+-                        set(ARCH_TAGS "${ARCH_TAGS}+fp16")
+-                        list(APPEND ARCH_DEFINITIONS GGML_USE_FP16_VECTOR_ARITHMETIC)
++                        check_arm_feature("armv8.2-a" "fp16" "GGML_USE_FP16_VECTOR_ARITHMETIC" "${EMPTY_CODE}")
+                     endif()
+                     if (GGML_INTERNAL_SVE)
+-                        set(ARM_MCPU "armv8.2-a")
+-                        set(ARCH_TAGS "${ARCH_TAGS}+sve")
+-                        list(APPEND ARCH_DEFINITIONS GGML_USE_SVE)
++                        check_arm_feature("armv8.2-a" "sve" "GGML_USE_SVE" "${SME_CODE}")
+                     endif()
+                     if (GGML_INTERNAL_MATMUL_INT8)
+-                        set(ARM_MCPU "armv8.6-a")
+-                        set(ARCH_TAGS "${ARCH_TAGS}+i8mm")
+-                        list(APPEND ARCH_DEFINITIONS GGML_USE_MATMUL_INT8)
++                        check_arm_feature("armv8.6-a" "i8mm" "GGML_USE_I8MM" "${I8MM_CODE}")
+                     endif()
+                     if (GGML_INTERNAL_SVE2)
+-                        set(ARM_MCPU "armv8.6-a")
+-                        set(ARCH_TAGS "${ARCH_TAGS}+sve2")
+-                        list(APPEND ARCH_DEFINITIONS GGML_USE_SVE2)
++                        check_arm_feature("armv8.6-a" "sve2" "GGML_USE_SVE2" "${SVE_CODE}")
+                     endif()
+                     if (GGML_INTERNAL_NOSVE)
+                         set(ARCH_TAGS "${ARCH_TAGS}+nosve")
+                     endif()
+                     if (GGML_INTERNAL_SME)
+-                        set(ARM_MCPU "armv9.2-a")
+-                        set(ARCH_TAGS "${ARCH_TAGS}+sme")
+-                        list(APPEND ARCH_DEFINITIONS GGML_USE_SME)
++                        check_arm_feature("armv9.2-a" "sme" "GGML_USE_SME" "${SME_CODE}")
+                     endif()
+                     list(APPEND ARCH_FLAGS "-march=${ARM_MCPU}${ARCH_TAGS}")
++                    if (DEFINED ARCH_DEFINITIONS_STR)
++                        string(REPLACE " " ";" ARCH_DEFINITIONS_LIST "${ARCH_DEFINITIONS_STR}")
++                        list(APPEND ARCH_DEFINITIONS ${ARCH_DEFINITIONS_LIST})
++                    endif()
+                     ggml_add_cpu_backend_features(${GGML_CPU_NAME} arm ${ARCH_DEFINITIONS})
+                 endif()
+             endif()
+@@ -295,66 +342,184 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+             if (GGML_NATIVE)
+                 list(APPEND ARCH_FLAGS -march=native)
+             else ()
++                set(FMA_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m256 acc = _mm256_setzero_ps();
++                        const __m256 d = _mm256_setzero_ps();
++                        const __m256 p = _mm256_setzero_ps();
++                        acc = _mm256_fmadd_ps( d, p, acc );
++                        return 0;
++                    }")
++                set(AVX_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m256 a = _mm256_set1_ps(0);
++                        return 0;
++                    }")
++                set(AVX2_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m256i a = _mm256_abs_epi16(a);
++                        __m256i x;
++                        _mm256_extract_epi64(x, 0);
++                        return 0;
++                    }")
++                set(AVX_VNNI_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m256i a = _mm256_set1_epi32(0);
++                        __m256i b = _mm256_set1_epi32(0);
++                        __m256i c = _mm256_dpbusd_epi32(a, b, b);
++                        return 0;
++                    }")
++                set(AVX512_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m512i a = _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0,
++                                                    0, 0, 0, 0, 0, 0, 0, 0);
++                        __m512i b = a;
++                        __mmask64 equality_mask = _mm512_cmp_epi8_mask(a, b, _MM_CMPINT_EQ);
++                        return 0;
++                    }")
++                set(AVX512_VBMI_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m512i a = _mm512_set1_epi8(0);
++                        __m512i b = _mm512_permutexvar_epi8(a, a);
++                        return 0;
++                    }")
++                set(AVX512_VNNI_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m512i a = _mm512_set1_epi32(0);
++                        __m512i b = _mm512_set1_epi32(0);
++                        __m512i c = _mm512_dpbusd_epi32(a, b, b);
++                        return 0;
++                    }")
++                set(AVX512_BF16_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        __m512bh a = _mm512_set1_epi16(0);
++                        __m512 b = _mm512_cvtne2ps_pbh(a, a);
++                        return 0;
++                    }")
++                set(AMX_TILE_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        asm volatile(\"tilezero %%tmm0\" : : );
++                        return 0;
++                    }")
++                set(AMX_INT8_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        asm volatile(\"tilezero %tmm0\\n\\t\");
++                        asm volatile(\"tdpbssd %tmm0, %tmm1, %tmm2\");
++                        return 0;
++                    }")
++                set(AMX_BF16_CODE "
++                    #include <immintrin.h>
++                    int main()
++                    {
++                        asm volatile(\"tilezero %tmm0\\n\\t\");
++                        asm volatile(\"tdpbf16ps %tmm0, %tmm1, %tmm2\");
++                        return 0;
++                    }")
++                set(EMPTY_CODE "
++                    int main()
++                    {
++                        return 0;
++                    }")
++
++                include(CheckCXXSourceRuns)
++
++                function(check_x86_feature flag definition code)
++                    set(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
++                    set(CMAKE_REQUIRED_FLAGS "${flag}")
++                    check_cxx_source_runs("${code}" GGML_MACHINE_SUPPORTS_${definition})
++                    if (GGML_MACHINE_SUPPORTS_${definition})
++                        if (NOT DEFINED ARCH_FLAGS_STR)
++                            set(ARCH_FLAGS_STR "${flag}" PARENT_SCOPE)
++                        else()
++                            set(ARCH_FLAGS_STR "${ARCH_FLAGS_STR} ${flag}" PARENT_SCOPE)
++                        endif()
++                        if (NOT DEFINED ARCH_DEFINITIONS_STR)
++                            set(ARCH_DEFINITIONS_STR "${definition}" PARENT_SCOPE)
++                        else()
++                            set(ARCH_DEFINITIONS_STR "${ARCH_DEFINITIONS_STR} ${definition}" PARENT_SCOPE)
++                        endif()
++                    endif()
++                    set(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS_SAVE})
++                endfunction()
++
+                 if (GGML_SSE42)
+-                    list(APPEND ARCH_FLAGS -msse4.2)
+-                    list(APPEND ARCH_DEFINITIONS GGML_SSE42)
++                    check_x86_feature("-msse4.2" "GGML_SSE42" "${EMPTY_CODE}")
+                 endif()
+                 if (GGML_F16C)
+-                    list(APPEND ARCH_FLAGS -mf16c)
+-                    list(APPEND ARCH_DEFINITIONS GGML_F16C)
++                    check_x86_feature("-mf16c" "GGML_F16C" "${EMPTY_CODE}")
+                 endif()
+                 if (GGML_FMA)
+-                    list(APPEND ARCH_FLAGS -mfma)
+-                    list(APPEND ARCH_DEFINITIONS GGML_FMA)
++                    check_x86_feature("-mfma" "GGML_FMA" "${FMA_CODE}")
+                 endif()
+                 if (GGML_BMI2)
+-                    list(APPEND ARCH_FLAGS -mbmi2)
+-                    list(APPEND ARCH_DEFINITIONS GGML_BMI2)
++                    check_x86_feature("-mbmi2" "GGML_BMI2" "${EMPTY_CODE}")
+                 endif()
+                 if (GGML_AVX)
+-                    list(APPEND ARCH_FLAGS -mavx)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX)
++                    check_x86_feature("-mavx" "GGML_AVX" "${AVX_CODE}")
+                 endif()
+                 if (GGML_AVX2)
+-                    list(APPEND ARCH_FLAGS -mavx2)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX2)
++                    check_x86_feature("-mavx2" "GGML_AVX2" "${AVX2_CODE}")
+                 endif()
+                 if (GGML_AVX_VNNI)
+-                    list(APPEND ARCH_FLAGS -mavxvnni)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX_VNNI)
++                    check_x86_feature("-mavxvnni" "GGML_AVX_VNNI" "${AVX_VNNI_CODE}")
+                 endif()
+                 if (GGML_AVX512)
+-                    list(APPEND ARCH_FLAGS -mavx512f)
+-                    list(APPEND ARCH_FLAGS -mavx512cd)
+-                    list(APPEND ARCH_FLAGS -mavx512vl)
+-                    list(APPEND ARCH_FLAGS -mavx512dq)
+-                    list(APPEND ARCH_FLAGS -mavx512bw)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX512)
++                    check_x86_feature("-mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw" "GGML_AVX512" "${AVX512_CODE}")
+                 endif()
+                 if (GGML_AVX512_VBMI)
+-                    list(APPEND ARCH_FLAGS -mavx512vbmi)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX512_VBMI)
++                    check_x86_feature("-mavx512vbmi" "GGML_AVX512_VBMI" "${AVX512_VBMI_CODE}")
+                 endif()
+                 if (GGML_AVX512_VNNI)
+-                    list(APPEND ARCH_FLAGS -mavx512vnni)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX512_VNNI)
++                    check_x86_feature("-mavx512vnni" "GGML_AVX512_VNNI" "${AVX512_VNNI_CODE}")
+                 endif()
+                 if (GGML_AVX512_BF16)
+-                    list(APPEND ARCH_FLAGS -mavx512bf16)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AVX512_BF16)
++                    check_x86_feature("-mavx512bf16" "GGML_AVX512_BF16" "${AVX512_BF16_CODE}")
+                 endif()
+                 if (GGML_AMX_TILE)
+-                    list(APPEND ARCH_FLAGS -mamx-tile)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AMX_TILE)
++                    check_x86_feature("-mamx-tile" "GGML_AMX_TILE" "${AMX_TILE_CODE}")
+                 endif()
+                 if (GGML_AMX_INT8)
+-                    list(APPEND ARCH_FLAGS -mamx-int8)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AMX_INT8)
++                    check_x86_feature("-mamx-int8" "GGML_AMX_INT8" "${AMX_INT8_CODE}")
+                 endif()
+                 if (GGML_AMX_BF16)
+-                    list(APPEND ARCH_FLAGS -mamx-bf16)
+-                    list(APPEND ARCH_DEFINITIONS GGML_AMX_BF16)
++                    check_x86_feature("-mamx-bf16" "GGML_AMX_BF16" "${AMX_BF16_CODE}")
+                 endif()
++
++                if (DEFINED ARCH_FLAGS_STR)
++                    string(REPLACE " " ";" ARCH_FLAGS_LIST "${ARCH_FLAGS_STR}")
++                    list(APPEND ARCH_FLAGS ${ARCH_FLAGS_LIST})
++                endif()
++                if (DEFINED ARCH_DEFINITIONS_STR)
++                    string(REPLACE " " ";" ARCH_DEFINITIONS_LIST "${ARCH_DEFINITIONS_STR}")
++                    list(APPEND ARCH_DEFINITIONS ${ARCH_DEFINITIONS_LIST})
++                endif()
++
+             endif()
+         endif()
+ 
+diff --git a/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp b/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
+index 67369147..c460c549 100644
+--- a/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
++++ b/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
+@@ -8,6 +8,10 @@
+ #include <sys/sysctl.h>
+ #endif
+ 
++#if !defined(HWCAP2_SVE2)
++#define HWCAP2_SVE2 (1 << 1)
++#endif
++
+ #if !defined(HWCAP2_I8MM)
+ #define HWCAP2_I8MM (1 << 13)
+ #endif

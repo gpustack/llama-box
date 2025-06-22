@@ -16,6 +16,9 @@ function fatal() {
 # shellcheck disable=SC2010
 ls -l "${ROOT_DIR}"/llama-box/patches | grep "^d" | awk '{print $NF}' | while read -r VENDOR; do
     info "Pulling ${VENDOR}"
+    if [[ "${VENDOR}" == "ggml" ]]; then
+        continue # Skip ggml as it is handled separately
+    fi
     git submodule update --remote "${VENDOR}"
     git submodule update --init "${VENDOR}"
     info "Pulled ${VENDOR}"

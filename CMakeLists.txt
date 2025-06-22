@@ -22,13 +22,15 @@ endif ()
 # Options
 #
 
+option(BOX_PATCH_CI "box: patch CI" OFF)
+option(BOX_PATCH_DEBUG "box: enable debug patches" OFF)
+option(BOX_OPENSSL "llama: use OpenSSL for HTTPS" ON)
+
 # debug
 option(LLAMA_ALL_WARNINGS "llama: enable all compiler warnings" ON)
-option(LLAMA_PATCH_DEBUG "llama: enable debug patches" OFF)
 
 # build
 option(LLAMA_FATAL_WARNINGS "llama: enable -Werror flag" OFF)
-option(LLAMA_OPENSSL "llama: use OpenSSL for HTTPS" ON)
 
 # sanitizers
 option(LLAMA_SANITIZE_THREAD "llama: enable thread sanitizer" OFF)
@@ -36,16 +38,16 @@ option(LLAMA_SANITIZE_ADDRESS "llama: enable address sanitizer" OFF)
 option(LLAMA_SANITIZE_UNDEFINED "llama: enable undefined sanitizer" OFF)
 
 # utils
-set(LLAMA_BUILD_COMMON ON CACHE BOOL "llama: build common utils library" FORCE)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
 
 # extra artifacts
-set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama: build tests" FORCE)
-set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama: build examples" FORCE)
-set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama: build server example" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 
 # 3rd party libs
-set(LLAMA_CURL OFF CACHE BOOL "llama: use libcurl to download model from an URL" FORCE)
-set(LLAMA_LLGUIDANCE OFF CACHE BOOL "llama-common: include LLGuidance library for structured output in common utils" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+set(LLAMA_LLGUIDANCE OFF CACHE BOOL "" FORCE)
 
 # change the default for these ggml options
 if (NOT DEFINED GGML_LLAMAFILE)
@@ -61,30 +63,36 @@ add_definitions(-DGGML_MAX_NAME=128)
 
 # change the default for these sd options
 if (BUILD_SHARED_LIBS)
-    set(BUILD_SHARED_LIBS ON CACHE BOOL "build shared libraries" FORCE)
-    set(GGML_BACKEND_DL ON CACHE BOOL "build backends as dynamic libraries (requires BUILD_SHARED_LIBS)" FORCE)
-    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "build all variants of the CPU backend (requires GGML_BACKEND_DL)" FORCE)
-    set(SD_BUILD_SHARED_LIBS ON CACHE BOOL "sd: build shared libs" FORCE)
+    set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+    if (NOT DEFINED GGML_BACKEND_DL)
+        set(GGML_BACKEND_DL ON)
+    endif ()
+    if (NOT DEFINED GGML_CPU_ALL_VARIANTS)
+        set(GGML_CPU_ALL_VARIANTS ON)
+    endif ()
+    set(GGML_BACKEND_DL ${GGML_BACKEND_DL} CACHE BOOL "" FORCE)
+    set(GGML_CPU_ALL_VARIANTS ${GGML_CPU_ALL_VARIANTS} CACHE BOOL "" FORCE)
+    set(SD_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 else ()
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "build shared libraries" FORCE)
-    set(GGML_BACKEND_DL OFF CACHE BOOL "build backends as dynamic libraries (requires BUILD_SHARED_LIBS)" FORCE)
-    set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "build all variants of the CPU backend (requires GGML_BACKEND_DL)" FORCE)
-    set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "sd: build shared libs" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
+    set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
+    set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 endif ()
 if (GGML_CUDA)
-    set(SD_CUDA ON CACHE BOOL "sd: cuda backend" FORCE)
+    set(SD_CUDA ON CACHE BOOL "" FORCE)
 elseif (GGML_HIP)
-    set(SD_HIP ON CACHE BOOL "sd: rocm backend" FORCE)
+    set(SD_HIP ON CACHE BOOL "" FORCE)
 elseif (GGML_VULKAN)
-    set(SD_VULKAN ON CACHE BOOL "sd: vulkan backend" FORCE)
+    set(SD_VULKAN ON CACHE BOOL "" FORCE)
 elseif (GGML_METAL)
-    set(SD_METAL ON CACHE BOOL "sd: metal backend" FORCE)
+    set(SD_METAL ON CACHE BOOL "" FORCE)
 elseif (GGML_SYCL)
-    set(SD_SYCL ON CACHE BOOL "sd: sycl backend" FORCE)
+    set(SD_SYCL ON CACHE BOOL "" FORCE)
 elseif (GGML_CANN)
-    set(SD_CANN ON CACHE BOOL "sd: cann backend" FORCE)
+    set(SD_CANN ON CACHE BOOL "" FORCE)
 elseif (GGML_MUSA)
-    set(SD_MUSA ON CACHE BOOL "sd: musa backend" FORCE)
+    set(SD_MUSA ON CACHE BOOL "" FORCE)
 endif ()
 
 #
@@ -107,16 +115,19 @@ endif ()
 
 if (NOT MSVC)
     if (LLAMA_SANITIZE_THREAD)
+        set(LLAMA_SANITIZE_THREAD ON CACHE BOOL "" FORCE)
         add_compile_options(-fsanitize=thread)
         link_libraries(-fsanitize=thread)
     endif ()
 
     if (LLAMA_SANITIZE_ADDRESS)
+        set(LLAMA_SANITIZE_ADDRESS ON CACHE BOOL "" FORCE)
         add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
         link_libraries(-fsanitize=address)
     endif ()
 
     if (LLAMA_SANITIZE_UNDEFINED)
+        set(LLAMA_SANITIZE_UNDEFINED ON CACHE BOOL "" FORCE)
         add_compile_options(-fsanitize=undefined)
         link_libraries(-fsanitize=undefined)
     endif ()
@@ -150,6 +161,7 @@ function(get_flags CCID CCVER)
 endfunction()
 
 if (LLAMA_FATAL_WARNINGS)
+    set(LLAMA_FATAL_WARNINGS ON CACHE BOOL "" FORCE)
     if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list(APPEND C_FLAGS -Werror)
         list(APPEND CXX_FLAGS -Werror)
@@ -159,6 +171,7 @@ if (LLAMA_FATAL_WARNINGS)
 endif ()
 
 if (LLAMA_ALL_WARNINGS)
+    set(LLAMA_ALL_WARNINGS ON CACHE BOOL "" FORCE)
     if (NOT MSVC)
         list(APPEND WARNING_FLAGS -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function)
         list(APPEND C_FLAGS -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes
@@ -177,6 +190,19 @@ if (LLAMA_ALL_WARNINGS)
         set(C_FLAGS "")
         set(CXX_FLAGS "")
     endif ()
+endif ()
+
+#
+# Patch
+#
+
+if (BOX_PATCH_CI)
+    execute_process(
+            COMMAND ${CMAKE_COMMAND} -DMSVC=${MSVC} -DCMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}
+            -DCMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID} -DCMAKE_VS_PLATFORM_NAME=${CMAKE_VS_PLATFORM_NAME}
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/llama-box/scripts/configure-patch.cmake"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/llama-box"
+    )
 endif ()
 
 #

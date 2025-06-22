@@ -53,16 +53,19 @@ add_custom_target(patch
         COMMENT "Applying patches"
         COMMAND ${CMAKE_COMMAND} -DMSVC=${MSVC} -DCMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}
         -DCMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID} -DCMAKE_VS_PLATFORM_NAME=${CMAKE_VS_PLATFORM_NAME}
-        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/patch.cmake"
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-patch.cmake"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         VERBATIM
 )
-add_dependencies(patch version build_info)
-add_dependencies(ggml-base patch)
+add_dependencies(version patch)
+add_dependencies(build_info patch)
+add_dependencies(version build_info patch)
 add_dependencies(ggml patch)
-add_dependencies(llama patch)
-add_dependencies(mtmd patch)
-add_dependencies(stable-diffusion ggml patch)
+add_dependencies(ggml-base patch)
+add_dependencies(ggml ggml-base patch)
+add_dependencies(llama ggml ggml-base patch)
+add_dependencies(stable-diffusion ggml ggml-base patch)
+add_dependencies(mtmd ggml ggml-base patch)
 add_dependencies(common ggml ggml-base patch)
 
 #
@@ -102,7 +105,7 @@ if (WIN32)
     target_link_libraries(${TARGET} PRIVATE ws2_32)
 endif ()
 target_compile_features(${TARGET} PUBLIC cxx_std_17)
-if (LLAMA_OPENSSL)
+if (BOX_OPENSSL)
     message(STATUS "Building with OpenSSL")
     set(OPENSSL_USE_STATIC_LIBS TRUE)
     if (DEFINED ENV{OPENSSL_ROOT_DIR})
@@ -134,14 +137,14 @@ endif ()
 #
 # clean patches
 #
-if (NOT LLAMA_PATCH_DEBUG)
+if (NOT BOX_PATCH_DEBUG)
     add_custom_command(
             TARGET ${TARGET}
             POST_BUILD
             COMMENT "Cleaning patches"
             COMMAND ${CMAKE_COMMAND} -DMSVC=${MSVC} -DCMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}
             -DCMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID} -DCMAKE_VS_PLATFORM_NAME=${CMAKE_VS_PLATFORM_NAME}
-            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/patch-reset.cmake"
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-patch-reset.cmake"
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             VERBATIM
     )

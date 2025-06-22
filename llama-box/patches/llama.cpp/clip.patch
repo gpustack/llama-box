@@ -205,7 +205,7 @@ index 30283d6f..d362cff0 100644
      return ctx->model.modality == CLIP_MODALITY_VISION;
  }
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index 08f3efb7..15bf2be3 100644
+index 08f3efb7..d90921f6 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
 @@ -6,6 +6,20 @@
@@ -229,7 +229,7 @@ index 08f3efb7..15bf2be3 100644
  struct clip_ctx;
  
  struct clip_image_size {
-@@ -25,36 +39,39 @@ enum clip_modality {
+@@ -25,87 +39,96 @@ enum clip_modality {
  struct clip_context_params {
      bool use_gpu;
      enum ggml_log_level verbosity;
@@ -279,10 +279,14 @@ index 08f3efb7..15bf2be3 100644
 -int clip_n_mmproj_embd(const struct clip_ctx * ctx);
 +CLIP_API int clip_n_mmproj_embd(const struct clip_ctx * ctx);
  
- struct clip_image_size      * clip_image_size_init(void);
- struct clip_image_u8        * clip_image_u8_init (void);
-@@ -62,50 +79,56 @@ struct clip_image_f32       * clip_image_f32_init(void);
- struct clip_image_f32_batch * clip_image_f32_batch_init(void); // only used by libllava
+-struct clip_image_size      * clip_image_size_init(void);
+-struct clip_image_u8        * clip_image_u8_init (void);
+-struct clip_image_f32       * clip_image_f32_init(void);
+-struct clip_image_f32_batch * clip_image_f32_batch_init(void); // only used by libllava
++CLIP_API struct clip_image_size      * clip_image_size_init(void);
++CLIP_API struct clip_image_u8        * clip_image_u8_init (void);
++CLIP_API struct clip_image_f32       * clip_image_f32_init(void);
++CLIP_API struct clip_image_f32_batch * clip_image_f32_batch_init(void); // only used by libllava
  
  // nx, ny are the output image dimensions
 -unsigned char * clip_image_u8_get_data(struct clip_image_u8 * img, uint32_t * nx, uint32_t * ny);
@@ -365,6 +369,48 @@ index 08f3efb7..15bf2be3 100644
 +CLIP_API bool clip_has_vision_encoder(const struct clip_ctx * ctx);
 +CLIP_API bool clip_has_audio_encoder(const struct clip_ctx * ctx);
 +CLIP_API bool clip_has_whisper_encoder(const struct clip_ctx * ctx);
+diff --git a/tools/mtmd/mtmd-audio.h b/tools/mtmd/mtmd-audio.h
+index b7b940af..91d31d16 100644
+--- a/tools/mtmd/mtmd-audio.h
++++ b/tools/mtmd/mtmd-audio.h
+@@ -15,6 +15,20 @@
+ 
+ #define COMMON_SAMPLE_RATE 16000
+ 
++#ifdef LLAMA_SHARED
++#    if defined(_WIN32) && !defined(__MINGW32__)
++#        ifdef LLAMA_BUILD
++#            define MTMD_AUDIO_API __declspec(dllexport)
++#        else
++#            define MTMD_AUDIO_API __declspec(dllimport)
++#        endif
++#    else
++#        define MTMD_AUDIO_API __attribute__ ((visibility ("default")))
++#    endif
++#else
++#    define MTMD_AUDIO_API
++#endif
++
+ namespace whisper_preprocessor {
+ 
+ struct whisper_mel {
+@@ -32,7 +46,7 @@ struct whisper_filters {
+     std::vector<float> data;
+ };
+ 
+-bool preprocess_audio(
++MTMD_AUDIO_API bool preprocess_audio(
+         const float * samples,
+         size_t n_samples,
+         const whisper_filters & filters,
+@@ -42,6 +56,6 @@ bool preprocess_audio(
+ 
+ namespace whisper_precalc_filters {
+ 
+-whisper_preprocessor::whisper_filters get_128_bins();
++MTMD_AUDIO_API whisper_preprocessor::whisper_filters get_128_bins();
+ 
+ } // namespace whisper_precalc_filters
 diff --git a/tools/mtmd/mtmd-helper.cpp b/tools/mtmd/mtmd-helper.cpp
 index 686f42f3..eead1f8e 100644
 --- a/tools/mtmd/mtmd-helper.cpp

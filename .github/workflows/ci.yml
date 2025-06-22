@@ -71,6 +71,7 @@ jobs:
         run: |
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_METAL=off -DGGML_ACCELERATE=on \
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
@@ -94,6 +95,61 @@ jobs:
         with:
           path: ${{ github.workspace }}/out/*.zip
           name: llama-box-darwin-${{ matrix.arch }}-${{ matrix.instruction }}
+
+  darwin-cpu:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - 'amd64'
+          - 'arm64'
+        version:
+          - '3.0'
+    # see https://github.com/actions/runner-images?tab=readme-ov-file#available-images,
+    #     https://support.apple.com/en-us/102894.
+    runs-on: ${{ matrix.arch == 'amd64' && 'macos-13' || 'macos-14' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+      - name: Deps
+        run: |
+          brew update
+      - name: Setup XCode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.arch == 'amd64' && '15.2' || '16.2' }}
+      - name: Build DL
+        run: |
+          echo "===== BUILD ====="
+          cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
+            -DGGML_METAL=off -DGGML_ACCELERATE=on \
+            -DGGML_NATIVE=off \
+            -DBUILD_SHARED_LIBS=on \
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
+          cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
+
+          echo "===== RESULT ====="
+          ls -alh ${{ github.workspace }}/dl-build/bin/
+          if [ -f ${{ github.workspace }}/dl-build/bin/llama-box ]; then
+            otool --version
+            otool -L ${{ github.workspace }}/dl-build/bin/llama-box || true
+          else
+            exit 1
+          fi
+          
+          echo "===== PACKAGE ====="
+          mkdir -p ${{ github.workspace }}/out
+          zip -j ${{ github.workspace }}/out/dl-llama-box-darwin-${{ matrix.arch }}-cpu.zip ${{ github.workspace }}/dl-build/bin/*
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/out/*.zip
+          name: llama-box-darwin-${{ matrix.arch }}-cpu
 
   darwin-metal:
     strategy:
@@ -124,13 +180,12 @@ jobs:
         run: |
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
-            -DGGML_NATIVE=on \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
+            -DGGML_NATIVE=off \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_BACKEND_DL=on \
-            -DGGML_CPU_ALL_VARIANTS=on
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
 
           echo "===== RESULT ====="
@@ -149,6 +204,7 @@ jobs:
         run: |
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
             -DGGML_NATIVE=on \
             -DGGML_OPENMP=off \
@@ -227,6 +283,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_NATIVE=off \
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} \
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} \
@@ -309,7 +366,7 @@ jobs:
           path: |
             ${{ github.workspace }}/.ccache
             ${{ github.workspace }}/.sccache
-      - name: Build
+      - name: Build DL
         env:
           CCACHE_DIR: "${{ github.workspace }}/.ccache"
           SCCACHE_DIR: "${{ github.workspace }}/.sccache"
@@ -326,15 +383,13 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_NATIVE=off \
+            -DBUILD_SHARED_LIBS=on \
             -DGGML_BLAS_VENDOR=OpenBLAS \
-            -DGGML_STATIC=on \
             -DGGML_BLAS=on \
             -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
-            -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -438,13 +493,12 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -463,6 +517,8 @@ jobs:
             chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
 
           docker run \
             --rm \
@@ -495,6 +551,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -588,13 +645,12 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DMUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -613,6 +669,8 @@ jobs:
             chmod -R a+rwx ${SCCACHE_DIR} || true
           fi
           EOF
+          chmod +x /tmp/entrypoint.sh
+          cat /tmp/entrypoint.sh
 
           docker run \
             --rm \
@@ -645,6 +703,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DMUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -745,17 +804,16 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
             -DGGML_NATIVE=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -808,6 +866,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
@@ -867,7 +926,7 @@ jobs:
       fail-fast: false
       matrix:
         # see https://sourcefind.cn/#/image/dcu/dtk.
-        #     25.04 ==> 25.04, Ubuntu 20.04.
+        #     25.04 ==> 25.04, Ubuntu 22.04.
         # build fat binary,
         # see https://github.com/ggerganov/llama.cpp/pull/1087#issuecomment-1682807878,
         #     https://llvm.org/docs/AMDGPUUsage.html.
@@ -914,17 +973,16 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
             -DCMAKE_HIP_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_FLAGS="-I\$(hipconfig -R)/include/" \
             -DGGML_NATIVE=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -981,6 +1039,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
             -DCMAKE_CXX_COMPILER="\$(hipconfig -l)/clang++" \
@@ -1101,15 +1160,13 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
             -DGGML_NATIVE=off \
-            ${{ contains(matrix.distro_container_image, '310p') && '-DGGML_AVX2=off' || '' }} \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -1162,6 +1219,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
             -DGGML_NATIVE=off \
@@ -1255,13 +1313,12 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             -DGGML_NATIVE=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -1314,6 +1371,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             -DGGML_NATIVE=off \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -1407,13 +1465,12 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_VULKAN=on \
             -DGGML_NATIVE=off \
-            -DGGML_OPENMP=off \
-            -DGGML_RPC=on \
-            -DGGML_BACKEND_DL=on \
             -DBUILD_SHARED_LIBS=on \
-            -DGGML_CPU_ALL_VARIANTS=on 
+            -DGGML_OPENMP=off \
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(nproc)
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/dl-build/bin/
@@ -1464,6 +1521,7 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=Release \
+            -DBOX_PATCH_CI=on \
             -DGGML_VULKAN=on \
             -DGGML_NATIVE=off \
             ${{ matrix.arch == 'arm64' && '-DGGML_CPU_ARM_ARCH="armv8.2-a"' || '' }} \
@@ -1577,14 +1635,14 @@ jobs:
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_NATIVE=off `
+            -DBOX_PATCH_CI=on `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
+            -DGGML_NATIVE=off `
             ${{ matrix.instruction == 'avx2' && '-DGGML_AVX=on -DGGML_AVX_VNNI=off -DGGML_AVX2=on' || '' }} `
             ${{ matrix.instruction == 'avx512' && '-DGGML_AVX512=on -DGGML_AVX512_BF16=off -DGGML_AVX512_VBMI=on -DGGML_AVX512_VNNI=on' || '' }} `
             -DGGML_STATIC=on `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
@@ -1650,7 +1708,7 @@ jobs:
           }
           
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Build
+      - name: Build DL
         env:
           CCACHE_DIR: "${{ github.workspace }}\\.ccache"
           SCCACHE_DIR: "${{ github.workspace }}\\.sccache"
@@ -1658,14 +1716,13 @@ jobs:
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_NATIVE=off `
+            -DBOX_PATCH_CI=on `
             ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
-            -DGGML_STATIC=on `
+            -DGGML_NATIVE=off `
+            -DBUILD_SHARED_LIBS=on `
+            -DGGML_CPU_ALL_VARIANTS=${{ matrix.arch == 'amd64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
-            -DGGML_RPC=on `
-            -DGGML_BACKEND_DL=on `
-            -DBUILD_SHARED_LIBS=on
-          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
@@ -1776,13 +1833,14 @@ jobs:
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             -DGGML_NATIVE=off `
+            -DBUILD_SHARED_LIBS=on `
+            -DGGML_CPU_ALL_VARIANTS=${{ matrix.arch == 'amd64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
-            -DGGML_RPC=on `
-            -DGGML_BACKEND_DL=on `
-            -DBUILD_SHARED_LIBS=on
-          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
@@ -1810,11 +1868,12 @@ jobs:
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${env:CUDA_ARCHITECTURES}" `
             -DGGML_NATIVE=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
@@ -1925,16 +1984,17 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
             -DCMAKE_CXX_FLAGS="-I$($PWD.Path.Replace('\', '/'))/rocwmma/library/include/" `
             -DGGML_NATIVE=off `
+            -DBUILD_SHARED_LIBS=on `
+            -DGGML_CPU_ALL_VARIANTS=${{ matrix.arch == 'amd64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
-            -DGGML_RPC=on `
-            -DGGML_BACKEND_DL=on `
-            -DBUILD_SHARED_LIBS=on
-          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
@@ -1963,6 +2023,8 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${env:AMDGPU_TARGETS}" `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\bin\clang++.exe" `
@@ -1970,7 +2032,6 @@ jobs:
             -DGGML_NATIVE=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
@@ -2065,15 +2126,18 @@ jobs:
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
+            -DSYCL_INCLUDE_DIR="C:\Program Files (x86)\Intel\oneAPI\compiler\latest\include" `
+            -DSYCL_LIBRARY_DIR="C:\Program Files (x86)\Intel\oneAPI\compiler\latest\lib" `
             -DGGML_SYCL=on -DGGML_SYCL_F16=on `
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_CXX_COMPILER=icx `
             -DGGML_NATIVE=off `
+            -DBUILD_SHARED_LIBS=on `
+            -DGGML_CPU_ALL_VARIANTS=${{ matrix.arch == 'amd64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
-            -DGGML_RPC=on `
-            -DGGML_BACKEND_DL=on `
-            -DBUILD_SHARED_LIBS=on
-          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
@@ -2101,13 +2165,14 @@ jobs:
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_SYCL=on -DGGML_SYCL_F16=on `
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_CXX_COMPILER=icx `
             -DGGML_NATIVE=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
@@ -2204,13 +2269,14 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:VULKAN_SDK}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_VULKAN=on `
             -DGGML_NATIVE=off `
+            -DBUILD_SHARED_LIBS=on `
+            -DGGML_CPU_ALL_VARIANTS=${{ matrix.arch == 'amd64' && 'on' || 'off' }} `
             -DGGML_OPENMP=off `
-            -DGGML_RPC=on `
-            -DGGML_BACKEND_DL=on `
-            -DBUILD_SHARED_LIBS=on
-          cmake --build ${{ github.workspace }}\dl-build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
+            -DGGML_RPC=on
           cmake --build ${{ github.workspace }}\dl-build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\dl-build\bin\" -File -ErrorAction Ignore
@@ -2238,11 +2304,12 @@ jobs:
           $env:CMAKE_PREFIX_PATH = "${env:VULKAN_SDK}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
+            -DBOX_PATCH_CI=on `
+            ${{ matrix.arch == 'arm64' && format('-DCMAKE_TOOLCHAIN_FILE={0}\llama-box\scripts\build-windows-arm64.cmake', github.workspace) || '' }} `
             -DGGML_VULKAN=on `
             -DGGML_NATIVE=off `
             -DGGML_OPENMP=off `
             -DGGML_RPC=on
-          cmake --build ${{ github.workspace }}\build --target ggml --config Release -- -j $((${env:NUMBER_OF_PROCESSORS} - 1))
           cmake --build ${{ github.workspace }}\build --target llama-box --config Release -- -j ${env:NUMBER_OF_PROCESSORS}
           Write-Host "===== RESULT ====="
           Get-ChildItem -Path "${{ github.workspace }}\build\bin\" -File -ErrorAction Ignore
@@ -2271,6 +2338,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - darwin
+      - darwin-cpu
       - darwin-metal
       - linux
       - linux-cpu

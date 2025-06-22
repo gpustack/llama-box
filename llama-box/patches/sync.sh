@@ -16,7 +16,11 @@ function fatal() {
 # shellcheck disable=SC2010
 ls -l "${ROOT_DIR}"/llama-box/patches | grep "^d" | awk '{print $NF}' | while read -r VENDOR; do
     info "Syncing ${VENDOR}"
-    pushd "${ROOT_DIR}/${VENDOR}" 1>/dev/null 2>&1 || true
+    if [[ "${VENDOR}" == "ggml" ]]; then
+        pushd "${ROOT_DIR}/llama.cpp/ggml" 1>/dev/null 2>&1 || true
+    else
+        pushd "${ROOT_DIR}/${VENDOR}" 1>/dev/null 2>&1 || true
+    fi
     find "${ROOT_DIR}"/llama-box/patches/"${VENDOR}" -type f -name "*.patch" | while read -r FILE; do
         info "  Syncing ${FILE}"
         git apply "${FILE}" 1>/dev/null || fatal "Failed to apply patch ${FILE}"
