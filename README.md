@@ -380,7 +380,7 @@ server:
          --host HOST              IP address to listen, or bind to an UNIX socket if the address ends with .sock (default: 127.0.0.1)
          --port PORT              Port to listen (default: 8080)
   -to    --timeout N              Server read/write timeout in seconds (default: 600)
-         --threads-http N         Number of threads used to process HTTP requests (default: -1)
+         --threads-http N         Number of threads used to process HTTP requests (default: -1, maximum: 64)
          --conn-idle N            Server connection idle in seconds (default: 60)
          --conn-keepalive N       Server connection keep-alive in seconds (default: 15)
   -m,    --model FILE             Model path (default: models/7B/ggml-model-f16.gguf)

@@ -211,7 +211,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server",                             "       --host HOST",                            "IP address to listen, or bind to an UNIX socket if the address ends with .sock (default: %s)", llm_params.hostname.c_str() });
     opts.push_back({ "server",                             "       --port PORT",                            "Port to listen (default: %d)", llm_params.port });
     opts.push_back({ "server",                             "-to    --timeout N",                            "Server read/write timeout in seconds (default: %d)", llm_params.timeout_read });
-    opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d)", llm_params.n_threads_http });
+    opts.push_back({ "server",                             "       --threads-http N",                       "Number of threads used to process HTTP requests (default: %d, maximum: 64)", llm_params.n_threads_http });
     opts.push_back({ "server",                             "       --conn-idle N",                          "Server connection idle in seconds (default: %d)", params_.hs_params.conn_idle });
     opts.push_back({ "server",                             "       --conn-keepalive N",                     "Server connection keep-alive in seconds (default: %d)", params_.hs_params.conn_keepalive });
     opts.push_back({ "server",                             "-m,    --model FILE",                           "Model path (default: %s)", DEFAULT_MODEL_PATH });
@@ -691,7 +691,7 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
             }
 
             if (!strcmp(flag, "--reranking") || !strcmp(flag, "--rerank")) {
-                params_.hs_params.llm_params.embedding = true;
+                params_.hs_params.llm_params.embedding    = true;
                 params_.hs_params.llm_params.pooling_type = LLAMA_POOLING_TYPE_RANK;
                 continue;
             }
@@ -2164,6 +2164,9 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
     }
     if (params_.hs_params.llm_params.n_threads_http <= 0) {
         params_.hs_params.llm_params.n_threads_http = params_.hs_params.llm_params.cpuparams.n_threads;
+    }
+    if (params_.hs_params.llm_params.n_threads_http > 64) {
+        params_.hs_params.llm_params.n_threads_http = 64;
     }
 
     if (!params_.hs_params.llm_params.kv_overrides.empty()) {
