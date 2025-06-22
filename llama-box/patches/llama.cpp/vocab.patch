@@ -12,7 +12,7 @@ index a0a318a2..85483a5b 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index 635508b1..39532dc8 100644
+index b04720be..89752b93 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -1041,6 +1041,7 @@ extern "C" {
@@ -24,10 +24,10 @@ index 635508b1..39532dc8 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index dd2251ef..9521df9b 100644
+index 5c9eb875..2d88df2e 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
-@@ -1467,7 +1467,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1470,7 +1470,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
              special_mask_id = LLAMA_TOKEN_NULL;
  
              const int precompiled_charsmap_keyidx = gguf_find_key(ctx, kv(LLM_KV_TOKENIZER_PRECOMPILED_CHARSMAP).c_str());
@@ -36,7 +36,7 @@ index dd2251ef..9521df9b 100644
                  const gguf_type pc_type = gguf_get_arr_type(ctx, precompiled_charsmap_keyidx);
                  GGML_ASSERT(pc_type == GGUF_TYPE_INT8 || pc_type == GGUF_TYPE_UINT8);
  
-@@ -1651,7 +1651,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1657,7 +1657,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                  pre_type = LLAMA_VOCAB_PRE_TYPE_SEED_CODER;
                  clean_spaces = false;
              } else {
@@ -46,7 +46,7 @@ index dd2251ef..9521df9b 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3183,6 +3184,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3202,6 +3203,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  

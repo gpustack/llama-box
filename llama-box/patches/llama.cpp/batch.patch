@@ -1,8 +1,8 @@
 diff --git a/src/llama-batch.cpp b/src/llama-batch.cpp
-index 8b6d14fe..72667346 100644
+index b3c996e1..a9c42401 100644
 --- a/src/llama-batch.cpp
 +++ b/src/llama-batch.cpp
-@@ -502,35 +502,35 @@ bool llama_batch_allocr::init(
+@@ -239,97 +239,97 @@ bool llama_batch_allocr::init(
      // consistency checks
      //
  
@@ -11,9 +11,22 @@ index 8b6d14fe..72667346 100644
 -            continue;
 -        }
 -
--        if (memory && seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
--            LLAMA_LOG_ERROR("%s: sequence %d does not start from the last position stored in the memory\n", __func__, s);
--            return false;
+-        if (memory) {
+-            if (batch.token) {
+-                if (seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
+-                    LLAMA_LOG_ERROR("%s: sequence %d does not start from the last position stored in the memory\n", __func__, s);
+-                    return false;
+-                }
+-            } else {
+-                assert(batch.embd);
+-
+-                // for embeddings (typically used as vision input), we allow them to have repeating positions
+-                // ref: https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-2983871762
+-                if (seq_pos_min(s) != memory->seq_pos_max(s) && seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
+-                    LLAMA_LOG_ERROR("%s: sequence %d does not start from the last position stored in the memory\n", __func__, s);
+-                    return false;
+-                }
+-            }
 -        }
 -
 -        if (seq_pos_max(s) - seq_pos_min(s) + 1 > (int) seq_pos[s].size()) {
@@ -35,14 +48,76 @@ index 8b6d14fe..72667346 100644
 -            }
 -        }
 -    }
+-
+-    // disallow partial sequence sub-sets:
+-    //
+-    // invalid:          x
+-    //            i: 0 1 2 ...
+-    // ---------------------------------------
+-    // seq_id[i][0]: 0 0 1
+-    // seq_id[i][1]: 1 1 2
+-    // seq_id[i][2]: 2
+-    //
+-    // disallow decreasing sequence positions:
+-    //
+-    // invalid:                  x
+-    //            i: 0 1 2 3 4 5 6 ...
+-    // ---------------------------------------
+-    //       pos[i]: 4 5 0 1 6 2 3
+-    // seq_id[i][0]: 0 0 1 1 0 1 0
+-    //
+-    {
+-        seq_set_t cur_seq_set[LLAMA_MAX_SEQ];
+-        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
+-            cur_seq_set[s].set();
+-        }
+-
+-        llama_pos cur_seq_pos[LLAMA_MAX_SEQ];
+-        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
+-            cur_seq_pos[s] = -1;
+-        }
+-
+-        for (int32_t i = 0; i < batch.n_tokens; ++i) {
+-            const llama_pos pos = batch.pos[i];
+-
+-            for (int32_t s = 0; s < batch.n_seq_id[i]; ++s) {
+-                const llama_seq_id seq_id = batch.seq_id[i][s];
+-
+-                cur_seq_set[seq_id] &= seq_set[i];
+-
+-                if (cur_seq_set[seq_id].none()) {
+-                    LLAMA_LOG_ERROR("%s: sequence %d belongs to incompatible sequence sets (not allowed)\n", __func__, seq_id);
+-                    return false;
+-                }
+-
+-                if (pos < cur_seq_pos[seq_id]) {
+-                    LLAMA_LOG_ERROR("%s: sequence %d positions are decreasing (not allowed)\n", __func__, seq_id);
+-                    return false;
+-                }
+-            }
+-        }
+-    }
 +//    for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
 +//        if (seq_pos[s].empty()) {
 +//            continue;
 +//        }
 +//
-+//        if (memory && seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
-+//            LLAMA_LOG_ERROR("%s: sequence %d does not start from the last position stored in the memory\n", __func__, s);
-+//            return false;
++//        if (memory) {
++//            if (batch.token) {
++//                if (seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
++//                    LLAMA_LOG_ERROR("%s: sequence %d does not start from the last position stored in the memory\n", __func__, s);
++//                    return false;
++//                }
++//            } else {
++//                assert(batch.embd);
++//
++//                // for embeddings (typically used as vision input), we allow them to have repeating positions
++//                // ref: https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-2983871762
++//                if (seq_pos_min(s) != memory->seq_pos_max(s) && seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
++//                    LLAMA_LOG_ERROR("%s: sequence %d does not start from the last position stored in the memory\n", __func__, s);
++//                    return false;
++//                }
++//            }
 +//        }
 +//
 +//        if (seq_pos_max(s) - seq_pos_min(s) + 1 > (int) seq_pos[s].size()) {
@@ -64,6 +139,55 @@ index 8b6d14fe..72667346 100644
 +//            }
 +//        }
 +//    }
++//
++//    // disallow partial sequence sub-sets:
++//    //
++//    // invalid:          x
++//    //            i: 0 1 2 ...
++//    // ---------------------------------------
++//    // seq_id[i][0]: 0 0 1
++//    // seq_id[i][1]: 1 1 2
++//    // seq_id[i][2]: 2
++//    //
++//    // disallow decreasing sequence positions:
++//    //
++//    // invalid:                  x
++//    //            i: 0 1 2 3 4 5 6 ...
++//    // ---------------------------------------
++//    //       pos[i]: 4 5 0 1 6 2 3
++//    // seq_id[i][0]: 0 0 1 1 0 1 0
++//    //
++//    {
++//        seq_set_t cur_seq_set[LLAMA_MAX_SEQ];
++//        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
++//            cur_seq_set[s].set();
++//        }
++//
++//        llama_pos cur_seq_pos[LLAMA_MAX_SEQ];
++//        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
++//            cur_seq_pos[s] = -1;
++//        }
++//
++//        for (int32_t i = 0; i < batch.n_tokens; ++i) {
++//            const llama_pos pos = batch.pos[i];
++//
++//            for (int32_t s = 0; s < batch.n_seq_id[i]; ++s) {
++//                const llama_seq_id seq_id = batch.seq_id[i][s];
++//
++//                cur_seq_set[seq_id] &= seq_set[i];
++//
++//                if (cur_seq_set[seq_id].none()) {
++//                    LLAMA_LOG_ERROR("%s: sequence %d belongs to incompatible sequence sets (not allowed)\n", __func__, seq_id);
++//                    return false;
++//                }
++//
++//                if (pos < cur_seq_pos[seq_id]) {
++//                    LLAMA_LOG_ERROR("%s: sequence %d positions are decreasing (not allowed)\n", __func__, seq_id);
++//                    return false;
++//                }
++//            }
++//        }
++//    }
  
-     return true;
- }
+     split_reset();
+ 
