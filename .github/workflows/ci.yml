@@ -129,6 +129,7 @@ jobs:
             -DGGML_METAL=off -DGGML_ACCELERATE=on \
             -DGGML_NATIVE=off \
             -DBUILD_SHARED_LIBS=on \
+            -DCMAKE_BUILD_RPATH="@loader_path" \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
@@ -184,6 +185,7 @@ jobs:
             -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
             -DGGML_NATIVE=off \
             -DBUILD_SHARED_LIBS=on \
+            -DCMAKE_BUILD_RPATH="@loader_path" \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
