@@ -20,16 +20,14 @@ seed=${SEED:-$(date +%s)}
 stream=${STREAM:-false}
 
 function request() {
-    rm -rf /tmp/request_*.json
-    rm -rf /tmp/response_*.json
-
     tr="tr"
     if command -v gtr >/dev/null 2>&1; then
         tr="gtr"
     fi
 
-    cc=${1:-1}
-    ct="${2:-}"
+    sq=${1:-0}
+    cc=${2:-1}
+    ct="${3:-}"
     if [[ -n "$ct" ]]; then
         if [[ "${ct:0:1}" == "@" ]] && [[ -f "${ct:1}" ]]; then
             ct=$(cat "${ct:1}")
@@ -78,13 +76,14 @@ function request() {
                seed: $seed,
                stream: $stream,
              } * .')"
-        echo "${data}" >"/tmp/request_$i.json"
+        echo "${data}" >"/tmp/request_${sq}_$i.json"
         # normal
         if [[ "${stream}" != "true" ]]; then
             curl -ks --request POST \
                 --url "${api_url}"/v1/chat/completions \
                 --header "Content-Type: application/json" \
-                --data "@/tmp/request_$i.json" >"/tmp/response_$i.json" &
+                --header "X-Request-ID: ${sq}-${i}" \
+                --data "@/tmp/request_${sq}_$i.json" >"/tmp/response_${sq}_$i.json" &
             continue
         fi
         # stream
@@ -93,11 +92,12 @@ function request() {
         curl -ks --no-buffer --request POST \
             --url "${api_url}/v1/chat/completions" \
             --header "Content-Type: application/json" \
-            --data "@/tmp/request_$i.json" | while IFS= read -r LINE; do
+            --header "X-Request-ID: ${sq}-${i}" \
+            --data "@/tmp/request_${sq}_$i.json" | while IFS= read -r LINE; do
             if [[ ! "${LINE}" = data:* ]]; then
                 if [[ "${LINE}" =~ error:.* ]]; then
                     LINE="${LINE:7}"
-                    echo "${LINE}" >"/tmp/response_$i.json"
+                    echo "${LINE}" >"/tmp/response_${sq}_$i.json"
                 fi
                 continue
             fi
@@ -105,7 +105,7 @@ function request() {
                 break
             fi
             LINE="${LINE:5}"
-            echo "${LINE}" >"/tmp/response_$i.json"
+            echo "${LINE}" >"/tmp/response_${sq}_$i.json"
         done &
     done
     wait
@@ -125,21 +125,21 @@ function request() {
     pts=0
     dts=0
     for ((i = 0; i < cc; i++)); do
-        pps=$(jq '.usage.prompt_tokens_per_second' "/tmp/response_$i.json")
+        pps=$(jq '.usage.prompt_tokens_per_second' "/tmp/response_${sq}_$i.json")
         if [[ "${pps}" == "null" ]]; then
-            pps=$(jq '.timings.prompt_per_second' "/tmp/response_$i.json")
+            pps=$(jq '.timings.prompt_per_second' "/tmp/response_${sq}_$i.json")
         fi
-        dps=$(jq '.usage.tokens_per_second' "/tmp/response_$i.json")
+        dps=$(jq '.usage.tokens_per_second' "/tmp/response_${sq}_$i.json")
         if [[ "${dps}" == "null" ]]; then
-            dps=$(jq '.timings.predicted_per_second' "/tmp/response_$i.json")
+            dps=$(jq '.timings.predicted_per_second' "/tmp/response_${sq}_$i.json")
         fi
-        pt=$(jq '.usage.prompt_tokens' "/tmp/response_$i.json")
+        pt=$(jq '.usage.prompt_tokens' "/tmp/response_${sq}_$i.json")
         if [[ "${pt}" == "null" ]]; then
-            pt=$(jq '.timings.prompt_n' "/tmp/response_$i.json")
+            pt=$(jq '.timings.prompt_n' "/tmp/response_${sq}_$i.json")
         fi
-        ct=$(jq '.usage.completion_tokens' "/tmp/response_$i.json")
+        ct=$(jq '.usage.completion_tokens' "/tmp/response_${sq}_$i.json")
         if [[ "${ct}" == "null" ]]; then
-            ct=$(jq '.timings.predicted_n' "/tmp/response_$i.json")
+            ct=$(jq '.timings.predicted_n' "/tmp/response_${sq}_$i.json")
         fi
         if [[ -n "${pps}" ]] && [[ "${pps}" != "null" ]]; then
             ppss=$(echo "$ppss + $pps" | bc)
@@ -167,18 +167,21 @@ function request() {
     printf " %2d (%2d) |%8d ms |%7d (%7d, %7d) |%9.2f tps |%9.2f tps |%9.2f tps \n" "$cc" "$oks" $tt $tts $pts $dts "$tps" "$avg_pps" "$avg_dps"
 }
 
+rm -rf /tmp/request_*.json
+rm -rf /tmp/response_*.json
+
 echo "STREAM=${stream} API_URL=${api_url} TEMP=${temp} TOP_P=${top_p} MAX_TOKENS=${max_tokens} SEED=${seed}"
 echo " cc (ok) |    cost    | tokens (prefill, decoded) |  throughput  | avg. prefill | avg. decoded  "
 echo "---------|------------|---------------------------|--------------|--------------|-------------- "
 if [[ -n "${1:-}" ]]; then
-    request "${1}" "${2:-}"
+    request "1" "${1}" "${2:-}"
 else
     batches=(1 1 2 4 8 4 2 1)
     for ((j = 0; j < ${#batches[@]}; j++)); do
         if [[ $j == 0 ]]; then
-            request "${batches[$j]}" "${2:-}" >/dev/null 2>&1
+            request "1" "${batches[$j]}" "${2:-}" >/dev/null 2>&1
             continue
         fi
-        request "${batches[$j]}" "${2:-}"
+        request "$j" "${batches[$j]}" "${2:-}"
     done
 fi

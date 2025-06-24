@@ -2746,8 +2746,8 @@ struct httpserver {
         // NB(thxCode): llama_causal_attn is a patch.
         llm_model_casual     = llama_causal_attn(llm_ctx);
         llm_model_rope_mrope = llama_model_rope_type(llm_model) == LLAMA_ROPE_TYPE_MROPE;
+        llm_model_n_swa      = llama_model_n_swa(llm_model);
         llm_model_arch_name  = llama_model_arch_name(llm_model);  // llama_model_arch_name is a patch.
-        llm_model_memory     = llama_get_memory(llm_ctx) != nullptr;
         batch_view_max       = int32_t(llama_n_batch(llm_ctx));
         batch_text           = llama_batch_init(llm_ctx_size, 0, 1);
         batch_text_temp      = llama_batch_init(llm_ctx_size, 0, 1);
@@ -2881,7 +2881,8 @@ struct httpserver {
         }
 
         // prompt cache
-        cache_prompt = llm_model_casual && params.cache_prompt && llm_kv_cache_shift;
+        cache_prompt =
+            llm_model_casual && params.cache_prompt && llm_kv_cache_shift && llama_get_memory(llm_ctx) != nullptr;
         if (cache_prompt) {
             cache_prompts.resize(params.llm_params.n_threads_http);
         }
@@ -3300,8 +3301,8 @@ struct httpserver {
     bool                llm_kv_cache_shift    = false;
     bool                llm_model_casual      = true;
     bool                llm_model_rope_mrope  = false;
+    int32_t             llm_model_n_swa       = 0;
     std::string         llm_model_arch_name   = "";
-    bool                llm_model_memory      = true;
     int32_t             batch_view_max        = 0;
     llama_batch         batch_text            = {};
     llama_batch         batch_text_temp       = {};
@@ -3409,12 +3410,20 @@ struct httpserver {
                 if (n_discard <= 4) {
                     return;
                 }
-                llama_memory_seq_rm(llama_get_memory(llm_ctx), cache_id, n_keep, n_keep + n_discard);
-                llama_memory_seq_add(llama_get_memory(llm_ctx), cache_id, n_keep + n_discard, cache_pos, -n_discard);
-                if (llm_ctx_draft != nullptr) {
-                    llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), cache_id, n_keep, n_keep + n_discard);
-                    llama_memory_seq_add(llama_get_memory(llm_ctx_draft), cache_id, n_keep + n_discard, cache_pos,
+                if (llama_memory_seq_rm(llama_get_memory(llm_ctx), cache_id, n_keep, n_keep + n_discard)) {
+                    llama_memory_seq_add(llama_get_memory(llm_ctx), cache_id, n_keep + n_discard, cache_pos,
                                          -n_discard);
+                    if (llm_ctx_draft != nullptr) {
+                        llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), cache_id, n_keep, n_keep + n_discard);
+                        llama_memory_seq_add(llama_get_memory(llm_ctx_draft), cache_id, n_keep + n_discard, cache_pos,
+                                             -n_discard);
+                    }
+                } else {
+                    llama_memory_seq_rm(llama_get_memory(llm_ctx), cache_id, -1, -1);
+                    if (llm_ctx_draft != nullptr) {
+                        llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), cache_id, -1, -1);
+                    }
+                    n_discard = cache_pos;
                 }
                 SRV_WRN(
                     "squash kv cache, "
@@ -3705,20 +3714,23 @@ struct httpserver {
                                     }
                                 }
                             }
-                            int32_t   seq_lcp_id          = seq_id;
+                            int32_t   seq_lcp_id          = -1;
                             size_t    seq_lcp_l           = 0;
                             llama_pos seq_lcp_pos         = 0;
                             llama_pos seq_lcp_pos_discard = 0;
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
-                                if (!cache.used) {
-                                    size_t lcp_l = common_lcp(cache.tokens, tokens);
-                                    if (lcp_l > seq_lcp_l) {
-                                        seq_lcp_id          = i;
-                                        seq_lcp_l           = lcp_l;
-                                        seq_lcp_pos         = cache.pos;
-                                        seq_lcp_pos_discard = cache.pos_discard;
-                                    }
+                                if (cache.used) {
+                                    continue;
+                                }
+                                size_t lcp_l = common_lcp(cache.tokens, tokens);
+                                if (lcp_l > seq_lcp_l) {
+                                    seq_lcp_id          = i;
+                                    seq_lcp_l           = lcp_l;
+                                    seq_lcp_pos         = cache.pos;
+                                    seq_lcp_pos_discard = cache.pos_discard;
+                                } else if (seq_lcp_id < 0) {
+                                    seq_lcp_id = i;
                                 }
                             }
                             seq_id = seq_lcp_id;
@@ -3729,25 +3741,38 @@ struct httpserver {
                                          "seq = %d, next_pos = 0\n",
                                          rid.c_str(), seq_id);
                             }
-                            // hit cache but need to redirect
-                            else if (seq_lcp_pos_discard != 0 && seq_lcp_l == tokens.size()) {
-                                SRV_INFV(2,
-                                         "rid %s | hit prompt cache, "
-                                         "seq = %d, next_pos = 0\n",
-                                         rid.c_str(), seq_id);
-                            }
                             // hit cache
                             else {
-                                int32_t   cached              = int32_t(seq_lcp_l) - 1;
-                                llama_pos pos                 = std::min(seq_lcp_pos - 1, cached);
+                                int32_t   cached = int32_t(seq_lcp_l) - 1;
+                                llama_pos pos    = std::min(seq_lcp_pos - 1, cached);
+                                // request the same longer prefill context again but the cache has discarded.
+                                if (seq_lcp_pos_discard > 0 && seq_lcp_l == tokens.size()) {
+                                    cached = 0;
+                                    pos    = 0;
+                                }
+                                // check whether the requested content is hitting the range discarded by SWA.
+                                else if (llm_model_n_swa > 0 && seq_lcp_pos > int32_t(seq_lcp_l)) {
+                                    const int32_t pos_min = llama_memory_seq_pos_min(llama_get_memory(llm_ctx), seq_id);
+                                    if (pos_min < 0 || pos_min > std::max(0, pos - llm_model_n_swa)) {
+                                        cached = 0;
+                                        pos    = 0;
+                                    }
+                                }
                                 task->pos                     = pos;
                                 task->n_processed_detokenized = cached;
                                 task->n_prefilled             = cached;
                                 task->n_prefilled_cached      = cached;
-                                SRV_INFV(2,
-                                         "rid %s | hit prompt cache, "
-                                         "seq = %d, cached = %d, next_pos = %d\n",
-                                         rid.c_str(), seq_id, cached, pos);
+                                if (pos == 0) {
+                                    SRV_INFV(2,
+                                             "rid %s | hit prompt cache, but need to re-process, "
+                                             "seq = %d, cached = 0, next_pos = 0\n",
+                                             rid.c_str(), seq_id);
+                                } else {
+                                    SRV_INFV(2,
+                                             "rid %s | hit prompt cache, "
+                                             "seq = %d, cached = %d, next_pos = %d\n",
+                                             rid.c_str(), seq_id, cached, pos);
+                                }
                             }
                             // mark cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
@@ -4008,7 +4033,7 @@ struct httpserver {
                     }
 
                     // prepare cache - clean cache
-                    if (cache_prompt && llm_model_memory) {
+                    if (cache_prompt) {
                         llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
                             llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
@@ -4638,9 +4663,7 @@ struct httpserver {
                     "increasing context size or reducing parallel: result = %d\n",
                     decoded);
                 // clean kv cache
-                if (llm_model_memory) {
-                    llama_memory_clear(llama_get_memory(llm_ctx), true);
-                }
+                llama_memory_clear(llama_get_memory(llm_ctx), true);
                 // output
                 for (auto & task_ptr : batch_task_ptrs) {
                     json data = {
@@ -4682,7 +4705,7 @@ struct httpserver {
                     task->embeds[task->embeds.size() - 1][0] = embed[0];
                 }
                 // clean kv cache
-                if (!cache_prompt && llm_model_memory) {
+                if (cache_prompt) {
                     llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                     if (llm_ctx_draft != nullptr) {
                         llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);

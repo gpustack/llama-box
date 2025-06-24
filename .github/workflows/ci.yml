@@ -428,7 +428,7 @@ jobs:
 
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
-          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
+          zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cpu.zip ${{ github.workspace }}/dl-build/bin/*
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
