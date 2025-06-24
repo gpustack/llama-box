@@ -2775,26 +2775,39 @@ struct httpserver {
             llm_ctx_clip_a = llm_init_clip.ctx_a;
 
             // check multimodal projection model compatibility
+            bool discard = false;
             if (llm_ctx_clip_v != nullptr) {
                 const int32_t n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip_v);
                 const int32_t n_embd      = llama_model_n_embd(llm_model);
                 if (n_embd_clip != n_embd) {
-                    SRV_ERR(
-                        "multimodal projector embedding length is not equal to the model, n_embd_clip = %d, n_embd = "
-                        "%d\n",
+                    SRV_WRN(
+                        "multimodal projector embedding length is not equal to the model, "
+                        "n_embd_clip = %d, n_embd = %d, "
+                        "discarding\n",
                         n_embd_clip, n_embd);
-                    return false;
+                    discard = true;
                 }
             }
             if (llm_ctx_clip_a != nullptr) {
                 const int32_t n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip_a);
                 const int32_t n_embd      = llama_model_n_embd(llm_model);
                 if (n_embd_clip != n_embd) {
-                    SRV_ERR(
-                        "multimodal projector audio embedding length is not equal to the model, n_embd_clip = %d, "
-                        "n_embd = %d\n",
+                    SRV_WRN(
+                        "multimodal projector audio embedding length is not equal to the model, "
+                        "n_embd_clip = %d, n_embd = %d, "
+                        "discarding\n",
                         n_embd_clip, n_embd);
-                    return false;
+                    discard = true;
+                }
+            }
+            if (discard) {
+                if (llm_ctx_clip_v != nullptr) {
+                    clip_free(llm_ctx_clip_v);
+                    llm_ctx_clip_v = nullptr;
+                }
+                if (llm_ctx_clip_a != nullptr) {
+                    clip_free(llm_ctx_clip_a);
+                    llm_ctx_clip_a = nullptr;
                 }
             }
         }
