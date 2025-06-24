@@ -35,7 +35,7 @@ index 62c936ed..e393462f 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 30283d6f..d362cff0 100644
+index a990520e..90ce02ef 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -30,6 +30,11 @@
@@ -68,18 +68,20 @@ index 30283d6f..d362cff0 100644
          auto & hparams = model.hparams;
          std::string log_ffn_op; // for logging
  
-@@ -2209,8 +2214,9 @@ struct clip_model_loader {
-                     } break;
+@@ -2210,10 +2215,10 @@ struct clip_model_loader {
                  case PROJECTOR_TYPE_PIXTRAL:
                      {
-+                        hparams.image_size = max_image_size <= 0 ? hparams.image_size : max_image_size;
                          hparams.rope_theta = 10000.0f;
 -                        hparams.warmup_image_size = hparams.patch_size * 8;
 +                        hparams.warmup_image_size = max_image_size <= 0 ? hparams.patch_size * 8 : max_image_size;
+                         // Mistral Small 2506 needs 1024x1024 image size cap to prevent OOM
+                         // ref: https://github.com/ggml-org/llama.cpp/issues/14310
+-                        hparams.image_size = 1024;
++                        hparams.image_size = max_image_size <= 0 ? hparams.image_size : max_image_size;
                          get_u32(KEY_SPATIAL_MERGE_SIZE, hparams.spatial_merge_size, false);
                      } break;
                  case PROJECTOR_TYPE_GEMMA3:
-@@ -2227,8 +2233,8 @@ struct clip_model_loader {
+@@ -2230,8 +2235,8 @@ struct clip_model_loader {
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
@@ -90,7 +92,7 @@ index 30283d6f..d362cff0 100644
                      } break;
                  case PROJECTOR_TYPE_QWEN25VL:
                      {
-@@ -2236,8 +2242,8 @@ struct clip_model_loader {
+@@ -2239,8 +2244,8 @@ struct clip_model_loader {
                          // https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/preprocessor_config.json
                          // however, the model use unreasonable memory past 1024 size, we force it to 1024 otherwise it's unusable
                          // ref: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/discussions/10
@@ -101,7 +103,7 @@ index 30283d6f..d362cff0 100644
                          get_u32(KEY_WIN_ATTN_PATTERN, hparams.n_wa_pattern);
                      } break;
                  case PROJECTOR_TYPE_LLAMA4:
-@@ -2293,6 +2299,19 @@ struct clip_model_loader {
+@@ -2296,6 +2301,19 @@ struct clip_model_loader {
          std::map<std::string, size_t> tensor_offset;
          std::vector<ggml_tensor *> tensors_to_load;
  
@@ -121,7 +123,7 @@ index 30283d6f..d362cff0 100644
          // TODO @ngxson : support both audio and video in the future
          const char * prefix = model.modality == CLIP_MODALITY_AUDIO ? "a" : "v";
  
-@@ -2705,7 +2724,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
+@@ -2708,7 +2726,7 @@ struct clip_init_result clip_init(const char * fname, struct clip_context_params
  
          if (loader.has_vision) {
              ctx_vision = new clip_ctx(ctx_params);
@@ -130,7 +132,7 @@ index 30283d6f..d362cff0 100644
              loader.load_tensors(*ctx_vision);
              loader.alloc_compute_meta(*ctx_vision);
          }
-@@ -2820,6 +2839,11 @@ static void normalize_image_u8_to_f32(const clip_image_u8 & src, clip_image_f32
+@@ -2823,6 +2841,11 @@ static void normalize_image_u8_to_f32(const clip_image_u8 & src, clip_image_f32
  struct image_manipulation {
      // Bilinear resize function
      static void bilinear_resize(const clip_image_u8& src, clip_image_u8& dst, int target_width, int target_height) {
@@ -142,7 +144,7 @@ index 30283d6f..d362cff0 100644
          dst.nx = target_width;
          dst.ny = target_height;
          dst.buf.resize(3 * target_width * target_height);
-@@ -2856,6 +2880,11 @@ struct image_manipulation {
+@@ -2859,6 +2882,11 @@ struct image_manipulation {
      // Bicubic resize function
      // part of image will be cropped if the aspect ratio is different
      static bool bicubic_resize(const clip_image_u8 & img, clip_image_u8 & dst, int target_width, int target_height) {
@@ -154,7 +156,7 @@ index 30283d6f..d362cff0 100644
          const int nx = img.nx;
          const int ny = img.ny;
  
-@@ -2991,6 +3020,9 @@ struct image_manipulation {
+@@ -2994,6 +3022,9 @@ struct image_manipulation {
          if (inp_size.width <= 0 || inp_size.height <= 0 || align_size <= 0 || max_dimension <= 0) {
              return {0, 0};
          }
@@ -164,7 +166,7 @@ index 30283d6f..d362cff0 100644
  
          float scale = std::min(1.0f, std::min(static_cast<float>(max_dimension) / inp_size.width,
                                                static_cast<float>(max_dimension) / inp_size.height));
-@@ -3340,7 +3372,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
+@@ -3343,7 +3374,7 @@ bool clip_image_preprocess(struct clip_ctx * ctx, const clip_image_u8 * img, str
          clip_image_u8 resized;
          auto patch_size = params.patch_size * 2;
          auto new_size = image_manipulation::calc_size_preserved_ratio(original_size, patch_size, params.image_size);
@@ -173,7 +175,7 @@ index 30283d6f..d362cff0 100644
  
          clip_image_f32_ptr img_f32(clip_image_f32_init());
          // clip_image_f32_ptr res(clip_image_f32_init());
-@@ -4111,6 +4143,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -4114,6 +4145,30 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type() == PROJECTOR_TYPE_GEMMA3;
  }
  
