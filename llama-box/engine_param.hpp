@@ -2152,7 +2152,11 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
     if (params_.hs_params.llm_params.chat_template.size() > 20 &&
         !common_chat_verify_template(params_.hs_params.llm_params.chat_template,
                                      params_.hs_params.llm_params.use_jinja)) {
-        invalid("--chat-template");
+        if (params_.hs_params.llm_params.use_jinja) {
+            invalid("--chat-template-file content is invalid, please check the content of the file");
+        } else {
+            invalid("--chat-template is invalid, please check the allowed options in the usage");
+        }
     }
     postprocess_cpu_params(params_.hs_params.llm_params.cpuparams, nullptr);
     postprocess_cpu_params(params_.hs_params.llm_params.cpuparams_batch, &params_.hs_params.llm_params.cpuparams);
