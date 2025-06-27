@@ -1430,11 +1430,11 @@ jobs:
       fail-fast: false
       matrix:
         # see https://vulkan.lunarg.com/sdk/home.
-        #     1.4 ==> 1.4.304, Ubuntu 22.04.
+        #     1.4 ==> 1.4.313, Ubuntu 22.04.
         include:
           - arch: 'amd64'
             version: '1.4'
-            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.4.304-ubuntu22.04-v2'
+            distro_container_image: 'gpustack/devel-lunarg-vulkan:1.4.313-ubuntu22.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
@@ -2199,11 +2199,11 @@ jobs:
       fail-fast: false
       matrix:
         # see https://vulkan.lunarg.com/sdk/home.
-        #     1.4 ==> 1.4.304.1, Windows Server 2022.
+        #     1.4 ==> 1.4.313.2, Windows Server 2022.
         include:
           - arch: 'amd64'
             version: '1.4'
-            distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.4.304.1/windows/VulkanSDK-1.4.304.1-Installer.exe'
+            distro_binary_installer: 'https://sdk.lunarg.com/sdk/download/1.4.313.2/windows/vulkansdk-windows-X64-1.4.313.2.exe'
     runs-on: windows-2022
     steps:
       - name: Checkout
