@@ -1,37 +1,38 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
-index f6127aee..ee6e4334 100644
+index ea203550..997ea0f0 100644
 --- a/ggml/src/ggml-cuda/common.cuh
 +++ b/ggml/src/ggml-cuda/common.cuh
-@@ -59,6 +59,9 @@
+@@ -59,6 +59,10 @@
  #define GGML_CUDA_CC_CDNA       (GGML_CUDA_CC_OFFSET_AMD + 0x908)  // MI100, minimum for MFMA, acc registers
  #define GGML_CUDA_CC_CDNA2      (GGML_CUDA_CC_OFFSET_AMD + 0x910)  // MI210, minimum acc register renameing
  #define GGML_CUDA_CC_CDNA3      (GGML_CUDA_CC_OFFSET_AMD + 0x942)  // MI300
 +// HYGON
-+#define GGML_CUDA_CC_CDNA2_DCU  (GGML_CUDA_CC_OFFSET_AMD + 0x926)  // Z100
-+#define GGML_CUDA_CC_CDNA2_DCU2 (GGML_CUDA_CC_OFFSET_AMD + 0x928)  // K100
++#define GGML_CUDA_CC_CDNA2_DCU_Z100  (GGML_CUDA_CC_OFFSET_AMD + 0x926)  // Z100
++#define GGML_CUDA_CC_CDNA2_DCU_K100 (GGML_CUDA_CC_OFFSET_AMD + 0x928)  // K100
++#define GGML_CUDA_CC_CDNA2_DCU_Z100L (GGML_CUDA_CC_OFFSET_AMD + 0x936)  // Z100L
  
  // RDNA removes MFMA, dp4a, xnack, acc registers, wave size is 32
  #define GGML_CUDA_CC_RDNA1      (GGML_CUDA_CC_OFFSET_AMD + 0x1010) // RX 5000
-@@ -73,7 +76,7 @@
+@@ -73,7 +77,7 @@
  #define GGML_CUDA_CC_IS_RDNA3(cc) (cc >= GGML_CUDA_CC_RDNA3 && cc < GGML_CUDA_CC_RDNA4)
  #define GGML_CUDA_CC_IS_RDNA4(cc) (cc >= GGML_CUDA_CC_RDNA4)
  #define GGML_CUDA_CC_IS_GCN(cc)   (cc > GGML_CUDA_CC_OFFSET_AMD && cc < GGML_CUDA_CC_CDNA)
 -#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA && cc < GGML_CUDA_CC_RDNA1)
-+#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA && cc < GGML_CUDA_CC_RDNA1 && cc != GGML_CUDA_CC_CDNA2_DCU && cc != GGML_CUDA_CC_CDNA2_DCU2)
++#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA && cc < GGML_CUDA_CC_RDNA1 && cc != GGML_CUDA_CC_CDNA2_DCU_Z100 && cc != GGML_CUDA_CC_CDNA2_DCU_K100 && cc != GGML_CUDA_CC_CDNA2_DCU_Z100L)
  
  // Moore Threads
- #define GGML_CUDA_MUSA_ARCH_IS_QY1 (__MUSA_ARCH__ <= 210)
-@@ -466,7 +469,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
+ #define GGML_CUDA_CC_QY1 (GGML_CUDA_CC_OFFSET_MTHREADS + 0x210) // MTT S80, MTT S3000
+@@ -467,7 +471,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
  
  static __device__ __forceinline__ int ggml_cuda_dp4a(const int a, const int b, int c) {
  #if defined(GGML_USE_HIP) && defined(__HIP_PLATFORM_AMD__)
 -#if defined(CDNA) || defined(RDNA2) || defined(__gfx906__)
-+#if (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__)) || defined(RDNA2) || defined(__gfx906__)
++#if (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__) && !defined(__gfx936__)) || defined(RDNA2) || defined(__gfx906__)
      c = __builtin_amdgcn_sdot4(a, b, c, false);
  #elif defined(RDNA3) || defined(RDNA4)
      c = __builtin_amdgcn_sudot4( true, a, true, b, c, false);
 diff --git a/ggml/src/ggml-cuda/mmvq.cu b/ggml/src/ggml-cuda/mmvq.cu
-index dc7adf50..87ee6e35 100644
+index dc7adf50..6f9db610 100644
 --- a/ggml/src/ggml-cuda/mmvq.cu
 +++ b/ggml/src/ggml-cuda/mmvq.cu
 @@ -63,7 +63,7 @@ enum mmvq_parameter_table_id {
@@ -39,7 +40,7 @@ index dc7adf50..87ee6e35 100644
  #if defined(RDNA2) || defined(RDNA3) || defined(RDNA4)
      return MMVQ_PARAMETERS_RDNA2;
 -#elif defined(GCN) || defined(CDNA)
-+#elif defined(GCN) || (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__))
++#elif defined(GCN) || (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__) && !defined(__gfx936__))
      return MMVQ_PARAMETERS_GCN;
  #else
      return MMVQ_PARAMETERS_GENERIC;

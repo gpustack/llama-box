@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index eff4a53e..49ec614c 100644
+index 8531baf6..f9162daf 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
 @@ -5235,10 +5235,6 @@ static void ggml_compute_forward_rope_f32(
