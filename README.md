@@ -369,6 +369,7 @@ general:
          --version                Print version and exit
          --system-info            Print system info and exit
          --list-devices           Print list of available devices and exit
+         --list-buffer-types      Print list of available buffer types and exit
   -v,    --verbose, --log-verbose 
                                   Set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V

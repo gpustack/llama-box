@@ -202,6 +202,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "general",                            "       --version",                              "Print version and exit" });
     opts.push_back({ "general",                            "       --system-info",                          "Print system info and exit" });
     opts.push_back({ "general",                            "       --list-devices",                         "Print list of available devices and exit" });
+    opts.push_back({ "general",                            "       --list-buffer-types",                    "Print list of available buffer types and exit" });
     opts.push_back({ "general",                            "-v,    --verbose, --log-verbose",               "Set verbosity level to infinity (i.e. log all messages, useful for debugging)" });
     opts.push_back({ "general",                            "-lv,   --verbosity, --log-verbosity V",         "Set the verbosity threshold, messages with a higher verbosity will be ignored" });
     opts.push_back({ "general",                            "       --log-colors",                           "Enable colored logging" });
@@ -515,6 +516,23 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 exit(0);
             }
 
+            if (!strcmp(flag, "--list-buffer-types")) {
+                std::set<std::string> buffer_type_names;
+                // enumerate all the devices and add their buffer types to the list
+                for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
+                    ggml_backend_device *      dev         = ggml_backend_dev_get(j);
+                    ggml_backend_buffer_type * buffer_type = ggml_backend_dev_buffer_type(dev);
+                    if (buffer_type) {
+                        buffer_type_names.insert(ggml_backend_buft_name(buffer_type));
+                    }
+                }
+                fprintf(stderr, "available buffer types:\n");
+                for (const auto & name : buffer_type_names) {
+                    fprintf(stderr, "  %s\n", name.c_str());
+                }
+                exit(0);
+            }
+
             if (!strcmp(flag, "-v") || !strcmp(flag, "--verbose") || !strcmp(flag, "--log-verbose")) {
                 params_.hs_params.llm_params.verbosity = INT_MAX;
                 common_log_set_verbosity_thold(INT_MAX);
@@ -741,21 +759,15 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                     missing("--override-tensor");
                 }
                 char * arg = argv[i++];
-
-                /* static */ std::unordered_map<std::string /* buffer type name */,
-                                                ggml_backend_buffer_type_t /* buffer type */>
-                    buffer_types;
-                if (buffer_types.empty()) {
-                    // enumerate all the devices and add their buffer types to the list
-                    for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
-                        auto * dev             = ggml_backend_dev_get(j);
-                        auto * dev_buffer_type = ggml_backend_dev_buffer_type(dev);
-                        if (dev_buffer_type) {
-                            buffer_types[ggml_backend_buft_name(dev_buffer_type)] = dev_buffer_type;
-                        }
+                // enumerate all the devices and add their buffer types to the list
+                std::unordered_map<std::string, ggml_backend_buffer_type_t> buffer_types;
+                for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
+                    ggml_backend_device *      dev         = ggml_backend_dev_get(j);
+                    ggml_backend_buffer_type * buffer_type = ggml_backend_dev_buffer_type(dev);
+                    if (buffer_type) {
+                        buffer_types[ggml_backend_buft_name(buffer_type)] = buffer_type;
                     }
                 }
-
                 for (const auto & override : string_split<std::string>(std::string(arg), ',')) {
                     std::string::size_type pos = override.find('=');
                     if (pos == std::string::npos) {
@@ -765,16 +777,13 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                     std::string buffer_type = override.substr(pos + 1);
 
                     if (buffer_types.find(buffer_type) == buffer_types.end()) {
-                        printf("Available buffer types:\n");
-                        for (const auto & it : buffer_types) {
-                            printf("  %s\n", ggml_backend_buft_name(it.second));
-                        }
-                        invalid("--override-tensor");
+                        invalid(("--override-tensor cannot find buffer type " + buffer_type).c_str());
                     }
 
                     params_.hs_params.llm_params.tensor_buft_overrides.push_back(
                         { strdup(tensor_name.c_str()), buffer_types.at(buffer_type) });
                 }
+                continue;
             }
 
             if (!strcmp(flag, "--no-warmup")) {
@@ -2176,6 +2185,10 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
     if (!params_.hs_params.llm_params.kv_overrides.empty()) {
         params_.hs_params.llm_params.kv_overrides.emplace_back();
         params_.hs_params.llm_params.kv_overrides.back().key[0] = 0;
+    }
+
+    if (!params_.hs_params.llm_params.tensor_buft_overrides.empty()) {
+        params_.hs_params.llm_params.tensor_buft_overrides.push_back({nullptr, nullptr});
     }
 
     if (params_.hs_params.llm_params.lora_init_without_apply) {
