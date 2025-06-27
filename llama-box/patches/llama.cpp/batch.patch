@@ -1,21 +1,27 @@
 diff --git a/src/llama-batch.cpp b/src/llama-batch.cpp
-index 401e1136..8a53cb79 100644
+index 91b1d607..d217f6d2 100644
 --- a/src/llama-batch.cpp
 +++ b/src/llama-batch.cpp
-@@ -239,108 +239,108 @@ bool llama_batch_allocr::init(
-     // consistency checks
-     //
+@@ -235,114 +235,114 @@ bool llama_batch_allocr::init(
+         LLAMA_LOG_DEBUG("%s:   ]\n", __func__);
+     }
  
+-    //
+-    // consistency checks
+-    //
+-
 -    for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
 -        if (seq_pos[s].empty()) {
 -            continue;
 -        }
 -
--        if (memory) {
+-        const llama_pos p0 = memory ? memory->seq_pos_max(s) : -1;
+-
+-        if (p0 >= 0) {
 -            bool ok = true;
 -
 -            if (batch.token) {
--                if (seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
+-                if (seq_pos_min(s) != p0 + 1) {
 -                    ok = false;
 -                }
 -            } else {
@@ -23,7 +29,7 @@ index 401e1136..8a53cb79 100644
 -
 -                // for embeddings (typically used as vision input), we allow them to have repeating positions
 -                // ref: https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-2983871762
--                if (seq_pos_min(s) != memory->seq_pos_max(s) && seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
+-                if (seq_pos_min(s) != p0 && seq_pos_min(s) != p0 + 1) {
 -                    ok = false;
 -                }
 -            }
@@ -34,7 +40,7 @@ index 401e1136..8a53cb79 100644
 -                        " - the last position stored in the memory module of the context (i.e. the KV cache) for sequence %d is X = %d\n"
 -                        " - the tokens for sequence %d in the input batch have a starting position of Y = %d\n"
 -                        " it is required that the sequence positions remain consecutive: Y = X + 1\n",
--                        __func__, s, s, memory->seq_pos_max(s), s, seq_pos_min(s));
+-                        __func__, s, s, p0, s, seq_pos_min(s));
 -
 -                return false;
 -            }
@@ -108,16 +114,22 @@ index 401e1136..8a53cb79 100644
 -            }
 -        }
 -    }
++//    //
++//    // consistency checks
++//    //
++//
 +//    for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
 +//        if (seq_pos[s].empty()) {
 +//            continue;
 +//        }
 +//
-+//        if (memory) {
++//        const llama_pos p0 = memory ? memory->seq_pos_max(s) : -1;
++//
++//        if (p0 >= 0) {
 +//            bool ok = true;
 +//
 +//            if (batch.token) {
-+//                if (seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
++//                if (seq_pos_min(s) != p0 + 1) {
 +//                    ok = false;
 +//                }
 +//            } else {
@@ -125,7 +137,7 @@ index 401e1136..8a53cb79 100644
 +//
 +//                // for embeddings (typically used as vision input), we allow them to have repeating positions
 +//                // ref: https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-2983871762
-+//                if (seq_pos_min(s) != memory->seq_pos_max(s) && seq_pos_min(s) != memory->seq_pos_max(s) + 1) {
++//                if (seq_pos_min(s) != p0 && seq_pos_min(s) != p0 + 1) {
 +//                    ok = false;
 +//                }
 +//            }
@@ -136,7 +148,7 @@ index 401e1136..8a53cb79 100644
 +//                        " - the last position stored in the memory module of the context (i.e. the KV cache) for sequence %d is X = %d\n"
 +//                        " - the tokens for sequence %d in the input batch have a starting position of Y = %d\n"
 +//                        " it is required that the sequence positions remain consecutive: Y = X + 1\n",
-+//                        __func__, s, s, memory->seq_pos_max(s), s, seq_pos_min(s));
++//                        __func__, s, s, p0, s, seq_pos_min(s));
 +//
 +//                return false;
 +//            }
