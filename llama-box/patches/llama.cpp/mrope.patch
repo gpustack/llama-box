@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index 8531baf6..f9162daf 100644
+index 27586ed1..8ff3eced 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
-@@ -5235,10 +5235,6 @@ static void ggml_compute_forward_rope_f32(
+@@ -5722,10 +5722,6 @@ static void ggml_compute_forward_rope_f32(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -13,7 +13,7 @@ index 8531baf6..f9162daf 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne0/2);
      }
-@@ -5421,10 +5417,6 @@ static void ggml_compute_forward_rope_f16(
+@@ -5908,10 +5904,6 @@ static void ggml_compute_forward_rope_f16(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -40,10 +40,10 @@ index 18f691b2..f5a4da3a 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index d8d30cc0..9bd117f3 100644
+index 12a36695..545048f3 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -4049,7 +4049,6 @@ static bool ggml_metal_encode_node(
+@@ -4224,7 +4224,6 @@ static bool ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
