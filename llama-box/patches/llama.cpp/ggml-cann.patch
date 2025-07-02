@@ -1,0 +1,90 @@
+diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
+index 010300df..7eb95cdd 100644
+--- a/src/llama-graph.cpp
++++ b/src/llama-graph.cpp
+@@ -560,20 +560,28 @@ ggml_tensor * llm_graph_context::build_ffn(
+ 
+     switch (type_op) {
+         case LLM_FFN_SILU:
++#ifndef GGML_USE_CANN
+             if (gate && type_gate == LLM_FFN_PAR) {
+                 cur = ggml_swiglu_split(ctx0, cur, tmp);
+                 cb(cur, "ffn_swiglu", il);
+                 type_gate = LLM_FFN_SEQ;
+             } else {
++#else
++            {
++#endif
+                 cur = ggml_silu(ctx0, cur);
+                 cb(cur, "ffn_silu", il);
+             } break;
+         case LLM_FFN_GELU:
++#ifndef GGML_USE_CANN
+             if (gate && type_gate == LLM_FFN_PAR) {
+                 cur = ggml_geglu_split(ctx0, cur, tmp);
+                 cb(cur, "ffn_geglu", il);
+                 type_gate = LLM_FFN_SEQ;
+             } else {
++#else
++            {
++#endif
+                 cur = ggml_gelu(ctx0, cur);
+                 cb(cur, "ffn_gelu", il);
+                 if (act_scales != NULL) {
+@@ -582,11 +590,15 @@ ggml_tensor * llm_graph_context::build_ffn(
+                 }
+             } break;
+         case LLM_FFN_RELU:
++#ifndef GGML_USE_CANN
+             if (gate && type_gate == LLM_FFN_PAR) {
+                 cur = ggml_reglu_split(ctx0, cur, tmp);
+                 cb(cur, "ffn_reglu", il);
+                 type_gate = LLM_FFN_SEQ;
+             } else {
++#else
++            {
++#endif
+                 cur = ggml_relu(ctx0, cur);
+                 cb(cur, "ffn_relu", il);
+             } break;
+@@ -742,18 +754,26 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
+ 
+     switch (type_op) {
+         case LLM_FFN_SILU:
++#ifndef GGML_USE_CANN
+             if (gate_exps) {
+                 cur = ggml_swiglu_split(ctx0, cur, up);
+                 cb(cur, "ffn_moe_swiglu", il);
+             } else {
++#else
++            {
++#endif
+                 cur = ggml_silu(ctx0, cur);
+                 cb(cur, "ffn_moe_silu", il);
+             } break;
+         case LLM_FFN_GELU:
++#ifndef GGML_USE_CANN
+             if (gate_exps) {
+                 cur = ggml_geglu_split(ctx0, cur, up);
+                 cb(cur, "ffn_moe_geglu", il);
+             } else {
++#else
++            {
++#endif
+                 cur = ggml_gelu(ctx0, cur);
+                 cb(cur, "ffn_moe_gelu", il);
+             } break;
+@@ -761,6 +781,13 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
+             GGML_ABORT("fatal error");
+     }
+ 
++#ifdef GGML_USE_CANN
++    if (gate_exps) {
++        cur = ggml_mul(ctx0, cur, up); // [n_ff, n_expert_used, n_tokens]
++        cb(cur, "ffn_moe_gate_par", il);
++    }
++#endif
++
+     experts = build_lora_mm_id(down_exps, cur, selected_experts); // [n_embd, n_expert_used, n_tokens]
+     cb(experts, "ffn_moe_down", il);
+ 
