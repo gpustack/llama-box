@@ -2427,8 +2427,8 @@ struct embeddings_task : btask {
                 if (dreq->encoding_format != "base64") {
                     item["embedding"] = embeds[seq];
                 } else {
-                    item["embedding"] =
-                        encode_base64(reinterpret_cast<const unsigned char *>(embeds[seq].data()), embeds[seq].size());
+                    item["embedding"] = encode_base64(reinterpret_cast<const unsigned char *>(embeds[seq].data()),
+                                                      embeds[seq].size() * sizeof(float));
                 }
                 data.push_back(item);
             }
