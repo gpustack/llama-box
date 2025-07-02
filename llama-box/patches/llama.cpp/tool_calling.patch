@@ -1,8 +1,8 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 7d9aaeb1..39c8b350 100644
+index 114dbfcc..02ffbd3c 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
-@@ -491,6 +491,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
+@@ -494,6 +494,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
      delete tmpls;
  }
  
@@ -16,7 +16,7 @@ index 7d9aaeb1..39c8b350 100644
  bool common_chat_templates_was_explicit(const struct common_chat_templates * tmpls) {
      return tmpls->has_explicit_template;
  }
-@@ -1799,6 +1806,83 @@ static common_chat_params common_chat_templates_apply_jinja(
+@@ -1816,6 +1823,83 @@ static common_chat_params common_chat_templates_apply_jinja(
      return common_chat_params_init_generic(tmpl, params);
  }
  
@@ -100,7 +100,7 @@ index 7d9aaeb1..39c8b350 100644
  // Legacy template route (adhoc C++ implementation of known templates), forward to llama_chat_apply_template.
  static common_chat_params common_chat_templates_apply_legacy(
      const struct common_chat_templates * tmpls,
-@@ -1857,6 +1941,17 @@ static common_chat_params common_chat_templates_apply_legacy(
+@@ -1874,6 +1958,17 @@ static common_chat_params common_chat_templates_apply_legacy(
      return params;
  }
  
@@ -118,7 +118,7 @@ index 7d9aaeb1..39c8b350 100644
  common_chat_params common_chat_templates_apply(
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
-@@ -1919,7 +2014,7 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+@@ -1936,7 +2031,7 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
      try {
          common_chat_parse(builder);
      } catch (const common_chat_msg_partial_exception & ex) {
@@ -127,7 +127,7 @@ index 7d9aaeb1..39c8b350 100644
          if (!is_partial) {
              builder.clear_tools();
              builder.move_to(0);
-@@ -1927,6 +2022,6 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+@@ -1944,6 +2039,6 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
          }
      }
      auto msg = builder.result();
@@ -136,10 +136,10 @@ index 7d9aaeb1..39c8b350 100644
      return msg;
  }
 diff --git a/common/chat.h b/common/chat.h
-index 9f59e6b0..d084a116 100644
+index ca807c14..ed4323de 100644
 --- a/common/chat.h
 +++ b/common/chat.h
-@@ -162,10 +162,15 @@ common_chat_templates_ptr common_chat_templates_init(
+@@ -164,10 +164,15 @@ common_chat_templates_ptr common_chat_templates_init(
                                             const std::string & bos_token_override = "",
                                             const std::string & eos_token_override = "");
  
