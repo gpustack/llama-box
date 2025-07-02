@@ -254,7 +254,10 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
                                                                                                             "List of built-in templates: %s", get_builtin_chat_templates_string().c_str() });
     opts.push_back({ "server/completion",                  "       --jinja",                                "Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)" });
     opts.push_back({ "server/completion",                  "       --chat-template-file FILE",              "Set jinja chat template (default: take from model's metadata)\n"
-                                                                                                            "Required --jinja set before\n" });
+                                                                                                            "Required --jinja set before" });
+    opts.push_back({ "server/completion",                  "       --chat-template-kwargs STRING",          "Set additional params for the jinja template in JSON format\n"
+                                                                                                            "Required --jinja set before\n"
+                                                                                                            "Example: --chat-template-kwargs \"{\\\"enable_thinking\\\":false}\""});
     opts.push_back({ "server/completion",                  "       --slot-save-path PATH",                  "Path to save slot kv cache (default: disabled)" });
     opts.push_back({ "server/completion",                  "-tps   --tokens-per-second N",                  "Maximum number of tokens per second (default: %d, 0 = disabled, -1 = try to detect)\n"
                                                                                                             "When enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header", params_.hs_params.n_tps });
@@ -268,7 +271,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
                                                                                                             "  - 1-medium\n"
                                                                                                             "  - 2-high\n"
                                                                                                             "  - 3-realtime", llm_params.cpuparams.priority});
-    opts.push_back({ "server/completion",                  "       --poll <0...100>",                       "Use polling level to wait for work (0 - no polling, default: %u)\n", (unsigned) llm_params.cpuparams.poll});
+    opts.push_back({ "server/completion",                  "       --poll <0...100>",                       "Use polling level to wait for work (0 - no polling, default: %u)", (unsigned) llm_params.cpuparams.poll});
 #endif
     opts.push_back({ "server/completion",                  "-tb,   --threads-batch N",                      "Number of threads to use during batch and prompt processing (default: same as --threads)" });
 #ifndef GGML_USE_OPENMP
@@ -908,6 +911,21 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                     invalid("--chat-template-file, set --chat-template directly if using a built-in template");
                 }
                 params_.hs_params.llm_params.chat_template = t;
+                continue;
+            }
+
+            if (!strcmp(flag, "--chat-template-kwargs")) {
+                if (i == argc) {
+                    missing("--chat-template-kwargs");
+                }
+                if (!params_.hs_params.llm_params.use_jinja) {
+                    invalid("--chat-template-file, --jinja must be set before");
+                }
+                char * arg = argv[i++];
+                auto parsed = json::parse(std::string(arg));
+                for (const auto & item : parsed.items()) {
+                    params_.hs_params.llm_params.default_template_kwargs[item.key()] = item.value().dump();
+                }
                 continue;
             }
 

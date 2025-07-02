@@ -431,7 +431,10 @@ server/completion:
          --chat-template-file FILE
                                   Set jinja chat template (default: take from model's metadata)
                                   Required --jinja set before
-                                  
+         --chat-template-kwargs STRING
+                                  Set additional params for the jinja template in JSON format
+                                  Required --jinja set before
+                                  Example: --chat-template-kwargs "{\"enable_thinking\":false}"
          --slot-save-path PATH    Path to save slot kv cache (default: disabled)
   -tps   --tokens-per-second N    Maximum number of tokens per second (default: 0, 0 = disabled, -1 = try to detect)
                                   When enabled, limit the request within its X-Request-Tokens-Per-Second HTTP header
@@ -446,7 +449,6 @@ server/completion:
                                     - 2-high
                                     - 3-realtime
          --poll <0...100>         Use polling level to wait for work (0 - no polling, default: 50)
-                                  
   -tb,   --threads-batch N        Number of threads to use during batch and prompt processing (default: same as --threads)
   -Cb,   --cpu-mask-batch M       Set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
   -Crb,  --cpu-range-batch lo-hi  Ranges of CPUs for affinity. Complements --cpu-mask-batch
