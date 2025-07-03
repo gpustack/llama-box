@@ -3907,7 +3907,7 @@ struct httpserver {
                                         const int32_t decoded_image =
                                             decode_completion_task_batch(llm_ctx, batch_mtmd.temp, batch_task_ptrs);
                                         if (llm_ctx_clip_v != nullptr && clip_is_gemma3(llm_ctx_clip_v)) {
-                                            llama_set_causal_attn(llm_ctx, false);
+                                            llama_set_causal_attn(llm_ctx, true);
                                         }
                                         if (decoded_image != 0) {
                                             SRV_ERR(
