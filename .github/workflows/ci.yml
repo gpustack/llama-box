@@ -125,11 +125,12 @@ jobs:
         run: |
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='@loader_path' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_METAL=off -DGGML_ACCELERATE=on \
             -DGGML_NATIVE=off \
             -DBUILD_SHARED_LIBS=on \
-            -DCMAKE_BUILD_RPATH="@loader_path" \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
@@ -181,11 +182,12 @@ jobs:
         run: |
           echo "===== BUILD ====="
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='@loader_path' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_METAL=on -DGGML_ACCELERATE=on -DGGML_METAL_USE_BF16=on -DGGML_METAL_EMBED_LIBRARY=on \
             -DGGML_NATIVE=off \
             -DBUILD_SHARED_LIBS=on \
-            -DCMAKE_BUILD_RPATH="@loader_path" \
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/dl-build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
@@ -385,6 +387,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_NATIVE=off \
             -DBUILD_SHARED_LIBS=on \
@@ -495,6 +499,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_CUDA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
@@ -647,6 +653,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_MUSA=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DMUSA_ARCHITECTURES="${MUSA_ARCHITECTURES}" \
             -DGGML_NATIVE=off \
@@ -806,6 +814,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DGGML_HIP_ROCWMMA_FATTN=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
@@ -975,6 +985,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_HIP=on -DGGML_CUDA_F16=on -DGGML_CUDA_FA=on -DGGML_CUDA_FA_ALL_QUANTS=on -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" \
             -DCMAKE_C_COMPILER="\$(hipconfig -l)/clang" \
@@ -1162,6 +1174,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_CANN=on \
             -DSOC_TYPE=${{ contains(matrix.distro_container_image, '910b') && 'Ascend910B3' || 'Ascend310P3' }} \
@@ -1315,6 +1329,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_SYCL=on -DGGML_SYCL_F16=on \
             -DGGML_NATIVE=off \
@@ -1467,6 +1483,8 @@ jobs:
           echo "===== BUILD ====="
           env || true
           cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/dl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DBOX_PATCH_CI=on \
             -DGGML_VULKAN=on \
             -DGGML_NATIVE=off \
