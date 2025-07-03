@@ -1,5 +1,5 @@
 diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
-index 010300df6..7eb95cdd0 100644
+index f2fae6d1b..cf1652b4e 100644
 --- a/src/llama-graph.cpp
 +++ b/src/llama-graph.cpp
 @@ -560,20 +560,28 @@ ggml_tensor * llm_graph_context::build_ffn(
