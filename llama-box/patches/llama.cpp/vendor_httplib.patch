@@ -1,5 +1,5 @@
 diff --git a/vendor/cpp-httplib/httplib.h b/vendor/cpp-httplib/httplib.h
-index 0aa4e627..93640e27 100644
+index 0aa4e6274..93640e27b 100644
 --- a/vendor/cpp-httplib/httplib.h
 +++ b/vendor/cpp-httplib/httplib.h
 @@ -6575,6 +6575,7 @@ inline void Server::stop() {

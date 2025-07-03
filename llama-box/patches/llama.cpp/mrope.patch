@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index dd83efde..eeb5f547 100644
+index 2ae0721e9..d3bd063c0 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
-@@ -5723,10 +5723,6 @@ static void ggml_compute_forward_rope_f32(
+@@ -5724,10 +5724,6 @@ static void ggml_compute_forward_rope_f32(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -13,7 +13,7 @@ index dd83efde..eeb5f547 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne0/2);
      }
-@@ -5909,10 +5905,6 @@ static void ggml_compute_forward_rope_f16(
+@@ -5910,10 +5906,6 @@ static void ggml_compute_forward_rope_f16(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -25,7 +25,7 @@ index dd83efde..eeb5f547 100644
          GGML_ASSERT(n_dims == ne0/2);
      }
 diff --git a/ggml/src/ggml-cuda/rope.cu b/ggml/src/ggml-cuda/rope.cu
-index 18f691b2..f5a4da3a 100644
+index 18f691b2d..f5a4da3ae 100644
 --- a/ggml/src/ggml-cuda/rope.cu
 +++ b/ggml/src/ggml-cuda/rope.cu
 @@ -377,10 +377,6 @@ void ggml_cuda_op_rope_impl(ggml_backend_cuda_context & ctx, ggml_tensor * dst)
@@ -40,10 +40,10 @@ index 18f691b2..f5a4da3a 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 12a36695..545048f3 100644
+index 1a0968ed4..bd21dab7e 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -4224,7 +4224,6 @@ static bool ggml_metal_encode_node(
+@@ -4233,7 +4233,6 @@ static bool ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
@@ -52,10 +52,10 @@ index 12a36695..545048f3 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
-index 496e4757..bbd19bf4 100644
+index 71829c05a..40e24b340 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
-@@ -5894,10 +5894,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const
+@@ -5906,10 +5906,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  

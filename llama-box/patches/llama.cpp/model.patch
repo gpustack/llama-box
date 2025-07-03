@@ -1,5 +1,5 @@
 diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
-index aa21108a..907cd4b8 100644
+index aa21108a4..907cd4b84 100644
 --- a/src/llama-arch.cpp
 +++ b/src/llama-arch.cpp
 @@ -17,6 +17,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
@@ -34,7 +34,7 @@ index aa21108a..907cd4b8 100644
          LLM_ARCH_BERT,
          {
 diff --git a/src/llama-arch.h b/src/llama-arch.h
-index 0771ec3e..18de556c 100644
+index 0771ec3eb..18de556c0 100644
 --- a/src/llama-arch.h
 +++ b/src/llama-arch.h
 @@ -21,6 +21,7 @@ enum llm_arch {
@@ -46,7 +46,7 @@ index 0771ec3e..18de556c 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_NOMIC_BERT_MOE,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index b15bf73c..20dea2bb 100644
+index b15bf73c2..20dea2bbc 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -741,6 +741,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {

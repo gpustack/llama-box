@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
-index 66a5ad8d..9e0e10c4 100644
+index 66a5ad8d2..6e0e55625 100644
 --- a/ggml/src/ggml-cpu/CMakeLists.txt
 +++ b/ggml/src/ggml-cpu/CMakeLists.txt
 @@ -158,47 +158,94 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
@@ -137,7 +137,7 @@ index 66a5ad8d..9e0e10c4 100644
                  # MSVC does not define macro __BMI2__
                  list(APPEND ARCH_DEFINITIONS __BMI2__ GGML_BMI2)
              endif()
-@@ -295,66 +342,184 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -295,65 +342,182 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
              if (GGML_NATIVE)
                  list(APPEND ARCH_FLAGS -march=native)
              else ()
@@ -340,7 +340,7 @@ index 66a5ad8d..9e0e10c4 100644
 -                    list(APPEND ARCH_FLAGS -mamx-bf16)
 -                    list(APPEND ARCH_DEFINITIONS GGML_AMX_BF16)
 +                    check_x86_feature("-mamx-bf16" "GGML_AMX_BF16" "${AMX_BF16_CODE}")
-                 endif()
++                endif()
 +
 +                if (DEFINED ARCH_FLAGS_STR)
 +                    string(REPLACE " " ";" ARCH_FLAGS_LIST "${ARCH_FLAGS_STR}")
@@ -349,13 +349,11 @@ index 66a5ad8d..9e0e10c4 100644
 +                if (DEFINED ARCH_DEFINITIONS_STR)
 +                    string(REPLACE " " ";" ARCH_DEFINITIONS_LIST "${ARCH_DEFINITIONS_STR}")
 +                    list(APPEND ARCH_DEFINITIONS ${ARCH_DEFINITIONS_LIST})
-+                endif()
-+
+                 endif()
              endif()
          endif()
- 
 diff --git a/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp b/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
-index 67369147..c460c549 100644
+index 67369147c..c460c5491 100644
 --- a/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
 +++ b/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
 @@ -8,6 +8,10 @@
