@@ -23,7 +23,7 @@ ls -l "${ROOT_DIR}"/llama-box/patches | grep "^d" | awk '{print $NF}' | while re
     fi
     find "${ROOT_DIR}"/llama-box/patches/"${VENDOR}" -type f -name "*.patch" | while read -r FILE; do
         info "  Syncing ${FILE}"
-        git apply "${FILE}" 1>/dev/null || fatal "Failed to apply patch ${FILE}"
+        git apply --whitespace=nowarn "${FILE}" 1>/dev/null || fatal "Failed to apply patch ${FILE}"
         git diff > "${FILE}" || fatal "Failed to update patch ${FILE}"
         git reset --hard 1>/dev/null || fatal "Failed to reset patch ${FILE}"
     done
