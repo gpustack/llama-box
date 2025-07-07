@@ -2888,7 +2888,7 @@ struct httpserver {
         if (!support_completion()) {
             // prompt cache
             cache_prompt = false;
-            SRV_INF("prompt caching %s\n", cache_prompt ? "unsupported" : "disabled");
+            SRV_INF("prompt caching %s\n", params.cache_prompt ? "unsupported" : "disabled");
 
             // context shift
             shift_context = params.llm_params.ctx_shift;
@@ -2897,8 +2897,7 @@ struct httpserver {
         }
 
         // prompt cache
-        cache_prompt =
-            llm_model_casual && params.cache_prompt && llm_kv_cache_shift && llama_get_memory(llm_ctx) != nullptr;
+        cache_prompt = params.cache_prompt && llm_kv_cache_shift && llama_get_memory(llm_ctx) != nullptr;
         if (cache_prompt) {
             cache_prompts.resize(params.llm_params.n_threads_http);
         }
@@ -4049,7 +4048,7 @@ struct httpserver {
                     }
 
                     // prepare cache - clean cache
-                    if (cache_prompt) {
+                    if (llm_kv_cache_shift && cache_prompt) {
                         llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
                             llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
@@ -4721,7 +4720,7 @@ struct httpserver {
                     task->embeds[task->embeds.size() - 1][0] = embed[0];
                 }
                 // clean kv cache
-                if (cache_prompt) {
+                if (llm_kv_cache_shift) {
                     llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                     if (llm_ctx_draft != nullptr) {
                         llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
