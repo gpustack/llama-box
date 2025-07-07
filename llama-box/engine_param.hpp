@@ -112,7 +112,7 @@ static void add_rpc_devices(const std::string & servers) {
     }
 }
 
-static std::string get_builtin_sd_sample_methods() {
+static std::string get_builtin_sd_sample_methods_string() {
     std::ostringstream msg;
     for (int m = 0; m < N_SAMPLE_METHODS; m++) {
         msg << std::string(sd_sample_method_to_argument(sample_method_t(m))) << (m == N_SAMPLE_METHODS - 1 ? "" : ", ");
@@ -120,10 +120,49 @@ static std::string get_builtin_sd_sample_methods() {
     return msg.str();
 }
 
-static std::string get_builtin_sd_schedule_method() {
+static std::string get_builtin_sd_schedule_methods_string() {
     std::ostringstream msg;
     for (int d = 0; d < N_SCHEDULES; d++) {
         msg << std::string(sd_schedule_to_argument(schedule_t(d))) << (d == N_SCHEDULES - 1 ? "" : ", ");
+    }
+    return msg.str();
+}
+
+static std::vector<enum common_sampler_type> get_default_samplers() {
+    return std::vector<enum common_sampler_type>{
+        COMMON_SAMPLER_TYPE_PENALTIES, COMMON_SAMPLER_TYPE_TOP_K, COMMON_SAMPLER_TYPE_TOP_P,
+        COMMON_SAMPLER_TYPE_MIN_P,     COMMON_SAMPLER_TYPE_XTC,   COMMON_SAMPLER_TYPE_TEMPERATURE,
+    };
+}
+
+static std::string get_default_sampler_type_names_string() {
+    std::ostringstream msg;
+    auto               samplers = get_default_samplers();
+    for (const auto & sampler : samplers) {
+        msg << common_sampler_type_to_str(sampler);
+        msg << (&sampler == &samplers.back() ? "" : ";");
+    }
+    return msg.str();
+}
+
+static std::string get_builtin_sampler_type_names_string() {
+    std::ostringstream            msg;
+    struct common_params_sampling sampling;
+    auto                          samplers = sampling.samplers;
+    for (const auto & sampler : samplers) {
+        msg << common_sampler_type_to_str(sampler);
+        msg << (&sampler == &samplers.back() ? "" : ";");
+    }
+    return msg.str();
+}
+
+static std::string get_builtin_dry_sequence_breaker_names_string() {
+    std::ostringstream            msg;
+    struct common_params_sampling sampling;
+    auto                          dry_sequence_breakers = sampling.dry_sequence_breakers;
+    for (const auto & breaker : dry_sequence_breakers) {
+        msg << (breaker == "\n" ? "\\n" : breaker);
+        msg << (&breaker == &dry_sequence_breakers.back() ? "" : ";");
     }
     return msg.str();
 }
@@ -178,21 +217,6 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     const auto & llm_params = params_.hs_params.llm_params;
     const auto & sd_params  = params_.hs_params.sd_params;
     const auto & rpc_params = params_.rs_params;
-
-    std::string default_sampler_type_chars;
-    std::string default_sampler_type_names;
-    for (const auto & sampler : llm_params.sampling.samplers) {
-        default_sampler_type_chars += common_sampler_type_to_chr(sampler);
-        default_sampler_type_names += common_sampler_type_to_str(sampler);
-        default_sampler_type_names += (&sampler == &llm_params.sampling.samplers.back() ? "" : ";");
-    }
-
-    std::string default_dry_sequence_breaker_names;
-    for (const auto & breaker : llm_params.sampling.dry_sequence_breakers) {
-        default_dry_sequence_breaker_names += breaker;
-        default_dry_sequence_breaker_names +=
-            (&breaker == &llm_params.sampling.dry_sequence_breakers.back() ? "" : ";");
-    }
 
     // clang-format off
     std::vector<opt> opts;
@@ -291,8 +315,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --keep N",                               "Number of tokens to keep from the initial prompt (default: %d)", llm_params.n_keep });
     opts.push_back({ "server/completion",                  "       --no-escape",                            "Disable process escape sequences" });
     opts.push_back({ "server/completion",                  "-e,    --escape",                               R"(Process escapes sequences (\n, \r, \t, \', \", \\) (default: %s))", llm_params.escape ? "true" : "false" });
-    opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "Samplers that will be used for generation in the order, separated by ';' (default: %s)", default_sampler_type_names.c_str() });
-    opts.push_back({ "server/completion",                  "       --sampling-seq SEQUENCE",                "Simplified sequence for samplers that will be used (default: %s)", default_sampler_type_chars.c_str() });
+    opts.push_back({ "server/completion",                  "       --samplers SAMPLERS",                    "Samplers that will be used for generation in the order, separated by ';', select from %s, (default: %s)", get_builtin_sampler_type_names_string().c_str(), get_default_sampler_type_names_string().c_str() });
     opts.push_back({ "server/completion",                  "       --temp T",                               "Temperature (default: %.1f)", (double)llm_params.sampling.temp });
     opts.push_back({ "server/completion",                  "       --top-k N",                              "Top-K sampling (default: %d, 0 = disabled)", llm_params.sampling.top_k });
     opts.push_back({ "server/completion",                  "       --top-p N",                              "Top-P sampling (default: %.1f, 1.0 = disabled)", (double) llm_params.sampling.top_p });
@@ -309,7 +332,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --dry-base N",                           "Set DRY sampling base value (default: %.2f)", (double)llm_params.sampling.dry_base });
     opts.push_back({ "server/completion",                  "       --dry-allowed-length N",                 "Set allowed length for DRY sampling (default: %d)", llm_params.sampling.dry_allowed_length });
     opts.push_back({ "server/completion",                  "       --dry-penalty-last-n N",                 "Set DRY penalty for the last n tokens (default: %d, 0 = disable, -1 = context size)", llm_params.sampling.dry_penalty_last_n });
-    opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "Add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", default_dry_sequence_breaker_names.c_str() });
+    opts.push_back({ "server/completion",                  "       --dry-sequence-breaker N",               "Add sequence breaker for DRY sampling, clearing out default breakers (%s) in the process; use \"none\" to not use any sequence breakers", get_builtin_dry_sequence_breaker_names_string().c_str() });
     opts.push_back({ "server/completion",                  "       --dynatemp-range N",                     "Dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)llm_params.sampling.dynatemp_range });
     opts.push_back({ "server/completion",                  "       --dynatemp-exp N",                       "Dynamic temperature exponent (default: %.1f)", (double)llm_params.sampling.dynatemp_exponent });
     opts.push_back({ "server/completion",                  "       --mirostat N",                           "Use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: %d, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)", llm_params.sampling.mirostat });
@@ -386,7 +409,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/images",                      "       --image-guidance N",                     "The value of guidance during the computing phase (default: %f)", sd_params.sampling.guidance });
     opts.push_back({ "server/images",                      "       --image-strength N",                     "Strength for noising, range of [0.0, 1.0], automatically retrieve the default value according to --model" });
     opts.push_back({ "server/images",                      "       --image-sample-method, --image-sampler TYPE",
-                                                                                                            "Sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sample_methods().c_str() });
+                                                                                                            "Sample method that will be used for generation, automatically retrieve the default value according to --model, allowed values: %s", get_builtin_sd_sample_methods_string().c_str() });
     opts.push_back({ "server/images",                      "       --image-sampling-steps, --image-sample-steps N",
                                                                                                             "Number of sampling steps, automatically retrieve the default value according to --model, and +2 when requesting high definition generation" });
     opts.push_back({ "server/images",                      "       --image-cfg-scale N",                    "The scale of classifier-free guidance(CFG), automatically retrieve the default value according to --model (1.0 = disabled)" });
@@ -396,7 +419,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/images",                      "       --image-slg-end N",                      "The phase to disable SLG (default: %.2f)\n"
                                                                                                             "SLG will be enabled at step int([STEP]*[--image-slg-start]) and disabled at int([STEP]*[--image-slg-end])", sd_params.sampling.slg_end });
     opts.push_back({ "server/images",                      "       --image-schedule-method, --image-schedule TYPE",
-                                                                                                            "Denoiser sigma schedule method, allowed values: %s (default: %s)", get_builtin_sd_schedule_method().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule_method) });
+                                                                                                            "Denoiser sigma schedule method, allowed values: %s (default: %s)", get_builtin_sd_schedule_methods_string().c_str(), sd_schedule_to_argument(sd_params.sampling.schedule_method) });
     opts.push_back({ "server/images",                      "       --image-no-text-encoder-model-offload",  "Disable text-encoder(clip-l/clip-g/t5xxl) model offload" });
     opts.push_back({ "server/images",                      "       --image-clip-l-model PATH",              "Path to the CLIP Large (clip-l) text encoder, or use --model included" });
     opts.push_back({ "server/images",                      "       --image-clip-g-model PATH",              "Path to the CLIP Generic (clip-g) text encoder, or use --model included" });
@@ -458,6 +481,9 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
 static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & params_) {
     // load dynamic backends
     ggml_backend_load_all();
+
+    // Preprocess params
+    params_.hs_params.llm_params.sampling.samplers = get_default_samplers();
 
     try {
         for (int i = 1; i < argc;) {
@@ -761,7 +787,7 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (i == argc) {
                     missing("--override-tensor");
                 }
-                char * arg = argv[i++];
+                char *                                                      arg = argv[i++];
                 // enumerate all the devices and add their buffer types to the list
                 std::unordered_map<std::string, ggml_backend_buffer_type_t> buffer_types;
                 for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
@@ -921,8 +947,8 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (!params_.hs_params.llm_params.use_jinja) {
                     invalid("--chat-template-file, --jinja must be set before");
                 }
-                char * arg = argv[i++];
-                auto parsed = json::parse(std::string(arg));
+                char * arg    = argv[i++];
+                auto   parsed = json::parse(std::string(arg));
                 for (const auto & item : parsed.items()) {
                     params_.hs_params.llm_params.default_template_kwargs[item.key()] = item.value().dump();
                 }
@@ -1132,15 +1158,6 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 char *     arg                                 = argv[i++];
                 const auto sampler_names                       = string_split<std::string>(arg, ';');
                 params_.hs_params.llm_params.sampling.samplers = common_sampler_types_from_names(sampler_names, true);
-                continue;
-            }
-
-            if (!strcmp(flag, "--sampling-seq")) {
-                if (i == argc) {
-                    missing("--sampling-seq");
-                }
-                char * arg                                     = argv[i++];
-                params_.hs_params.llm_params.sampling.samplers = common_sampler_types_from_chars(arg);
                 continue;
             }
 
@@ -2206,7 +2223,7 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
     }
 
     if (!params_.hs_params.llm_params.tensor_buft_overrides.empty()) {
-        params_.hs_params.llm_params.tensor_buft_overrides.push_back({nullptr, nullptr});
+        params_.hs_params.llm_params.tensor_buft_overrides.push_back({ nullptr, nullptr });
     }
 
     if (params_.hs_params.llm_params.lora_init_without_apply) {

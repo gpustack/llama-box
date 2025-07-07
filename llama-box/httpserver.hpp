@@ -3102,7 +3102,7 @@ struct httpserver {
                     break;
                 }
                 n_check_decoded++;
-                const int32_t id = common_sampler_sample(check_smpl, llm_ctx, 0);
+                const int32_t id = common_sampler_sample2(check_smpl, llm_ctx, 0);
                 if (llama_vocab_is_eog(llm_vocab, id)) {
                     break;
                 }
@@ -4203,7 +4203,7 @@ struct httpserver {
                     //// default
                     if (task->drafted_tokens.empty()) {
                         const int32_t     tok_idx = task->i_batch_seq_end;
-                        const llama_token tok     = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
+                        const llama_token tok     = common_sampler_sample2(task->sampler, llm_ctx, tok_idx);
                         common_sampler_accept(task->sampler, tok, true);
                         task->push_generated_token(llm_ctx, tok_idx, tok);
                         task->n_decoded++;
@@ -4215,7 +4215,7 @@ struct httpserver {
                         for (int32_t j = 0, s = int32_t(task->drafted_tokens.size()); j < s + 1; ++j) {
                             // greedy verification only
                             const int32_t     tok_idx = task->i_batch_seq_end - s + j;
-                            const llama_token tok     = common_sampler_sample(task->sampler, llm_ctx, tok_idx);
+                            const llama_token tok     = common_sampler_sample2(task->sampler, llm_ctx, tok_idx);
                             common_sampler_accept(task->sampler, tok, true);
                             task->push_generated_token(llm_ctx, tok_idx, tok);
                             task->n_decoded++;
@@ -4566,7 +4566,7 @@ struct httpserver {
                                 // speculative in n_max times
                                 for (int32_t j = 0; j < params.llm_params.speculative.n_max; ++j) {
                                     const llama_token tok =
-                                        common_sampler_sample(task->sampler_draft, llm_ctx_draft, 0, true);
+                                        common_sampler_sample2(task->sampler_draft, llm_ctx_draft, 0);
                                     const llama_token_data_array * cur_p =
                                         common_sampler_get_candidates(task->sampler_draft);
                                     if (cur_p->data[0].p < params.llm_params.speculative.p_min) {

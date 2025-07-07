@@ -466,8 +466,7 @@ server/completion:
          --keep N                 Number of tokens to keep from the initial prompt (default: 0)
          --no-escape              Disable process escape sequences
   -e,    --escape                 Process escapes sequences (\n, \r, \t, \', \", \\) (default: true)
-         --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';' (default: penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature)
-         --sampling-seq SEQUENCE  Simplified sequence for samplers that will be used (default: edskypmxt)
+         --samplers SAMPLERS      Samplers that will be used for generation in the order, separated by ';', select from penalties;dry;top_n_sigma;top_k;typ_p;top_p;min_p;xtc;temperature, (default: penalties;top_k;top_p;min_p;xtc;temperature)
          --temp T                 Temperature (default: 0.8)
          --top-k N                Top-K sampling (default: 40, 0 = disabled)
          --top-p N                Top-P sampling (default: 0.9, 1.0 = disabled)
@@ -485,8 +484,7 @@ server/completion:
          --dry-allowed-length N   Set allowed length for DRY sampling (default: 2)
          --dry-penalty-last-n N   Set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
          --dry-sequence-breaker N 
-                                  Add sequence breaker for DRY sampling, clearing out default breakers (
-                                  ;:;";*) in the process; use "none" to not use any sequence breakers
+                                  Add sequence breaker for DRY sampling, clearing out default breakers (\n;:;";*) in the process; use "none" to not use any sequence breakers
          --dynatemp-range N       Dynamic temperature range (default: 0.0, 0.0 = disabled)
          --dynatemp-exp N         Dynamic temperature exponent (default: 1.0)
          --mirostat N             Use Mirostat sampling, Top K, Nucleus, Tail Free and Locally Typical samplers are ignored if used (default: 0, 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0)
