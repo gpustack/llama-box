@@ -2732,6 +2732,54 @@ struct httpserver {
             }
         }
 
+        // load multimodal projection model if needed.
+        if (!params.llm_params.mmproj.path.empty()) {
+            SRV_INF("loading multimodal projection model '%s'\n", params.llm_params.mmproj.path.c_str());
+
+            if (params.llm_params.n_ctx < 2048) {
+                SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
+                params.llm_params.n_ctx = 2048;
+            }
+            // NB(thxCode): clip_context_params is a patch.
+            clip_context_params llm_params_clip{
+                /* use_gpu */ params.llm_params.n_gpu_layers != 0,
+                /* verbosity */ common_log_verbosity_thold > 3 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_INFO,
+                /* max_image_size */ params.max_image_size,
+            };
+            llm_init_clip = clip_init(params.llm_params.mmproj.path.c_str(), llm_params_clip);
+            if (llm_init_clip.ctx_a == nullptr && llm_init_clip.ctx_v == nullptr) {
+                SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
+                return false;
+            }
+            llm_ctx_clip_v = llm_init_clip.ctx_v;
+            llm_ctx_clip_a = llm_init_clip.ctx_a;
+        }
+
+        // load the draft model if needed.
+        if (!params.llm_params.speculative.model.path.empty() && params.llm_params.speculative.n_max > 0) {
+            SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.path.c_str());
+
+            common_params llm_params_draft   = params.llm_params;
+            llm_params_draft.n_parallel      = params.llm_params.n_threads_http;
+            llm_params_draft.embedding       = false;
+            llm_params_draft.model           = params.llm_params.speculative.model;
+            llm_params_draft.n_gpu_layers    = params.llm_params.speculative.n_gpu_layers;
+            llm_params_draft.cpuparams       = params.llm_params.speculative.cpuparams;
+            llm_params_draft.cpuparams_batch = params.llm_params.speculative.cpuparams_batch;
+            llm_params_draft.cache_type_k    = GGML_TYPE_F16;
+            llm_params_draft.cache_type_v    = GGML_TYPE_F16;
+            llm_params_draft.warmup          = false;
+            llm_init_draft                   = common_init_from_params(llm_params_draft);
+            llm_model_draft                  = llm_init_draft.model.get();
+            llm_ctx_draft                    = llm_init_draft.context.get();
+            if (llm_model_draft == nullptr) {
+                SRV_ERR("failed to load draft model, '%s'\n", params.llm_params.speculative.model.path.c_str());
+                return false;
+            }
+            llm_vocab_draft  = llama_model_get_vocab(llm_model_draft);
+            batch_text_draft = llama_batch_init(int32_t(llama_n_ctx(llm_ctx_draft)), 0, 1);
+        }
+
         common_params llm_params = params.llm_params;
         llm_params.n_parallel    = params.llm_params.n_threads_http;
         llm_init                 = common_init_from_params(llm_params);
@@ -2755,29 +2803,8 @@ struct httpserver {
         batch_text           = llama_batch_init(llm_ctx_size, 0, 1);
         batch_text_temp      = llama_batch_init(llm_ctx_size, 0, 1);
 
-        // load multimodal projection model
-        if (!params.llm_params.mmproj.path.empty()) {
-            SRV_INF("loading multimodal projection model '%s'\n", params.llm_params.mmproj.path.c_str());
-
-            if (params.llm_params.n_ctx < 2048) {
-                SRV_WRN("%s", "n_ctx is too small for multimodal projection, setting to 2048\n");
-                params.llm_params.n_ctx = 2048;
-            }
-            // NB(thxCode): clip_context_params is a patch.
-            clip_context_params llm_params_clip{
-                /* use_gpu */ params.llm_params.n_gpu_layers != 0,
-                /* verbosity */ common_log_verbosity_thold > 3 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_INFO,
-                /* max_image_size */ params.max_image_size,
-            };
-            llm_init_clip = clip_init(params.llm_params.mmproj.path.c_str(), llm_params_clip);
-            if (llm_init_clip.ctx_a == nullptr && llm_init_clip.ctx_v == nullptr) {
-                SRV_ERR("failed to load multimodal project model, '%s'\n", params.llm_params.mmproj.path.c_str());
-                return false;
-            }
-            llm_ctx_clip_v = llm_init_clip.ctx_v;
-            llm_ctx_clip_a = llm_init_clip.ctx_a;
-
-            // check multimodal projection model compatibility
+        // check multimodal projection model compatibility if needed
+        if (llm_ctx_clip_v != nullptr || llm_ctx_clip_a != nullptr) {
             bool discard = false;
             if (llm_ctx_clip_v != nullptr) {
                 const int32_t n_embd_clip = clip_n_mmproj_embd(llm_ctx_clip_v);
@@ -2815,31 +2842,8 @@ struct httpserver {
             }
         }
 
-        // load the draft model if needed
-        if (!params.llm_params.speculative.model.path.empty() && params.llm_params.speculative.n_max > 0) {
-            SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.path.c_str());
-
-            common_params llm_params_draft   = params.llm_params;
-            llm_params_draft.n_parallel      = params.llm_params.n_threads_http;
-            llm_params_draft.embedding       = false;
-            llm_params_draft.model           = params.llm_params.speculative.model;
-            llm_params_draft.n_gpu_layers    = params.llm_params.speculative.n_gpu_layers;
-            llm_params_draft.cpuparams       = params.llm_params.speculative.cpuparams;
-            llm_params_draft.cpuparams_batch = params.llm_params.speculative.cpuparams_batch;
-            llm_params_draft.cache_type_k    = GGML_TYPE_F16;
-            llm_params_draft.cache_type_v    = GGML_TYPE_F16;
-            llm_params_draft.warmup          = false;
-            llm_init_draft                   = common_init_from_params(llm_params_draft);
-            llm_model_draft                  = llm_init_draft.model.get();
-            llm_ctx_draft                    = llm_init_draft.context.get();
-            if (llm_model_draft == nullptr) {
-                SRV_ERR("failed to load draft model, '%s'\n", params.llm_params.speculative.model.path.c_str());
-                return false;
-            }
-            llm_vocab_draft  = llama_model_get_vocab(llm_model_draft);
-            batch_text_draft = llama_batch_init(int32_t(llama_n_ctx(llm_ctx_draft)), 0, 1);
-
-            // check draft model compatibility if needed
+        // check draft model compatibility if needed
+        if (llm_model_draft != nullptr) {
             const bool vocab_type_draft = llama_vocab_type(llm_vocab_draft);
             const bool vocab_type       = llama_vocab_type(llm_vocab);
             if (vocab_type_draft != vocab_type) {
