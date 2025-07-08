@@ -379,10 +379,14 @@ static ggml_backend_t rpcserver_create_backend(rpcserver_params & params) {
         backend = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
         SRV_INF("%s", "using CPU backend\n");
     } else {
-        auto * dev = ggml_backend_dev_get(gpu);
-        if (dev) {
-            backend = ggml_backend_dev_init(dev, nullptr);
-            SRV_INF("using GPU backend: %s\n", ggml_backend_dev_name(dev));
+        while(true) {
+            ggml_backend_device * dev = ggml_backend_dev_get(gpu);
+            if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+                backend = ggml_backend_dev_init(dev, nullptr);
+                SRV_INF("using GPU backend: %s\n", ggml_backend_dev_name(dev));
+                break;
+            }
+            gpu++;
         }
         if (!backend) {
             SRV_INF("%s", "failed to create GPU backend, fallback using CPU backend\n");
