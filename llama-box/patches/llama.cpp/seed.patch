@@ -1,0 +1,155 @@
+diff --git a/src/llama-sampling.cpp b/src/llama-sampling.cpp
+index bfbf5fa23..9f8144b23 100644
+--- a/src/llama-sampling.cpp
++++ b/src/llama-sampling.cpp
+@@ -17,6 +17,53 @@
+ #include <unordered_map>
+ #include <stdexcept>
+ 
++class Xoshiro256{
++  public:
++    using result_type = uint64_t;
++
++    Xoshiro256(uint64_t s) {
++        seed(s);
++    }
++
++    void seed(uint64_t s) {
++        state[0] = splitmix64(s);
++        state[1] = splitmix64(s);
++        state[2] = splitmix64(s);
++        state[3] = splitmix64(s);
++    }
++
++    result_type operator()() {
++        const result_type result = rotl(state[1] * 5, 7) * 9;
++        const result_type t = state[1] << 17;
++
++        state[2] ^= state[0];
++        state[3] ^= state[1];
++        state[1] ^= state[2];
++        state[0] ^= state[3];
++
++        state[2] ^= t;
++        state[3] = rotl(state[3], 45);
++
++        return result;
++    }
++
++    static constexpr result_type min() { return 0; }
++    static constexpr result_type max() { return UINT64_MAX; }
++
++  private:
++    result_type state[4];
++
++    static result_type splitmix64(uint64_t& x) {
++        uint64_t z = ( x += 0x9E3779B97F4A7C15ULL );
++        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
++        z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
++        return z ^ (z >> 31);
++    }
++    static result_type rotl(result_type x, int k) {
++        return (x << k) | (x >> (64 - k));
++    }
++};
++
+ // the ring buffer works similarly to std::deque, but with a fixed capacity
+ template<typename T>
+ struct ring_buffer {
+@@ -128,7 +175,7 @@ struct ring_buffer {
+     std::vector<T> data;
+ };
+ 
+-static int llama_sample_dist(llama_token_data_array * cur_p, std::mt19937 & rng) {
++static int llama_sample_dist(llama_token_data_array * cur_p, Xoshiro256 & rng) {
+     // iterator for the probabilities
+ #ifdef __GNUC__
+     #pragma GCC diagnostic push
+@@ -304,13 +351,8 @@ static void llama_sampler_top_k_impl(llama_token_data_array * cur_p, int32_t k)
+ 
+ static uint32_t get_rng_seed(uint32_t seed) {
+     if (seed == LLAMA_DEFAULT_SEED) {
+-        // use system clock if std::random_device is not a true RNG
+-        static bool is_rd_prng = std::random_device().entropy() == 0;
+-        if (is_rd_prng) {
+-            return (uint32_t) std::chrono::system_clock::now().time_since_epoch().count();
+-        }
+-        std::random_device rd;
+-        return rd();
++        static thread_local Xoshiro256 rng((uint32_t) std::chrono::system_clock::now().time_since_epoch().count());
++        return (uint32_t) rng();
+     }
+     return seed;
+ }
+@@ -566,7 +608,7 @@ struct llama_sampler_dist {
+     const uint32_t seed;
+           uint32_t seed_cur;
+ 
+-    std::mt19937 rng;
++    Xoshiro256 rng;
+ };
+ 
+ static const char * llama_sampler_dist_name(const struct llama_sampler * /*smpl*/) {
+@@ -621,7 +663,7 @@ struct llama_sampler * llama_sampler_init_dist(uint32_t seed) {
+         /* .ctx   = */ new llama_sampler_dist {
+             /* .seed     = */ seed,
+             /* .seed_cur = */ seed_cur,
+-            /* .rng      = */ std::mt19937(seed_cur),
++            /* .rng      = */ Xoshiro256(seed_cur),
+         }
+     );
+ }
+@@ -1121,7 +1163,7 @@ struct llama_sampler_xtc {
+     const uint32_t seed;
+     uint32_t       seed_cur;
+ 
+-    std::mt19937   rng;
++    Xoshiro256   rng;
+ };
+ 
+ static const char * llama_sampler_xtc_name(const struct llama_sampler * /*smpl*/) {
+@@ -1201,7 +1243,7 @@ struct llama_sampler * llama_sampler_init_xtc(float p, float t, size_t min_keep,
+             /* .min_keep      = */ min_keep,
+             /* .seed          = */ seed,
+             /* .seed_cur      = */ seed_cur,
+-            /* .rng           = */ std::mt19937(seed_cur),
++            /* .rng           = */ Xoshiro256(seed_cur),
+         }
+     );
+ }
+@@ -1221,7 +1263,7 @@ struct llama_sampler_mirostat {
+ 
+     float mu;
+ 
+-    std::mt19937 rng;
++    Xoshiro256 rng;
+ };
+ 
+ static const char * llama_sampler_mirostat_name(const struct llama_sampler * /*smpl*/) {
+@@ -1310,7 +1352,7 @@ struct llama_sampler * llama_sampler_init_mirostat(int32_t n_vocab, uint32_t see
+             /* .eta      = */ eta,
+             /* .m        = */ m,
+             /* .mu       = */ 2.0f*tau,
+-            /* .rng      = */ std::mt19937(seed_cur),
++            /* .rng      = */ Xoshiro256(seed_cur),
+         }
+     );
+ }
+@@ -1326,7 +1368,7 @@ struct llama_sampler_mirostat_v2 {
+ 
+     float mu;
+ 
+-    std::mt19937 rng;
++    Xoshiro256 rng;
+ };
+ 
+ static const char * llama_sampler_mirostat_v2_name(const struct llama_sampler * /*smpl*/) {
+@@ -1407,7 +1449,7 @@ struct llama_sampler * llama_sampler_init_mirostat_v2(uint32_t seed, float tau,
+             /* .tau      = */ tau,
+             /* .eta      = */ eta,
+             /* .mu       = */ 2.0f*tau,
+-            /* .rng      = */ std::mt19937(seed_cur),
++            /* .rng      = */ Xoshiro256(seed_cur),
+         }
+     );
+ }
