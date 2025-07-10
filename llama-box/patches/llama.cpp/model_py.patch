@@ -1,5 +1,5 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 702827f4d..606ba38f2 100755
+index 2419126ec..2fbac578b 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
 @@ -4193,6 +4193,123 @@ class XLMRobertaModel(BertModel):
@@ -127,7 +127,7 @@ index 702827f4d..606ba38f2 100755
  class GemmaModel(TextModel):
      model_arch = gguf.MODEL_ARCH.GEMMA
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 93eec4355..0fbc848c6 100644
+index fbe3f5327..6f499503b 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
 @@ -297,6 +297,7 @@ class MODEL_ARCH(IntEnum):
@@ -138,7 +138,7 @@ index 93eec4355..0fbc848c6 100644
      BERT             = auto()
      NOMIC_BERT       = auto()
      NOMIC_BERT_MOE   = auto()
-@@ -602,6 +603,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -606,6 +607,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.MPT:              "mpt",
      MODEL_ARCH.STARCODER:        "starcoder",
      MODEL_ARCH.REFACT:           "refact",
@@ -146,7 +146,7 @@ index 93eec4355..0fbc848c6 100644
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
      MODEL_ARCH.NOMIC_BERT_MOE:   "nomic-bert-moe",
-@@ -1089,6 +1091,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -1097,6 +1099,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
      ],
@@ -168,7 +168,7 @@ index 93eec4355..0fbc848c6 100644
          MODEL_TENSOR.TOKEN_EMBD,
          MODEL_TENSOR.TOKEN_EMBD_NORM,
 diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index 6bddbec23..ca9f8ac8c 100644
+index 215eb297e..40a1cf2bd 100644
 --- a/gguf-py/gguf/tensor_mapping.py
 +++ b/gguf-py/gguf/tensor_mapping.py
 @@ -158,6 +158,7 @@ class TensorNameMap:
@@ -195,7 +195,7 @@ index 6bddbec23..ca9f8ac8c 100644
              "encoder.layer.{bid}.attention.output.LayerNorm",  # bert
              "transformer.layer.{bid}.sa_layer_norm",           # distillbert
              "encoder.layers.{bid}.norm1",                      # nomic-bert
-@@ -325,6 +328,7 @@ class TensorNameMap:
+@@ -327,6 +330,7 @@ class TensorNameMap:
              "h.{bid}.mlp.dense_h_to_4h",                              # bloom
              "model.layers.{bid}.mlp.up_proj",                         # llama-hf refact nemotron olmo2
              "layers.{bid}.feed_forward.w3",                           # llama-pth
@@ -203,7 +203,7 @@ index 6bddbec23..ca9f8ac8c 100644
              "encoder.layer.{bid}.intermediate.dense",                 # bert
              "transformer.layer.{bid}.ffn.lin1",                       # distillbert
              "transformer.h.{bid}.mlp.fc_in",                          # gpt-j
-@@ -415,6 +419,7 @@ class TensorNameMap:
+@@ -417,6 +421,7 @@ class TensorNameMap:
              "h.{bid}.mlp.dense_4h_to_h",                              # bloom
              "model.layers.{bid}.mlp.down_proj",                       # llama-hf nemotron olmo2
              "layers.{bid}.feed_forward.w2",                           # llama-pth
@@ -211,7 +211,7 @@ index 6bddbec23..ca9f8ac8c 100644
              "encoder.layer.{bid}.output.dense",                       # bert
              "transformer.layer.{bid}.ffn.lin2",                       # distillbert
              "transformer.h.{bid}.mlp.fc_out",                         # gpt-j
-@@ -481,6 +486,7 @@ class TensorNameMap:
+@@ -483,6 +488,7 @@ class TensorNameMap:
          ),
  
          MODEL_TENSOR.LAYER_OUT_NORM: (

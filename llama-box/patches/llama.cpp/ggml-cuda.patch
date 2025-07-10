@@ -1,25 +1,24 @@
 diff --git a/ggml/src/ggml-cuda/scale.cu b/ggml/src/ggml-cuda/scale.cu
-index 1405e066e..7956d6bb9 100644
+index 2ee9e5889..1b45a468b 100644
 --- a/ggml/src/ggml-cuda/scale.cu
 +++ b/ggml/src/ggml-cuda/scale.cu
 @@ -1,7 +1,7 @@
  #include "scale.cuh"
  
--static __global__ void scale_f32(const float * x, float * dst, const float scale, const int k) {
+ static __global__ void scale_f32(const float * x, float * dst, const float scale, const float bias, const int k) {
 -    const int i = blockDim.x*blockIdx.x + threadIdx.x;
-+static __global__ void scale_f32(const float * x, float * dst, const float scale, const int64_t k) {
 +    const int64_t i = blockDim.x*blockIdx.x + threadIdx.x;
  
      if (i >= k) {
          return;
 @@ -10,8 +10,8 @@ static __global__ void scale_f32(const float * x, float * dst, const float scale
-     dst[i] = scale * x[i];
+     dst[i] = scale * x[i] + bias;
  }
  
--static void scale_f32_cuda(const float * x, float * dst, const float scale, const int k, cudaStream_t stream) {
+-static void scale_f32_cuda(const float * x, float * dst, const float scale, const float bias, const int k, cudaStream_t stream) {
 -    const int num_blocks = (k + CUDA_SCALE_BLOCK_SIZE - 1) / CUDA_SCALE_BLOCK_SIZE;
-+static void scale_f32_cuda(const float * x, float * dst, const float scale, const int64_t k, cudaStream_t stream) {
++static void scale_f32_cuda(const float * x, float * dst, const float scale, const float bias, const int64_t k, cudaStream_t stream) {
 +    const int64_t num_blocks = (k + CUDA_SCALE_BLOCK_SIZE - 1) / CUDA_SCALE_BLOCK_SIZE;
-     scale_f32<<<num_blocks, CUDA_SCALE_BLOCK_SIZE, 0, stream>>>(x, dst, scale, k);
+     scale_f32<<<num_blocks, CUDA_SCALE_BLOCK_SIZE, 0, stream>>>(x, dst, scale, bias, k);
  }
  

@@ -1,8 +1,8 @@
 diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
-index 7f0e8c67f..55d0b7096 100644
+index a248a7ec2..2c816ac22 100644
 --- a/src/llama-graph.cpp
 +++ b/src/llama-graph.cpp
-@@ -565,20 +565,28 @@ ggml_tensor * llm_graph_context::build_ffn(
+@@ -544,20 +544,28 @@ ggml_tensor * llm_graph_context::build_ffn(
  
      switch (type_op) {
          case LLM_FFN_SILU:
@@ -31,7 +31,7 @@ index 7f0e8c67f..55d0b7096 100644
                  cur = ggml_gelu(ctx0, cur);
                  cb(cur, "ffn_gelu", il);
                  if (act_scales != NULL) {
-@@ -587,11 +595,15 @@ ggml_tensor * llm_graph_context::build_ffn(
+@@ -566,11 +574,15 @@ ggml_tensor * llm_graph_context::build_ffn(
                  }
              } break;
          case LLM_FFN_RELU:
@@ -47,7 +47,7 @@ index 7f0e8c67f..55d0b7096 100644
                  cur = ggml_relu(ctx0, cur);
                  cb(cur, "ffn_relu", il);
              } break;
-@@ -747,18 +759,26 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
+@@ -726,18 +738,26 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
  
      switch (type_op) {
          case LLM_FFN_SILU:
@@ -74,7 +74,7 @@ index 7f0e8c67f..55d0b7096 100644
                  cur = ggml_gelu(ctx0, cur);
                  cb(cur, "ffn_moe_gelu", il);
              } break;
-@@ -766,6 +786,13 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
+@@ -745,6 +765,13 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
              GGML_ABORT("fatal error");
      }
  
