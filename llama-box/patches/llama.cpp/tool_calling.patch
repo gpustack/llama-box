@@ -156,10 +156,10 @@ index ca807c145..ed4323dec 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 3eda9bc68..c7af48717 100644
+index dc86aea41..35d8b4996 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -407,6 +407,11 @@ extern "C" {
+@@ -408,6 +408,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -171,7 +171,7 @@ index 3eda9bc68..c7af48717 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -508,6 +513,7 @@ extern "C" {
+@@ -509,6 +514,7 @@ extern "C" {
      LLAMA_API const struct llama_vocab * llama_model_get_vocab(const struct llama_model * model);
      LLAMA_API enum llama_rope_type       llama_model_rope_type(const struct llama_model * model);
  
@@ -179,7 +179,7 @@ index 3eda9bc68..c7af48717 100644
      LLAMA_API int32_t llama_model_n_ctx_train(const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_embd     (const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_layer    (const struct llama_model * model);
-@@ -1136,6 +1142,37 @@ extern "C" {
+@@ -1137,6 +1143,37 @@ extern "C" {
      // Chat templates
      //
  
@@ -218,10 +218,10 @@ index 3eda9bc68..c7af48717 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 5d317f4ee..12166c512 100644
+index cbc19d3c4..419263172 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
-@@ -189,6 +189,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -192,6 +192,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
  
@@ -829,7 +829,7 @@ index 5d317f4ee..12166c512 100644
  // This function uses heuristic checks to determine commonly used template. It is not a jinja parser.
  int32_t llm_chat_apply_template(
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index 38800010a..a4bb355ad 100644
+index b621fda28..07ed9daf3 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -3,6 +3,7 @@
@@ -840,7 +840,7 @@ index 38800010a..a4bb355ad 100644
  
  enum llm_chat_template {
      LLM_CHAT_TEMPLATE_CHATML,
-@@ -49,10 +50,19 @@ enum llm_chat_template {
+@@ -50,10 +51,19 @@ enum llm_chat_template {
  
  struct llama_chat_message;
  
@@ -861,10 +861,10 @@ index 38800010a..a4bb355ad 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 29ded0aff..dac16a7e6 100644
+index 4468c837f..a1188090a 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -15076,6 +15076,10 @@ void llama_model_free(llama_model * model) {
+@@ -15845,6 +15845,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  
