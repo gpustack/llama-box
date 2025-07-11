@@ -24,7 +24,7 @@ index dc86aea41..38e22a3fb 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 6aa1d901c..ca9fd0ea9 100644
+index 10823b183..6af3e6efe 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1471,7 +1471,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
@@ -46,7 +46,7 @@ index 6aa1d901c..ca9fd0ea9 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3209,6 +3210,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3211,6 +3212,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  
