@@ -60,10 +60,6 @@ int main(int argc, char ** argv) {
         return 1;
     }
 
-    // tell backends zero-offloading or not
-    // NB(thxCode): ggml_backend_register_metadata_set is a patch.
-    ggml_backend_register_metadata_set(params.hs_params.llm_params.n_gpu_layers);
-
     // print arguments
     {
         LOG_INF("\n");

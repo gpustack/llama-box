@@ -479,8 +479,30 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
 }
 
 static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & params_) {
-    // load dynamic backends
+    // Tell backends zero-offloading or not
+    for (int i = 1; i < argc;) {
+        const char * flag = argv[i++];
+        if (*flag != '-') {
+            continue;
+        }
+        if (!strcmp(flag, "-ngl") || !strcmp(flag, "--gpu-layers") || !strcmp(flag, "--n-gpu-layers")) {
+            if (i == argc) {
+                continue;
+            }
+            char * arg = argv[i++];
+            try {
+                int ngl = std::stoi(arg);
+                // NB(thxCode): ggml_backend_register_metadata_set is a patch.
+                ggml_backend_register_metadata_set(ngl);
+            } catch (const std::exception & e) {
+            }
+        }
+    }
+
+#ifdef GGML_BACKEND_DL
+    // Load dynamic backends
     ggml_backend_load_all();
+#endif
 
     // Preprocess params
     params_.hs_params.llm_params.sampling.samplers = get_default_samplers();
