@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 83a073980..16dae27f2 100644
+index 44ddc69d0..6fed9a590 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -1601,6 +1601,7 @@ static bool ggml_backend_metal_buffer_rset_init(
+@@ -1613,6 +1613,7 @@ static bool ggml_backend_metal_buffer_rset_init(
  
          [ctx->rset commit];
          [ctx->rset requestResidency];
@@ -10,7 +10,7 @@ index 83a073980..16dae27f2 100644
  
          return true;
      }
-@@ -1617,8 +1618,10 @@ static void ggml_backend_metal_buffer_rset_free(struct ggml_backend_metal_buffer
+@@ -1629,8 +1630,10 @@ static void ggml_backend_metal_buffer_rset_free(struct ggml_backend_metal_buffer
  #if defined(GGML_METAL_HAS_RESIDENCY_SETS)
      if (@available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
          if (ctx->rset) {
@@ -21,7 +21,7 @@ index 83a073980..16dae27f2 100644
              [ctx->rset release];
          }
      }
-@@ -1912,10 +1915,10 @@ static bool ggml_metal_encode_node(
+@@ -1930,10 +1933,10 @@ static bool ggml_metal_encode_node(
              } break;
      }
  
@@ -36,7 +36,7 @@ index 83a073980..16dae27f2 100644
  
      ggml_metal_mem_pool_clear(mem_pool);
  
-@@ -3021,7 +3024,21 @@ static bool ggml_metal_encode_node(
+@@ -3111,7 +3114,21 @@ static bool ggml_metal_encode_node(
  
                  // find the break-even point where the matrix-matrix kernel becomes more efficient compared
                  // to the matrix-vector kernel
@@ -59,7 +59,7 @@ index 83a073980..16dae27f2 100644
  
                  // first try to use small-batch mat-mv kernels
                  // these should be efficient for BS [2, ~8]
-@@ -3030,13 +3047,8 @@ static bool ggml_metal_encode_node(
+@@ -3120,13 +3137,8 @@ static bool ggml_metal_encode_node(
                       (
                        (
                         src0t == GGML_TYPE_F16  || // TODO: helper function
@@ -74,7 +74,7 @@ index 83a073980..16dae27f2 100644
                       ) ||
                       (
                        (
-@@ -3055,7 +3067,7 @@ static bool ggml_metal_encode_node(
+@@ -3145,7 +3157,7 @@ static bool ggml_metal_encode_node(
                      //       my current hypothesis is that the work grid is not evenly divisible for different nsg
                      //       values and there can be some tail effects when nsg is high. need to confirm this
                      //
@@ -83,7 +83,7 @@ index 83a073980..16dae27f2 100644
                      const int nxpsg  = ne11 < 3 ? 16 : 8; // num threads along row per simdgroup
                      const int nypsg  = 32/nxpsg;          // num threads along col per simdgroup (i.e. a simdgroup processes that many src0 rows at a time)
                      const int r0ptg  = nypsg*nsg;         // num src0 rows per threadgroup
-@@ -4014,7 +4026,7 @@ static bool ggml_metal_encode_node(
+@@ -4104,7 +4116,7 @@ static bool ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {
