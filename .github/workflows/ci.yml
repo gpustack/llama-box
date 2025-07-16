@@ -45,7 +45,7 @@ concurrency:
 # see https://github.com/ggerganov/llama.cpp/issues/7743#issuecomment-2148342691,
 #     https://github.com/ggerganov/llama.cpp/issues/7719#issuecomment-2147631216.
 jobs:
-  
+
   darwin:
     strategy:
       fail-fast: false
@@ -77,7 +77,7 @@ jobs:
             -DGGML_OPENMP=off \
             -DGGML_RPC=on
           cmake --build ${{ github.workspace }}/build --target llama-box --config Release -- -j $(sysctl -n hw.physicalcpu)
-          
+
           echo "===== RESULT ====="
           ls -alh ${{ github.workspace }}/build/bin/
           if [ -f ${{ github.workspace }}/build/bin/llama-box ]; then
@@ -86,7 +86,7 @@ jobs:
           else
             exit 1
           fi
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/llama-box-darwin-${{ matrix.arch }}-${{ matrix.instruction }}.zip ${{ github.workspace }}/build/bin/llama-box
@@ -143,7 +143,7 @@ jobs:
           else
             exit 1
           fi
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/dl-llama-box-darwin-${{ matrix.arch }}-cpu.zip ${{ github.workspace }}/dl-build/bin/*
@@ -200,7 +200,7 @@ jobs:
           else
             exit 1
           fi
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/dl-llama-box-darwin-${{ matrix.arch }}-metal.zip ${{ github.workspace }}/dl-build/bin/*
@@ -615,11 +615,11 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/mthreads/musa/tags?page_size=&ordering=&name=ubuntu22.04.
-        #     rc4.0 ==> rc4.0.1, Ubuntu 22.04.
+        #     4.2 ==> 4.2.0, Ubuntu 22.04.
         include:
           - arch: 'amd64'
-            version: 'rc4.0'
-            distro_container_image: 'gpustack/devel-mthreads-musa:rc4.0.1-ubuntu22.04-v2'
+            version: '4.2'
+            distro_container_image: 'gpustack/devel-mthreads-musa:4.2.0-ubuntu22.04-v2'
             musa_arch: '21;22;31'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
@@ -1203,7 +1203,7 @@ jobs:
           EOF
           chmod +x /tmp/entrypoint.sh
           cat /tmp/entrypoint.sh
-          
+
           docker run \
             --rm \
             --privileged \
@@ -1217,7 +1217,7 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-cann-${{ matrix.version }}${{ contains(matrix.distro_container_image, '310p') && '-310p' || '' }}.zip ${{ github.workspace }}/dl-build/bin/*
@@ -1373,7 +1373,7 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
@@ -1525,7 +1525,7 @@ jobs:
             --volume /tmp/entrypoint.sh:/entrypoint.sh \
             --entrypoint /entrypoint.sh \
             ${{ matrix.distro_container_image }}
-          
+
           echo "===== PACKAGE ====="
           mkdir -p ${{ github.workspace }}/out
           zip -j ${{ github.workspace }}/out/dl-llama-box-linux-${{ matrix.arch }}-vulkan-${{ matrix.version }}.zip ${{ github.workspace }}/dl-build/bin/*
@@ -1632,7 +1632,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
@@ -1642,7 +1642,7 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
-          
+
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build
         env:
@@ -1651,7 +1651,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\build -DCMAKE_BUILD_TYPE=Release `
@@ -1672,7 +1672,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-${{ matrix.instruction }}.zip"
@@ -1716,7 +1716,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
@@ -1726,7 +1726,7 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
-          
+
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build DL
         env:
@@ -1752,7 +1752,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cpu.zip"
@@ -1807,27 +1807,27 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] download NVIDIA CUDA SDK"
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\.toolbox" -ErrorAction Ignore | Out-Null
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ github.workspace }}\.toolbox\installer.exe" `
             --url "${{ matrix.distro_binary_installer }}"
-          
+
           # https://docs.nvidia.com/cuda/archive/12.4.0/cuda-installation-guide-microsoft-windows/index.html
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install NVIDIA CUDA SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-s','cudart_${{ matrix.version }}','nvcc_${{ matrix.version }}','cublas_${{ matrix.version }}','cublas_dev_${{ matrix.version }}','thrust_${{ matrix.version }}'
-          
+
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify NVIDIA CUDA SDK"
           & 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' --version
-          
+
           $cudaPath = "$(Resolve-Path -Path 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin\nvcc.exe' | Split-Path | Split-Path)"
-          $cudaVersion=($cudaPath | Split-Path -Leaf ) -replace 'v(\d+).(\d+)', '$1_$2' 
+          $cudaVersion=($cudaPath | Split-Path -Leaf ) -replace 'v(\d+).(\d+)', '$1_$2'
           "CUDA_PATH=${cudaPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CUDA_PATH_V${cudaVersion}=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CUDA_PATH_VX_Y=CUDA_PATH_V${cudaVersion}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
+
           if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
@@ -1837,7 +1837,7 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
-          
+
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build DL
         env:
@@ -1847,9 +1847,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "CUDA_PATH=${env:CUDA_PATH}"
-          
+
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
@@ -1870,7 +1870,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
@@ -1903,7 +1903,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-cuda-${{ matrix.version }}.zip"
@@ -1964,20 +1964,20 @@ jobs:
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ github.workspace }}\.toolbox\installer.exe" `
             --url "${{ matrix.distro_binary_installer }}"
-          
+
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install AMD ROCm HIP SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-install'
 
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] verify AMD ROCm HIP SDK"
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
-          
+
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] clone AMD ROCm rocWMMA source"
           git clone https://github.com/rocm/rocwmma --branch rocm-6.2.4 --depth 1
 
           $hipPath = "$(Resolve-Path -Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Split-Path | Split-Path)"
           "HIP_PATH=${hipPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
+
           if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
@@ -1987,7 +1987,7 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
-          
+
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build DL
         env:
@@ -1997,9 +1997,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "HIP_PATH=${env:HIP_PATH}"
-          
+
           Write-Host "===== BUILD ====="
           $env:CMAKE_PREFIX_PATH = "${env:HIP_PATH}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
@@ -2024,7 +2024,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
@@ -2061,7 +2061,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-hip-${{ matrix.version }}.zip"
@@ -2114,7 +2114,7 @@ jobs:
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ github.workspace }}\.toolbox\installer.exe" `
             --url "${{ matrix.distro_binary_installer }}"
-          
+
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install Intel oneAPI SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '-s','--action=install','--components=intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel:intel.oneapi.win.dnnl:intel.oneapi.win.tbb.devel','--eula=accept','-p=NEED_VS2017_INTEGRATION=0','-p=NEED_VS2019_INTEGRATION=0','-p=NEED_VS2022_INTEGRATION=0'
@@ -2126,11 +2126,11 @@ jobs:
           "ONEAPI_PATH=${oneapiPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
           $oneapiRoot = "$(Split-Path -Path $oneapiPath)"
           "ONEAPI_ROOT=${oneapiRoot}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          
+
           cmd /c "call `"${oneapiRoot}\setvars.bat`" && set" | ForEach-Object { `
             if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
           }
-          
+
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build DL
         env:
@@ -2139,10 +2139,10 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "ONEAPI_PATH=${env:ONEAPI_PATH}"
           Write-Host "ONEAPI_ROOT=${env:ONEAPI_ROOT}"
-          
+
           Write-Host "===== BUILD ====="
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore
           cmake -G "Ninja" -S ${{ github.workspace }} -B ${{ github.workspace }}\dl-build -DCMAKE_BUILD_TYPE=Release `
@@ -2167,7 +2167,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\dl-build\bin\*" -DestinationPath "${{ github.workspace }}\out\dl-llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
@@ -2202,7 +2202,7 @@ jobs:
             exit 1
           }
           sccache -s
-          
+
           Write-Host "===== PACKAGE ====="
           New-Item -Force -ItemType Directory -Path "${{ github.workspace }}\out" -ErrorAction Ignore | Out-Null
           Compress-Archive -Path "${{ github.workspace }}\build\bin\llama-box.exe" -DestinationPath "${{ github.workspace }}\out\llama-box-windows-${{ matrix.arch }}-oneapi-${{ matrix.version }}.zip"
@@ -2255,7 +2255,7 @@ jobs:
           curl.exe --retry 5 --retry-delay 5 `
             --output "${{ github.workspace }}\.toolbox\installer.exe" `
             --url "${{ matrix.distro_binary_installer }}"
-          
+
           Write-Host "I [$((Get-Date).ToString("yyyy-mm-dd HH:mm:ss"))] install LunarG Vulkan SDK"
           Start-Process "${{ github.workspace }}\.toolbox\installer.exe" -NoNewWindow -Wait `
             -ArgumentList '--accept-licenses','--default-answer','--confirm-command install'
@@ -2263,7 +2263,7 @@ jobs:
           $vulkanPath = "$(Resolve-Path -Path 'C:\VulkanSDK\*\bin' | Split-Path)"
           "VULKAN_SDK=${vulkanPath}" | Out-File -FilePath $env:GITHUB_ENV -Append
           "${vulkanPath}\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          
+
           if (Test-Path -PathType Leaf -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat") {
             cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.arch == 'amd64' && 'amd64' || 'amd64_arm64' }} && set' | ForEach-Object { `
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
@@ -2273,7 +2273,7 @@ jobs:
               if ($_ -Match '^(.*?)=(.*)$') { $_ | Out-File -FilePath $env:GITHUB_ENV -Append } `
             }
           }
-          
+
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Build DL
         env:
@@ -2282,9 +2282,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $ProgressPreference = 'SilentlyContinue'
-          
+
           Write-Host "VULKAN_SDK=${env:VULKAN_SDK}"
-          
+
           Write-Host "===== BUILD ====="
           $env:CMAKE_PREFIX_PATH = "${env:VULKAN_SDK}"
           Get-ChildItem Env: -ErrorAction Ignore | Format-Table -Property Name, Value -ErrorAction Ignore

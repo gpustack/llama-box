@@ -10,12 +10,15 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
 ## Agenda
 
-- [Features](#features)
-- [Supports](#supports)
-- [Examples](#examples)
-- [Usage](#usage)
-- [Server API](#server-api)
-- [Tools](#tools)
+- [LLaMA Box (V2)](#llama-box-v2)
+  - [Agenda](#agenda)
+  - [Features](#features)
+  - [Supports](#supports)
+  - [Examples](#examples)
+  - [Usage](#usage)
+  - [Server API](#server-api)
+  - [Tools](#tools)
+  - [License](#license)
 
 ## Features
 
@@ -71,10 +74,10 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
   ```shell
     $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <non-image model> --rpc remote-ip:remote-port --tensor-split 1,2,3
-    $ # Same as --tensor-split 1,2,3,0. 
-    $ # The remote RPC server will handle 1/6 of the model, the 1st GPU will handle 1/3 of the model, and the 2nd GPU will handle 1/2 of the model. 
+    $ # Same as --tensor-split 1,2,3,0.
+    $ # The remote RPC server will handle 1/6 of the model, the 1st GPU will handle 1/3 of the model, and the 2nd GPU will handle 1/2 of the model.
     $ # Nothing to do with the 3rd GPU.
-    
+
     $ # Assume that there are 1 remote RPC servers and 3 available GPUs, launch box as below.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <non-image model> --rpc remote-ip:remote-port --tensor-split 0,0,1,1
     $ # The 2nd GPU will handle 1/2 of the model, and the 3rd GPU will handle 1/2 of the model.
@@ -87,7 +90,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
     $ # Same as --tensor-split 1,1,1,0.
     $ # The remote RPC server will handle text encoder part, the 1st GPU will handle VAE part, and the 2nd GPU will handle diffusion part.
     $ # Nothing to do with the 3rd GPU.
-    
+
     $ # Assume that there are 1 remote RPC server and 3 available GPUs, launch box as below.
     $ llama-box -np 4 --host 0.0.0.0 -m <image model> --rpc remote-ip:remote-port --tensor-split 0,0,1,1
     $ # Then 2nd GPU will handle text encoder and VAE parts, and the 3rd GPU will handle diffusion part.
@@ -97,7 +100,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
   ```shell
     $ # Launch box.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <model>
-    
+
     $ # Inject X-Request-ID: trace-id to track the request.
     $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-ID: trace-id" -d '{"model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
     $ # View logs
@@ -106,7 +109,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
   ```shell
     $ # Launch box with -tps -1.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m <model> --tokens-per-second -1
-  
+
     $ # For level 1 users, inject X-Request-Tokens-Per-Second: 10 to limit the number of tokens per second to 10.
     $ curl --silent --no-buffer http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -H "X-Request-Tokens-Per-Second: 10" -d '{"stream": true, "model": "demo", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
 
@@ -132,7 +135,7 @@ LLaMA Box supports the following platforms.
 | **Huawei Ascend CANN <br/>8.1.rc1 (8.1.rc1.beta1)** | `linux/amd64`<sup>Ubuntu 20.04</sup><br/> `linux/arm64`<sup>Ubuntu 20.04</sup>                                                        | `Ascend 910b`, `Ascend 310p`, <br/>see [Ascend Document](https://www.hiascend.com/en/document).                                                                                                                                                                                                                                                                                                                                                                        |
 | **Huawei Ascend CANN <br/>8.0 (8.0.0.beta1)**       | `linux/amd64`<sup>Ubuntu 20.04</sup><br/> `linux/arm64`<sup>Ubuntu 20.04</sup>                                                        | `Ascend 910b`, `Ascend 310p`, <br/>see [Ascend Document](https://www.hiascend.com/en/document).                                                                                                                                                                                                                                                                                                                                                                        |
 | **HYGON DTK(DCU Toolkit) <br/>25.04 (25.04)**       | `linux/amd64`<sup>Ubuntu 22.04</sup><br/>                                                                                             | `Z100`, `K100`, `Z100L`, <br/>see [DTK Community](https://developer.sourcefind.cn/?s=Note).                                                                                                                                                                                                                                                                                                                                                                            |
-| **Moore Threads MUSA <br/>rc4.0 (rc4.0.1)**         | `linux/amd64`<sup>Ubuntu 22.04</sup><br/>                                                                                             | `MTT S4000`, `MTT S80`, <br/>see [Moor Threads Website](https://en.mthreads.com).                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Moore Threads MUSA <br/>4.2 (4.2.0)**             | `linux/amd64`<sup>Ubuntu 22.04</sup><br/>                                                                                             | `MTT S4000`, `MTT S80`, <br/>see [Moor Threads Website](https://en.mthreads.com).                                                                                                                                                                                                                                                                                                                                                                                      |
 | **Apple Metal 3**                                   | `darwin/amd64`<sup>macOS 13.7</sup><br/> `darwin/arm64`<sup>macOS 14.7</sup>                                                          | Support [Apple Metal](https://developer.apple.com/metal/), <br/>see [Metal Framework](https://developer.apple.com/documentation/metal?language=objc).                                                                                                                                                                                                                                                                                                                  |
 | _AVX2_                                              | `darwin/amd64`<sup>macOS 13.7</sup><br/> `linux/amd64`<sup>CentOS 7</sup><br/> `windows/amd64`<sup>Windows Server 2022</sup>          | CPUs support AVX2, <br/>see [Wikipedia](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#Advanced_Vector_Extensions_2).                                                                                                                                                                                                                                                                                                                                        |
 | _Advanced SIMD (NEON)_                              | `linux/arm64`<sup>Ubuntu 18.04</sup><br/> `windows/arm64`<sup>Windows Server 2022</sup>                                               | CPUs support <br/>Advanced SIMD (NEON), <br/>see [Wikipedia](https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(Neon)).                                                                                                                                                                                                                                                                                                                              |
@@ -164,7 +167,7 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 sessions(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/unsloth/Qwen3-8B-GGUF/Qwen3-8B-Q8_0.gguf
-    
+
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen3", "messages": [{"role":"user", "content":"Introduce Beijing in 50 words."}]}'
 
@@ -180,24 +183,24 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q8_0.gguf --mmproj ~/.cache/lm-studio/models/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf
-    
+
     $ # Chat with image base64.
     $ IMAGE_URL="$(echo "data:image/jpeg;base64,$(curl https://raw.githubusercontent.com/haotian-liu/LLaVA/main/llava/serve/examples/extreme_ironing.jpg --output - | base64)")"; \
       echo "{\"model\": \"qwen2.5-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}, {\"type\": \"text\", \"text\": \"What is unusual about this image?\"}]}]}" > /tmp/data.json
-    
+
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
 
     $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
-  
+
     $ # Chat with image url.
     $ IMAGE_URL="https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"; \
       echo "{\"model\": \"qwen2.5-vl\", \"temperature\": 0.1, \"messages\": [{\"role\":\"user\", \"content\": [{\"type\":\"text\",\"text\":\"What is in this image?\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"$IMAGE_URL\"}}]}]}" > /tmp/data.json
-    
+
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
-  
+
     $ # or use the chat.sh tool.
     $ ./llama-box/tools/chat.sh @/tmp/data.json
     ```
@@ -210,11 +213,11 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/ggml-org/ultravox-v0_5-llama-3_2-1b-GGUF/Llama-3.2-1B-Instruct-Q8_0.gguf --mmproj ~/.cache/lm-studio/models/ggml-org/ultravox-v0_5-llama-3_2-1b-GGUF/mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf
-  
+
     $ # Chat with audio base64.
     $ AUDIO_DATA="$(curl https://upload.wikimedia.org/wikipedia/commons/transcoded/6/6f/Apollo13-wehaveaproblem.ogg/Apollo13-wehaveaproblem.ogg.mp3 --output - | base64)"; \
       echo "{\"model\": \"ultravox\", \"temperature\": 0.1, \"messages\": [{\"role\":\"system\", \"content\": [{\"type\": \"text\", \"text\": \"You are a helpful assistant.\"}]}, {\"role\":\"user\", \"content\": [{\"type\": \"input_audio\", \"input_audio\": {  \"format\": \"mp3\", \"data\": \"$AUDIO_DATA\"}}, {\"type\": \"text\", \"text\": \"How many times has roger appeared?\"}]}]}" > /tmp/data.json
-    
+
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d @/tmp/data.json
 
@@ -229,10 +232,10 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/Qwen/Qwen2-0.5B-Instruct-GGUF/qwen2-0_5b-instruct-fp16.gguf
-    
+
     $ # Call with curl,
     $ curl http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"model": "qwen2.5", "messages": [{"role":"user","content":"What is the weather like in Paris today?"}], "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}}}]}'
-    
+
     $ # or use the chat.sh tool.
     $ TOOLS_WITH=true ./llama-box/tools/chat.sh "What is the weather like in Paris today?"
     ```
@@ -246,10 +249,10 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 1 session(allowing 1 parallel chat user).
     $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/stable-diffusion-v3.5-medium-GGUF/stable-diffusion-v3-5-medium-FP16.gguf --images
-    
+
     $ # Call with curl,
     $ curl http://localhost:8080/v1/images/generations -H "Content-Type: application/json" -d '{"model": "sd3-medium", "prompt": "A lovely cat"}'
-    
+
     $ # or use the image_generate.sh tool.
     $ ./llama-box/tools/image_generate.sh "A lovely cat"
     ```
@@ -262,11 +265,11 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 1 session(allowing 1 parallel chat user).
     $ llama-box -np 1 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/FLUX.1-Fill-dev-GGUF/FLUX.1-Fill-dev-Q8_0.gguf --images
-    
+
     $ # Call with curl,
     $ curl https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png --output /tmp/input.png
     $ curl https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo_mask.png --output /tmp/mask.png
-  
+
     $ # or use the image_edit.sh tool.
     $ IMAGE=/tmp/input.png MASK=/tmp/mask.png ./llama-box/tools/image_edit.sh "a tiger sitting on a park bench"
     ```
@@ -312,7 +315,7 @@ LLaMA Box supports the following platforms.
     ```shell
     $ # Provide 4 session(allowing 4 parallel chat users), with a max of 8192 tokens per session.
     $ llama-box -c 8192 -np 4 --host 0.0.0.0 -m ~/.cache/lm-studio/models/gpustack/jina-reranker-v1-tiny-en-GGUF/jina-reranker-v1-tiny-en-FP16.gguf --rerank
-    
+
     $ # Call with curl.
     $ curl http://localhost:8080/v1/rerank -H "Content-Type: application/json" -d '{"model":"jina-reranker-v1-tiny-en","query":"Organic skincare products for sensitive skin","top_n":3,"documents":["Eco-friendly kitchenware for modern homes","Biodegradable cleaning supplies for eco-conscious consumers","Organic cotton baby clothes for sensitive skin","Natural organic skincare range for sensitive skin","Tech gadgets for smart homes: 2024 edition","Sustainable gardening tools and compost solutions","Sensitive skin-friendly facial cleansers and toners","Organic food wraps and storage solutions","All-natural pet food for dogs with allergies","oga mats made from recycled materials"]}'
     ```
@@ -370,7 +373,7 @@ general:
          --system-info            Print system info and exit
          --list-devices           Print list of available devices and exit
          --list-buffer-types      Print list of available buffer types and exit
-  -v,    --verbose, --log-verbose 
+  -v,    --verbose, --log-verbose
                                   Set verbosity level to infinity (i.e. log all messages, useful for debugging)
   -lv,   --verbosity, --log-verbosity V
                                   Set the verbosity threshold, messages with a higher verbosity will be ignored
@@ -387,7 +390,7 @@ server:
   -m,    --model FILE             Model path (default: models/7B/ggml-model-f16.gguf)
   -a,    --alias NAME             Model name alias
          --lora FILE              Apply LoRA adapter (implies --no-mmap)
-         --lora-scaled FILE SCALE 
+         --lora-scaled FILE SCALE
                                   Apply LoRA adapter with user defined scaling S (implies --no-mmap)
          --lora-init-without-apply
                                   Load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled)
@@ -412,7 +415,7 @@ server:
 
 server/completion:
 
-  -dev,  --device <dev1,dev2,...> 
+  -dev,  --device <dev1,dev2,...>
                                   A comma-separated list of devices to use for offloading (none = don't offload)
                                   Use --list-devices to see a list of available devices
   -sm,   --split-mode SPLIT_MODE  How to split the model across multiple GPUs, one of:
@@ -442,7 +445,7 @@ server/completion:
   -C,    --cpu-mask M             Set CPU affinity mask: arbitrarily long hex. Complements cpu-range (default: "")
   -Cr,   --cpu-range lo-hi        Range of CPUs for affinity. Complements --cpu-mask
          --cpu-strict <0|1>       Use strict CPU placement (default: 0)
-                                  
+
          --prio N                 Set process/thread priority (default: 0), one of:
                                     - 0-normal
                                     - 1-medium
@@ -452,7 +455,7 @@ server/completion:
   -tb,   --threads-batch N        Number of threads to use during batch and prompt processing (default: same as --threads)
   -Cb,   --cpu-mask-batch M       Set CPU affinity mask: arbitrarily long hex. Complements cpu-range-batch (default: same as --cpu-mask)
   -Crb,  --cpu-range-batch lo-hi  Ranges of CPUs for affinity. Complements --cpu-mask-batch
-         --cpu-strict-batch <0|1> 
+         --cpu-strict-batch <0|1>
                                   Use strict CPU placement (default: same as --cpu-strict)
          --prio-batch N           Set process/thread priority : 0-normal, 1-medium, 2-high, 3-realtime (default: --priority)
          --poll-batch <0...100>   Use polling to wait for work (default: same as --poll
@@ -483,7 +486,7 @@ server/completion:
          --dry-base N             Set DRY sampling base value (default: 1.75)
          --dry-allowed-length N   Set allowed length for DRY sampling (default: 2)
          --dry-penalty-last-n N   Set DRY penalty for the last n tokens (default: -1, 0 = disable, -1 = context size)
-         --dry-sequence-breaker N 
+         --dry-sequence-breaker N
                                   Add sequence breaker for DRY sampling, clearing out default breakers (\n;:;";*) in the process; use "none" to not use any sequence breakers
          --dynatemp-range N       Dynamic temperature range (default: 0.0, 0.0 = disabled)
          --dynatemp-exp N         Dynamic temperature exponent (default: 1.0)
@@ -585,14 +588,14 @@ server/images:
                                   Path to the CLIP Large (clip-l) text encoder, or use --model included
          --image-clip-g-model PATH
                                   Path to the CLIP Generic (clip-g) text encoder, or use --model included
-         --image-t5xxl-model PATH 
+         --image-t5xxl-model PATH
                                   Path to the Text-to-Text Transfer Transformer (t5xxl) text encoder, or use --model included
          --image-no-vae-model-offload
                                   Disable vae(taesd) model offload
          --image-vae-model PATH   Path to Variational AutoEncoder (vae), or use --model included
          --image-vae-tiling       Indicate to process vae decoder in tiles to reduce memory usage (default: disabled)
          --image-no-vae-tiling    Disable vae decoder in tiles
-         --image-taesd-model PATH 
+         --image-taesd-model PATH
                                   Path to Tiny AutoEncoder For StableDiffusion (taesd), or use --model included
          --image-upscale-model PATH
                                   Path to the upscale model, or use --model included
@@ -671,7 +674,7 @@ The available endpoints for the LLaMA Box server mode are:
       "add_special": false,
       "with_pieces": false
     }
-    
+
     RESPONSE : (application/json)
     CASE 1: without pieces
       {
@@ -694,7 +697,7 @@ The available endpoints for the LLaMA Box server mode are:
     {
       "tokens": [123, ...]
     }
-    
+
     RESPONSE : (application/json)
     {
       "content": "..."
@@ -709,8 +712,8 @@ The available endpoints for the LLaMA Box server mode are:
     RESPONSE : (application/json)
     [
       {
-        "id": 0, 
-        "path": "...", 
+        "id": 0,
+        "path": "...",
         "init_scale": 1.0 // initial scale, may not be the same as the one used currently
       },
       ...
@@ -764,7 +767,7 @@ The available endpoints for the LLaMA Box server mode are:
           "preview_faster": true  // enable preview mode (deprecated)
         }
       }
-      
+
       RESPONSE : (text/event-stream)
       data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
       ...
@@ -803,7 +806,7 @@ The available endpoints for the LLaMA Box server mode are:
           ...
          ]
       }
-      
+
       RESPONSE : (text/event-stream)
       data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
       ...
@@ -833,7 +836,7 @@ The available endpoints for the LLaMA Box server mode are:
       stream_options_chunk_size=4096     // split the final image b64_json into chunks with the given size, default 4k
       stream_options_preview=true        // enable preview mode
       stream_options_preview_faster=true // enable preview mode (deprecated)
-      
+
       RESPONSE : (text/event-stream)
       CASE 1: correct input image
         data: {"created":1731916353,"data":[{"index":0,"object":"image.chunk","progress":10.0}], ...}
