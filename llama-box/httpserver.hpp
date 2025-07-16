@@ -11,6 +11,7 @@
 #include "readerwriterqueue/readerwriterqueue.h"
 
 #define CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH 536870912
+#define CPPHTTPLIB_LISTEN_BACKLOG                      512
 #define CPPHTTPLIB_TCP_NODELAY                         true
 #include "llama.cpp/common/chat.h"
 #include "llama.cpp/common/common.h"
