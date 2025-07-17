@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index fd77e9a6..4ce3cd0a 100644
+index 6581d27a..9d92aef6 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
-@@ -6022,10 +6022,6 @@ static void ggml_compute_forward_rope_f32(
+@@ -6025,10 +6025,6 @@ static void ggml_compute_forward_rope_f32(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;  // ggml_rope_multi, multimodal rotary position embedding
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  
@@ -13,7 +13,7 @@ index fd77e9a6..4ce3cd0a 100644
      if (is_vision) {
          GGML_ASSERT(n_dims == ne0/2);
      }
-@@ -6208,10 +6204,6 @@ static void ggml_compute_forward_rope_f16(
+@@ -6211,10 +6207,6 @@ static void ggml_compute_forward_rope_f16(
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  

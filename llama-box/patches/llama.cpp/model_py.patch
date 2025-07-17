@@ -1,8 +1,8 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 764163c4..2f7bb5b1 100755
+index d802524b..e094994d 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
-@@ -4379,6 +4379,123 @@ class XLMRobertaModel(BertModel):
+@@ -4449,6 +4449,123 @@ class XLMRobertaModel(BertModel):
          return super().modify_tensors(data_torch, name, bid)
  
  
@@ -127,7 +127,7 @@ index 764163c4..2f7bb5b1 100755
  class GemmaModel(TextModel):
      model_arch = gguf.MODEL_ARCH.GEMMA
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 486a165b..df9fc495 100644
+index d8afe769..e3148941 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
 @@ -300,6 +300,7 @@ class MODEL_ARCH(IntEnum):
@@ -138,7 +138,7 @@ index 486a165b..df9fc495 100644
      BERT             = auto()
      NOMIC_BERT       = auto()
      NOMIC_BERT_MOE   = auto()
-@@ -615,6 +616,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -616,6 +617,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.MPT:              "mpt",
      MODEL_ARCH.STARCODER:        "starcoder",
      MODEL_ARCH.REFACT:           "refact",
@@ -146,7 +146,7 @@ index 486a165b..df9fc495 100644
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
      MODEL_ARCH.NOMIC_BERT_MOE:   "nomic-bert-moe",
-@@ -1112,6 +1114,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -1114,6 +1116,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
      ],

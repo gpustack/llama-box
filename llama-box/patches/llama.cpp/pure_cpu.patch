@@ -1,22 +1,21 @@
 diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
-index c36c12d6..1b1dc734 100644
+index c36c12d6..949748ce 100644
 --- a/ggml/src/ggml-backend-impl.h
 +++ b/ggml/src/ggml-backend-impl.h
-@@ -207,6 +207,9 @@ extern "C" {
+@@ -207,6 +207,8 @@ extern "C" {
      };
  
      // Internal backend registry API
 +    static int ngl = -1;
-+
 +    GGML_API void ggml_backend_register_metadata_set(int ngl_);
      GGML_API void ggml_backend_register(ggml_backend_reg_t reg);
  
      // Add backend dynamic loading support to the backend
 diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
-index 042ea77a..50360f50 100644
+index f0cdac31..3fb3518f 100644
 --- a/ggml/src/ggml-backend-reg.cpp
 +++ b/ggml/src/ggml-backend-reg.cpp
-@@ -162,22 +162,34 @@ struct ggml_backend_registry {
+@@ -166,25 +166,39 @@ struct ggml_backend_registry {
  
      ggml_backend_registry() {
  #ifdef GGML_USE_CUDA
@@ -43,6 +42,12 @@ index 042ea77a..50360f50 100644
 +            register_backend(ggml_backend_vk_reg());
 +        }
  #endif
+ #ifdef GGML_USE_WEBGPU
+-        register_backend(ggml_backend_webgpu_reg());
++        if (ngl != 0) {
++            register_backend(ggml_backend_webgpu_reg());
++        }
+ #endif
  #ifdef GGML_USE_OPENCL
 -        register_backend(ggml_backend_opencl_reg());
 +        if (ngl != 0) {
@@ -57,7 +62,7 @@ index 042ea77a..50360f50 100644
  #endif
  #ifdef GGML_USE_BLAS
          register_backend(ggml_backend_blas_reg());
-@@ -300,6 +312,10 @@ static ggml_backend_registry & get_reg() {
+@@ -307,6 +321,10 @@ static ggml_backend_registry & get_reg() {
  }
  
  // Internal API
@@ -68,7 +73,7 @@ index 042ea77a..50360f50 100644
  void ggml_backend_register(ggml_backend_reg_t reg) {
      get_reg().register_backend(reg);
  }
-@@ -564,16 +580,18 @@ void ggml_backend_load_all_from_path(const char * dir_path) {
+@@ -571,16 +589,18 @@ void ggml_backend_load_all_from_path(const char * dir_path) {
      bool silent = false;
  #endif
  

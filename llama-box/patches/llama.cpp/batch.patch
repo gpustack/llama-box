@@ -1,8 +1,8 @@
 diff --git a/src/llama-batch.cpp b/src/llama-batch.cpp
-index 3bc8554e..be189b6e 100644
+index eb15d2c4..2e79216c 100644
 --- a/src/llama-batch.cpp
 +++ b/src/llama-batch.cpp
-@@ -237,114 +237,114 @@ bool llama_batch_allocr::init(
+@@ -246,115 +246,6 @@ bool llama_batch_allocr::init(
          LLAMA_LOG_DEBUG("%s:   ]\n", __func__);
      }
  
@@ -10,7 +10,7 @@ index 3bc8554e..be189b6e 100644
 -    // consistency checks
 -    //
 -
--    for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
+-    for (uint32_t s = 0; s < n_seq_max; ++s) {
 -        if (seq_pos[s].empty()) {
 -            continue;
 -        }
@@ -53,8 +53,8 @@ index 3bc8554e..be189b6e 100644
 -    }
 -
 -    if (memory) {
--        for (int32_t s0 = 0; s0 < LLAMA_MAX_SEQ; ++s0) {
--            for (int32_t s1 = 0; s1 < LLAMA_MAX_SEQ; ++s1) {
+-        for (uint32_t s0 = 0; s0 < n_seq_max; ++s0) {
+-            for (uint32_t s1 = 0; s1 < n_seq_max; ++s1) {
 -                if (seq_cpl[s0][s1]) {
 -                    if (memory->seq_pos_min(s0) != memory->seq_pos_min(s1) ||
 -                        memory->seq_pos_max(s0) != memory->seq_pos_max(s1)) {
@@ -85,12 +85,12 @@ index 3bc8554e..be189b6e 100644
 -    //
 -    {
 -        seq_set_t cur_seq_set[LLAMA_MAX_SEQ];
--        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
+-        for (uint32_t s = 0; s < n_seq_max; ++s) {
 -            cur_seq_set[s].set();
 -        }
 -
 -        llama_pos cur_seq_pos[LLAMA_MAX_SEQ];
--        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
+-        for (uint32_t s = 0; s < n_seq_max; ++s) {
 -            cur_seq_pos[s] = -1;
 -        }
 -
@@ -114,114 +114,7 @@ index 3bc8554e..be189b6e 100644
 -            }
 -        }
 -    }
-+//    //
-+//    // consistency checks
-+//    //
-+//
-+//    for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
-+//        if (seq_pos[s].empty()) {
-+//            continue;
-+//        }
-+//
-+//        const llama_pos p0 = memory ? memory->seq_pos_max(s) : -1;
-+//
-+//        if (p0 >= 0) {
-+//            bool ok = true;
-+//
-+//            if (batch.token) {
-+//                if (seq_pos_min(s) != p0 + 1) {
-+//                    ok = false;
-+//                }
-+//            } else {
-+//                assert(batch.embd);
-+//
-+//                // for embeddings (typically used as vision input), we allow them to have repeating positions
-+//                // ref: https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-2983871762
-+//                if (seq_pos_min(s) != p0 && seq_pos_min(s) != p0 + 1) {
-+//                    ok = false;
-+//                }
-+//            }
-+//
-+//            if (!ok) {
-+//                LLAMA_LOG_ERROR(
-+//                        "%s: the tokens of sequence %d in the input batch have inconsistent sequence positions:\n"
-+//                        " - the last position stored in the memory module of the context (i.e. the KV cache) for sequence %d is X = %d\n"
-+//                        " - the tokens for sequence %d in the input batch have a starting position of Y = %d\n"
-+//                        " it is required that the sequence positions remain consecutive: Y = X + 1\n",
-+//                        __func__, s, s, p0, s, seq_pos_min(s));
-+//
-+//                return false;
-+//            }
-+//        }
-+//
-+//        if (seq_pos_max(s) - seq_pos_min(s) + 1 > (int) seq_pos[s].size()) {
-+//            LLAMA_LOG_ERROR("%s: sequence %d positions are not continuous\n", __func__, s);
-+//            return false;
-+//        }
-+//    }
-+//
-+//    if (memory) {
-+//        for (int32_t s0 = 0; s0 < LLAMA_MAX_SEQ; ++s0) {
-+//            for (int32_t s1 = 0; s1 < LLAMA_MAX_SEQ; ++s1) {
-+//                if (seq_cpl[s0][s1]) {
-+//                    if (memory->seq_pos_min(s0) != memory->seq_pos_min(s1) ||
-+//                        memory->seq_pos_max(s0) != memory->seq_pos_max(s1)) {
-+//                        LLAMA_LOG_ERROR("%s: sequence %d is coupled to %d in the input batch, but have divereged\n", __func__, s0, s1);
-+//                        return false;
-+//                    }
-+//                }
-+//            }
-+//        }
-+//    }
-+//
-+//    // disallow partial sequence sub-sets:
-+//    //
-+//    // invalid:          x
-+//    //            i: 0 1 2 ...
-+//    // ---------------------------------------
-+//    // seq_id[i][0]: 0 0 1
-+//    // seq_id[i][1]: 1 1 2
-+//    // seq_id[i][2]: 2
-+//    //
-+//    // disallow decreasing sequence positions:
-+//    //
-+//    // invalid:                  x
-+//    //            i: 0 1 2 3 4 5 6 ...
-+//    // ---------------------------------------
-+//    //       pos[i]: 4 5 0 1 6 2 3
-+//    // seq_id[i][0]: 0 0 1 1 0 1 0
-+//    //
-+//    {
-+//        seq_set_t cur_seq_set[LLAMA_MAX_SEQ];
-+//        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
-+//            cur_seq_set[s].set();
-+//        }
-+//
-+//        llama_pos cur_seq_pos[LLAMA_MAX_SEQ];
-+//        for (int32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
-+//            cur_seq_pos[s] = -1;
-+//        }
-+//
-+//        for (int32_t i = 0; i < batch.n_tokens; ++i) {
-+//            const llama_pos pos = batch.pos[i];
-+//
-+//            for (int32_t s = 0; s < batch.n_seq_id[i]; ++s) {
-+//                const llama_seq_id seq_id = batch.seq_id[i][s];
-+//
-+//                cur_seq_set[seq_id] &= seq_set[i];
-+//
-+//                if (cur_seq_set[seq_id].none()) {
-+//                    LLAMA_LOG_ERROR("%s: sequence %d belongs to incompatible sequence sets (not allowed)\n", __func__, seq_id);
-+//                    return false;
-+//                }
-+//
-+//                if (pos < cur_seq_pos[seq_id]) {
-+//                    LLAMA_LOG_ERROR("%s: sequence %d positions are decreasing (not allowed)\n", __func__, seq_id);
-+//                    return false;
-+//                }
-+//            }
-+//        }
-+//    }
- 
+-
      split_reset();
  
+     return true;

@@ -30,10 +30,10 @@ index 2064421d..ecfc9958 100644
  std::string common_sampler_print(const struct common_sampler * gsmpl);
  
 diff --git a/include/llama.h b/include/llama.h
-index 28e84d4d..04373394 100644
+index db6a5337..0dc66037 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1340,6 +1340,8 @@ extern "C" {
+@@ -1344,6 +1344,8 @@ extern "C" {
      // Returns the seed used by the sampler if applicable, LLAMA_DEFAULT_SEED otherwise
      LLAMA_API uint32_t llama_sampler_get_seed(const struct llama_sampler * smpl);
  
