@@ -1,5 +1,5 @@
 diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
-index 53504399c..fc00cf8cc 100644
+index 53504399..fc00cf8c 100644
 --- a/ggml/src/gguf.cpp
 +++ b/ggml/src/gguf.cpp
 @@ -429,7 +429,7 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
@@ -12,7 +12,7 @@ index 53504399c..fc00cf8cc 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index c83b75915..da23b31b5 100644
+index 28e84d4d..17ee13b4 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -1005,6 +1005,7 @@ extern "C" {
@@ -24,7 +24,7 @@ index c83b75915..da23b31b5 100644
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
      LLAMA_API bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 8d5c3b144..5ad5eed34 100644
+index 8d5c3b14..5ad5eed3 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1757,7 +1757,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {

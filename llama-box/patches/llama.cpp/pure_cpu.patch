@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
-index c36c12d65..1b1dc734b 100644
+index c36c12d6..1b1dc734 100644
 --- a/ggml/src/ggml-backend-impl.h
 +++ b/ggml/src/ggml-backend-impl.h
 @@ -207,6 +207,9 @@ extern "C" {
@@ -13,7 +13,7 @@ index c36c12d65..1b1dc734b 100644
  
      // Add backend dynamic loading support to the backend
 diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
-index 042ea77ac..50360f504 100644
+index 042ea77a..50360f50 100644
 --- a/ggml/src/ggml-backend-reg.cpp
 +++ b/ggml/src/ggml-backend-reg.cpp
 @@ -162,22 +162,34 @@ struct ggml_backend_registry {
@@ -96,7 +96,7 @@ index 042ea77ac..50360f504 100644
      // check the environment variable GGML_BACKEND_PATH to load an out-of-tree backend
      const char * backend_path = std::getenv("GGML_BACKEND_PATH");
 diff --git a/src/llama.cpp b/src/llama.cpp
-index 34906cdb6..db75b00c9 100644
+index 34906cdb..db75b00c 100644
 --- a/src/llama.cpp
 +++ b/src/llama.cpp
 @@ -197,7 +197,7 @@ static struct llama_model * llama_model_load_from_file_impl(

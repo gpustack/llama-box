@@ -1,5 +1,5 @@
 diff --git a/src/llama-batch.cpp b/src/llama-batch.cpp
-index 3bc8554e5..be189b6ef 100644
+index 3bc8554e..be189b6e 100644
 --- a/src/llama-batch.cpp
 +++ b/src/llama-batch.cpp
 @@ -237,114 +237,114 @@ bool llama_batch_allocr::init(

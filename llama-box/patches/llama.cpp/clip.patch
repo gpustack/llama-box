@@ -1,5 +1,5 @@
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index 62c936ed0..e393462fe 100644
+index 62c936ed..e393462f 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
 @@ -226,6 +226,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
@@ -35,7 +35,7 @@ index 62c936ed0..e393462fe 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 9146c9e9c..29df92558 100644
+index 9146c9e9..29df9255 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -30,6 +30,11 @@
@@ -207,7 +207,7 @@ index 9146c9e9c..29df92558 100644
      return ctx->model.modality == CLIP_MODALITY_VISION;
  }
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index 08f3efb7b..d90921f64 100644
+index 08f3efb7..d90921f6 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
 @@ -6,6 +6,20 @@
@@ -372,7 +372,7 @@ index 08f3efb7b..d90921f64 100644
 +CLIP_API bool clip_has_audio_encoder(const struct clip_ctx * ctx);
 +CLIP_API bool clip_has_whisper_encoder(const struct clip_ctx * ctx);
 diff --git a/tools/mtmd/mtmd-audio.h b/tools/mtmd/mtmd-audio.h
-index b7b940aff..91d31d161 100644
+index b7b940af..91d31d16 100644
 --- a/tools/mtmd/mtmd-audio.h
 +++ b/tools/mtmd/mtmd-audio.h
 @@ -15,6 +15,20 @@
@@ -414,7 +414,7 @@ index b7b940aff..91d31d161 100644
  
  } // namespace whisper_precalc_filters
 diff --git a/tools/mtmd/mtmd-helper.cpp b/tools/mtmd/mtmd-helper.cpp
-index 686f42f39..eead1f8e6 100644
+index 686f42f3..eead1f8e 100644
 --- a/tools/mtmd/mtmd-helper.cpp
 +++ b/tools/mtmd/mtmd-helper.cpp
 @@ -458,3 +458,7 @@ mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, const char *
@@ -427,7 +427,7 @@ index 686f42f39..eead1f8e6 100644
 +}
 \ No newline at end of file
 diff --git a/tools/mtmd/mtmd-helper.h b/tools/mtmd/mtmd-helper.h
-index 5c0edc693..f474b0c93 100644
+index 5c0edc69..f474b0c9 100644
 --- a/tools/mtmd/mtmd-helper.h
 +++ b/tools/mtmd/mtmd-helper.h
 @@ -80,6 +80,8 @@ MTMD_API int32_t mtmd_helper_decode_image_chunk(mtmd_context * ctx,
