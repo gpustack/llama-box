@@ -248,6 +248,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server",                             "       --no-flash-attn",                        "Disable Flash Attention, which can increase (V)RAM but reduce computation" });
     opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention, which can reduce (V)RAM but increase computation" });
     opts.push_back({ "server",                             "       --swa-full",                             "Use full-size SWA cache (default %s)", llm_params.swa_full ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "--kv-unified, -kvu",                            "Use single unified KV buffer for the KV cache of all sequences (default %s)", llm_params.kv_unified ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --images",                               "Enable image endpoint (default: %s)", params_.hs_params.endpoint_images ? "enabled" : "disabled" });
@@ -741,6 +742,11 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
 
             if (!strcmp(flag, "--swa-full")) {
                 params_.hs_params.llm_params.swa_full = true;
+                continue;
+            }
+
+            if (!strcmp(flag, "-kvu") || !strcmp(flag, "--kv-unified")) {
+                params_.hs_params.llm_params.kv_unified = true;
                 continue;
             }
 
