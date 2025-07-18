@@ -1,5 +1,5 @@
 diff --git a/include/llama.h b/include/llama.h
-index db6a5337..28f427c5 100644
+index 1c3a1cd1..ea7cf560 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -451,6 +451,7 @@ extern "C" {
@@ -11,7 +11,7 @@ index db6a5337..28f427c5 100644
      LLAMA_API uint32_t llama_n_batch    (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_ubatch   (const struct llama_context * ctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 840ec9a9..ddc669a8 100644
+index 4e1d9115..2a193686 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -113,6 +113,20 @@ llama_context::llama_context(
@@ -35,8 +35,8 @@ index 840ec9a9..ddc669a8 100644
      const uint32_t n_ctx_per_seq = cparams.n_ctx / cparams.n_seq_max;
  
      LLAMA_LOG_INFO("%s: n_seq_max     = %u\n",   __func__, cparams.n_seq_max);
-@@ -407,6 +421,10 @@ ggml_context * llama_context::get_ctx_compute() const {
-     return ctx_compute.get();
+@@ -403,6 +417,10 @@ ggml_backend_sched_t llama_context::get_sched() const {
+     return sched.get();
  }
  
 +bool llama_context::causal_attn() const {
@@ -46,7 +46,7 @@ index 840ec9a9..ddc669a8 100644
  uint32_t llama_context::n_ctx() const {
      return cparams.n_ctx;
  }
-@@ -1075,7 +1093,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
+@@ -1087,7 +1105,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
          //    ggml_graph_dump_dot(gf, NULL, "llama.dot");
          //}
  
@@ -55,7 +55,7 @@ index 840ec9a9..ddc669a8 100644
          auto * t_embd   = cparams.embeddings ? res->get_embd() : nullptr;
  
          if (t_embd && res->get_embd_pooled()) {
-@@ -1239,7 +1257,7 @@ uint32_t llama_context::output_reserve(int32_t n_outputs) {
+@@ -1247,7 +1265,7 @@ uint32_t llama_context::output_reserve(int32_t n_outputs) {
      const auto n_vocab = vocab.n_tokens();
      const auto n_embd  = hparams.n_embd;
  
@@ -64,7 +64,7 @@ index 840ec9a9..ddc669a8 100644
      bool has_embd   = cparams.embeddings;
  
      // TODO: hacky enc-dec support
-@@ -2270,6 +2288,10 @@ void llama_free(llama_context * ctx) {
+@@ -2279,6 +2297,10 @@ void llama_free(llama_context * ctx) {
      delete ctx;
  }
  
@@ -76,12 +76,12 @@ index 840ec9a9..ddc669a8 100644
      return ctx->n_ctx();
  }
 diff --git a/src/llama-context.h b/src/llama-context.h
-index 9ce05715..b625d919 100644
+index fd480af6..badcf1ac 100644
 --- a/src/llama-context.h
 +++ b/src/llama-context.h
-@@ -37,6 +37,7 @@ struct llama_context {
+@@ -35,6 +35,7 @@ struct llama_context {
  
-     ggml_context * get_ctx_compute() const;
+     ggml_backend_sched_t get_sched() const;
  
 +    bool     causal_attn()   const;
      uint32_t n_ctx()         const;

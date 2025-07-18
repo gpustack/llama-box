@@ -30,7 +30,7 @@ index 2064421d..ecfc9958 100644
  std::string common_sampler_print(const struct common_sampler * gsmpl);
  
 diff --git a/include/llama.h b/include/llama.h
-index db6a5337..0dc66037 100644
+index 1c3a1cd1..a30e6fbc 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -1344,6 +1344,8 @@ extern "C" {
