@@ -395,6 +395,7 @@ server:
          --no-flash-attn          Disable Flash Attention, which can increase (V)RAM but reduce computation
   -fa,   --flash-attn             Enable Flash Attention, which can reduce (V)RAM but increase computation
          --swa-full               Use full-size SWA cache (default disabled)
+  --kv-unified, -kvu              Use single unified KV buffer for the KV cache of all sequences (default disabled)
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
          --images                 Enable image endpoint (default: disabled)
@@ -426,7 +427,7 @@ server/completion:
                                   Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template BUILTIN  Set built-in chat template (default: analyze from model's metadata)
                                   Only built-in templates are accepted, implicit reset --jinja setting
-                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, falcon, falcon3, gemma, gigachat, glmedge, granite, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, mistral-v7-tekken, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
+                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, exaone4, falcon, falcon3, gemma, gigachat, glmedge, granite, hunyuan-moe, kimi-k2, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, mistral-v7-tekken, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
          --jinja                  Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)
          --chat-template-file FILE
                                   Set jinja chat template (default: take from model's metadata)
