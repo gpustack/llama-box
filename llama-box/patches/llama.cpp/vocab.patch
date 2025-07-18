@@ -24,7 +24,7 @@ index 1c3a1cd1..fea87b59 100644
  
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 2181c01e..99a04582 100644
+index e8bae645..b4a63dcc 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1757,7 +1757,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
@@ -36,7 +36,7 @@ index 2181c01e..99a04582 100644
                  const gguf_type pc_type = gguf_get_arr_type(ctx, precompiled_charsmap_keyidx);
                  GGML_ASSERT(pc_type == GGUF_TYPE_INT8 || pc_type == GGUF_TYPE_UINT8);
  
-@@ -1966,7 +1966,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+@@ -1969,7 +1969,8 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                  pre_type = LLAMA_VOCAB_PRE_TYPE_KIMI_K2;
                  clean_spaces = false;
              } else {
@@ -46,7 +46,7 @@ index 2181c01e..99a04582 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3562,6 +3563,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3565,6 +3566,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  
