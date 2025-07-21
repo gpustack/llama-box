@@ -1,8 +1,8 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index 466271be..fdac5c3c 100644
+index d8c4d988..6b8a5095 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
-@@ -1041,7 +1041,16 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -1050,7 +1050,16 @@ struct common_init_result common_init_from_params(common_params & params) {
  
          // some models (e.g. T5) don't have a BOS token
          if (bos != LLAMA_TOKEN_NULL) {
@@ -19,7 +19,7 @@ index 466271be..fdac5c3c 100644
          }
          if (eos != LLAMA_TOKEN_NULL) {
              tmp.push_back(eos);
-@@ -1051,7 +1060,9 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -1060,7 +1069,9 @@ struct common_init_result common_init_from_params(common_params & params) {
          }
  
          if (llama_model_has_encoder(model)) {
@@ -30,7 +30,7 @@ index 466271be..fdac5c3c 100644
              llama_token decoder_start_token_id = llama_model_decoder_start_token(model);
              if (decoder_start_token_id == LLAMA_TOKEN_NULL) {
                  decoder_start_token_id = bos;
-@@ -1060,7 +1071,9 @@ struct common_init_result common_init_from_params(common_params & params) {
+@@ -1069,7 +1080,9 @@ struct common_init_result common_init_from_params(common_params & params) {
              tmp.push_back(decoder_start_token_id);
          }
          if (llama_model_has_decoder(model)) {

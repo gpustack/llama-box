@@ -127,10 +127,10 @@ index c8bf3c53..2706f047 100755
  class GemmaModel(TextModel):
      model_arch = gguf.MODEL_ARCH.GEMMA
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 40e809f1..30aff1c1 100644
+index 680210db..f6a4ed03 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
-@@ -300,6 +300,7 @@ class MODEL_ARCH(IntEnum):
+@@ -306,6 +306,7 @@ class MODEL_ARCH(IntEnum):
      MPT              = auto()
      STARCODER        = auto()
      REFACT           = auto()
@@ -138,7 +138,7 @@ index 40e809f1..30aff1c1 100644
      BERT             = auto()
      NOMIC_BERT       = auto()
      NOMIC_BERT_MOE   = auto()
-@@ -618,6 +619,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -624,6 +625,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.MPT:              "mpt",
      MODEL_ARCH.STARCODER:        "starcoder",
      MODEL_ARCH.REFACT:           "refact",
@@ -146,7 +146,7 @@ index 40e809f1..30aff1c1 100644
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
      MODEL_ARCH.NOMIC_BERT_MOE:   "nomic-bert-moe",
-@@ -1118,6 +1120,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -1124,6 +1126,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
      ],

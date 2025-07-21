@@ -40,10 +40,10 @@ index d058504c..c6dbd821 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 44ddc69d..c94395f7 100644
+index dc391a0d..c7fd2c7c 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -4367,7 +4367,6 @@ static bool ggml_metal_encode_node(
+@@ -4595,7 +4595,6 @@ static int ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
