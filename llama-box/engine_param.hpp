@@ -375,6 +375,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --control-vector FILE",                  "Add a control vector" });
     opts.push_back({ "server/completion",                  "       --control-vector-scaled FILE SCALE",     "Add a control vector with user defined scaling SCALE" });
     opts.push_back({ "server/completion",                  "       --control-vector-layer-range START END", "Layer range to apply the control vector(s) to, start and end inclusive" });
+    opts.push_back({ "server/completion",                  "-r     --reverse-prompt",                       "Halt generation" });
     opts.push_back({ "server/completion",                  "-sp,   --special",                              "Special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --enable-reasoning",                     "Enable reasoning (default: %s)", llm_params.reasoning_budget == -1 ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --no-enable-reasoning",                  "Disable reasoning" });
@@ -1689,6 +1690,15 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 char * e                                                = argv[i++];
                 params_.hs_params.llm_params.control_vector_layer_start = std::stoi(std::string(s));
                 params_.hs_params.llm_params.control_vector_layer_end   = std::stoi(std::string(e));
+                continue;
+            }
+
+            if (!strcmp(flag, "-r") || !strcmp(flag, "--reverse-prompt")) {
+                if (i == argc) {
+                    missing("--reverse-prompt");
+                }
+                char * arg = argv[i++];
+                params_.hs_params.llm_params.antiprompt.push_back(std::string(arg));
                 continue;
             }
 

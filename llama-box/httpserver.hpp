@@ -776,6 +776,8 @@ static inline std::unique_ptr<legacy_complete_req> get_legacy_complete_req(const
         } else {
             throw std::invalid_argument("Illegal param: \"stop\" must be a string or a list of strings");
         }
+    } else if (!params.antiprompt.empty()) {
+        ptr->stop = params.antiprompt;
     }
 
     ptr->stream = json_value(req, "stream", false);
@@ -1235,6 +1237,8 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
         } else if (!stop.is_null()) {
             throw std::invalid_argument("Illegal param: \"stop\" must be a string or a list of strings");
         }
+    } else if (!params.antiprompt.empty()) {
+        ptr->stop = params.antiprompt;
     }
 
     ptr->stream = json_value(req, "stream", false);
