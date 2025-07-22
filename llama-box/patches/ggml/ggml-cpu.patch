@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
-index 66a5ad8d..6e0e5562 100644
+index d9590b9d..70158caf 100644
 --- a/ggml/src/ggml-cpu/CMakeLists.txt
 +++ b/ggml/src/ggml-cpu/CMakeLists.txt
 @@ -158,47 +158,94 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
