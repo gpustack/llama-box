@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
-index 66a5ad8d..6e0e5562 100644
+index 2cc42d4b..9c051fd4 100644
 --- a/ggml/src/ggml-cpu/CMakeLists.txt
 +++ b/ggml/src/ggml-cpu/CMakeLists.txt
-@@ -158,47 +158,94 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -160,47 +160,94 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
                  if (GGML_CPU_ARM_ARCH)
                      list(APPEND ARCH_FLAGS -march=${GGML_CPU_ARM_ARCH})
                  elseif(GGML_CPU_ALL_VARIANTS)
@@ -115,7 +115,7 @@ index 66a5ad8d..6e0e5562 100644
                      ggml_add_cpu_backend_features(${GGML_CPU_NAME} arm ${ARCH_DEFINITIONS})
                  endif()
              endif()
-@@ -239,7 +286,7 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -241,7 +288,7 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
              if (GGML_NATIVE)
                  include(ggml-cpu/cmake/FindSIMD.cmake)
              endif ()
@@ -124,7 +124,7 @@ index 66a5ad8d..6e0e5562 100644
                  list(APPEND ARCH_FLAGS /arch:AVX512)
                  # /arch:AVX512 includes: __AVX512F__, __AVX512CD__, __AVX512BW__, __AVX512DQ__, and __AVX512VL__
                  # MSVC has no compile-time flags enabling specific
-@@ -284,10 +331,10 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -286,10 +333,10 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
                  list(APPEND ARCH_FLAGS /arch:SSE4.2)
                  list(APPEND ARCH_DEFINITIONS GGML_SSE42)
              endif()
@@ -137,7 +137,7 @@ index 66a5ad8d..6e0e5562 100644
                  # MSVC does not define macro __BMI2__
                  list(APPEND ARCH_DEFINITIONS __BMI2__ GGML_BMI2)
              endif()
-@@ -295,65 +342,182 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
+@@ -297,65 +344,182 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
              if (GGML_NATIVE)
                  list(APPEND ARCH_FLAGS -march=native)
              else ()

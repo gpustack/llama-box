@@ -1,5 +1,5 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index c8bf3c53..2706f047 100755
+index e12c922b..1865fc32 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
 @@ -4540,6 +4540,123 @@ class XLMRobertaModel(BertModel):

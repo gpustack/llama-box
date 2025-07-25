@@ -156,7 +156,7 @@ index ca807c14..ed4323de 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 1c3a1cd1..29a9048d 100644
+index 6f454a50..c29a0c72 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -371,6 +371,11 @@ extern "C" {
@@ -179,7 +179,7 @@ index 1c3a1cd1..29a9048d 100644
      LLAMA_API int32_t llama_model_n_ctx_train(const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_embd     (const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_layer    (const struct llama_model * model);
-@@ -1101,6 +1107,37 @@ extern "C" {
+@@ -1103,6 +1109,37 @@ extern "C" {
      // Chat templates
      //
  
@@ -218,7 +218,7 @@ index 1c3a1cd1..29a9048d 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index 80072ad2..c093e74f 100644
+index d34bb268..c47868f8 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
 @@ -199,6 +199,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
@@ -861,10 +861,10 @@ index 6968a19f..baaef734 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 2d90ec1a..5c532ef6 100644
+index a997a1e8..a66f5b9f 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -17482,6 +17482,10 @@ void llama_model_free(llama_model * model) {
+@@ -17499,6 +17499,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  

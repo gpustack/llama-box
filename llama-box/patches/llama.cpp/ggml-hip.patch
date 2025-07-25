@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
-index 1a2708ec..72d5013a 100644
+index 9435daf0..49324136 100644
 --- a/ggml/src/ggml-cuda/common.cuh
 +++ b/ggml/src/ggml-cuda/common.cuh
 @@ -59,6 +59,10 @@
