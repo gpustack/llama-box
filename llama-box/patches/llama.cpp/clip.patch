@@ -35,7 +35,7 @@ index 62c936ed..e393462f 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index be191404..a8f2b042 100644
+index e8e3b0a0..cd479700 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -30,6 +30,11 @@

@@ -46,7 +46,7 @@ index d09b7d78..74696b0d 100644
      LLM_ARCH_NOMIC_BERT,
      LLM_ARCH_NOMIC_BERT_MOE,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index a997a1e8..6fd9a49c 100644
+index 71f89e19..a1843f39 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -756,6 +756,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
@@ -135,7 +135,7 @@ index a997a1e8..6fd9a49c 100644
              } else if (model.arch == LLM_ARCH_BERT || model.arch == LLM_ARCH_NOMIC_BERT_MOE) {
                  cur = build_ffn(cur,
                          model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   NULL,
-@@ -17016,6 +17038,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params,
+@@ -17017,6 +17039,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params,
      switch (arch) {
          // Models that need specific instantiation should be handled in the
          // switch statement
@@ -143,7 +143,7 @@ index a997a1e8..6fd9a49c 100644
          case LLM_ARCH_BERT:
          case LLM_ARCH_JINA_BERT_V2:
          case LLM_ARCH_NOMIC_BERT:
-@@ -17612,6 +17635,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
+@@ -17613,6 +17636,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
          case LLM_ARCH_FALCON_H1:
          case LLM_ARCH_GROK:
          case LLM_ARCH_DBRX:

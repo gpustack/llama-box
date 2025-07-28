@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 1a999932..456541b6 100644
+index 337f7985..8aba16ce 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1690,6 +1690,7 @@ static void ggml_backend_metal_buffer_rset_free(struct ggml_backend_metal_buffer
@@ -25,7 +25,7 @@ index 1a999932..456541b6 100644
  
      ggml_metal_mem_pool_clear(mem_pool);
  
-@@ -3266,7 +3267,21 @@ static int ggml_metal_encode_node(
+@@ -3277,7 +3278,21 @@ static int ggml_metal_encode_node(
  
                  // find the break-even point where the matrix-matrix kernel becomes more efficient compared
                  // to the matrix-vector kernel
@@ -48,7 +48,7 @@ index 1a999932..456541b6 100644
  
                  // first try to use small-batch mat-mv kernels
                  // these should be efficient for BS [2, ~8]
-@@ -3275,13 +3290,8 @@ static int ggml_metal_encode_node(
+@@ -3286,13 +3301,8 @@ static int ggml_metal_encode_node(
                       (
                        (
                         src0t == GGML_TYPE_F16  || // TODO: helper function
@@ -63,7 +63,7 @@ index 1a999932..456541b6 100644
                       ) ||
                       (
                        (
-@@ -3300,7 +3310,7 @@ static int ggml_metal_encode_node(
+@@ -3311,7 +3321,7 @@ static int ggml_metal_encode_node(
                      //       my current hypothesis is that the work grid is not evenly divisible for different nsg
                      //       values and there can be some tail effects when nsg is high. need to confirm this
                      //
@@ -72,7 +72,7 @@ index 1a999932..456541b6 100644
                      const int nxpsg  = ne11 < 3 ? 16 : 8; // num threads along row per simdgroup
                      const int nypsg  = 32/nxpsg;          // num threads along col per simdgroup (i.e. a simdgroup processes that many src0 rows at a time)
                      const int r0ptg  = nypsg*nsg;         // num src0 rows per threadgroup
-@@ -4259,7 +4269,7 @@ static int ggml_metal_encode_node(
+@@ -4270,7 +4280,7 @@ static int ggml_metal_encode_node(
              } break;
          case GGML_OP_RMS_NORM:
              {

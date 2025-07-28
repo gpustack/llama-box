@@ -11,7 +11,7 @@ index 6f454a50..cd924158 100644
      LLAMA_API uint32_t llama_n_batch    (const struct llama_context * ctx);
      LLAMA_API uint32_t llama_n_ubatch   (const struct llama_context * ctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index a91d157e..832eda2f 100644
+index 9e77fe6d..82e2859d 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -113,6 +113,20 @@ llama_context::llama_context(
@@ -46,7 +46,7 @@ index a91d157e..832eda2f 100644
  uint32_t llama_context::n_ctx() const {
      return cparams.n_ctx;
  }
-@@ -1096,7 +1114,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
+@@ -1102,7 +1120,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
          //    ggml_graph_dump_dot(gf, NULL, "llama.dot");
          //}
  
@@ -55,7 +55,7 @@ index a91d157e..832eda2f 100644
          auto * t_embd   = cparams.embeddings ? res->get_embd() : nullptr;
  
          if (t_embd && res->get_embd_pooled()) {
-@@ -1246,7 +1264,7 @@ uint32_t llama_context::output_reserve(int32_t n_outputs) {
+@@ -1258,7 +1276,7 @@ uint32_t llama_context::output_reserve(int32_t n_outputs) {
      const auto n_vocab = vocab.n_tokens();
      const auto n_embd  = hparams.n_embd;
  
@@ -64,7 +64,7 @@ index a91d157e..832eda2f 100644
      bool has_embd   = cparams.embeddings;
  
      // TODO: hacky enc-dec support
-@@ -2302,6 +2320,10 @@ void llama_free(llama_context * ctx) {
+@@ -2314,6 +2332,10 @@ void llama_free(llama_context * ctx) {
      delete ctx;
  }
  
@@ -76,7 +76,7 @@ index a91d157e..832eda2f 100644
      return ctx->n_ctx();
  }
 diff --git a/src/llama-context.h b/src/llama-context.h
-index fdbe6120..6e0e36fd 100644
+index 5c3a1c09..a9f8cb2a 100644
 --- a/src/llama-context.h
 +++ b/src/llama-context.h
 @@ -35,6 +35,7 @@ struct llama_context {

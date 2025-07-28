@@ -40,10 +40,10 @@ index d058504c..c6dbd821 100644
          GGML_ASSERT(n_dims == ne00/2);
      }
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 1a999932..72950c61 100644
+index 337f7985..f7508d7d 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
-@@ -4598,7 +4598,6 @@ static int ggml_metal_encode_node(
+@@ -4609,7 +4609,6 @@ static int ggml_metal_encode_node(
              {
                  GGML_ASSERT(ggml_is_contiguous(src0));
                  GGML_ASSERT(ggml_is_contiguous(src1));
@@ -52,10 +52,10 @@ index 1a999932..72950c61 100644
                  GGML_ASSERT( dst->type == GGML_TYPE_F16 || dst->type == GGML_TYPE_F32);
  
 diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
-index 63ac4a98..71138c4d 100644
+index c87a3238..b3739710 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
-@@ -6337,10 +6337,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const
+@@ -6496,10 +6496,6 @@ static void ggml_cl_rope(ggml_backend_t backend, const ggml_tensor * src0, const
      const bool is_mrope = mode & GGML_ROPE_TYPE_MROPE;
      const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
  

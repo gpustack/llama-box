@@ -1,5 +1,5 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index a91d157e..005ea6c0 100644
+index 9e77fe6d..3a104d4b 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -117,7 +117,7 @@ llama_context::llama_context(
@@ -90,7 +90,7 @@ index a91d157e..005ea6c0 100644
  
      return cvec.apply(model, data, len, n_embd, il_start, il_end);
  }
-@@ -932,7 +932,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
+@@ -938,7 +938,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
      GGML_ASSERT((!batch_inp.token && batch_inp.embd) || (batch_inp.token && !batch_inp.embd)); // NOLINT
  
      if (!memory) {
@@ -99,7 +99,7 @@ index a91d157e..005ea6c0 100644
          return encode(batch_inp);
      }
  
-@@ -2277,8 +2277,8 @@ llama_context * llama_init_from_model(
+@@ -2289,8 +2289,8 @@ llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {
