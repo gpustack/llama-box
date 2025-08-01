@@ -1,8 +1,8 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 9e77fe6d..3a104d4b 100644
+index bd637f3d..6e9e5ed4 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
-@@ -117,7 +117,7 @@ llama_context::llama_context(
+@@ -126,7 +126,7 @@ llama_context::llama_context(
  
      LLAMA_LOG_INFO("%s: n_seq_max     = %u\n",   __func__, cparams.n_seq_max);
      LLAMA_LOG_INFO("%s: n_ctx         = %u\n",   __func__, cparams.n_ctx);
@@ -11,7 +11,7 @@ index 9e77fe6d..3a104d4b 100644
      LLAMA_LOG_INFO("%s: n_batch       = %u\n",   __func__, cparams.n_batch);
      LLAMA_LOG_INFO("%s: n_ubatch      = %u\n",   __func__, cparams.n_ubatch);
      LLAMA_LOG_INFO("%s: causal_attn   = %d\n",   __func__, cparams.causal_attn);
-@@ -126,14 +126,14 @@ llama_context::llama_context(
+@@ -135,14 +135,14 @@ llama_context::llama_context(
      LLAMA_LOG_INFO("%s: freq_base     = %.1f\n", __func__, cparams.rope_freq_base);
      LLAMA_LOG_INFO("%s: freq_scale    = %g\n",   __func__, cparams.rope_freq_scale);
  
@@ -32,7 +32,7 @@ index 9e77fe6d..3a104d4b 100644
      }
  
      if (!params.swa_full && cparams.n_seq_max > 1 && hparams.is_swa_any()) {
-@@ -647,19 +647,19 @@ void llama_context::set_abort_callback(bool (*abort_callback)(void * data), void
+@@ -656,19 +656,19 @@ void llama_context::set_abort_callback(bool (*abort_callback)(void * data), void
  }
  
  void llama_context::set_embeddings(bool value) {
@@ -55,7 +55,7 @@ index 9e77fe6d..3a104d4b 100644
  
      cparams.warmup = value;
  }
-@@ -667,14 +667,14 @@ void llama_context::set_warmup(bool value) {
+@@ -676,14 +676,14 @@ void llama_context::set_warmup(bool value) {
  void llama_context::set_adapter_lora(
              llama_adapter_lora * adapter,
              float scale) {
@@ -72,7 +72,7 @@ index 9e77fe6d..3a104d4b 100644
  
      auto pos = loras.find(adapter);
      if (pos != loras.end()) {
-@@ -686,7 +686,7 @@ bool llama_context::rm_adapter_lora(
+@@ -695,7 +695,7 @@ bool llama_context::rm_adapter_lora(
  }
  
  void llama_context::clear_adapter_lora() {
@@ -81,7 +81,7 @@ index 9e77fe6d..3a104d4b 100644
  
      loras.clear();
  }
-@@ -697,7 +697,7 @@ bool llama_context::apply_adapter_cvec(
+@@ -706,7 +706,7 @@ bool llama_context::apply_adapter_cvec(
                  int32_t   n_embd,
                  int32_t   il_start,
                  int32_t   il_end) {
@@ -90,7 +90,7 @@ index 9e77fe6d..3a104d4b 100644
  
      return cvec.apply(model, data, len, n_embd, il_start, il_end);
  }
-@@ -938,7 +938,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
+@@ -947,7 +947,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
      GGML_ASSERT((!batch_inp.token && batch_inp.embd) || (batch_inp.token && !batch_inp.embd)); // NOLINT
  
      if (!memory) {
@@ -99,7 +99,7 @@ index 9e77fe6d..3a104d4b 100644
          return encode(batch_inp);
      }
  
-@@ -2289,8 +2289,8 @@ llama_context * llama_init_from_model(
+@@ -2298,8 +2298,8 @@ llama_context * llama_init_from_model(
      }
  
      if (ggml_is_quantized(params.type_v) && !params.flash_attn) {

@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
-index cdc3bb5a..e9be01b0 100644
+index 7fb04d51..94b41040 100644
 --- a/ggml/src/ggml-cuda/common.cuh
 +++ b/ggml/src/ggml-cuda/common.cuh
 @@ -59,6 +59,10 @@
@@ -18,14 +18,14 @@ index cdc3bb5a..e9be01b0 100644
  #define GGML_CUDA_CC_IS_RDNA4(cc) (cc >= GGML_CUDA_CC_RDNA4)
  #define GGML_CUDA_CC_IS_GCN(cc)   (cc > GGML_CUDA_CC_OFFSET_AMD && cc < GGML_CUDA_CC_CDNA1)
 -#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA1 && cc < GGML_CUDA_CC_RDNA1)
-+#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA && cc < GGML_CUDA_CC_RDNA1 && cc != GGML_CUDA_CC_CDNA2_DCU_Z100 && cc != GGML_CUDA_CC_CDNA2_DCU_K100 && cc != GGML_CUDA_CC_CDNA2_DCU_Z100L)
++#define GGML_CUDA_CC_IS_CDNA(cc)  (cc >= GGML_CUDA_CC_CDNA1 && cc < GGML_CUDA_CC_RDNA1 && cc != GGML_CUDA_CC_CDNA2_DCU_Z100 && cc != GGML_CUDA_CC_CDNA2_DCU_K100 && cc != GGML_CUDA_CC_CDNA2_DCU_Z100L)
  #define GGML_CUDA_CC_IS_CDNA3(cc) (cc >= GGML_CUDA_CC_CDNA3 && cc < GGML_CUDA_CC_RDNA1)
  
  // Moore Threads
-@@ -494,7 +498,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
+@@ -511,7 +515,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
  
  static __device__ __forceinline__ int ggml_cuda_dp4a(const int a, const int b, int c) {
- #if defined(GGML_USE_HIP) && defined(__HIP_PLATFORM_AMD__)
+ #if defined(GGML_USE_HIP)
 -#if defined(CDNA) || defined(RDNA2) || defined(__gfx906__)
 +#if (defined(CDNA) && !defined(__gfx926__) && !defined(__gfx928__) && !defined(__gfx936__)) || defined(RDNA2) || defined(__gfx906__)
      c = __builtin_amdgcn_sdot4(a, b, c, false);

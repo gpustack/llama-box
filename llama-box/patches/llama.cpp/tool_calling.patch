@@ -1,5 +1,5 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 114dbfcc..02ffbd3c 100644
+index 0c777d7a..937e93a6 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
 @@ -494,6 +494,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
@@ -127,12 +127,16 @@ index 114dbfcc..02ffbd3c 100644
          if (!is_partial) {
              builder.clear_tools();
              builder.move_to(0);
-@@ -1944,6 +2039,6 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+@@ -1944,8 +2039,8 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
          }
      }
      auto msg = builder.result();
--    LOG_DBG("Parsed message: %s\n", common_chat_msgs_to_json_oaicompat<json>({msg}).at(0).dump().c_str());
-+//    LOG_DBG("Parsed message: %s\n", common_chat_msgs_to_json_oaicompat<json>({msg}).at(0).dump().c_str());
+-    if (!is_partial) {
+-        LOG_DBG("Parsed message: %s\n", common_chat_msgs_to_json_oaicompat<json>({msg}).at(0).dump().c_str());
+-    }
++//    if (!is_partial) {
++//        LOG_DBG("Parsed message: %s\n", common_chat_msgs_to_json_oaicompat<json>({msg}).at(0).dump().c_str());
++//    }
      return msg;
  }
 diff --git a/common/chat.h b/common/chat.h
@@ -156,10 +160,10 @@ index ca807c14..ed4323de 100644
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs);
 diff --git a/include/llama.h b/include/llama.h
-index 6f454a50..c29a0c72 100644
+index 2cbe18d8..1208c1b8 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -371,6 +371,11 @@ extern "C" {
+@@ -372,6 +372,11 @@ extern "C" {
          const char * role;
          const char * content;
      } llama_chat_message;
@@ -171,7 +175,7 @@ index 6f454a50..c29a0c72 100644
  
      // lora adapter
      struct llama_adapter_lora;
-@@ -472,6 +477,7 @@ extern "C" {
+@@ -473,6 +478,7 @@ extern "C" {
      LLAMA_API const struct llama_vocab * llama_model_get_vocab(const struct llama_model * model);
      LLAMA_API enum llama_rope_type       llama_model_rope_type(const struct llama_model * model);
  
@@ -179,7 +183,7 @@ index 6f454a50..c29a0c72 100644
      LLAMA_API int32_t llama_model_n_ctx_train(const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_embd     (const struct llama_model * model);
      LLAMA_API int32_t llama_model_n_layer    (const struct llama_model * model);
-@@ -1103,6 +1109,37 @@ extern "C" {
+@@ -1107,6 +1113,37 @@ extern "C" {
      // Chat templates
      //
  
@@ -861,10 +865,10 @@ index 6968a19f..baaef734 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 71f89e19..8f5d896a 100644
+index 3983a693..5cd7c6be 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -17500,6 +17500,10 @@ void llama_model_free(llama_model * model) {
+@@ -17869,6 +17869,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  
