@@ -42,6 +42,7 @@ and [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
         - [x] UltraVox Series
         - [x] Qwen2 Audio Series
         - [x] Qwen2.5-Omni Series
+        - [x] Voxtral Series
         - [x] ...
     ```shell
       $ # Avoid memory raising when processing high-resolution images, like Qwen2 VL model, launch box with --visual-max-image-size 1344.

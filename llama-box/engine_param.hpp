@@ -354,7 +354,9 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN high correction dim or alpha (default: %.1f)", (double)llm_params.yarn_beta_slow });
     opts.push_back({ "server/completion",                  "-nkvo, --no-kv-offload",                        "Disable KV offload" });
     opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "Disable caching prompt" });
+    opts.push_back({ "server/completion",                  "       --cpu-moe",                              "Use CPU for Mixture of Experts (MoE) weights" });
     opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "Min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
+    opts.push_back({ "server/completion",                  "-nr,   --no-repack",                            "Disable weight repacking" });
     opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types_string().c_str(), ggml_type_name(llm_params.cache_type_k) });
     opts.push_back({ "server/completion",                  "-ctv,  --cache-type-v TYPE",                    "KV cache data type for V, allowed values: %s (default: %s)", get_all_cache_kv_types_string().c_str(), ggml_type_name(llm_params.cache_type_v) });
     opts.push_back({ "server/completion",                  "-dt,   --defrag-thold N",                       "KV cache defragmentation threshold (default: %.1f, < 0 - disabled)", (double)llm_params.defrag_thold });
@@ -1561,6 +1563,16 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 continue;
             }
 
+            if (!strcmp(flag, "--cpu-moe")) {
+                params_.hs_params.llm_params.tensor_buft_overrides.push_back(
+                    { "\\.ffn_up_exps\\.weight$", ggml_backend_cpu_buffer_type() });
+                params_.hs_params.llm_params.tensor_buft_overrides.push_back(
+                    { "\\.ffn_down_exps\\.weight$", ggml_backend_cpu_buffer_type() });
+                params_.hs_params.llm_params.tensor_buft_overrides.push_back(
+                    { "\\.ffn_gate_exps\\.weight$", ggml_backend_cpu_buffer_type() });
+                continue;
+            }
+
             if (!strcmp(flag, "--cache-reuse")) {
                 if (i == argc) {
                     missing("--cache-reuse");
@@ -1570,6 +1582,11 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (params_.hs_params.llm_params.n_cache_reuse > 0) {
                     params_.hs_params.cache_prompt = true;
                 }
+                continue;
+            }
+
+            if (!strcmp(flag, "-nr") || !strcmp(flag, "--no-repack")) {
+                params_.hs_params.llm_params.no_extra_bufts = true;
                 continue;
             }
 

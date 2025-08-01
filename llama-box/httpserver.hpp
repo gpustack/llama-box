@@ -5623,7 +5623,7 @@ struct httpserver {
                         //          <image> (tile image) </image> ... <image> (tile image) </image>\n
                         //          ...
                         //      </slice>
-                        // 2.6: <image> (overview image) </image>
+                        // 2.6/4.0: <image> (overview image) </image>
                         //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
                         //      <slice> (tile image) </slice> <slice> (tile image) </slice>\n
                         //      ...
@@ -5864,6 +5864,22 @@ struct httpserver {
                         tokenized_text = common_tokenize(llm_vocab, "<|audio_eos|>", false, true);
                         n_prefilling_request += int32_t(tokenized_text.size());
                         tokenized_prompts.emplace_back(std::move(tokenized_text));
+                    }
+                    // ultravox
+                    // NB(thxCode): clip_is_ultravox is a patch.
+                    else if (clip_is_ultravox(llm_ctx_clip_a)) {
+                        // format:
+                        // [BEGIN_AUDIO] audio
+
+                        // [BEGIN_AUDIO]
+                        llama_tokens tokenized_text = common_tokenize(llm_vocab, "[BEGIN_AUDIO]", add_bos, true);
+                        n_prefilling_request += int32_t(tokenized_text.size());
+                        tokenized_prompts.emplace_back(std::move(tokenized_text));
+                        // <MTMD/>
+                        for (llama_multimodal_tokens & tokenized_mtmd : tokenized_mtmds) {
+                            n_prefilling_request += int32_t(tokenized_mtmd.n_pos);
+                            tokenized_prompts.emplace_back(std::move(tokenized_mtmd));
+                        }
                     }
                     // others
                     else {
