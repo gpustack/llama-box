@@ -1013,7 +1013,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                         "Illegal param: \"url\" must be a valid base64-encoded image");
                                 }
                                 url = url.substr(idx + split.length());
-                                if (img.empty()) {
+                                if (url.empty()) {
                                     throw std::invalid_argument(
                                         "Illegal param: \"url\" is an empty image base64-encoded data");
                                 }
@@ -1032,7 +1032,7 @@ static inline std::unique_ptr<chat_complete_req> get_chat_complete_req(
                                 } else {
                                     pos = url.find('/', pos + 3);
                                     if (pos == std::string::npos) {
-                                        host = img;
+                                        host = url;
                                         path = "/";
                                     } else {
                                         host = url.substr(0, pos);
@@ -2394,7 +2394,6 @@ struct embeddings_task : btask {
     // input
     std::vector<llama_tokens> tokenized_inputs;
     std::unique_ptr<breq>     req;
-    int32_t                   n_prefilling_request = 0;
 
     // process
     int32_t                         i_input_prefilled = 0;  // indicate the index which input has been prefilled
@@ -5993,8 +5992,6 @@ struct httpserver {
 
         const llama_token tok_eos = llama_vocab_eos(llm_vocab);
 
-        int32_t n_prefilling_request = 0;
-
         std::vector<llama_tokens> tokenized_inputs = tokenize_prompts(llm_vocab, req->input, true, true);
         for (size_t i = 0; i < tokenized_inputs.size(); i++) {
             if (llm_model_arch_name == "qwen3" || tokenized_inputs[i].empty()) {
@@ -6013,19 +6010,17 @@ struct httpserver {
                 tokenized_inputs[i].erase(tokenized_inputs[i].begin(), tokenized_inputs[i].end() - llm_ctx_size);
                 n_pos = llm_ctx_size;
             }
-            n_prefilling_request += n_pos;
         }
 
-        if (n_prefilling_request == 0) {
+        if (tokenized_inputs.empty()) {
             return send_json(request, response, httplib::BadRequest_400, "Illegal param: empty embedding tokens");
         }
 
         std::unique_ptr<embeddings_task> task =
             std::make_unique<embeddings_task>(get_task_id(), request.is_connection_closed);
-        task->tokenized_inputs     = std::move(tokenized_inputs);
-        task->n_prefilling_request = n_prefilling_request;
-        task->req                  = std::move(req);
-        task->t_start_prefill      = ggml_time_us();
+        task->tokenized_inputs = std::move(tokenized_inputs);
+        task->req              = std::move(req);
+        task->t_start_prefill  = ggml_time_us();
 
         return process(request, response, std::move(task));
     }
@@ -6043,8 +6038,6 @@ struct httpserver {
         const llama_token tok_sep        = llama_vocab_sep(llm_vocab);
         const size_t      n_tok_addition = 4;
 
-        int32_t n_prefilling_request = 0;
-
         llama_tokens tokenized_query = tokenize_prompt(llm_vocab, req->query, false, true);
         if (req->normalize && tokenized_query.size() * 2 + n_tok_addition > size_t(llm_ctx_size)) {
             return send_json(
@@ -6057,7 +6050,6 @@ struct httpserver {
                 throw std::invalid_argument(
                     R"(Illegal param: the sum of the lengths of "query" and "document" exceeds the context size)");
             }
-            n_prefilling_request += n_pos;
             // format input: [BOS]query[EOS][SEP]document[EOS]
             llama_tokens tokenized_input;
             tokenized_input.reserve(n_pos);
@@ -6085,16 +6077,15 @@ struct httpserver {
             tokenized_inputs.emplace_back(decorate({ llama_vocab_unk(llm_vocab) }));
         }
 
-        if (n_prefilling_request == 0) {
+        if (tokenized_inputs.empty()) {
             return send_json(request, response, httplib::BadRequest_400, "Illegal param: empty reranking tokens");
         }
 
         std::unique_ptr<embeddings_task> task =
             std::make_unique<embeddings_task>(get_task_id(), request.is_connection_closed);
-        task->tokenized_inputs     = std::move(tokenized_inputs);
-        task->n_prefilling_request = n_prefilling_request;
-        task->req                  = std::move(req);
-        task->t_start_prefill      = ggml_time_us();
+        task->tokenized_inputs = std::move(tokenized_inputs);
+        task->req              = std::move(req);
+        task->t_start_prefill  = ggml_time_us();
 
         return process(request, response, std::move(task));
     }

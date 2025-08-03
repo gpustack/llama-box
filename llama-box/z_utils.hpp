@@ -364,15 +364,30 @@ static inline bool json_is_array_of_objects(const nlohmann::json & data) {
 }
 
 /**
- * this handles 2 cases:
- * - only string, example: "string"
+ * this handles 3 cases:
+ * - object with "text" key, example: {"text": "string"}
  * - mixed string and tokens, example: [12, 34, "string", 56, 78]
+ * - only string, example: "string"
  */
-static inline llama_tokens tokenize_prompt(const llama_vocab * vocab, const nlohmann::json & json_prompt,
-                                           bool add_special, bool parse_special) {
-    llama_tokens result;
-    if (json_prompt.is_array()) {
-        bool first = true;
+static inline llama_tokens tokenize_prompt(const llama_vocab *    vocab,
+                                                                      const nlohmann::json & json_prompt,
+                                                                      bool add_special, bool parse_special) {
+    // object
+    if (json_prompt.is_object()) {
+        // text prompt
+        if (json_prompt.contains("text") && json_prompt.at("text").is_string()) {
+            std::string s = json_prompt.at("text").get<std::string>();
+            return common_tokenize(vocab, s, add_special, parse_special);
+        }
+        // image prompt
+        // TODO
+        // others
+        throw std::runtime_error("Illegal param: content must be an object with 'text' or 'image' key");
+    }
+    // a list
+    else if (json_prompt.is_array()) {
+        llama_tokens result;
+        bool         first = true;
         for (const auto & jp : json_prompt) {
             if (jp.is_string()) {
                 std::string  s = jp.get<std::string>();
@@ -391,26 +406,34 @@ static inline llama_tokens tokenize_prompt(const llama_vocab * vocab, const nloh
                 result.push_back(jp.get<llama_token>());
             }
         }
-    } else if (json_prompt.is_string()) {
-        std::string s = json_prompt.get<std::string>();
-        result        = common_tokenize(vocab, s, add_special, parse_special);
-    } else {
-        throw std::runtime_error(
-            "Illegal param: content must be a string, a list of tokens, a list of mixed strings & tokens");
+        return result;
     }
-    return result;
+    // pure string
+    else if (json_prompt.is_string()) {
+        std::string s = json_prompt.get<std::string>();
+        return common_tokenize(vocab, s, add_special, parse_special);
+    }
+    // others
+    throw std::runtime_error(
+        "Illegal param: content must be "
+        "an object with 'text' key, "
+        "a list of tokens, "
+        "a list of strings, "
+        "a list of mixed strings and tokens, "
+        "or a pure string");
 }
 
 /**
- * break the input "prompt" object into multiple prompt if needed, then tokenize them
+ * break the input "json_prompt" object into multiple prompt if needed, then tokenize them
  * this supports these cases:
- * - "prompt": "string"
- * - "prompt": [12, 34, 56]
- * - "prompt": [12, 34, "string", 56, 78]
+ * - "json_prompt": "string"
+ * - "json_prompt": [12, 34, 56]
+ * - "json_prompt": [12, 34, "string", 56, 78]
+ * - "json_prompt": [{"text": "string1"}, {"text": "string2"}, {"text": "string3"}]
  * and multiple prompts (multi-tasks):
- * - "prompt": ["string1", "string2"]
- * - "prompt": ["string1", [12, 34, 56]]
- * - "prompt": [[12, 34, "string", 56, 78], [12, 34, 56]]
+ * - "json_prompt": ["string1", "string2"]
+ * - "json_prompt": ["string1", [12, 34, 56]]
+ * - "json_prompt": [[12, 34, "string", 56, 78], [12, 34, 56]]
  */
 static inline std::vector<llama_tokens> tokenize_prompts(const llama_vocab * vocab, const nlohmann::json & json_prompt,
                                                          bool add_special, bool parse_special) {
@@ -425,7 +448,10 @@ static inline std::vector<llama_tokens> tokenize_prompts(const llama_vocab * voc
         // array of prompts
         result.reserve(json_prompt.size());
         for (const auto & p : json_prompt) {
-            if (p.is_string() || json_is_array_of_mixed_numbers_strings(p)) {
+            if (p.is_object()) {
+                // object
+                result.push_back(tokenize_prompt(vocab, p, add_special, parse_special));
+            } else if (p.is_string() || json_is_array_of_mixed_numbers_strings(p)) {
                 // string or mixed
                 result.push_back(tokenize_prompt(vocab, p, add_special, parse_special));
             } else if (json_is_array_of_numbers(p)) {
@@ -436,12 +462,22 @@ static inline std::vector<llama_tokens> tokenize_prompts(const llama_vocab * voc
                 result.push_back(tokenize_prompt(vocab, p, add_special, parse_special));
             } else {
                 throw std::runtime_error(
-                    "Illegal param: content must be a string, a list of tokens, or a list of mixed strings & tokens");
+                    "Illegal param: content must be "
+                    "an object with 'text' key, "
+                    "a list of tokens, "
+                    "a list of strings, "
+                    "a list of mixed strings and tokens, "
+                    "or a pure string");
             }
         }
     } else {
         throw std::runtime_error(
-            "Illegal param: content must be a string, a list of tokens, a list of mixed strings & tokens");
+            "Illegal param: content must be "
+            "an object with 'text' key, "
+            "a list of tokens, "
+            "a list of strings, "
+            "a list of mixed strings and tokens, "
+            "or a pure string");
     }
     return result;
 }
