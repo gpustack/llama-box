@@ -1,5 +1,5 @@
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 0c777d7a..937e93a6 100644
+index c5a840e8..9c1fa4ed 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
 @@ -494,6 +494,13 @@ void common_chat_templates_free(struct common_chat_templates * tmpls) {
@@ -16,7 +16,7 @@ index 0c777d7a..937e93a6 100644
  bool common_chat_templates_was_explicit(const struct common_chat_templates * tmpls) {
      return tmpls->has_explicit_template;
  }
-@@ -1816,6 +1823,83 @@ static common_chat_params common_chat_templates_apply_jinja(
+@@ -1814,6 +1821,83 @@ static common_chat_params common_chat_templates_apply_jinja(
      return common_chat_params_init_generic(tmpl, params);
  }
  
@@ -100,7 +100,7 @@ index 0c777d7a..937e93a6 100644
  // Legacy template route (adhoc C++ implementation of known templates), forward to llama_chat_apply_template.
  static common_chat_params common_chat_templates_apply_legacy(
      const struct common_chat_templates * tmpls,
-@@ -1874,6 +1958,17 @@ static common_chat_params common_chat_templates_apply_legacy(
+@@ -1872,6 +1956,17 @@ static common_chat_params common_chat_templates_apply_legacy(
      return params;
  }
  
@@ -118,7 +118,7 @@ index 0c777d7a..937e93a6 100644
  common_chat_params common_chat_templates_apply(
      const struct common_chat_templates * tmpls,
      const struct common_chat_templates_inputs & inputs)
-@@ -1936,7 +2031,7 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+@@ -1934,7 +2029,7 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
      try {
          common_chat_parse(builder);
      } catch (const common_chat_msg_partial_exception & ex) {
@@ -127,7 +127,7 @@ index 0c777d7a..937e93a6 100644
          if (!is_partial) {
              builder.clear_tools();
              builder.move_to(0);
-@@ -1944,8 +2039,8 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
+@@ -1942,8 +2037,8 @@ common_chat_msg common_chat_parse(const std::string & input, bool is_partial, co
          }
      }
      auto msg = builder.result();
@@ -222,10 +222,10 @@ index 2cbe18d8..1208c1b8 100644
      /// Both "model" and "custom_template" are optional, but at least one is required. "custom_template" has higher precedence than "model"
      /// NOTE: This function does not use a jinja parser. It only support a pre-defined list of template. See more: https://github.com/ggml-org/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template
 diff --git a/src/llama-chat.cpp b/src/llama-chat.cpp
-index d34bb268..c47868f8 100644
+index c4576e24..b72f1e12 100644
 --- a/src/llama-chat.cpp
 +++ b/src/llama-chat.cpp
-@@ -199,6 +199,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
+@@ -202,6 +202,606 @@ llm_chat_template llm_chat_detect_template(const std::string & tmpl) {
      return LLM_CHAT_TEMPLATE_UNKNOWN;
  }
  
@@ -833,7 +833,7 @@ index d34bb268..c47868f8 100644
  // This function uses heuristic checks to determine commonly used template. It is not a jinja parser.
  int32_t llm_chat_apply_template(
 diff --git a/src/llama-chat.h b/src/llama-chat.h
-index 6968a19f..baaef734 100644
+index 4cf77fd2..6e270212 100644
 --- a/src/llama-chat.h
 +++ b/src/llama-chat.h
 @@ -3,6 +3,7 @@
@@ -844,7 +844,7 @@ index 6968a19f..baaef734 100644
  
  enum llm_chat_template {
      LLM_CHAT_TEMPLATE_CHATML,
-@@ -52,10 +53,19 @@ enum llm_chat_template {
+@@ -53,10 +54,19 @@ enum llm_chat_template {
  
  struct llama_chat_message;
  
@@ -865,10 +865,10 @@ index 6968a19f..baaef734 100644
      llm_chat_template tmpl,
      const std::vector<const llama_chat_message *> & chat,
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index 3983a693..5cd7c6be 100644
+index 60a615c1..e8defba8 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
-@@ -17869,6 +17869,10 @@ void llama_model_free(llama_model * model) {
+@@ -18058,6 +18058,10 @@ void llama_model_free(llama_model * model) {
      delete model;
  }
  
