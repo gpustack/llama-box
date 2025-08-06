@@ -12,10 +12,10 @@ index 53504399c..fc00cf8cc 100644
              }
              if (!ok) {
 diff --git a/include/llama.h b/include/llama.h
-index 2cbe18d8c..06663e7f0 100644
+index 545e957e5..17804e5ae 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1014,6 +1014,7 @@ extern "C" {
+@@ -1015,6 +1015,7 @@ extern "C" {
      LLAMA_API llama_token llama_vocab_sep(const struct llama_vocab * vocab); // sentence separator
      LLAMA_API llama_token llama_vocab_nl (const struct llama_vocab * vocab); // next-line
      LLAMA_API llama_token llama_vocab_pad(const struct llama_vocab * vocab); // padding
@@ -24,7 +24,7 @@ index 2cbe18d8c..06663e7f0 100644
  
      LLAMA_API bool llama_vocab_get_add_bos(const struct llama_vocab * vocab);
 diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
-index 3f43fc556..b9f820334 100644
+index f7e03e702..7ad535203 100644
 --- a/src/llama-vocab.cpp
 +++ b/src/llama-vocab.cpp
 @@ -1758,7 +1758,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
@@ -46,7 +46,7 @@ index 3f43fc556..b9f820334 100644
              }
          } else if (type == LLAMA_VOCAB_TYPE_SPM) {
              pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
-@@ -3574,6 +3575,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
+@@ -3613,6 +3614,10 @@ llama_token llama_vocab_pad(const struct llama_vocab * vocab) {
      return vocab->token_pad();
  }
  

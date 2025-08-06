@@ -1,9 +1,9 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index 6581d27ad..1cc6cade8 100644
+index 854f1c2b4..ef9be6246 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
-@@ -5600,7 +5600,9 @@ static void ggml_compute_forward_soft_max_f32(
-                 ggml_vec_max_f32(ne00, &max, wp);
+@@ -5774,7 +5774,9 @@ static void ggml_compute_forward_soft_max_f32(
+                 }
  
                  ggml_float sum = ggml_vec_soft_max_f32(ne00, dp, wp, max);
 -                assert(sum > 0.0);
@@ -11,5 +11,5 @@ index 6581d27ad..1cc6cade8 100644
 +                    sum = -INFINITY;
 +                }
  
-                 sum = 1.0/sum;
-                 ggml_vec_scale_f32(ne00, dp, sum);
+                 if (sk) {
+                     sum += (ggml_float) expf(sk[i02] - max);

@@ -97,10 +97,10 @@ index 2064421db..8e9006635 100644
  //
  // - set logits
 diff --git a/include/llama.h b/include/llama.h
-index 2cbe18d8c..9fde969fe 100644
+index 545e957e5..672bb38af 100644
 --- a/include/llama.h
 +++ b/include/llama.h
-@@ -1268,6 +1268,8 @@ extern "C" {
+@@ -1269,6 +1269,8 @@ extern "C" {
                                 float   tau,
                                 float   eta);
  
