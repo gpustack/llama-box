@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
-index eaf41e5a6..a457fd4a1 100644
+index 1b9d29e91..8bdb5a0b7 100644
 --- a/ggml/src/ggml-backend.cpp
 +++ b/ggml/src/ggml-backend.cpp
 @@ -594,7 +594,7 @@ static bool ggml_is_view_op(enum ggml_op op) {
