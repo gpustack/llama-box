@@ -428,7 +428,7 @@ server/completion:
                                   Types: int, float, bool, str. example: --override-kv tokenizer.ggml.add_bos_token=bool:false
          --chat-template BUILTIN  Set built-in chat template (default: analyze from model's metadata)
                                   Only built-in templates are accepted, implicit reset --jinja setting
-                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, exaone4, falcon, falcon3, gemma, gigachat, glmedge, granite, hunyuan-moe, kimi-k2, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, mistral-v7-tekken, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
+                                  List of built-in templates: bailing, chatglm3, chatglm4, chatml, command-r, deepseek, deepseek2, deepseek3, exaone3, exaone4, falcon, falcon3, gemma, gigachat, glmedge, granite, hunyuan-dense, hunyuan-moe, kimi-k2, llama2, llama2-sys, llama2-sys-bos, llama2-sys-strip, llama3, llama4, llava, llava-mistral, megrez, minicpm, mistral-v1, mistral-v3, mistral-v3-tekken, mistral-v7, mistral-v7-tekken, monarch, openchat, orion, phi3, phi4, rwkv-world, smolvlm, vicuna, vicuna-orca, yandex, zephyr
          --jinja                  Enable jinja template for chat, implicit reset --chat-template and --chat-template-file setting (default: disabled)
          --chat-template-file FILE
                                   Set jinja chat template (default: take from model's metadata)
@@ -509,7 +509,10 @@ server/completion:
          --yarn-beta-slow N       YaRN high correction dim or alpha (default: 1.0)
   -nkvo, --no-kv-offload          Disable KV offload
          --no-cache-prompt        Disable caching prompt
+  -cmoe  --cpu-moe                Keep all Mixture of Experts (MoE) weights in the CPU
+  -ncmoe --n-cpu-moe N            Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU
          --cache-reuse N          Min chunk size to attempt reusing from the cache via KV shifting (default: 0)
+  -nr,   --no-repack              Disable weight repacking
   -ctk,  --cache-type-k TYPE      KV cache data type for K, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -ctv,  --cache-type-v TYPE      KV cache data type for V, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)
   -dt,   --defrag-thold N         KV cache defragmentation threshold (default: 0.1, < 0 - disabled)
@@ -528,6 +531,7 @@ server/completion:
                                   Add a control vector with user defined scaling SCALE
          --control-vector-layer-range START END
                                   Layer range to apply the control vector(s) to, start and end inclusive
+  -r     --reverse-prompt         Halt generation
   -sp,   --special                Special tokens output enabled (default: false)
          --enable-reasoning       Enable reasoning (default: true)
          --no-enable-reasoning    Disable reasoning
