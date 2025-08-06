@@ -1113,33 +1113,33 @@ jobs:
       fail-fast: false
       matrix:
         # see https://hub.docker.com/r/ascendai/cann/tags?page=&page_size=&ordering=&name=8.0.0.beta1-910b.
+        #     8.2.rc1     ==> 8.2.rc1, Ubuntu 20.04
         #     8.1.rc1     ==> 8.1.rc1.beta1, Ubuntu 20.04
-        #     8.0.0       ==> 8.0.0.beta1, Ubuntu 20.04
         include:
           - arch: 'amd64'
+            version: '8.2.rc1'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.2.rc1-910b-ubuntu20.04-v2'
+          - arch: 'amd64'
+            version: '8.2.rc1'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.2.rc1-310p-ubuntu20.04-v2'
+          - arch: 'amd64'
             version: '8.1.rc1'
             distro_container_image: 'gpustack/devel-ascendai-cann:8.1.rc1.beta1-910b-ubuntu20.04-v2'
           - arch: 'amd64'
             version: '8.1.rc1'
             distro_container_image: 'gpustack/devel-ascendai-cann:8.1.rc1.beta1-310p-ubuntu20.04-v2'
-          - arch: 'amd64'
-            version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04-v2'
-          - arch: 'amd64'
-            version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04-v2'
+          - arch: 'arm64'
+            version: '8.2.rc1'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.2.rc1.beta1-910b-ubuntu20.04-v2'
+          - arch: 'arm64'
+            version: '8.2.rc1'
+            distro_container_image: 'gpustack/devel-ascendai-cann:8.2.rc1.beta1-310p-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.1.rc1'
             distro_container_image: 'gpustack/devel-ascendai-cann:8.1.rc1.beta1-910b-ubuntu20.04-v2'
           - arch: 'arm64'
             version: '8.1.rc1'
             distro_container_image: 'gpustack/devel-ascendai-cann:8.1.rc1.beta1-310p-ubuntu20.04-v2'
-          - arch: 'arm64'
-            version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-910b-ubuntu20.04-v2'
-          - arch: 'arm64'
-            version: '8.0'
-            distro_container_image: 'gpustack/devel-ascendai-cann:8.0.0.beta1-310p-ubuntu20.04-v2'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Maximize Root Space
