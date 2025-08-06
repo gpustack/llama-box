@@ -1,5 +1,5 @@
 diff --git a/common/ngram-cache.cpp b/common/ngram-cache.cpp
-index d1a4d84c..26ed2e89 100644
+index d1a4d84c4..26ed2e894 100644
 --- a/common/ngram-cache.cpp
 +++ b/common/ngram-cache.cpp
 @@ -192,7 +192,6 @@ void common_ngram_cache_draft(

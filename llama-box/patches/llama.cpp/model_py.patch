@@ -1,8 +1,8 @@
 diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
-index 9303a047..5d984687 100755
+index a215f4ed7..2937d4536 100755
 --- a/convert_hf_to_gguf.py
 +++ b/convert_hf_to_gguf.py
-@@ -4703,6 +4703,123 @@ class XLMRobertaModel(BertModel):
+@@ -4706,6 +4706,123 @@ class XLMRobertaModel(BertModel):
          return super().modify_tensors(data_torch, name, bid)
  
  
@@ -127,10 +127,10 @@ index 9303a047..5d984687 100755
  class GemmaModel(TextModel):
      model_arch = gguf.MODEL_ARCH.GEMMA
 diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
-index 5707085c..0cd3bf84 100644
+index e2d81dd98..ab19a9c8b 100644
 --- a/gguf-py/gguf/constants.py
 +++ b/gguf-py/gguf/constants.py
-@@ -309,6 +309,7 @@ class MODEL_ARCH(IntEnum):
+@@ -310,6 +310,7 @@ class MODEL_ARCH(IntEnum):
      MPT              = auto()
      STARCODER        = auto()
      REFACT           = auto()
@@ -138,7 +138,7 @@ index 5707085c..0cd3bf84 100644
      BERT             = auto()
      NOMIC_BERT       = auto()
      NOMIC_BERT_MOE   = auto()
-@@ -630,6 +631,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
+@@ -639,6 +640,7 @@ MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
      MODEL_ARCH.MPT:              "mpt",
      MODEL_ARCH.STARCODER:        "starcoder",
      MODEL_ARCH.REFACT:           "refact",
@@ -146,7 +146,7 @@ index 5707085c..0cd3bf84 100644
      MODEL_ARCH.BERT:             "bert",
      MODEL_ARCH.NOMIC_BERT:       "nomic-bert",
      MODEL_ARCH.NOMIC_BERT_MOE:   "nomic-bert-moe",
-@@ -1133,6 +1135,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+@@ -1150,6 +1152,20 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
          MODEL_TENSOR.FFN_DOWN,
          MODEL_TENSOR.FFN_UP,
      ],
@@ -168,7 +168,7 @@ index 5707085c..0cd3bf84 100644
          MODEL_TENSOR.TOKEN_EMBD,
          MODEL_TENSOR.TOKEN_EMBD_NORM,
 diff --git a/gguf-py/gguf/tensor_mapping.py b/gguf-py/gguf/tensor_mapping.py
-index e6efc93f..44a054ec 100644
+index dd4f3d52e..0bd5ed9e2 100644
 --- a/gguf-py/gguf/tensor_mapping.py
 +++ b/gguf-py/gguf/tensor_mapping.py
 @@ -167,6 +167,7 @@ class TensorNameMap:

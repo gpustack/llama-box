@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-metal/ggml-metal.m b/ggml/src/ggml-metal/ggml-metal.m
-index 337f7985..8aba16ce 100644
+index 337f7985b..8aba16ce6 100644
 --- a/ggml/src/ggml-metal/ggml-metal.m
 +++ b/ggml/src/ggml-metal/ggml-metal.m
 @@ -1690,6 +1690,7 @@ static void ggml_backend_metal_buffer_rset_free(struct ggml_backend_metal_buffer

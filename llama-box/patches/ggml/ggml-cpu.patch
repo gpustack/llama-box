@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cpu/CMakeLists.txt b/ggml/src/ggml-cpu/CMakeLists.txt
-index f188d163..573d6bc4 100644
+index f188d1638..573d6bc43 100644
 --- a/ggml/src/ggml-cpu/CMakeLists.txt
 +++ b/ggml/src/ggml-cpu/CMakeLists.txt
 @@ -160,47 +160,94 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
@@ -353,7 +353,7 @@ index f188d163..573d6bc4 100644
              endif()
          endif()
 diff --git a/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp b/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
-index 67369147..c460c549 100644
+index 67369147c..c460c5491 100644
 --- a/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
 +++ b/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp
 @@ -8,6 +8,10 @@

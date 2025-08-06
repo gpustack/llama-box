@@ -1,5 +1,5 @@
 diff --git a/common/sampling.cpp b/common/sampling.cpp
-index 9c04d35f..4a28bb02 100644
+index 9c04d35fd..4a28bb026 100644
 --- a/common/sampling.cpp
 +++ b/common/sampling.cpp
 @@ -232,7 +232,7 @@ struct common_sampler * common_sampler_init(const struct llama_model * model, co
@@ -84,7 +84,7 @@ index 9c04d35f..4a28bb02 100644
      gsmpl->set_logits(ctx, idx);
  
 diff --git a/common/sampling.h b/common/sampling.h
-index 2064421d..8e900663 100644
+index 2064421db..8e9006635 100644
 --- a/common/sampling.h
 +++ b/common/sampling.h
 @@ -48,6 +48,8 @@ struct common_sampler * common_sampler_clone (struct common_sampler * gsmpl);
@@ -97,7 +97,7 @@ index 2064421d..8e900663 100644
  //
  // - set logits
 diff --git a/include/llama.h b/include/llama.h
-index 2cbe18d8..9fde969f 100644
+index 2cbe18d8c..9fde969fe 100644
 --- a/include/llama.h
 +++ b/include/llama.h
 @@ -1268,6 +1268,8 @@ extern "C" {
@@ -110,7 +110,7 @@ index 2cbe18d8..9fde969f 100644
      /// @param vocab The vocabulary that this grammar will be used with.
      /// @param grammar_str The production rules for the grammar, encoded as a string. Returns an empty grammar if empty. Returns NULL if parsing of grammar_str fails.
 diff --git a/src/llama-sampling.cpp b/src/llama-sampling.cpp
-index bfbf5fa2..abec33bf 100644
+index bfbf5fa23..abec33bf2 100644
 --- a/src/llama-sampling.cpp
 +++ b/src/llama-sampling.cpp
 @@ -1569,6 +1569,11 @@ static struct llama_sampler * llama_sampler_init_grammar_impl(

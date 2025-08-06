@@ -1,5 +1,5 @@
 diff --git a/common/common.cpp b/common/common.cpp
-index c6962d1d..5aca359d 100644
+index c6962d1d1..5aca359dd 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -1050,7 +1050,16 @@ struct common_init_result common_init_from_params(common_params & params) {
@@ -42,7 +42,7 @@ index c6962d1d..5aca359d 100644
          llama_memory_clear(llama_get_memory(lctx), true);
          llama_synchronize(lctx);
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 958bcc04..3696e1a4 100644
+index 958bcc047..3696e1a46 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -982,9 +982,9 @@ int llama_context::decode(const llama_batch & batch_inp) {
