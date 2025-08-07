@@ -618,7 +618,7 @@ jobs:
         #     rc4.2 ==> rc4.2.0, Ubuntu 22.04.
         include:
           - arch: 'amd64'
-            version: 'rc4.0'
+            version: 'rc4.2'
             distro_container_image: 'gpustack/devel-mthreads-musa:rc4.2.0-ubuntu22.04-v2'
             musa_arch: '21;22;31'
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
