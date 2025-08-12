@@ -2919,12 +2919,15 @@ struct httpserver {
         {
             chat_templates = common_chat_templates_init(llm_model, params.llm_params.chat_template);
 
+            const auto * source = common_chat_templates_source(chat_templates.get());
             // NB(thxCode): llama_chat_template_alias is a patch.
-            std::string alias = llama_chat_template_alias(common_chat_templates_source(chat_templates.get()));
+            std::string  alias  = llama_chat_template_alias(source);
 
             if (params.llm_params.use_jinja) {
                 // NB(thxCode): common_chat_templates_supports_tool_calls is a patch.
-                support_tool_calls = common_chat_templates_supports_tool_calls(chat_templates.get());
+                support_tool_calls          = common_chat_templates_supports_tool_calls(chat_templates.get());
+                // NB(thxCode): common_chat_templates_supports_parallel_tool_calls is a patch.
+                support_parallel_tool_calls = common_chat_templates_supports_parallel_tool_calls(chat_templates.get());
             } else {
                 bool get_token = false;
                 // chatml / chatglm4
@@ -3009,7 +3012,7 @@ struct httpserver {
             }
 
             {
-                if (alias == "deepseek3" || string_starts_with(llm_model_arch_name, "qwen3")) {
+                if (alias == "deepseek3" || alias == "granite" || string_starts_with(llm_model_arch_name, "qwen3")) {
                     llama_tokens ids = common_tokenize(llm_vocab, "<think>", false, true);
                     if (ids.size() == 1) {
                         reasoning_start_token = ids[0];
@@ -3017,6 +3020,12 @@ struct httpserver {
                     ids = common_tokenize(llm_vocab, "</think>", false, true);
                     if (ids.size() == 1) {
                         reasoning_end_token = ids[0];
+                    }
+                    // If the template does not contain the end token, we disable reasoning.
+                    auto source_str = std::string(source);
+                    if (source_str.find("</think>") == std::string::npos) {
+                        reasoning_start_token = LLAMA_TOKEN_NULL;
+                        reasoning_end_token   = LLAMA_TOKEN_NULL;
                     }
                 } else if (alias == "command-r") {
                     llama_tokens ids = common_tokenize(llm_vocab, "<|START_THINKING|>", false, true);
@@ -3026,6 +3035,12 @@ struct httpserver {
                     ids = common_tokenize(llm_vocab, "<|END_THINKING|>", false, true);
                     if (ids.size() == 1) {
                         reasoning_end_token = ids[0];
+                    }
+                    // If the template does not contain the end token, we disable reasoning.
+                    auto source_str = std::string(source);
+                    if (source_str.find("<|END_THINKING|>") == std::string::npos) {
+                        reasoning_start_token = LLAMA_TOKEN_NULL;
+                        reasoning_end_token   = LLAMA_TOKEN_NULL;
                     }
                 }
                 support_reasoning = params.llm_params.reasoning_budget != 0 &&
@@ -3371,6 +3386,7 @@ struct httpserver {
 
     // tool calls
     bool                     support_tool_calls                   = false;
+    bool                     support_parallel_tool_calls          = true;
     // non-jinja tool calls
     llama_tokens             tool_call_start_tokens               = {};
     std::vector<std::string> tool_call_start_words                = {};
@@ -5344,45 +5360,46 @@ struct httpserver {
         /* LLAMA */
         else {
             metadata_json = {
-                { "vocab_type",            llama_vocab_type(llm_vocab)                      },
-                { "n_vocab",               llama_vocab_n_tokens(llm_vocab)                  },
-                { "n_ctx_train",           llama_model_n_ctx_train(llm_model)               },
-                { "n_embd",                llama_model_n_embd(llm_model)                    },
-                { "n_params",              llama_model_n_params(llm_model)                  },
-                { "size",                  llama_model_size(llm_model)                      },
-                { "n_ctx",                 llm_ctx_size                                     },
-                { "n_slot",                1                                                },
-                { "n_slot_ctx",            llm_ctx_size                                     },
-                { "ctx_shift",             shift_context                                    },
-                { "prompt_cache",          cache_prompt                                     },
-                { "seed",                  int32_t(params.llm_params.sampling.seed)         },
-                { "temperature",           params.llm_params.sampling.temp                  },
-                { "dynatemp_range",        params.llm_params.sampling.dynatemp_range        },
-                { "dynatemp_exponent",     params.llm_params.sampling.dynatemp_exponent     },
-                { "top_k",                 params.llm_params.sampling.top_k                 },
-                { "top_p",                 params.llm_params.sampling.top_p                 },
-                { "min_p",                 params.llm_params.sampling.min_p                 },
-                { "top_n_sigma",           params.llm_params.sampling.top_n_sigma           },
-                { "xtc_probability",       params.llm_params.sampling.xtc_probability       },
-                { "xtc_threshold",         params.llm_params.sampling.xtc_threshold         },
-                { "typical_p",             params.llm_params.sampling.typ_p                 },
-                { "repeat_last_n",         params.llm_params.sampling.penalty_last_n        },
-                { "repeat_penalty",        params.llm_params.sampling.penalty_repeat        },
-                { "presence_penalty",      params.llm_params.sampling.penalty_present       },
-                { "frequency_penalty",     params.llm_params.sampling.penalty_freq          },
-                { "dry_multiplier",        params.llm_params.sampling.dry_multiplier        },
-                { "dry_base",              params.llm_params.sampling.dry_base              },
-                { "dry_allowed_length",    params.llm_params.sampling.dry_allowed_length    },
-                { "dry_penalty_last_n",    params.llm_params.sampling.dry_penalty_last_n    },
-                { "dry_sequence_breakers", params.llm_params.sampling.dry_sequence_breakers },
-                { "mirostat",              params.llm_params.sampling.mirostat              },
-                { "mirostat_tau",          params.llm_params.sampling.mirostat_tau          },
-                { "mirostat_eta",          params.llm_params.sampling.mirostat_eta          },
-                { "support_vision",        llm_ctx_clip_v != nullptr                        },
-                { "support_audio",         llm_ctx_clip_a != nullptr                        },
-                { "support_speculative",   llm_ctx_draft != nullptr                         },
-                { "support_tool_calls",    support_tool_calls                               },
-                { "support_reasoning",     support_reasoning                                },
+                { "vocab_type",                  llama_vocab_type(llm_vocab)                      },
+                { "n_vocab",                     llama_vocab_n_tokens(llm_vocab)                  },
+                { "n_ctx_train",                 llama_model_n_ctx_train(llm_model)               },
+                { "n_embd",                      llama_model_n_embd(llm_model)                    },
+                { "n_params",                    llama_model_n_params(llm_model)                  },
+                { "size",                        llama_model_size(llm_model)                      },
+                { "n_ctx",                       llm_ctx_size                                     },
+                { "n_slot",                      1                                                },
+                { "n_slot_ctx",                  llm_ctx_size                                     },
+                { "ctx_shift",                   shift_context                                    },
+                { "prompt_cache",                cache_prompt                                     },
+                { "seed",                        int32_t(params.llm_params.sampling.seed)         },
+                { "temperature",                 params.llm_params.sampling.temp                  },
+                { "dynatemp_range",              params.llm_params.sampling.dynatemp_range        },
+                { "dynatemp_exponent",           params.llm_params.sampling.dynatemp_exponent     },
+                { "top_k",                       params.llm_params.sampling.top_k                 },
+                { "top_p",                       params.llm_params.sampling.top_p                 },
+                { "min_p",                       params.llm_params.sampling.min_p                 },
+                { "top_n_sigma",                 params.llm_params.sampling.top_n_sigma           },
+                { "xtc_probability",             params.llm_params.sampling.xtc_probability       },
+                { "xtc_threshold",               params.llm_params.sampling.xtc_threshold         },
+                { "typical_p",                   params.llm_params.sampling.typ_p                 },
+                { "repeat_last_n",               params.llm_params.sampling.penalty_last_n        },
+                { "repeat_penalty",              params.llm_params.sampling.penalty_repeat        },
+                { "presence_penalty",            params.llm_params.sampling.penalty_present       },
+                { "frequency_penalty",           params.llm_params.sampling.penalty_freq          },
+                { "dry_multiplier",              params.llm_params.sampling.dry_multiplier        },
+                { "dry_base",                    params.llm_params.sampling.dry_base              },
+                { "dry_allowed_length",          params.llm_params.sampling.dry_allowed_length    },
+                { "dry_penalty_last_n",          params.llm_params.sampling.dry_penalty_last_n    },
+                { "dry_sequence_breakers",       params.llm_params.sampling.dry_sequence_breakers },
+                { "mirostat",                    params.llm_params.sampling.mirostat              },
+                { "mirostat_tau",                params.llm_params.sampling.mirostat_tau          },
+                { "mirostat_eta",                params.llm_params.sampling.mirostat_eta          },
+                { "support_vision",              llm_ctx_clip_v != nullptr                        },
+                { "support_audio",               llm_ctx_clip_a != nullptr                        },
+                { "support_speculative",         llm_ctx_draft != nullptr                         },
+                { "support_tool_calls",          support_tool_calls                               },
+                { "support_parallel_tool_calls", support_parallel_tool_calls                      },
+                { "support_reasoning",           support_reasoning                                },
             };
         }
 
@@ -5952,7 +5969,8 @@ struct httpserver {
             }
         }
 
-        bool tool_call_stop_fast = !req->parallel_tool_calls || req->tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED;
+        bool tool_call_stop_fast = !(support_parallel_tool_calls && req->parallel_tool_calls) ||
+                                   req->tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED || req->tools.size() <= 1;
 
         // NB(thxCode): disable reasoning process if we need to generate tool calls in jinja.
         bool reasoning_finished = !support_reasoning || (params.llm_params.use_jinja &&
