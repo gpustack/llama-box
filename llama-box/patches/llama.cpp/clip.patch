@@ -1,8 +1,8 @@
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index c8822dcf5..2507cd2ff 100644
+index f1eb63336..d6150578f 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
-@@ -228,6 +228,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -229,6 +229,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
      va_end(args);
  }
  
@@ -10,7 +10,7 @@ index c8822dcf5..2507cd2ff 100644
  #define LOG_TMPL(level, ...) \
      do { \
          if ((level) >= g_logger_state.verbosity_thold) { \
-@@ -239,6 +240,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
+@@ -240,6 +241,7 @@ static void clip_log_internal(enum ggml_log_level level, const char * format, ..
  #define LOG_ERR(...) LOG_TMPL(GGML_LOG_LEVEL_ERROR, __VA_ARGS__)
  #define LOG_DBG(...) LOG_TMPL(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
  #define LOG_CNT(...) LOG_TMPL(GGML_LOG_LEVEL_CONT,  __VA_ARGS__)
@@ -18,7 +18,7 @@ index c8822dcf5..2507cd2ff 100644
  
  //
  // cpp wrappers
-@@ -294,6 +296,7 @@ struct clip_image_f32_batch {
+@@ -295,6 +297,7 @@ struct clip_image_f32_batch {
  // common utils
  //
  
@@ -26,7 +26,7 @@ index c8822dcf5..2507cd2ff 100644
  static std::string string_format(const char * fmt, ...) {
      va_list ap;
      va_list ap2;
-@@ -325,6 +328,7 @@ static void string_replace_all(std::string & s, const std::string & search, cons
+@@ -326,6 +329,7 @@ static void string_replace_all(std::string & s, const std::string & search, cons
      builder.append(s, last_pos, std::string::npos);
      s = std::move(builder);
  }
@@ -35,7 +35,7 @@ index c8822dcf5..2507cd2ff 100644
  // split string by a `std::string delim` instead of `char delim`
  static std::vector<std::string> string_split_str(std::string s, const std::string & delimiter) {
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 20c217331..f8f04e96d 100644
+index fdaf9738e..80e479390 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -30,6 +30,11 @@
@@ -59,7 +59,7 @@ index 20c217331..f8f04e96d 100644
      int32_t n_embd;
      int32_t n_ff;
      int32_t projection_dim;
-@@ -2088,7 +2093,7 @@ struct clip_model_loader {
+@@ -2076,7 +2081,7 @@ struct clip_model_loader {
          }
      }
  
@@ -175,7 +175,7 @@ index 20c217331..f8f04e96d 100644
  
          clip_image_f32_ptr img_f32(clip_image_f32_init());
          // clip_image_f32_ptr res(clip_image_f32_init());
-@@ -4175,6 +4206,34 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
+@@ -4164,6 +4195,34 @@ bool clip_is_gemma3(const struct clip_ctx * ctx) {
      return ctx->proj_type() == PROJECTOR_TYPE_GEMMA3;
  }
  
