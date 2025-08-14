@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
-index a23da57e3..ef8100be3 100644
+index 2b14b30ac..3c5b17e95 100644
 --- a/ggml/src/ggml-cuda/common.cuh
 +++ b/ggml/src/ggml-cuda/common.cuh
 @@ -60,6 +60,10 @@
@@ -22,7 +22,7 @@ index a23da57e3..ef8100be3 100644
  #define GGML_CUDA_CC_IS_CDNA3(cc) (cc >= GGML_CUDA_CC_CDNA3 && cc < GGML_CUDA_CC_RDNA1)
  
  // Moore Threads
-@@ -520,7 +524,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
+@@ -500,7 +504,7 @@ static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half
  
  static __device__ __forceinline__ int ggml_cuda_dp4a(const int a, const int b, int c) {
  #if defined(GGML_USE_HIP)
