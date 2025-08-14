@@ -539,6 +539,9 @@ server/completion:
   -sp,   --special                Special tokens output enabled (default: false)
          --enable-reasoning       Enable reasoning (default: true)
          --no-enable-reasoning    Disable reasoning
+         --reasoning-in-content   Return reasoning result into content field (default: false)
+         --no-reasoning-in-content
+                                  Disable return reasoning result into content field
 
 server/completion/speculative:
 

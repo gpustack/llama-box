@@ -2139,11 +2139,12 @@ struct completions_task : btask {
     int32_t            n_processed_detokenized = 0;  // indicate how many processed tokens are detokenized
     std::string        generated_finish_reason;      // indicate the reason of finish
     size_t             generated_text_keep_pos = std::string::npos;  // erase after call to_json
-    std::string        generated_text;        // keep [generated_text_keep_pos,) after call to_json if streaming
-    std::vector<json>  generated_tool_calls;  // erase after call to_json if streaming
-    std::vector<float> generated_probs;       // erase after call get_probs_json if streaming
+    std::string        generated_text;            // keep [generated_text_keep_pos,) after call to_json if streaming
+    std::string        generated_reasoning_text;  // indicate the generated reasoning text if not streaming
+    std::vector<json>  generated_tool_calls;      // erase after call to_json if streaming
+    std::vector<float> generated_probs;           // erase after call get_probs_json if streaming
     std::vector<std::vector<std::pair<llama_token /* tok */, float /* prob */>>>
-        generated_top_probs;                  // erase after call get_probs_json if streaming
+        generated_top_probs;                      // erase after call get_probs_json if streaming
 
     //// prefill
     int32_t n_prefilling_request = 0;  // indicate how many tokens need to be prefilled
@@ -2287,7 +2288,7 @@ struct completions_task : btask {
         return result;
     }
 
-    json to_json(const llama_context * llm_ctx) {
+    json to_json(const llama_context * llm_ctx, const bool reasoning_in_content) {
         bool stop          = !generated_finish_reason.empty();
         bool include_usage = stop && json_value(req->stream_options, "include_usage", true);
         bool is_chat       = req->get_type() == REQ_CHAT_COMPLETE;
@@ -2343,9 +2344,19 @@ struct completions_task : btask {
                 { "finish_reason", stop ? json(generated_finish_reason) : json() },
             };
             if (is_chat) {
-                json delta_message = json{
-                    { "content", generated_text_send },
-                };
+                json delta_message;
+                if (!reasoning_in_content && !reasoning_finished) {
+                    delta_message = json{
+                        { "reasoning_content", generated_text_send },
+                    };
+                } else {
+                    delta_message = json{
+                        { "content", generated_text_send },
+                    };
+                    if (!generated_reasoning_text.empty()) {
+                        delta_message["reasoning_content"] = generated_reasoning_text;
+                    }
+                }
                 if (!generated_tool_calls.empty()) {
                     if (generated_text_send.empty()) {
                         delta_message["content"] = json();
@@ -3043,14 +3054,22 @@ struct httpserver {
                         reasoning_start_token = LLAMA_TOKEN_NULL;
                         reasoning_end_token   = LLAMA_TOKEN_NULL;
                     }
+                } else if (alias == "gpt-oss") {
+                    reasoning_start_word = "<|channel|>analysis<|message|>";
+                    reasoning_end_word   = "<|start|>assistant<|channel|>final<|message|>";
                 }
-                support_reasoning = params.llm_params.reasoning_budget != 0 &&
-                                    reasoning_start_token != LLAMA_TOKEN_NULL &&
-                                    reasoning_end_token != LLAMA_TOKEN_NULL;
+                support_reasoning =
+                    !(string_starts_with(llm_model_arch_name, "qwen3") && params.llm_params.reasoning_budget == 0) &&
+                    ((reasoning_start_token != LLAMA_TOKEN_NULL && reasoning_end_token != LLAMA_TOKEN_NULL) ||
+                     (!reasoning_start_word.empty() && !reasoning_end_word.empty()));
                 if (!support_reasoning) {
                     reasoning_start_token = LLAMA_TOKEN_NULL;
                     reasoning_end_token   = LLAMA_TOKEN_NULL;
+                    reasoning_start_word.clear();
+                    reasoning_end_word.clear();
                 }
+                reasoning_in_content =
+                    support_reasoning && params.llm_params.reasoning_format != COMMON_REASONING_FORMAT_AUTO;
             }
 
             std::string prompt;
@@ -3400,8 +3419,11 @@ struct httpserver {
 
     // reasoning
     bool        support_reasoning     = false;
+    bool        reasoning_in_content  = false;
     llama_token reasoning_start_token = LLAMA_TOKEN_NULL;
+    std::string reasoning_start_word  = "";
     llama_token reasoning_end_token   = LLAMA_TOKEN_NULL;
+    std::string reasoning_end_word    = "";
 
     static inline int32_t get_task_id() {
         thread_local static int32_t id = -1;
@@ -4336,22 +4358,38 @@ struct httpserver {
                             bool        special =
                                 params.llm_params.special || task->req->sampling.preserved_tokens.find(tok) !=
                                                                  task->req->sampling.preserved_tokens.end();
-                            sampled_str += common_token_to_piece(llm_ctx, tok, special);
-                            // check if the token is a reasoning token
+                            // has reasoning
                             if (support_reasoning && !task->reasoning_finished) {
+                                // find reasoning begin [in token]
                                 if (!task->reasoning_start_found) {
                                     task->reasoning_start_found = tok == reasoning_start_token;
-                                } else if (!task->reasoning_end_found) {
+                                    if (!reasoning_in_content && task->reasoning_start_found) {
+                                        continue;
+                                    }
+                                }
+                                // find reasoning end [in token]
+                                else if (!task->reasoning_end_found) {
                                     if (tok == reasoning_end_token) {
                                         task->reasoning_end_found = true;
+                                        if (!reasoning_in_content) {
+                                            continue;
+                                        }
                                     } else {
                                         task->n_reasoning++;
                                     }
-                                } else if (!task->reasoning_finished) {
+                                }
+                                // finish
+                                else if (!task->reasoning_finished) {
                                     task->reasoning_finished = true;
-                                    task->generated_text.clear();  // avoid to remember the thinking content
+                                    // avoid to remember the thinking content
+                                    if (!task->is_stream() && !reasoning_in_content) {
+                                        task->generated_reasoning_text.swap(task->generated_text);
+                                    } else {
+                                        task->generated_text.clear();
+                                    }
                                 }
                             }
+                            sampled_str += common_token_to_piece(llm_ctx, tok, special);
                         }
                         task->generated_text += sampled_str;
                         send_text = get_position_of_utf8(task->generated_text) == task->generated_text.size();
@@ -4370,6 +4408,37 @@ struct httpserver {
                                     task->generated_finish_reason = "stop";
                                     task->generated_text_keep_pos = pos;
                                     break;
+                                }
+                            }
+                            // find reasoning
+                            if (support_reasoning && !task->reasoning_finished) {
+                                // find reasoning begin [in word]
+                                if (!task->reasoning_start_found && reasoning_start_token == LLAMA_TOKEN_NULL) {
+                                    send_text = false;  // avoid to send text before reasoning start
+                                    task->reasoning_start_found =
+                                        string_starts_with(task->generated_text, reasoning_start_word);
+                                    if (task->reasoning_start_found) {
+                                        send_text = true;
+                                        task->n_reasoning++;
+                                        if (!reasoning_in_content) {
+                                            task->generated_text.clear();
+                                        }
+                                    }
+                                }
+                                // find reasoning end [in word]
+                                else if (!task->reasoning_end_found && reasoning_end_token == LLAMA_TOKEN_NULL) {
+                                    task->n_reasoning++;
+                                    task->reasoning_end_found =
+                                        string_ends_with(task->generated_text, reasoning_end_word);
+                                    if (task->reasoning_end_found) {
+                                        if (!reasoning_in_content) {
+                                            size_t pos = task->generated_text.rfind(reasoning_end_word);
+                                            task->generated_text_keep_pos = pos;
+                                            task->generated_text          = task->generated_text.erase(pos);
+                                        }
+                                    } else {
+                                        send_text = reasoning_end_word.find(sampled_str) == std::string::npos;
+                                    }
                                 }
                             }
                             // find tool call
@@ -4602,7 +4671,7 @@ struct httpserver {
                     if (task->generated_finish_reason.empty()) {
                         // stream outputting
                         if (send_text && task_ptr->is_stream()) {
-                            json data = task->to_json(llm_ctx);
+                            json data = task->to_json(llm_ctx, reasoning_in_content);
                             process_task_results[tid]->enqueue(
                                 std::make_unique<btask_result>(httplib::Continue_100, std::move(data)));
                         }
@@ -4696,7 +4765,7 @@ struct httpserver {
                         task->n_drafted == 0 ? 0.0 : double(task->n_drafted_accepted) / double(task->n_drafted);
                     // output
                     if (opened) {
-                        json data = task->to_json(llm_ctx);
+                        json data = task->to_json(llm_ctx, reasoning_in_content);
                         process_task_results[tid]->enqueue(
                             std::make_unique<btask_result>(httplib::OK_200, std::move(data)));
                     }

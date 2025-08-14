@@ -139,7 +139,7 @@ chat_completion() {
                 TOOL_CALLS=''
             fi
             CONTENT_SEG="$(
-                echo "${LINE}" | jq -cr '.choices[0].delta.content'
+                echo "${LINE}" | jq -cr '.choices[0].delta.reasoning_content // .choices[0].delta.content'
                 echo -n "#"
             )"
             CONTENT_SEG="${CONTENT_SEG:0:${#CONTENT_SEG}-2}"

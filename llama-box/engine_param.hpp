@@ -415,6 +415,8 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "-sp,   --special",                              "Special tokens output enabled (default: %s)", llm_params.special ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --enable-reasoning",                     "Enable reasoning (default: %s)", llm_params.reasoning_budget == -1 ? "true" : "false" });
     opts.push_back({ "server/completion",                  "       --no-enable-reasoning",                  "Disable reasoning" });
+    opts.push_back({ "server/completion",                  "       --reasoning-in-content",                 "Return reasoning result into content field (default: %s)", llm_params.reasoning_format != COMMON_REASONING_FORMAT_AUTO ? "true" : "false" });
+    opts.push_back({ "server/completion",                  "       --no-reasoning-in-content",              "Disable return reasoning result into content field" });
     // server // completion //
     // server // completion // speculative //
     opts.push_back({ "server/completion/speculative" });
@@ -1800,6 +1802,16 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
 
             if (!strcmp(flag, "--no-enable-reasoning")) {
                 params_.hs_params.llm_params.reasoning_budget = 0;
+                continue;
+            }
+
+            if (!strcmp(flag, "--reasoning-in-content")) {
+                params_.hs_params.llm_params.reasoning_format = COMMON_REASONING_FORMAT_NONE;
+                continue;
+            }
+
+            if (!strcmp(flag, "--no-reasoning-in-content")) {
+                params_.hs_params.llm_params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
                 continue;
             }
 
