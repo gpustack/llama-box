@@ -3723,10 +3723,13 @@ struct httpserver {
                         // filter
                         if (llm_kv_cache_used - llm_kv_cache_inactive + task->n_prefilling_request >
                             llm_kv_cache_limit) {
-                            SRV_DBG(
+                            SRV_INF(
                                 "rid %s | "
-                                "batching, waiting previous batch finished: not enough space to place all tokens\n",
-                                rid.c_str());
+                                "batching, waiting previous batch finished: not enough space to place all tokens, "
+                                "llm_kv_cache_used(%d) - llm_kv_cache_inactive(%d) + n_prefilling_request(%d) > "
+                                "llm_kv_cache_limit(%d)\n",
+                                rid.c_str(), llm_kv_cache_used, llm_kv_cache_inactive, task->n_prefilling_request,
+                                llm_kv_cache_limit);
                             process_tasks->enqueue(std::move(task_ptr));
                             continue;
                         }
@@ -3761,6 +3764,10 @@ struct httpserver {
                             for (int32_t i = 0; i < params.llm_params.n_threads_http; i++) {
                                 cache_prompt_entry & cache = cache_prompts.at(i);
                                 if (cache.used) {
+                                    SRV_DBG(
+                                        "rid %s | skip cache prompt in used "
+                                        "seq_id = %d\n",
+                                        rid.c_str(), i);
                                     continue;
                                 }
                                 size_t lcp_l = common_lcp(cache.tokens, tokens);
@@ -3814,7 +3821,7 @@ struct httpserver {
                                              rid.c_str(), seq_id, cached, pos);
                                 }
                             }
-                            // mark cache
+                            // mask prompt cache
                             cache_prompt_entry & cache = cache_prompts.at(seq_id);
                             llm_kv_cache_used -= cache.pos;
                             llm_kv_cache_inactive -= cache.pos;
@@ -3822,7 +3829,6 @@ struct httpserver {
                             cache.pos         = 0;
                             cache.pos_discard = task->pos > 0 ? cache.pos_discard : 0;
                             task->set_seq_id(seq_id);
-
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, task->pos, -1);
                             if (llm_ctx_draft != nullptr) {
@@ -3968,6 +3974,18 @@ struct httpserver {
                         llm_kv_cache_used += n_text_d;
                         // abort if incomplete prefilling
                         if (task->n_prefilled < task->n_prefilling_request) {
+                            // clean prompt cache
+                            if (cache_prompt) {
+                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                                cache.tokens.clear();
+                                cache.used        = false;
+                                cache.pos         = 0;
+                                cache.pos_discard = 0;
+                                SRV_INFV(2,
+                                         "rid %s | released cache prompt, "
+                                         "seq = %d\n",
+                                         rid.c_str(), seq_id);
+                            }
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
@@ -4074,14 +4092,14 @@ struct httpserver {
 
                     // prepare cache - clean cache
                     if (cache_prompt) {
-                        // mark cache
+                        // clean prompt cache
                         cache_prompt_entry & cache = cache_prompts.at(seq_id);
                         llm_kv_cache_used -= cache.pos;
                         llm_kv_cache_inactive -= cache.pos;
+                        cache.tokens.clear();
                         cache.used        = false;
                         cache.pos         = 0;
                         cache.pos_discard = 0;
-
                         // clean kv cache
                         llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
@@ -4161,6 +4179,18 @@ struct httpserver {
                             auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
                             const std::string rid    = task->get_r_id();
                             const int32_t     seq_id = task->get_seq_id();
+                            // clean prompt cache
+                            if (cache_prompt) {
+                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                                cache.tokens.clear();
+                                cache.used        = false;
+                                cache.pos         = 0;
+                                cache.pos_discard = 0;
+                                SRV_INFV(2,
+                                         "rid %s | released cache prompt, "
+                                         "seq = %d\n",
+                                         rid.c_str(), seq_id);
+                            }
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
@@ -4199,6 +4229,18 @@ struct httpserver {
                             auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
                             const std::string rid    = task->get_r_id();
                             const int32_t     seq_id = task->get_seq_id();
+                            // clean prompt cache
+                            if (cache_prompt) {
+                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                                cache.tokens.clear();
+                                cache.used        = false;
+                                cache.pos         = 0;
+                                cache.pos_discard = 0;
+                                SRV_INFV(2,
+                                         "rid %s | released cache prompt, "
+                                         "seq = %d\n",
+                                         rid.c_str(), seq_id);
+                            }
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
@@ -4689,6 +4731,10 @@ struct httpserver {
                         cache.pos  = task->pos;
                         cache.pos_discard += task->pos_discard;
                         llm_kv_cache_inactive += task->pos;
+                        SRV_INFV(2,
+                                 "rid %s | released cache prompt, "
+                                 "seq = %d\n",
+                                 rid.c_str(), seq_id);
                     }
                 }
                 return;
