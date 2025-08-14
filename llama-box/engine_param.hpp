@@ -188,6 +188,35 @@ inline std::vector<ggml_backend_dev_t> parse_device_list(const std::string & val
     return devices;
 }
 
+inline void parse_tensor_buffer_overrides(const std::string &                             value,
+                                          std::vector<llama_model_tensor_buft_override> & overrides) {
+    std::map<std::string, ggml_backend_buffer_type_t> buft_list;
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        ggml_backend_device *      dev  = ggml_backend_dev_get(i);
+        ggml_backend_buffer_type * buft = ggml_backend_dev_buffer_type(dev);
+        if (buft) {
+            buft_list[ggml_backend_buft_name(buft)] = buft;
+        }
+    }
+
+    for (const auto & override : string_split<std::string>(value, ',')) {
+        std::string::size_type pos = override.find('=');
+        if (pos == std::string::npos) {
+            throw std::invalid_argument("invalid value");
+        }
+        std::string tensor_name = override.substr(0, pos);
+        std::string buffer_type = override.substr(pos + 1);
+
+        if (buft_list.find(buffer_type) == buft_list.end()) {
+            throw std::invalid_argument("unknown buffer type " + buffer_type);
+        }
+        // keep strings alive and avoid leaking memory by storing them in a static vector
+        static std::list<std::string> buft_overrides;
+        buft_overrides.push_back(tensor_name);
+        overrides.push_back({ buft_overrides.back().c_str(), buft_list.at(buffer_type) });
+    }
+}
+
 // implementations
 
 static void llama_box_params_print_usage(int, char ** argv, const llama_box_params & params_) {
@@ -248,7 +277,7 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server",                             "       --no-flash-attn",                        "Disable Flash Attention, which can increase (V)RAM but reduce computation" });
     opts.push_back({ "server",                             "-fa,   --flash-attn",                           "Enable Flash Attention, which can reduce (V)RAM but increase computation" });
     opts.push_back({ "server",                             "       --swa-full",                             "Use full-size SWA cache (default %s)", llm_params.swa_full ? "enabled" : "disabled" });
-    opts.push_back({ "server",                             "--kv-unified, -kvu",                            "Use single unified KV buffer for the KV cache of all sequences (default %s)", llm_params.kv_unified ? "enabled" : "disabled" });
+    opts.push_back({ "server",                             "-kvu,  --kv-unified",                           "Use single unified KV buffer for the KV cache of all sequences (default %s)", llm_params.kv_unified ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --metrics",                              "Enable prometheus compatible metrics endpoint (default: %s)", llm_params.endpoint_metrics ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --embeddings",                           "Enable embedding endpoint (default: %s)", llm_params.embedding ? "enabled" : "disabled" });
     opts.push_back({ "server",                             "       --images",                               "Enable image endpoint (default: %s)", params_.hs_params.endpoint_images ? "enabled" : "disabled" });
@@ -260,6 +289,8 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
                                                                                                             "-ngl 0 means no offloading"});
     opts.push_back({ "server",                             "-ot,   --override-tensor PATTERN_1=BUFFER_TYPE_1,PATTERN_2=BUFFER_TYPE_2,...",
                                                                                                             R"(Override tensor buffer type, for example, use --override-tensor "[2-9][0-9]\.ffn_.*_exps\.=CPU" to keep experts of layers 20-99 in the CPU)"});
+    opts.push_back({ "server",                             "-otd,  --override-tensor-draft PATTERN_1=BUFFER_TYPE_1,PATTERN_2=BUFFER_TYPE_2,...",
+                                                                                                            R"(Override tensor buffer type for draft model, for example, use --override-tensor-draft "[2-9][0-9]\.ffn_.*_exps\.=CPU" to keep experts of layers 20-99 in the CPU)"});
     opts.push_back({ "server",                             "       --no-warmup",                            "Disable warm up the model with an empty run" });
     opts.push_back({ "server",                             "       --warmup",                               "Enable warm up the model with an empty run, which is used to occupy the (V)RAM before serving" });
     // server // completion //
@@ -354,8 +385,10 @@ static void llama_box_params_print_usage(int, char ** argv, const llama_box_para
     opts.push_back({ "server/completion",                  "       --yarn-beta-slow N",                     "YaRN high correction dim or alpha (default: %.1f)", (double)llm_params.yarn_beta_slow });
     opts.push_back({ "server/completion",                  "-nkvo, --no-kv-offload",                        "Disable KV offload" });
     opts.push_back({ "server/completion",                  "       --no-cache-prompt",                      "Disable caching prompt" });
-    opts.push_back({ "server/completion",                  "-cmoe  --cpu-moe",                              "Keep all Mixture of Experts (MoE) weights in the CPU" });
-    opts.push_back({ "server/completion",                  "-ncmoe --n-cpu-moe N",                          "Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU" });
+    opts.push_back({ "server/completion",                  "-cmoe, --cpu-moe",                              "Keep all Mixture of Experts (MoE) weights in the CPU" });
+    opts.push_back({ "server/completion",                  "-ncmoe, --n-cpu-moe N",                         "Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU" });
+    opts.push_back({ "server/completion",                  "-cmoed, --cpu-moe-draft",                       "Keep all Mixture of Experts (MoE) weights in the CPU for draft model" });
+    opts.push_back({ "server/completion",                  "-ncmoed, --n-cpu-moe-draft N",                  "Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU for draft model" });
     opts.push_back({ "server/completion",                  "       --cache-reuse N",                        "Min chunk size to attempt reusing from the cache via KV shifting (default: %d)", llm_params.n_cache_reuse });
     opts.push_back({ "server/completion",                  "-nr,   --no-repack",                            "Disable weight repacking" });
     opts.push_back({ "server/completion",                  "-ctk,  --cache-type-k TYPE",                    "KV cache data type for K, allowed values: %s (default: %s)", get_all_cache_kv_types_string().c_str(), ggml_type_name(llm_params.cache_type_k) });
@@ -819,30 +852,25 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 if (i == argc) {
                     missing("--override-tensor");
                 }
-                char *                                                      arg = argv[i++];
-                // enumerate all the devices and add their buffer types to the list
-                std::unordered_map<std::string, ggml_backend_buffer_type_t> buffer_types;
-                for (size_t j = 0; j < ggml_backend_dev_count(); ++j) {
-                    ggml_backend_device *      dev         = ggml_backend_dev_get(j);
-                    ggml_backend_buffer_type * buffer_type = ggml_backend_dev_buffer_type(dev);
-                    if (buffer_type) {
-                        buffer_types[ggml_backend_buft_name(buffer_type)] = buffer_type;
-                    }
+                char * arg = argv[i++];
+                try {
+                    parse_tensor_buffer_overrides(std::string(arg), params_.hs_params.llm_params.tensor_buft_overrides);
+                } catch (const std::exception & e) {
+                    invalid(("--override-tensor: " + std::string(e.what())).c_str());
                 }
-                for (const auto & override : string_split<std::string>(std::string(arg), ',')) {
-                    std::string::size_type pos = override.find('=');
-                    if (pos == std::string::npos) {
-                        invalid("--override-tensor");
-                    }
-                    std::string tensor_name = override.substr(0, pos);
-                    std::string buffer_type = override.substr(pos + 1);
+                continue;
+            }
 
-                    if (buffer_types.find(buffer_type) == buffer_types.end()) {
-                        invalid(("--override-tensor cannot find buffer type " + buffer_type).c_str());
-                    }
-
-                    params_.hs_params.llm_params.tensor_buft_overrides.push_back(
-                        { strdup(tensor_name.c_str()), buffer_types.at(buffer_type) });
+            if (!strcmp(flag, "-otd") || !strcmp(flag, "--override-tensor-draft")) {
+                if (i == argc) {
+                    missing("--override-tensor-draft");
+                }
+                char * arg = argv[i++];
+                try {
+                    parse_tensor_buffer_overrides(std::string(arg),
+                                                  params_.hs_params.llm_params.speculative.tensor_buft_overrides);
+                } catch (const std::exception & e) {
+                    invalid(("--override-tensor-draft: " + std::string(e.what())).c_str());
                 }
                 continue;
             }
@@ -1589,6 +1617,31 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
                 continue;
             }
 
+            if (!strcmp(flag, "-cmoed") || !strcmp(flag, "--cpu-moe-draft")) {
+                params_.hs_params.llm_params.speculative.tensor_buft_overrides.push_back(
+                    { "\\.ffn_(up|down|gate)_exps", ggml_backend_cpu_buffer_type() });
+                continue;
+            }
+
+            if (!strcmp(flag, "-ncmoed") || !strcmp(flag, "--n-cpu-moe-draft")) {
+                if (i == argc) {
+                    missing("--n-cpu-moe-draft");
+                }
+                char *  arg       = argv[i++];
+                int32_t n_cpu_moe = std::stoi(std::string(arg));
+                if (n_cpu_moe < 0) {
+                    invalid("--n-cpu-moe-draft");
+                }
+                for (int cpu_moe = 0; i < n_cpu_moe; ++i) {
+                    // keep strings alive and avoid leaking memory by storing them in a static vector
+                    static std::list<std::string> buft_overrides;
+                    buft_overrides.push_back(string_format("blk\\.%d\\.ffn_(up|down|gate)_exps", cpu_moe));
+                    params_.hs_params.llm_params.speculative.tensor_buft_overrides.push_back(
+                        { buft_overrides.back().c_str(), ggml_backend_cpu_buffer_type() });
+                }
+                continue;
+            }
+
             if (!strcmp(flag, "--cache-reuse")) {
                 if (i == argc) {
                     missing("--cache-reuse");
@@ -2295,6 +2348,10 @@ static bool llama_box_params_parse(int argc, char ** argv, llama_box_params & pa
 
     if (!params_.hs_params.llm_params.tensor_buft_overrides.empty()) {
         params_.hs_params.llm_params.tensor_buft_overrides.push_back({ nullptr, nullptr });
+    }
+
+    if (!params_.hs_params.llm_params.speculative.tensor_buft_overrides.empty()) {
+        params_.hs_params.llm_params.speculative.tensor_buft_overrides.push_back({ nullptr, nullptr });
     }
 
     if (params_.hs_params.llm_params.lora_init_without_apply) {

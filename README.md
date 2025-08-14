@@ -396,7 +396,7 @@ server:
          --no-flash-attn          Disable Flash Attention, which can increase (V)RAM but reduce computation
   -fa,   --flash-attn             Enable Flash Attention, which can reduce (V)RAM but increase computation
          --swa-full               Use full-size SWA cache (default disabled)
-  --kv-unified, -kvu              Use single unified KV buffer for the KV cache of all sequences (default disabled)
+  -kvu,  --kv-unified             Use single unified KV buffer for the KV cache of all sequences (default disabled)
          --metrics                Enable prometheus compatible metrics endpoint (default: disabled)
          --embeddings             Enable embedding endpoint (default: disabled)
          --images                 Enable image endpoint (default: disabled)
@@ -409,6 +409,8 @@ server:
                                   -ngl 0 means no offloading
   -ot,   --override-tensor PATTERN_1=BUFFER_TYPE_1,PATTERN_2=BUFFER_TYPE_2,...
                                   Override tensor buffer type, for example, use --override-tensor "[2-9][0-9]\.ffn_.*_exps\.=CPU" to keep experts of layers 20-99 in the CPU
+  -otd,  --override-tensor-draft PATTERN_1=BUFFER_TYPE_1,PATTERN_2=BUFFER_TYPE_2,...
+                                  Override tensor buffer type for draft model, for example, use --override-tensor-draft "[2-9][0-9]\.ffn_.*_exps\.=CPU" to keep experts of layers 20-99 in the CPU
          --no-warmup              Disable warm up the model with an empty run
          --warmup                 Enable warm up the model with an empty run, which is used to occupy the (V)RAM before serving
 
@@ -509,8 +511,10 @@ server/completion:
          --yarn-beta-slow N       YaRN high correction dim or alpha (default: 1.0)
   -nkvo, --no-kv-offload          Disable KV offload
          --no-cache-prompt        Disable caching prompt
-  -cmoe  --cpu-moe                Keep all Mixture of Experts (MoE) weights in the CPU
-  -ncmoe --n-cpu-moe N            Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU
+  -cmoe, --cpu-moe                Keep all Mixture of Experts (MoE) weights in the CPU
+  -ncmoe, --n-cpu-moe N           Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU
+  -cmoed, --cpu-moe-draft         Keep all Mixture of Experts (MoE) weights in the CPU for draft model
+  -ncmoed, --n-cpu-moe-draft N    Keep the Mixture of Experts (MoE) weights of the first N layers in the CPU for draft model
          --cache-reuse N          Min chunk size to attempt reusing from the cache via KV shifting (default: 0)
   -nr,   --no-repack              Disable weight repacking
   -ctk,  --cache-type-k TYPE      KV cache data type for K, allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1 (default: f16)

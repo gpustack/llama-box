@@ -2763,19 +2763,20 @@ struct httpserver {
         if (!params.llm_params.speculative.model.path.empty() && params.llm_params.speculative.n_max > 0) {
             SRV_INF("loading draft model '%s'\n", params.llm_params.speculative.model.path.c_str());
 
-            common_params llm_params_draft   = params.llm_params;
-            llm_params_draft.n_parallel      = params.llm_params.n_threads_http;
-            llm_params_draft.embedding       = false;
-            llm_params_draft.model           = params.llm_params.speculative.model;
-            llm_params_draft.n_gpu_layers    = params.llm_params.speculative.n_gpu_layers;
-            llm_params_draft.cpuparams       = params.llm_params.speculative.cpuparams;
-            llm_params_draft.cpuparams_batch = params.llm_params.speculative.cpuparams_batch;
-            llm_params_draft.cache_type_k    = GGML_TYPE_F16;
-            llm_params_draft.cache_type_v    = GGML_TYPE_F16;
-            llm_params_draft.warmup          = false;
-            llm_init_draft                   = common_init_from_params(llm_params_draft);
-            llm_model_draft                  = llm_init_draft.model.get();
-            llm_ctx_draft                    = llm_init_draft.context.get();
+            common_params llm_params_draft         = params.llm_params;
+            llm_params_draft.n_parallel            = params.llm_params.n_threads_http;
+            llm_params_draft.embedding             = false;
+            llm_params_draft.model                 = params.llm_params.speculative.model;
+            llm_params_draft.n_gpu_layers          = params.llm_params.speculative.n_gpu_layers;
+            llm_params_draft.cpuparams             = params.llm_params.speculative.cpuparams;
+            llm_params_draft.cpuparams_batch       = params.llm_params.speculative.cpuparams_batch;
+            llm_params_draft.tensor_buft_overrides = params.llm_params.speculative.tensor_buft_overrides;
+            llm_params_draft.cache_type_k          = GGML_TYPE_F16;
+            llm_params_draft.cache_type_v          = GGML_TYPE_F16;
+            llm_params_draft.warmup                = false;
+            llm_init_draft                         = common_init_from_params(llm_params_draft);
+            llm_model_draft                        = llm_init_draft.model.get();
+            llm_ctx_draft                          = llm_init_draft.context.get();
             if (llm_model_draft == nullptr) {
                 SRV_ERR("failed to load draft model, '%s'\n", params.llm_params.speculative.model.path.c_str());
                 return false;
