@@ -4073,7 +4073,16 @@ struct httpserver {
                     }
 
                     // prepare cache - clean cache
-                    if (llm_kv_cache_shift && cache_prompt) {
+                    if (cache_prompt) {
+                        // mark cache
+                        cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                        llm_kv_cache_used -= cache.pos;
+                        llm_kv_cache_inactive -= cache.pos;
+                        cache.used        = false;
+                        cache.pos         = 0;
+                        cache.pos_discard = 0;
+
+                        // clean kv cache
                         llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                         if (llm_ctx_draft != nullptr) {
                             llama_memory_seq_rm(llama_get_memory(llm_ctx_draft), seq_id, 0, -1);
@@ -4082,13 +4091,6 @@ struct httpserver {
                                  "rid %s | batching, clean cache, "
                                  "clean kv cache, seq %d = [0, end)\n",
                                  rid.c_str(), seq_id);
-
-                        cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                        llm_kv_cache_used -= cache.pos;
-                        llm_kv_cache_inactive -= cache.pos;
-                        cache.used        = false;
-                        cache.pos         = 0;
-                        cache.pos_discard = 0;
                     }
 
                     for (llama_pos pos = 0; pos < n_pos; pos++) {
