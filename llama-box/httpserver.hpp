@@ -2807,8 +2807,9 @@ struct httpserver {
         }
         llm_vocab            = llama_model_get_vocab(llm_model);
         llm_ctx_size         = int32_t(llama_n_ctx(llm_ctx));
+        llm_slot_ctx_size    = llm_ctx_size / llm_params.n_parallel;
         llm_ctx_embed_size   = llama_model_n_embd(llm_model);
-        llm_kv_cache_limit   = llm_ctx_size - 1;
+        llm_kv_cache_limit   = llm_slot_ctx_size - 1;
         llm_kv_cache_shift   = llama_memory_can_shift(llama_get_memory(llm_ctx));
         // NB(thxCode): llama_causal_attn is a patch.
         llm_model_casual     = llama_causal_attn(llm_ctx);
@@ -3130,7 +3131,7 @@ struct httpserver {
         // sample tokens per second
         if (params.n_tps < 0) {
             SRV_INF("%s", "sampling tokens per second, this will take some time...\n");
-            const int32_t    n_check             = std::min(llm_ctx_size, params.llm_params.n_ubatch);
+            const int32_t    n_check             = std::min(llm_slot_ctx_size, params.llm_params.n_ubatch);
             llama_tokens     check_prompt_tokens = { llama_vocab_bos(llm_vocab) };
             common_sampler * check_smpl          = common_sampler_init(llm_model, params.llm_params.sampling);
             int64_t          t_start_decode      = ggml_time_us();
@@ -3352,6 +3353,7 @@ struct httpserver {
     llama_context *     llm_ctx               = nullptr;
     const llama_vocab * llm_vocab             = nullptr;
     int32_t             llm_ctx_size          = 0;
+    int32_t             llm_slot_ctx_size     = 0;
     int32_t             llm_ctx_embed_size    = 0;
     int32_t             llm_kv_cache_used     = 0;  // include llm_kv_cache_inactive
     int32_t             llm_kv_cache_inactive = 0;
@@ -3705,14 +3707,14 @@ struct httpserver {
                     }
                 }
             } else if (batch_task_type != ttype) {
-                SRV_INF(
+                SRV_DBG(
                     "rid %s | "
                     "batching, waiting previous batch finished: not the same kind batch\n",
                     rid.c_str());
                 process_tasks->enqueue(std::move(task_ptr));
                 continue;
             } else if (!equal_lora(task_ptr->get_lora_adapters(), lora_adapters)) {
-                SRV_INF(
+                SRV_DBG(
                     "rid %s | "
                     "batching, waiting previous batch finished: lora adapters not matched\n",
                     rid.c_str());
@@ -3741,7 +3743,7 @@ struct httpserver {
                         // filter
                         if (llm_kv_cache_used - llm_kv_cache_inactive + task->n_prefilling_request >
                             llm_kv_cache_limit) {
-                            SRV_INF(
+                            SRV_DBG(
                                 "rid %s | "
                                 "batching, waiting previous batch finished: not enough space to place all tokens, "
                                 "kv_cache_used(%d) - kv_cache_inactive(%d) + prefill_t(%d) > "
@@ -4097,8 +4099,8 @@ struct httpserver {
                 if (task->i_input_prefilled < n_input) {
                     llama_tokens tokenized_input = task->tokenized_inputs[task->i_input_prefilled];
                     const auto   n_pos           = int32_t(tokenized_input.size());
-                    // allow batch's tokens size be equal to llm_ctx_size
-                    if (batch_text.n_tokens + n_pos > llm_ctx_size) {
+                    // allow batch's tokens size be equal to llm_slot_ctx_size
+                    if (batch_text.n_tokens + n_pos > llm_slot_ctx_size) {
                         SRV_INF("rid %s | batching, not enough space to fill, waiting\n", rid.c_str());
                         continue;
                     }
@@ -5500,8 +5502,8 @@ struct httpserver {
                 { "n_params",                    llama_model_n_params(llm_model)                  },
                 { "size",                        llama_model_size(llm_model)                      },
                 { "n_ctx",                       llm_ctx_size                                     },
-                { "n_slot",                      1                                                },
-                { "n_slot_ctx",                  llm_ctx_size                                     },
+                { "n_slot",                      params.llm_params.n_threads_http                 },
+                { "n_slot_ctx",                  llm_slot_ctx_size                                },
                 { "ctx_shift",                   shift_context                                    },
                 { "prompt_cache",                cache_prompt                                     },
                 { "seed",                        int32_t(params.llm_params.sampling.seed)         },
@@ -5589,16 +5591,16 @@ struct httpserver {
         {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= llm_ctx_size) {
+            if (n_prefilling_request >= llm_slot_ctx_size) {
                 if (!shift_context) {
                     SRV_ERR(
                         "rid %s | prompt tokens size exceeds the context size, please enable context shift "
                         "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
-                        req->get_id(), n_prefilling_request, llm_ctx_size);
+                        req->get_id(), n_prefilling_request, llm_slot_ctx_size);
                     return send_json(request, response, httplib::BadRequest_400,
                                      "Illegal param: prompt tokens size exceeds the context size");
                 }
-                const int32_t n_left       = llm_ctx_size - params.llm_params.n_keep;
+                const int32_t n_left       = llm_slot_ctx_size - params.llm_params.n_keep;
                 const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
                     (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
@@ -5621,7 +5623,7 @@ struct httpserver {
             return send_json(request, response, httplib::BadRequest_400, "Illegal param: empty completions tokens");
         }
 
-        int32_t n_decoding_budget = llm_ctx_size;
+        int32_t n_decoding_budget = llm_slot_ctx_size;
         if (req->max_tokens > 0) {
             n_decoding_budget = req->max_tokens;
         } else if (req->max_tokens < 0) {
@@ -5709,16 +5711,16 @@ struct httpserver {
         if (req->multimedias.empty()) {
             llama_tokens tokenized_prompt = tokenize_prompt(llm_vocab, req->chat_params.prompt, true, true);
             n_prefilling_request          = int32_t(tokenized_prompt.size());
-            if (n_prefilling_request >= llm_ctx_size) {
+            if (n_prefilling_request >= llm_slot_ctx_size) {
                 if (!shift_context) {
                     SRV_ERR(
                         "rid %s | prompt tokens size exceeds the context size, please enable context shift "
                         "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
-                        req->get_id(), n_prefilling_request, llm_ctx_size);
+                        req->get_id(), n_prefilling_request, llm_slot_ctx_size);
                     return send_json(request, response, httplib::BadRequest_400,
                                      "Illegal param: prompt tokens size exceeds the context size");
                 }
-                const int32_t n_left       = llm_ctx_size - params.llm_params.n_keep;
+                const int32_t n_left       = llm_slot_ctx_size - params.llm_params.n_keep;
                 const int32_t n_block_size = n_left >> 1;
                 const int32_t n_block_erased =
                     (n_prefilling_request - params.llm_params.n_keep - n_block_size) / n_block_size;
@@ -6051,11 +6053,11 @@ struct httpserver {
                 tokenized_prompts.emplace_back(std::move(tokenized_text));
             }
 
-            if (n_prefilling_request >= llm_ctx_size) {
+            if (n_prefilling_request >= llm_slot_ctx_size) {
                 SRV_ERR(
                     "rid %s | prompt tokens size exceeds the context size, please increase the context size "
                     "or reduce prompt size, prefill_t = %d, n_ctx = %d\n",
-                    req->get_id(), n_prefilling_request, llm_ctx_size);
+                    req->get_id(), n_prefilling_request, llm_slot_ctx_size);
                 return send_json(request, response, httplib::BadRequest_400,
                                  "Illegal param: prompt tokens size exceeds the context size");
             }
@@ -6071,7 +6073,7 @@ struct httpserver {
 
         bool tokenized_prompts_include_tools = !req->tools.empty();
 
-        int32_t n_decoding_budget = llm_ctx_size;
+        int32_t n_decoding_budget = llm_slot_ctx_size;
         if (req->max_tokens > 0) {
             n_decoding_budget = req->max_tokens;
         } else if (req->max_tokens < 0) {
@@ -6149,7 +6151,7 @@ struct httpserver {
                 tokenized_inputs[i].push_back(tok_eos);
             }
             auto n_pos = int32_t(tokenized_inputs[i].size());
-            if (n_pos > llm_ctx_size) {
+            if (n_pos > llm_slot_ctx_size) {
                 if (!shift_context) {
                     return send_json(request, response, httplib::BadRequest_400,
                                      "Illegal param: \"input\" tokens size exceeds the context size");
@@ -6157,9 +6159,9 @@ struct httpserver {
                 SRV_WRN(
                     "rid %s | input item %zu tokens size exceeds the context size, "
                     "shifting context [%d, %d) -> [0, %d)\n",
-                    req->get_id(), i, n_pos - llm_ctx_size, n_pos, llm_ctx_size);
-                tokenized_inputs[i].erase(tokenized_inputs[i].begin(), tokenized_inputs[i].end() - llm_ctx_size);
-                n_pos = llm_ctx_size;
+                    req->get_id(), i, n_pos - llm_slot_ctx_size, n_pos, llm_slot_ctx_size);
+                tokenized_inputs[i].erase(tokenized_inputs[i].begin(), tokenized_inputs[i].end() - llm_slot_ctx_size);
+                n_pos = llm_slot_ctx_size;
             }
         }
 
@@ -6190,14 +6192,14 @@ struct httpserver {
         const size_t      n_tok_addition = 4;
 
         llama_tokens tokenized_query = tokenize_prompt(llm_vocab, req->query, false, true);
-        if (req->normalize && tokenized_query.size() * 2 + n_tok_addition > size_t(llm_ctx_size)) {
+        if (req->normalize && tokenized_query.size() * 2 + n_tok_addition > size_t(llm_slot_ctx_size)) {
             return send_json(
                 request, response, httplib::BadRequest_400,
                 R"(Illegal param: "query" length exceeds the context size, disable "normalize" to bypass this check)");
         }
         auto decorate = [&](const llama_tokens & tokenized_document) {
             auto n_pos = int32_t(tokenized_query.size() + tokenized_document.size() + n_tok_addition);
-            if (n_pos > llm_ctx_size) {
+            if (n_pos > llm_slot_ctx_size) {
                 throw std::invalid_argument(
                     R"(Illegal param: the sum of the lengths of "query" and "document" exceeds the context size)");
             }
