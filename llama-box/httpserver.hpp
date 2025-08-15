@@ -3537,12 +3537,10 @@ struct httpserver {
     inline int32_t decode_completion_task_batch(llama_context * input_ctx, llama_batch & input_batch,
                                                 const std::vector<std::unique_ptr<btask>> & batch_task_ptrs) {
         // decoded results:
-        // -3 compute failed,
-        // -2 allocate failed,
-        // -1 no tokens,
+        // -2 no update / failed to compute / failed ot reserve output buffer,
+        // -1 no tokens / failed to allocate batch,
         //  0 ok,
-        //  1 no kv cache,
-        //  2 compute aborted
+        //  1 failed to prepare.
         int32_t                decoded       = 0;
         bool                   is_mrope_view = llm_model_rope_mrope && input_batch.n_tokens > batch_view_max;
         std::vector<llama_pos> mrope_pos_view;
@@ -3603,9 +3601,7 @@ struct httpserver {
                 }
                 // shift the target task if found
                 if (task != nullptr) {
-                    int32_t pos_previous = task->pos;
                     shift_completion_task_cache(task);
-                    task->pos -= (pos_previous - task->pos);
                     // adjust batch pos
                     input_batch.pos[task->i_batch_seq_end] = task->pos - 1;
                 }
@@ -3748,8 +3744,8 @@ struct httpserver {
                             SRV_INF(
                                 "rid %s | "
                                 "batching, waiting previous batch finished: not enough space to place all tokens, "
-                                "llm_kv_cache_used(%d) - llm_kv_cache_inactive(%d) + n_prefilling_request(%d) > "
-                                "llm_kv_cache_limit(%d)\n",
+                                "kv_cache_used(%d) - kv_cache_inactive(%d) + prefill_t(%d) > "
+                                "kv_cache_limit(%d)\n",
                                 rid.c_str(), llm_kv_cache_used, llm_kv_cache_inactive, task->n_prefilling_request,
                                 llm_kv_cache_limit);
                             process_tasks->enqueue(std::move(task_ptr));
@@ -3996,18 +3992,6 @@ struct httpserver {
                         llm_kv_cache_used += n_text_d;
                         // abort if incomplete prefilling
                         if (task->n_prefilled < task->n_prefilling_request) {
-                            // clean prompt cache
-                            if (cache_prompt) {
-                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                                cache.tokens.clear();
-                                cache.used        = false;
-                                cache.pos         = 0;
-                                cache.pos_discard = 0;
-                                SRV_INFV(2,
-                                         "rid %s | released cache prompt, "
-                                         "seq = %d\n",
-                                         rid.c_str(), seq_id);
-                            }
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
@@ -4018,6 +4002,18 @@ struct httpserver {
                                 "clean kv cache, seq %d = [0, end)\n",
                                 rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
+                            // clean prompt cache
+                            if (cache_prompt) {
+                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                                cache.tokens.clear();
+                                cache.used        = false;
+                                cache.pos         = 0;
+                                cache.pos_discard = 0;
+                                SRV_INFV(2,
+                                         "rid %s | released cache prompt, "
+                                         "seq = %d, kv_cache_used = %d, kv_cache_inactive = %d\n",
+                                         rid.c_str(), seq_id, llm_kv_cache_used, llm_kv_cache_inactive);
+                            }
                             // output
                             json data = {
                                 { "message",
@@ -4201,18 +4197,6 @@ struct httpserver {
                             auto *            task   = dynamic_cast<completions_task *>(task_ptr.get());
                             const std::string rid    = task->get_r_id();
                             const int32_t     seq_id = task->get_seq_id();
-                            // clean prompt cache
-                            if (cache_prompt) {
-                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
-                                cache.tokens.clear();
-                                cache.used        = false;
-                                cache.pos         = 0;
-                                cache.pos_discard = 0;
-                                SRV_INFV(2,
-                                         "rid %s | released cache prompt, "
-                                         "seq = %d\n",
-                                         rid.c_str(), seq_id);
-                            }
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
                             if (llm_ctx_draft != nullptr) {
@@ -4223,6 +4207,18 @@ struct httpserver {
                                      "clean kv cache, seq %d = [0, end)\n",
                                      rid.c_str(), seq_id);
                             llm_kv_cache_used -= task->pos;
+                            // clean prompt cache
+                            if (cache_prompt) {
+                                cache_prompt_entry & cache = cache_prompts.at(seq_id);
+                                cache.tokens.clear();
+                                cache.used        = false;
+                                cache.pos         = 0;
+                                cache.pos_discard = 0;
+                                SRV_INFV(2,
+                                         "rid %s | released cache prompt, "
+                                         "seq = %d, kv_cache_used = %d, kv_cache_inactive = %d\n",
+                                         rid.c_str(), seq_id, llm_kv_cache_used, llm_kv_cache_inactive);
+                            }
                             // output
                             json data = {
                                 { "message",
@@ -4260,8 +4256,8 @@ struct httpserver {
                                 cache.pos_discard = 0;
                                 SRV_INFV(2,
                                          "rid %s | released cache prompt, "
-                                         "seq = %d\n",
-                                         rid.c_str(), seq_id);
+                                         "seq = %d, kv_cache_used = %d, kv_cache_inactive = %d\n",
+                                         rid.c_str(), seq_id, llm_kv_cache_used, llm_kv_cache_inactive);
                             }
                             // clean kv cache
                             llama_memory_seq_rm(llama_get_memory(llm_ctx), seq_id, 0, -1);
@@ -4362,20 +4358,31 @@ struct httpserver {
                             if (support_reasoning && !task->reasoning_finished) {
                                 // find reasoning begin [in token]
                                 if (!task->reasoning_start_found) {
-                                    task->reasoning_start_found = tok == reasoning_start_token;
-                                    if (!reasoning_in_content && task->reasoning_start_found) {
-                                        continue;
+                                    if (reasoning_start_token != LLAMA_TOKEN_NULL) {
+                                        task->reasoning_start_found = tok == reasoning_start_token;
+                                        if (task->reasoning_start_found) {
+                                            // ignore reasoning start content if needed
+                                            if (!reasoning_in_content) {
+                                                continue;
+                                            }
+                                        }
+                                        // finish reasoning analysis as not found any available start
+                                        else {
+                                            task->reasoning_finished = true;
+                                        }
                                     }
                                 }
                                 // find reasoning end [in token]
                                 else if (!task->reasoning_end_found) {
-                                    if (tok == reasoning_end_token) {
-                                        task->reasoning_end_found = true;
-                                        if (!reasoning_in_content) {
-                                            continue;
-                                        }
-                                    } else {
+                                    if (reasoning_end_token != LLAMA_TOKEN_NULL) {
                                         task->n_reasoning++;
+                                        task->reasoning_end_found = tok == reasoning_end_token;
+                                        if (task->reasoning_end_found) {
+                                            // ignore reasoning end content if needed
+                                            if (!reasoning_in_content) {
+                                                continue;
+                                            }
+                                        }
                                     }
                                 }
                                 // finish
@@ -4410,27 +4417,35 @@ struct httpserver {
                                     break;
                                 }
                             }
-                            // find reasoning
-                            if (support_reasoning && !task->reasoning_finished) {
+                            // has reasoning
+                            if (support_reasoning && !task->reasoning_finished &&
+                                reasoning_start_token == LLAMA_TOKEN_NULL) {
                                 // find reasoning begin [in word]
-                                if (!task->reasoning_start_found && reasoning_start_token == LLAMA_TOKEN_NULL) {
+                                if (!task->reasoning_start_found) {
                                     send_text = false;  // avoid to send text before reasoning start
                                     task->reasoning_start_found =
                                         string_starts_with(task->generated_text, reasoning_start_word);
                                     if (task->reasoning_start_found) {
                                         send_text = true;
                                         task->n_reasoning++;
+                                        // ignore reasoning start content if needed
                                         if (!reasoning_in_content) {
                                             task->generated_text.clear();
                                         }
                                     }
+                                    // finish reasoning analysis as not found any available start
+                                    else if (task->generated_text.length() > reasoning_start_word.length()) {
+                                        task->reasoning_finished = true;
+                                        send_text                = true;
+                                    }
                                 }
                                 // find reasoning end [in word]
-                                else if (!task->reasoning_end_found && reasoning_end_token == LLAMA_TOKEN_NULL) {
+                                else if (!task->reasoning_end_found) {
                                     task->n_reasoning++;
                                     task->reasoning_end_found =
                                         string_ends_with(task->generated_text, reasoning_end_word);
                                     if (task->reasoning_end_found) {
+                                        // ignore reasoning end content if needed
                                         if (!reasoning_in_content) {
                                             size_t pos = task->generated_text.rfind(reasoning_end_word);
                                             task->generated_text_keep_pos = pos;
@@ -4802,8 +4817,8 @@ struct httpserver {
                         llm_kv_cache_inactive += task->pos;
                         SRV_INFV(2,
                                  "rid %s | released cache prompt, "
-                                 "seq = %d\n",
-                                 rid.c_str(), seq_id);
+                                 "seq = %d, kv_cache_used = %d, kv_cache_inactive = %d\n",
+                                 rid.c_str(), seq_id, llm_kv_cache_used, llm_kv_cache_inactive);
                     }
                 }
                 return;
