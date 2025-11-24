@@ -1,3 +1,7 @@
+> [!CAUTION]
+> This project is not longer actively maintained.
+> Please consider using [llama.cpp](https://github.com/ggml-org/llama.cpp/releases) directly.
+
 # LLaMA Box (V2)
 
 [![](https://img.shields.io/github/actions/workflow/status/gpustack/llama-box/ci.yml?label=ci)](https://github.com/gpustack/llama-box/actions)
